@@ -22,7 +22,7 @@ func revokeFixture(t *testing.T, refresh *memRefresh) (*Handler, *memAudit, stri
 	u := sampleUser()
 	audit := &memAudit{}
 	h := testHandler(t, store, refresh, u).WithAudit(audit)
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: testKeys, AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}

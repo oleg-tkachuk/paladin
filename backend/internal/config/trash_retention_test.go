@@ -23,7 +23,7 @@ storage:
       kind: aws-s3
       auth: { mode: default_chain }
 auth:
-  signing_key: "base-key-must-be-32-bytes-long-or-more"
+  session_key_path: /keys/session.pem
 `
 
 func loadTrashRetention(t *testing.T, extra string) (Config, error) {

@@ -129,7 +129,6 @@ func validateNoWeakSecrets(c *Config) error {
 	// Field path -> value. Only inline values are checked; a *Secret sibling
 	// resolves from Kubernetes at boot and is never a committed literal.
 	candidates := map[string]string{
-		"auth.signing_key":                     c.Auth.SigningKey,
 		"api_token.hmac_key":                   c.APIToken.HMACKey,
 		"datastores.postgres.password":         c.Datastores.Postgres.Password,
 		"datastores.postgres.migrate_password": c.Datastores.Postgres.MigratePassword,

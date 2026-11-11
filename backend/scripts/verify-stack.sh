@@ -63,6 +63,16 @@ compose=(docker compose -p "$project" -f frontend/tests/e2e/docker-compose.test.
 #   PALADIN_E2E_PORT_PG=15434  task backend:test:stack
 # shellcheck source=SCRIPTDIR/../../scripts/stack-ports.sh
 source "$root/scripts/stack-ports.sh"
+# mint_session <audience> <subject> <claims> — a dev session, signed ES256 by
+# the key compose generated under the kid the api role's JWKS names, as the
+# minting role signs one (ADR-0047). Through the backend's own Taskfile, for
+# the reason given at phase_dev_bootstrap.
+mint_session() {
+    task -s -t "$root/backend/Taskfile.yaml" auth:mint-token \
+        JWT_ALG=ES256 JWT_SECRET="$(cat "$PALADIN_SESSION_KEY_FILE")" STEP_FLAGS="--kid $PALADIN_SESSION_KID" \
+        JWT_ISS="$PALADIN_JWT_ISSUER" JWT_AUD="$1" JWT_SUB="$2" JWT_CLAIMS="$3"
+}
+
 # ─── phases ──────────────────────────────────────────────────────────────────
 
 # The only check that covers all RPC declarations at once, enumerated from the
@@ -157,9 +167,7 @@ phase_dev_bootstrap() {
     local claims
     claims=$(jq -nc --arg t "$dev_tenant" \
         '{roles: ["platform.admin"], tenant: $t, tenant_slug: "ui-dev"}')
-    JWT=$(task -s -t "$root/backend/Taskfile.yaml" auth:mint-token \
-        JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
-        JWT_AUD=paladin-admin JWT_SUB=verify-deep JWT_CLAIMS="$claims")
+    JWT=$(mint_session paladin-admin verify-deep "$claims")
     export JWT
     export TENANT_ID="$dev_tenant"
     # BUCKET_ID matches the bucket compose actually created in MinIO
@@ -183,14 +191,10 @@ phase_sdk() {
     local dev_tenant=3a823fd4-0b3d-4ce2-a280-93b8d75cc07b claims log
     claims=$(jq -nc --arg t "$dev_tenant" \
         '{roles: ["platform.admin"], tenant: $t, tenant_slug: "ui-dev"}')
-    JWT=$(task -s -t "$root/backend/Taskfile.yaml" auth:mint-token \
-        JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
-        JWT_AUD=paladin-admin JWT_SUB=verify-deep JWT_CLAIMS="$claims")
+    JWT=$(mint_session paladin-admin verify-deep "$claims")
     TENANT_ID="$dev_tenant" PALADIN_HOST="$stack_data_url" PALADIN_ADMIN_HOST="$stack_admin_url" \
         BUCKET_ID=paladin-e2e JWT="$JWT" bash frontend/scripts/dev-bootstrap.sh >/dev/null
-    PALADIN_SDK_TOKEN=$(task -s -t "$root/backend/Taskfile.yaml" auth:mint-token \
-        JWT_SECRET="$PALADIN_JWT_SECRET" JWT_ISS="$PALADIN_JWT_ISSUER" \
-        JWT_AUD=paladin-data JWT_SUB=verify-deep-sdk JWT_CLAIMS="$claims")
+    PALADIN_SDK_TOKEN=$(mint_session paladin-data verify-deep-sdk "$claims")
     export PALADIN_SDK_TOKEN
     export PALADIN_SDK_DATA_URL="$stack_data_url"
     export PALADIN_SDK_COLLECTION="tenants/$dev_tenant/collections/default"
@@ -210,7 +214,11 @@ phase_sdk() {
 
 # ─── the stack ───────────────────────────────────────────────────────────────
 
-cleanup() { "${compose[@]}" down -v >/dev/null 2>&1 || true; }
+session_dir=$(mktemp -d "${TMPDIR:-/tmp}/verify-stack-session.XXXXXX")
+cleanup() {
+    "${compose[@]}" down -v >/dev/null 2>&1 || true
+    rm -rf "$session_dir"
+}
 trap cleanup EXIT
 "${compose[@]}" down -v >/dev/null 2>&1 || true
 
@@ -227,10 +235,17 @@ stack_use_built_image "$STACK_CORE_TAG_VAR" "$STACK_CORE_INFO" "${PALADIN_IMAGE_
 echo ">>> [stack] booting api + admin (${STACK_CORE_IMAGE}:${PALADIN_CORE_TAG})"
 "${compose[@]}" up --wait api admin
 
-# Matches backend/configs/compose.yaml (auth.signing_key / auth.issuer).
-export PALADIN_JWT_SECRET=dev-secret-change-me-32-bytes-min
+# Matches backend/configs/compose.yaml (auth.issuer).
 export PALADIN_JWT_ISSUER=paladin-dev
 stack_export_urls
+
+# The session key compose generated into the api container's volume, read
+# through the one-shot container that wrote it, and its kid from the JWKS the
+# api role serves: the dev tokens below are signed as the server signs them.
+export PALADIN_SESSION_KEY_FILE="$session_dir/session-key.pem"
+"${compose[@]}" run --rm --no-deps --entrypoint cat capability-key /session/session-key.pem >"$PALADIN_SESSION_KEY_FILE"
+PALADIN_SESSION_KID=$(curl -fsS "$stack_iam_url/.well-known/jwks.json" | jq -r '.keys[0].kid')
+export PALADIN_SESSION_KID
 
 # Readiness, asserted rather than assumed — and the one place TestSmokeStackReady
 # runs at all.

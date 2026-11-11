@@ -65,7 +65,7 @@ func TestBuildSharedDeps_RefusesBeforeTouchingTheDatabase(t *testing.T) {
 	}{
 		"pool of the wrong type": {
 			db:  &postgres.DB{Pool: notAPgxPool{}},
-			cfg: config.Config{Auth: config.Auth{SigningKey: "k"}, Storage: goodStorage},
+			cfg: config.Config{Storage: goodStorage},
 			// Everything downstream type-asserts this pool; letting it past
 			// here turns a boot error into a panic on the first request.
 			wantErr: "not *pgxpool.Pool",
@@ -75,7 +75,7 @@ func TestBuildSharedDeps_RefusesBeforeTouchingTheDatabase(t *testing.T) {
 			// The registry has no default backend, so an empty map is not a
 			// smaller deployment — it is one where every object write resolves
 			// to nothing.
-			cfg:     config.Config{Auth: config.Auth{SigningKey: "k"}},
+			cfg:     config.Config{},
 			wantErr: "storage backend",
 		},
 	}

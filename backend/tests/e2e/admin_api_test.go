@@ -9,7 +9,7 @@
 // Run against a deployed cluster:
 //
 //	PALADIN_E2E_ADMIN_URL=http://localhost:8090 \
-//	PALADIN_JWT_SECRET=dev-secret-change-me-32-bytes-min \
+//	PALADIN_SESSION_KEY_FILE=<the minting role's session key, PEM> \
 //	PALADIN_JWT_ISSUER=paladin-dev \
 //	go test -tags=e2e ./tests/e2e/...
 //
@@ -28,10 +28,7 @@ package e2e
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -46,6 +43,9 @@ import (
 	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jws"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 )
@@ -60,6 +60,9 @@ import (
 // envAdminURL names the admin plane's address — the variable
 // scripts/stack-ports.sh exports and every suite reads.
 const envAdminURL = "PALADIN_E2E_ADMIN_URL"
+
+// envSessionKeyFile names the PEM of the session key the stack signs with.
+const envSessionKeyFile = "PALADIN_SESSION_KEY_FILE"
 
 func envOrSkip(t *testing.T, names ...string) string {
 	t.Helper()
@@ -88,7 +91,7 @@ type fixture struct {
 	// owner (apiutil.CallerContext) — so writing into a newly-created
 	// tenant needs a JWT minted against THAT tenant's UUID, not the
 	// fixture's bootstrap tenant.
-	jwtSecret string
+	keys      *sessionkey.Set
 	jwtIssuer string
 
 	// platformTenantID owns the bucket the run creates: every bucket has an
@@ -105,9 +108,11 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	adminURL := envOrSkip(t, envAdminURL)
-	secret := os.Getenv("PALADIN_JWT_SECRET")
-	if secret == "" {
-		secret = "dev-secret-change-me-32-bytes-min"
+	// Sessions are signed ES256 by the minting role's key (ADR-0047); the
+	// stack gate hands this test the key compose generated.
+	keys, err := sessionkey.Load(envOrSkip(t, envSessionKeyFile), nil)
+	if err != nil {
+		t.Fatalf("session key: %v", err)
 	}
 	issuer := os.Getenv("PALADIN_JWT_ISSUER")
 	if issuer == "" {
@@ -123,8 +128,8 @@ func newFixture(t *testing.T) *fixture {
 	// that does not exist is refused, as IAM never issues one. The tenant is
 	// read by its slug through a tenant-less platform JWT, which spans
 	// tenants.
-	platform := platformTenantID(ctx, t, secret, issuer, adminURL)
-	jwt := mintJWT(t, secret, issuer, "paladin-admin", platform,
+	platform := platformTenantID(ctx, t, keys, issuer, adminURL)
+	jwt := mintJWT(t, keys, issuer, "paladin-admin", platform,
 		"e2e-runner", []string{"platform.admin"}, 30*time.Minute)
 
 	httpClient := &http.Client{
@@ -140,7 +145,7 @@ func newFixture(t *testing.T) *fixture {
 		cancel:    cancel,
 		adminURL:  adminURL,
 		nonce:     nonce,
-		jwtSecret: secret,
+		keys:      keys,
 		jwtIssuer: issuer,
 
 		platformTenantID: platform,
@@ -162,13 +167,13 @@ const (
 )
 
 // platformTenantID is the id of the tenant the stack's bootstrap created.
-func platformTenantID(ctx context.Context, t *testing.T, secret, issuer, adminURL string) string {
+func platformTenantID(ctx context.Context, t *testing.T, keys *sessionkey.Set, issuer, adminURL string) string {
 	t.Helper()
 	slug := os.Getenv(envPlatformTenantSlug)
 	if slug == "" {
 		slug = defaultPlatformTenantSlug
 	}
-	spanning := mintJWT(t, secret, issuer, "paladin-admin", "",
+	spanning := mintJWT(t, keys, issuer, "paladin-admin", "",
 		"e2e-runner", []string{"platform.admin"}, time.Minute)
 	hc := &http.Client{Timeout: 30 * time.Second, Transport: &authedTransport{jwt: spanning, base: http.DefaultTransport}}
 	got, err := paladinadminv1connect.NewTenantServiceClient(connect.NewClient(connecthttp.NewTransport(hc, adminURL))).GetTenant(ctx,
@@ -186,7 +191,7 @@ func platformTenantID(ctx context.Context, t *testing.T, secret, issuer, adminUR
 // the resource owner.
 func (f *fixture) collectionsAsTenant(t *testing.T, tenantID string) paladinadminv1connect.CollectionServiceClient {
 	t.Helper()
-	jwt := mintJWT(t, f.jwtSecret, f.jwtIssuer, "paladin-admin",
+	jwt := mintJWT(t, f.keys, f.jwtIssuer, "paladin-admin",
 		tenantID, "e2e-runner", []string{"platform.admin"}, 30*time.Minute)
 	hc := &http.Client{
 		Timeout:   30 * time.Second,
@@ -268,13 +273,12 @@ func randomNonce(t *testing.T, n int) string {
 
 // mintJWT signs an HS256 token matching the dev config's verifier
 // (auth.issuer = paladin-dev, audiences include paladin-admin).
-func mintJWT(t *testing.T, secret, issuer, audience, tenantID, subject string,
+func mintJWT(t *testing.T, keys *sessionkey.Set, issuer, audience, tenantID, subject string,
 	roles []string, ttl time.Duration,
 ) string {
 	t.Helper()
 	now := time.Now()
-	header := map[string]string{"alg": "HS256", "typ": "JWT"}
-	claims := map[string]any{
+	claims, err := json.Marshal(map[string]any{
 		"iss":    issuer,
 		"aud":    audience,
 		"sub":    subject,
@@ -283,15 +287,22 @@ func mintJWT(t *testing.T, secret, issuer, audience, tenantID, subject string,
 		"iat":    now.Unix(),
 		"exp":    now.Add(ttl).Unix(),
 		"nbf":    now.Add(-30 * time.Second).Unix(),
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	headerJSON, _ := json.Marshal(header)
-	claimsJSON, _ := json.Marshal(claims)
-	enc := base64.RawURLEncoding
-	signingInput := enc.EncodeToString(headerJSON) + "." + enc.EncodeToString(claimsJSON)
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(signingInput))
-	sig := enc.EncodeToString(mac.Sum(nil))
-	return signingInput + "." + sig
+	return signSession(t, keys, claims)
+}
+
+// signSession is claims signed ES256 by the session key, under its kid, as
+// the minting role signs them (ADR-0047).
+func signSession(t *testing.T, keys *sessionkey.Set, claims []byte) string {
+	t.Helper()
+	signed, err := jws.Sign(claims, jws.WithKey(jwa.ES256(), keys.Signer()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(signed)
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────

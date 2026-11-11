@@ -341,7 +341,6 @@ func TestGoBlocksAreDeclaredInSchema(t *testing.T) {
 var unsetKnobAllowlist = map[string]string{
 	"security.log_sensitive": "retired; accepted so old configs load, read by nothing, warned about when true",
 	// Supplied at deploy time, never in a committed values file.
-	"auth.signing_key_secret":                     "secret ref; the env overlay or external-secrets fills it",
 	"api_token.hmac_key":                          "secret; per-deploy",
 	"capability.dpop_nonce.key":                   "secret; per-deploy",
 	"capability.dpop_nonce.key_secret":            "secret ref; per-deploy",
@@ -366,6 +365,10 @@ var unsetKnobAllowlist = map[string]string{
 	"datastores.postgres.migrate_dsn":             "rendered from chart values postgres.*",
 	"datastores.postgres.password_secret":         "rendered from chart values postgres.app",
 	"datastores.postgres.migrate_password_secret": "rendered from chart values postgres.migrate",
+	// The session key's file and the JWKS CA (ADR-0047), pointed at what the
+	// chart mounts: auth.sessionKey and internalTLS.
+	"auth.session_key_path": "rendered from chart values auth.sessionKey",
+	"auth.jwks_ca_path":     "rendered from chart values internalTLS; empty trusts the system roots",
 
 	// TLS knobs whose empty value IS the configuration: the certificate's
 	// SANs already cover the Service names, and skipping verification is

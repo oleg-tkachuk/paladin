@@ -14,7 +14,7 @@ import (
 // verifier and extracts (jti, user_id, tenant_id). Returns ErrTokenInvalid for
 // any verification or claim-shape failure.
 type RefreshDecoder struct {
-	Verifier *JWTVerifier // must have ExpectedAudience=AudienceIAM
+	Verifier TokenVerifier // must have ExpectedAudience=AudienceIAM
 }
 
 // DecodeRefresh implements iam/authh.RefreshTokenDecoder.

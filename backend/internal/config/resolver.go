@@ -210,7 +210,6 @@ func secretBindings(cfg *Config) []secretBinding {
 		bind("bootstrap.admin.password_secret", &cfg.Bootstrap.Admin.PasswordSecret, &cfg.Bootstrap.Admin.Password)
 	}
 	// Validate() refuses a key given both inline and by reference.
-	bind("auth.signing_key_secret", &cfg.Auth.SigningKeySecret, &cfg.Auth.SigningKey)
 	bind("api_token.hmac_key_secret", &cfg.APIToken.HMACKeySecret, &cfg.APIToken.HMACKey)
 	bind("capability.dpop_nonce.key_secret", &cfg.Capability.DPoPNonce.KeySecret, &cfg.Capability.DPoPNonce.Key)
 	bind("mcp.dpop_key_secret", &cfg.MCP.DPoPKeySecret, &cfg.MCP.DPoPKey)
@@ -362,10 +361,6 @@ func (c *Config) Obfuscated() Config {
 			redacted[name] = b
 		}
 		cc.Storage.Backends = redacted
-	}
-
-	if cc.Auth.SigningKey != "" {
-		cc.Auth.SigningKey = Redacted
 	}
 
 	if cc.MCP.OAuth.Exchange.ClientSecret != "" {

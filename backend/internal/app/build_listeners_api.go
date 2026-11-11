@@ -25,6 +25,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/usersettingsh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
@@ -99,11 +100,19 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	storageBootstrapH := storagebootstraph.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
 
 	// ─── IAM-plane handlers ──────────────────────────────────────────────
-	iss, err := wire.ProvideIssuer(cfg)
+	// This role mints sessions, so it alone loads the private key; the admin
+	// plane of an embedded process verifies with the same set (ADR-0047).
+	keys, err := sessionkey.Load(cfg.Auth.SessionKeyPath, cfg.Auth.PreviousSessionPublicKeyPaths)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("auth.session_key_path: %w", err)
+	}
+	deps.SessionKeys = keys
+	l.Info("session key loaded", zap.String("kid", keys.KeyID()), zap.Int("published", keys.Public().Len()))
+	iss, err := wire.ProvideIssuer(cfg, keys)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	dec := wire.ProvideRefreshDecoder(cfg)
+	dec := wire.ProvideRefreshDecoder(cfg, keys)
 	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine).
 		WithReuseAudit(repos.Audit, l).
 		WithCollectionRoutes(wire.ProvideCollectionRouteLister(repos, polEngine, cfg))
@@ -123,11 +132,11 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("init protovalidate: %w", err)
 	}
-	verifierData, err := BuildVerifier(ctx, cfg.Auth, auth.AudienceData, l)
+	verifierData, err := BuildVerifier(ctx, cfg.Auth, keys, auth.AudienceData, l)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	verifierIAM, err := BuildVerifier(ctx, cfg.Auth, auth.AudienceIAM, l)
+	verifierIAM, err := BuildVerifier(ctx, cfg.Auth, keys, auth.AudienceIAM, l)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -493,6 +502,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	iamMux = http.NewServeMux()
 	iamMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
 	healthH.Register(iamMux)
+	iamMux.Handle(sessionkey.WellKnownPath, keys.Handler())
 	iamServices := servicesIn(protoregistry.GlobalFiles, iamPackage)
 	mountGRPCStandards(iamMux, healthH.GRPCChecker(iamServices...), iamServices)
 	paladiniamv1connect.RegisterAuthServiceHandler(iamServer, connectiam.NewAuthServer(authH))

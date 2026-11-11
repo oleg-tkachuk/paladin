@@ -231,9 +231,6 @@ func (c *Config) Validate() error {
 	if c.Middleware.RateLimit.Backend == RateLimitBackendValkey && c.Datastores.Valkey.Addr == "" {
 		return fmt.Errorf("middleware.rate_limit.backend is %q but datastores.valkey.addr is empty", RateLimitBackendValkey)
 	}
-	if c.Auth.SigningKey != "" && c.Auth.SigningKeySecret != nil {
-		return fmt.Errorf("auth: cannot specify both signing_key and signing_key_secret")
-	}
 	if err := validateMCPExchange(c.MCP.OAuth); err != nil {
 		return fmt.Errorf("mcp.oauth.exchange: %w", err)
 	}

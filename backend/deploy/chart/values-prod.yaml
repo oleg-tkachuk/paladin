@@ -52,7 +52,7 @@ config:
   runtime:
     # Gates /system/health.json (component tree + subsystem + Postgres
     # reachability). Resolved at boot from the Secret below, which a
-    # SealedSecret / ExternalSecret provides — same posture as signing_key —
+    # SealedSecret / ExternalSecret provides — same posture as the session key —
     # so the token never sits in the config ConfigMap. The console chart's
     # healthSnapshotTokenSecret names the same Secret and key; the Secret must
     # also appear in rbac.secretReader.secretNames.
@@ -72,16 +72,9 @@ config:
     # must equal config.mcp.oauth.authorization_server.issuer exactly, and a
     # trailing slash breaks the /.well-known/ metadata fetch.
     issuer: "https://paladin.example.com"
-    # signing_key MUST come from a SealedSecret / ExternalSecret — NEVER
-    # commit a real signing key here. Leave signing_key empty and point
-    # signing_key_secret at the Secret the SealedSecret controller unseals in
-    # this namespace; the resolver reads it at boot. The name below must also
-    # appear in rbac.secretReader.secretNames. See docs/security.md (kubeseal
-    # runbook).
-    signing_key: ""
-    signing_key_secret:
-      name: paladin-auth-signing-key
-      key: signing_key
+    # The session key comes from a SealedSecret / ExternalSecret named in
+    # auth.sessionKey.existingSecret (top level), mounted into the minting
+    # role alone (ADR-0047) — never a value here.
 
     # OAuth 2.1 Authorization Server (ADR-0009): the /oauth/authorize +
     # /oauth/token + /oauth/register endpoints that mint the bearers the MCP
@@ -249,6 +242,13 @@ bootstrap:
   admin:
     enabled: false
 
+# The session signing key (ADR-0047), provided by a SealedSecret /
+# ExternalSecret and mounted into the minting role alone; no Role reads it.
+auth:
+  sessionKey:
+    generate: false
+    existingSecret: paladin-session-key
+
 # The Postgres operator keeps its user Secrets in the `database` namespace,
 # which a namespaced Role cannot reach.
 rbac:
@@ -260,7 +260,6 @@ rbac:
       - paladin-postgresql-reaper-user
       - paladin-admin-key
       - paladin-bootstrap-admin
-      - paladin-auth-signing-key
       - paladin-ingest-hmac
       - paladin-health-token
 

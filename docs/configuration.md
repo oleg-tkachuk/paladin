@@ -43,7 +43,7 @@ own are therefore reachable:
 
 ```bash
 PALADIN_STORAGE_BACKENDS_PRIMARY_PUBLIC_ENDPOINT=https://s3.example.com   # → storage.backends.primary.public_endpoint
-PALADIN_AUTH_SIGNING_KEY=…                                                # → auth.signing_key
+PALADIN_AUTH_SESSION_KEY_PATH=/etc/paladin-session/session-key.pem        # → auth.session_key_path
 ```
 
 ## Secrets
@@ -52,11 +52,11 @@ Any credential field has a `_secret` sibling that resolves from a
 Kubernetes Secret at boot:
 
 ```yaml
-auth:
-  signing_key_secret:
-    name: paladin-auth
-    key: signing-key        # defaults to "password" when omitted
-    namespace: paladin          # defaults to the pod's namespace
+api_token:
+  hmac_key_secret:
+    name: paladin-api-token-hmac
+    key: hmac_key           # defaults to "password" when omitted
+    namespace: paladin      # defaults to the pod's namespace
 ```
 
 A bare string is accepted as shorthand for `{name: <string>}`. A few

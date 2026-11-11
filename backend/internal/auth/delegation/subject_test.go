@@ -10,23 +10,30 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 )
 
 // The IAM issuer the subject tokens below come from.
 const (
 	subjectIssuer     = "paladin"
-	subjectKey        = "subject-test-signing-key-32-bytes-long"
-	subjectOtherKey   = "another-signing-key-of-32-bytes-long!!"
 	subjectClientID   = "agent"
 	subjectUser       = "user-1"
 	subjectTokenTTL   = time.Minute
 	subjectExpiredAgo = time.Hour
 )
 
-func subjectMinter(t *testing.T, name, key string, now time.Time) *issuer.Issuer {
+// The session keys of the IAM issuer the subject tokens come from, and of
+// another one, whose tokens are refused.
+var (
+	subjectKey      = sessiontest.MustKeys()
+	subjectOtherKey = sessiontest.MustKeys()
+)
+
+func subjectMinter(t *testing.T, name string, key *sessionkey.Set, now time.Time) *issuer.Issuer {
 	t.Helper()
 	iss, err := issuer.New(issuer.Config{
-		Issuer: name, SigningKey: []byte(key), Now: func() time.Time { return now },
+		Issuer: name, Keys: key, Now: func() time.Time { return now },
 		AccessTokenTTL: subjectTokenTTL, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour,
 	})
 	if err != nil {
@@ -50,8 +57,8 @@ func mintSubject(t *testing.T, iss *issuer.Issuer, client string) (string, time.
 // A caller's paladin-mcp token is read for limes' exchange as the IAM
 // issuer wrote it, and anything else is refused as invalid_grant.
 func TestSubjectVerifierKeepsTheContract(t *testing.T) {
-	v := NewSubjectVerifier(&auth.JWTVerifier{
-		Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
+	v := NewSubjectVerifier(&auth.KeySetVerifier{
+		Keys: subjectKey.Public(), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
 	}, subjectIssuer)
 	now := time.Now()
 
@@ -89,8 +96,8 @@ func TestSubjectVerifierKeepsTheContract(t *testing.T) {
 
 // The scopes the user consented to reach the exchange policy.
 func TestSubjectVerifierReadsTheConsent(t *testing.T) {
-	v := NewSubjectVerifier(&auth.JWTVerifier{
-		Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
+	v := NewSubjectVerifier(&auth.KeySetVerifier{
+		Keys: subjectKey.Public(), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
 	}, subjectIssuer)
 	tok, _ := mintSubject(t, subjectMinter(t, subjectIssuer, subjectKey, time.Now()), subjectClientID)
 	got, err := v.VerifySubject(t.Context(), tok)
@@ -106,7 +113,7 @@ func TestSubjectVerifierReadsTheConsent(t *testing.T) {
 // one capability it issues per token on: two tokens of one user are two
 // subjects.
 func TestSubjectVerifierNamesTheToken(t *testing.T) {
-	tokens := &auth.JWTVerifier{Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP}
+	tokens := &auth.KeySetVerifier{Keys: subjectKey.Public(), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP}
 	v := NewSubjectVerifier(tokens, subjectIssuer)
 	minter := subjectMinter(t, subjectIssuer, subjectKey, time.Now())
 
@@ -134,8 +141,8 @@ func TestSubjectVerifierNamesTheToken(t *testing.T) {
 // A subject names the session its token was issued in, which the exchange
 // records on the capability so revoking the session revokes it.
 func TestSubjectVerifierNamesTheSession(t *testing.T) {
-	v := NewSubjectVerifier(&auth.JWTVerifier{
-		Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
+	v := NewSubjectVerifier(&auth.KeySetVerifier{
+		Keys: subjectKey.Public(), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
 	}, subjectIssuer)
 	session := uuid.NewV7().String()
 	tok, _, err := subjectMinter(t, subjectIssuer, subjectKey, time.Now()).MintAccess(issuer.AccessClaims{

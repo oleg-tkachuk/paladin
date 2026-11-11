@@ -79,6 +79,7 @@ app.name
 auth
 auth.access_token_ttl
 auth.issuer
+auth.jwks_ca_path
 auth.jwks_url
 auth.leeway
 auth.login_rate_limit_per_ip_per_minute
@@ -93,13 +94,10 @@ auth.oauth.seed_clients
 auth.oauth.token_endpoint_allowed_origins
 auth.oauth.token_exchange_rate_limit_per_minute
 auth.oauth.token_rate_limit_per_minute
+auth.previous_session_public_key_paths
 auth.refresh_token_ttl
 auth.scoped_token_max_ttl
-auth.signing_key
-auth.signing_key_secret
-auth.signing_key_secret.key
-auth.signing_key_secret.name
-auth.signing_key_secret.namespace
+auth.session_key_path
 bootstrap
 bootstrap.admin
 bootstrap.admin.display_name

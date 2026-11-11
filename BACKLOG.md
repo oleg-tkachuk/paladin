@@ -266,22 +266,20 @@ the same commit. Treat this file like a runtime invariant.
   can mint an operator session; the IAM endpoints share the `api` pods with
   the data plane.
 - **Definition of Done**, one pull request per step, each deployable alone:
-  2. Sessions are ES256 with a `kid`, the IAM plane serves
-     `/.well-known/jwks.json`, verifiers outside the issuer use it, and the
-     private key is in a Secret only the issuing role reads; HS256 is
-     refused; `auth:mint-token`, the compose stack and the tests sign with
-     ES256 keys (decisions 1–4).
   3. Every role's service account reads only its own Secrets (decision 8).
   4. `serve iam` runs the IAM plane, the OAuth AS and the JWKS as its own
      Deployment; `serve api` serves the data plane alone (decision 7).
+     The OAuth AS metadata's `jwks_uri` then names that role's JWKS rather
+     than `mcp.oauth.authorization_server.jwks_uri`, and the chart's
+     `auth.signingKey` values, accepted unused since the ES256 cut, go.
 - **Checks that close it:** a token signed HS256, or HMAC'd with the public
-  key, is refused; a chart render shows only the issuer's Role naming the
-  private-key Secret; on the cluster,
-  `kubectl auth can-i get secret/<key> --as=system:serviceaccount:paladin:paladin-core-worker`
-  answers `no`, and so does it for every role but `iam`.
-- **Blockers:** steps 2–4 change chart values and Deployments, and
-  local-iac takes every chart release, so local-iac is prepared before each
-  of those merges.
+  key, is refused (held by the auth tests since the ES256 cut); a chart render
+  shows the session-key Secret mounted by the minting role alone and named by
+  no Role (scripts/chart-defaults.test.sh); on the cluster,
+  `kubectl auth can-i get secret/<name> --as=system:serviceaccount:paladin:<role>`
+  answers `no` for every Secret a role does not use.
+- **Blockers:** steps 3–4 change chart values and Deployments, and local-iac
+  takes every chart release, so local-iac is prepared before each merges.
 
 ### Console session terminated in Go (ADR-0048)
 

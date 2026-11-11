@@ -108,7 +108,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	if err != nil {
 		return nil, nil, fmt.Errorf("init protovalidate: %w", err)
 	}
-	verifierAdmin, err := BuildVerifier(ctx, cfg.Auth, auth.AudienceAdmin, l)
+	verifierAdmin, err := BuildVerifier(ctx, cfg.Auth, deps.SessionKeys, auth.AudienceAdmin, l)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -158,7 +158,7 @@ func TestToken_RefreshRefusesAConsoleToken(t *testing.T) {
 	h := testHandler(t, store, refresh, u)
 
 	// A console login's refresh token: same issuer and signature, no grant.
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: testKeys, AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}

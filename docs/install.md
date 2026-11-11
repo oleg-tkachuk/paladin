@@ -108,9 +108,11 @@ Everything else has a default:
 
 - `config.app.env` is `prod`: weak secrets, ephemeral signing keys and an
   unauthenticated ingest webhook are refused at boot.
-- The access-token signing key is generated into `<fullname>-auth-signing-key`
-  (`paladin-core-auth-signing-key` for a release named `paladin-core`) and
-  kept across upgrades. The issuer defaults to the same full name.
+- The session signing key, ECDSA P-256, is generated into
+  `<fullname>-session-key` (`paladin-core-session-key` for a release named
+  `paladin-core`), kept across upgrades, and mounted as a file into the role
+  that mints sessions alone; the other roles verify by its JWKS (ADR-0047).
+  The issuer defaults to the same full name.
 - A platform admin is created on first install, with a generated password in
   the `paladin-bootstrap-admin` Secret.
 - The Secrets the chart reads are allowed by a namespaced Role. If one lives in
@@ -318,8 +320,8 @@ every sync. Provide both instead:
 
 ```yaml
 auth:
-  signingKey:
-    existingSecret: paladin-auth-signing-key   # key: signing_key
+  sessionKey:
+    existingSecret: paladin-session-key   # key: session-key.pem, ECDSA P-256 PEM
 bootstrap:
   admin:
     enabled: false   # ship the paladin-bootstrap-admin Secret yourself

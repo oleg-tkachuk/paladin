@@ -15,9 +15,6 @@ package e2e
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -26,6 +23,8 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -42,9 +41,7 @@ const (
 	audienceAdmin = "paladin-admin"
 	// probeTokenTTL is how long a probe's token lives: the whole test.
 	probeTokenTTL = 10 * time.Minute
-	// forgedSecret signs a token Paladin did not issue.
-	forgedSecret = "not-the-real-secret-1234567890ab"
-	probeObject  = "secret.txt"
+	probeObject   = "secret.txt"
 	// bucketReady is the provision_state of a bucket the backend holds.
 	bucketReady = "ready"
 	// stackBucket is the bucket the stack's object store is created with
@@ -63,7 +60,7 @@ type tokenClaims struct {
 
 // signToken is mintJWT with the claims a probe spoofs and the key it signs
 // with chosen by the probe.
-func signToken(t *testing.T, secret, issuer string, c tokenClaims) string {
+func signToken(t *testing.T, keys *sessionkey.Set, issuer string, c tokenClaims) string {
 	t.Helper()
 	now := time.Now()
 	claims := map[string]any{
@@ -75,13 +72,11 @@ func signToken(t *testing.T, secret, issuer string, c tokenClaims) string {
 	if c.slug != "" {
 		claims["tenant_slug"] = c.slug
 	}
-	header, _ := json.Marshal(map[string]string{"alg": "HS256", "typ": "JWT"})
-	body, _ := json.Marshal(claims)
-	enc := base64.RawURLEncoding
-	input := enc.EncodeToString(header) + "." + enc.EncodeToString(body)
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(input))
-	return input + "." + enc.EncodeToString(mac.Sum(nil))
+	body, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signSession(t, keys, body)
 }
 
 // dataPlane is the data plane as a token's bearer sees it.
@@ -124,7 +119,7 @@ func TestTenantIsolation_E2E(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create the victim's collection: %v", err)
 	}
-	token := func(c tokenClaims) string { return signToken(t, f.jwtSecret, f.jwtIssuer, c) }
+	token := func(c tokenClaims) string { return signToken(t, f.keys, f.jwtIssuer, c) }
 	owner := token(tokenClaims{audienceData, victim.GetTenantId(), victim.GetSlug(), "victim", []string{"tenant.admin"}})
 	ownerData := dataPlane(t, dataURL, owner)
 	obj, err := paladin.Upload(ctx, ownerData, paladin.UploadInput{
@@ -178,7 +173,8 @@ func TestTenantIsolation_E2E(t *testing.T) {
 		refused("admin audience on data", read(token(tokenClaims{audienceAdmin, victim.GetTenantId(), victim.GetSlug(), "victim", []string{"tenant.admin"}})))
 	})
 	t.Run("a token Paladin did not sign is refused", func(t *testing.T) {
-		forged := signToken(t, forgedSecret, f.jwtIssuer, tokenClaims{audienceData, victim.GetTenantId(), victim.GetSlug(), "forger", []string{"platform.admin"}})
+		// A key of its own, which signs a token Paladin did not issue.
+		forged := signToken(t, sessiontest.Keys(t), f.jwtIssuer, tokenClaims{audienceData, victim.GetTenantId(), victim.GetSlug(), "forger", []string{"platform.admin"}})
 		refused("forged", read(forged))
 	})
 	// The control: every refusal above is of an object its own tenant reads.

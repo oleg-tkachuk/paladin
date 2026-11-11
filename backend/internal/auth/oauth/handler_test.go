@@ -25,9 +25,12 @@ import (
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	cedar "github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 )
 
-const testSigningKey = "test-signing-key-at-least-32-bytes-long!!"
+// testKeys is the session key set every issuer and verifier here signs and
+// verifies with, as the server's IAM does (ADR-0047).
+var testKeys = sessiontest.MustKeys()
 
 // ─── in-memory fakes ─────────────────────────────────────────────────────────
 
@@ -164,11 +167,11 @@ func testHandler(t *testing.T, store Store, refresh authstore.RefreshTokenReposi
 
 func testHandlerCfg(t *testing.T, store Store, refresh authstore.RefreshTokenRepository, u authstore.User, cfg config.OAuthAS) *Handler {
 	t.Helper()
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: testKeys, AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}
-	dec := &auth.RefreshDecoder{Verifier: &auth.JWTVerifier{Key: []byte(testSigningKey), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceIAM}}
+	dec := &auth.RefreshDecoder{Verifier: &auth.KeySetVerifier{Keys: testKeys.Public(), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceIAM}}
 	return NewHandler(cfg, store, memUsers{u: u}, refresh, iss, dec, ratecount.NewKeyLimiter(ratecount.NewLocal()), zap.NewNop())
 }
 
@@ -519,7 +522,7 @@ func TestToken_RefreshReuseDetected(t *testing.T) {
 	h := testHandler(t, store, refresh, u).WithAudit(audit)
 
 	// Mint a validly-signed IAM refresh token the decoder will accept.
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: testKeys, AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}
@@ -560,7 +563,7 @@ func TestToken_RefreshRefusedWhenTheTokenEndsMidRotation(t *testing.T) {
 	}
 	audit := &memAudit{}
 	h := testHandler(t, store, refresh, u).WithAudit(audit)
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: testKeys, AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,12 +18,14 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/tlsconfig"
 )
 
 // BuildHTTPServer wraps a mux into an h2c-enabled http.Server with
@@ -72,32 +75,42 @@ func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) (*htt
 	}, nil
 }
 
-// BuildVerifier returns a TokenVerifier pinned to a specific audience.
-// JWKS-mode wins when auth.jwks_url is set; otherwise the HMAC verifier
-// reads auth.signing_key, and with neither it refuses: an HMAC over the
-// empty key would accept a token HMAC'd with nothing.
-func BuildVerifier(ctx context.Context, a config.Auth, audience string, l *zap.Logger) (auth.TokenVerifier, error) {
-	if a.JWKSURL != "" {
-		v := auth.NewJWKSVerifier(a.JWKSURL)
-		v.ExpectedIssuer = a.Issuer
-		v.ExpectedAudience = audience
-		v.Leeway = a.Leeway
-		v.Logger = l
-		if err := v.Start(ctx); err != nil {
-			return nil, fmt.Errorf("jwks(%s): %w", audience, err)
+// BuildVerifier returns the session verifier for audience (ADR-0047): by
+// keys, the session keys this process holds when it mints (`serve api`, the
+// embedded mode), else by the JWKS at auth.jwks_url, which the minting role
+// serves. With neither it refuses to be built. The JWKS is fetched in the
+// background: a minting role not yet up leaves this one ready, refusing
+// sessions until the first fetch succeeds.
+func BuildVerifier(ctx context.Context, a config.Auth, keys *sessionkey.Set, audience string, l *zap.Logger) (auth.TokenVerifier, error) {
+	if keys != nil {
+		return &auth.KeySetVerifier{
+			Keys:             keys.Public(),
+			ExpectedIssuer:   a.Issuer,
+			ExpectedAudience: audience,
+			Leeway:           a.Leeway,
+		}, nil
+	}
+	if a.JWKSURL == "" {
+		return nil, fmt.Errorf("verifier(%s): auth.jwks_url is required where the session key is not held", audience)
+	}
+	v := auth.NewJWKSVerifier(a.JWKSURL)
+	if a.JWKSCAPath != "" {
+		client, err := jwksClient(a.JWKSCAPath)
+		if err != nil {
+			return nil, fmt.Errorf("verifier(%s): auth.jwks_ca_path: %w", audience, err)
 		}
-		l.Info("using jwks verifier", zap.String("audience", audience), logfield.URL("url", a.JWKSURL))
-		return v, nil
+		v.HTTPClient = client
 	}
-	if a.SigningKey == "" {
-		return nil, fmt.Errorf("verifier(%s): auth.signing_key (or signing_key_secret) or auth.jwks_url is required", audience)
+	v.ExpectedIssuer = a.Issuer
+	v.ExpectedAudience = audience
+	v.Leeway = a.Leeway
+	v.Logger = l
+	if err := v.Start(ctx); err != nil {
+		l.Warn("session jwks not fetched yet; sessions are refused until it is",
+			zap.String("audience", audience), logfield.URL("url", a.JWKSURL), zap.Error(err))
 	}
-	return &auth.JWTVerifier{
-		Key:              []byte(a.SigningKey),
-		ExpectedIssuer:   a.Issuer,
-		ExpectedAudience: audience,
-		Leeway:           a.Leeway,
-	}, nil
+	l.Info("verifying sessions by jwks", zap.String("audience", audience), logfield.URL("url", a.JWKSURL))
+	return v, nil
 }
 
 // ParseBuildTime turns the link-time `buildTime` string into a time.Time.
@@ -263,4 +276,20 @@ func storeAnswers(err, notFound error) error {
 		return nil
 	}
 	return err
+}
+
+// jwksTimeout bounds one fetch of the session JWKS.
+const jwksTimeout = 10 * time.Second
+
+// jwksClient fetches the session JWKS trusting caPath, the internal CA the
+// minting role's IAM listener serves under.
+func jwksClient(caPath string) (*http.Client, error) {
+	tlsCfg, err := tlsconfig.New("", "", caPath, "", false)
+	if err != nil {
+		return nil, err
+	}
+	tlsCfg.MinVersion = tls.VersionTLS12
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = tlsCfg
+	return &http.Client{Timeout: jwksTimeout, Transport: tr}, nil
 }

@@ -57,9 +57,9 @@ issuer alone.
    configured string.
 3. **The private key is in a Secret only the issuing role can read.** The
    chart generates it (`genPrivateKey "ecdsa"`, kept across syncs) in a
-   Secret of its own, under a Role bound to that role's service account
-   alone — from the first release that has the key, not after the role
-   split.
+   Secret of its own and mounts it as a file into the issuing role alone; no
+   Role names it, so no service account reads it through the API — from the
+   first release that has the key, not after the role split.
 4. **Verifiers hold public keys only.** The issuing process verifies with
    its own key set in memory, and so does the embedded all-in-one mode;
    every other role fetches the IAM JWKS (`auth.jwks_url`), with the

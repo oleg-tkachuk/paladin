@@ -23,8 +23,6 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 
-	"errors"
-
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/audith"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
@@ -43,6 +41,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
@@ -160,15 +159,12 @@ func ProvideMultipartHandler(repos Repos, storage Storage, pe *policy.Engine, sm
 
 // ─── v2 IAM/admin handlers ──────────────────────────────────────────────────
 
-// ProvideIssuer builds the JWT issuer used by Login / RefreshToken /
-// MintScopedToken. Fails at startup if no signing key is configured.
-func ProvideIssuer(cfg config.Config) (*issuer.Issuer, error) {
-	if cfg.Auth.SigningKey == "" {
-		return nil, errors.New("wire: auth.signing_key (or signing_key_secret) required")
-	}
+// ProvideIssuer builds the session issuer Login, RefreshToken and the OAuth
+// AS mint with, signing by keys (ADR-0047).
+func ProvideIssuer(cfg config.Config, keys *sessionkey.Set) (*issuer.Issuer, error) {
 	return issuer.New(issuer.Config{
 		Issuer:            cfg.Auth.Issuer,
-		SigningKey:        []byte(cfg.Auth.SigningKey),
+		Keys:              keys,
 		AccessTokenTTL:    cfg.Auth.AccessTokenTTL,
 		RefreshTokenTTL:   cfg.Auth.RefreshTokenTTL,
 		ScopedTokenMaxTTL: cfg.Auth.ScopedTokenMaxTTL,
@@ -178,10 +174,10 @@ func ProvideIssuer(cfg config.Config) (*issuer.Issuer, error) {
 // ProvideRefreshDecoder produces the verifier used to validate refresh
 // tokens presented to AuthService.RefreshToken. Audience is hard-pinned to
 // AudienceIAM regardless of which mux delivered the token.
-func ProvideRefreshDecoder(cfg config.Config) *auth.RefreshDecoder {
+func ProvideRefreshDecoder(cfg config.Config, keys *sessionkey.Set) *auth.RefreshDecoder {
 	return &auth.RefreshDecoder{
-		Verifier: &auth.JWTVerifier{
-			Key:              []byte(cfg.Auth.SigningKey),
+		Verifier: &auth.KeySetVerifier{
+			Keys:             keys.Public(),
 			ExpectedIssuer:   cfg.Auth.Issuer,
 			ExpectedAudience: auth.AudienceIAM,
 			Leeway:           cfg.Auth.Leeway,

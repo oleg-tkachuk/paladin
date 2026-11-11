@@ -49,18 +49,28 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 	pbdata "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
 )
 
-const wiringSigningKey = "wiring-test-signing-key-not-a-secret-000000000000"
-
 // wiringAPITokenPepper is api_token.hmac_key for a wiring with API tokens on:
-// a secret of its own, never derived from the signing key (ADR-0047).
+// a secret of its own, never derived from the session key (ADR-0047).
 const wiringAPITokenPepper = "wiring-test-api-token-pepper-not-a-secret-000000"
+
+// wiringKeys is the session key set cfg's role mints with.
+func wiringKeys(t *testing.T, cfg config.Config) *sessionkey.Set {
+	t.Helper()
+	keys, err := sessionkey.Load(cfg.Auth.SessionKeyPath, cfg.Auth.PreviousSessionPublicKeyPaths)
+	if err != nil {
+		t.Fatalf("session keys: %v", err)
+	}
+	return keys
+}
 
 func wiringConfig(t *testing.T, dsn string) config.Config {
 	t.Helper()
@@ -71,7 +81,9 @@ func wiringConfig(t *testing.T, dsn string) config.Config {
 	cfg.Datastores.Postgres.DSN = dsn
 	cfg.Datastores.Postgres.MigrateDSN = dsn
 	cfg.Datastores.Postgres.ReaperDSN = dsn
-	cfg.Auth.SigningKey = wiringSigningKey
+	// The session key the API role mints with; wiringKeys reads it back for a
+	// test that mints as that role does.
+	cfg.Auth.SessionKeyPath, _ = sessiontest.KeyFile(t)
 	cfg.Storage.Backends = map[string]config.StorageBackend{
 		"primary": {
 			Kind: "s3-compatible", Endpoint: "http://127.0.0.1:1", Region: "us-east-1",
@@ -118,7 +130,7 @@ func TestApp_AssembledMuxesEmitLifecycleEvents(t *testing.T) {
 	// minting against anything else is refused, correctly, by the same
 	// verifier production uses.
 	iss, err := issuer.New(issuer.Config{
-		Issuer: cfg.Auth.Issuer, SigningKey: []byte(wiringSigningKey),
+		Issuer: cfg.Auth.Issuer, Keys: wiringKeys(t, cfg),
 		AccessTokenTTL: 15 * time.Minute,
 	})
 	if err != nil {

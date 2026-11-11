@@ -160,15 +160,18 @@ limits:
     part_ttl: 15m                       # PresignPart (multipart)
     max_ttl: 168h                       # 7d — upper bound for caller-supplied ttls
 
-# ─── Auth (JWT issuance + verification) ─────────────────────────────────────
-# Paladin IAM mints HS256 tokens via Login / RefreshToken and verifies them on
-# each plane interceptor. The same `signing_key` is used for both. Three
-# audiences are recognised at verify time: paladin-data, paladin-admin, paladin-iam.
+# ─── Auth (session issuance + verification) ─────────────────────────────────
+# Paladin IAM mints sessions via Login / RefreshToken, signed ES256 by the
+# session key, which only the role that mints (`serve api`) reads (ADR-0047).
+# Every other role verifies against the JWKS that role serves. Three audiences
+# are recognised at verify time: paladin-data, paladin-admin, paladin-iam.
 auth:
   issuer: "paladin-dev"
-  signing_key: "dev-secret-change-me-32-bytes-min"  # must be ≥ 32 bytes
-  # signing_key_secret: { name: paladin-iam, key: signing_key }   # set in staging/prod; mutually exclusive with signing_key
-  jwks_url: ""                                      # set to verify tokens against a JWKS instead of signing_key
+  # ECDSA P-256, PEM PKCS#8 or SEC1: openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256
+  session_key_path: /etc/paladin-session/session-key.pem
+  previous_session_public_key_paths: []  # PEM public keys rotated out, published until their tokens expire
+  jwks_url: ""                           # where the other roles fetch the session JWKS: <iam>/.well-known/jwks.json
+  jwks_ca_path: ""                       # the CA that JWKS is served under, when it is not a system root
   leeway: 30s
   access_token_ttl: 15m
   refresh_token_ttl: 168h               # 7 days

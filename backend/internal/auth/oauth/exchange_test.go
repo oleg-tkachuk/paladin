@@ -53,8 +53,8 @@ func exchanger(t *testing.T) Client {
 	return Client{ClientID: exchangerID, SecretHash: hash}
 }
 
-func mcpVerifier() *auth.JWTVerifier {
-	return &auth.JWTVerifier{Key: []byte(testSigningKey), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceMCP}
+func mcpVerifier() *auth.KeySetVerifier {
+	return &auth.KeySetVerifier{Keys: testKeys.Public(), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceMCP}
 }
 
 // The delegation issuer the exchange in these tests issues through, and how
@@ -315,7 +315,7 @@ func TestTokenExchange_AdminNeedsAnAdminRole(t *testing.T) {
 func TestTokenExchange_Refusals(t *testing.T) {
 	u := sampleUser()
 	f := newExchangeFixture(t, u)
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: testKeys, AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -406,7 +406,7 @@ func TestTokenExchange_ExpiresWithTheSubject(t *testing.T) {
 	const subjectTTL = time.Minute
 	u := sampleUser()
 	f := newExchangeFixture(t, u)
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(testSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: testKeys, AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,7 +11,7 @@ import (
 // TestLoad_OverlayMerges confirms that paths[1..] override paths[0]
 // at the leaf-key level (deep merge). The base file carries every
 // required field; the overlay file just bumps app.env and the
-// auth.signing_key. Loaded result must reflect overlay values.
+// auth.session_key_path. Loaded result must reflect overlay values.
 func TestLoad_OverlayMerges(t *testing.T) {
 	dir := t.TempDir()
 
@@ -39,7 +39,7 @@ storage:
       kind: aws-s3
       auth: { mode: default_chain }
 auth:
-  signing_key: "base-key-must-be-32-bytes-long-or-more"
+  session_key_path: /keys/base.pem
 `), 0o600); err != nil {
 		t.Fatalf("write base: %v", err)
 	}
@@ -49,7 +49,7 @@ auth:
 app:
   env: prod
 auth:
-  signing_key: "overlay-key-must-be-32-bytes-long-too"
+  session_key_path: /keys/overlay.pem
 runtime:
   mode: release
 `), 0o600); err != nil {
@@ -68,8 +68,8 @@ runtime:
 	if cfg.Runtime.Mode != "release" {
 		t.Errorf("runtime.mode: got %q, want release", cfg.Runtime.Mode)
 	}
-	if cfg.Auth.SigningKey != "overlay-key-must-be-32-bytes-long-too" {
-		t.Errorf("auth.signing_key: overlay should override; got %q", cfg.Auth.SigningKey)
+	if cfg.Auth.SessionKeyPath != "/keys/overlay.pem" {
+		t.Errorf("auth.session_key_path: overlay should override; got %q", cfg.Auth.SessionKeyPath)
 	}
 
 	// Base-only fields unchanged by overlay:

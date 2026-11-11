@@ -131,7 +131,7 @@ func withDelegationExchange(ctx context.Context, as *oauth.Handler, deps *Shared
 		return nil, errExchangeNeedsCapability
 	}
 	cfg := deps.Cfg.Auth
-	tokens, err := BuildVerifier(ctx, cfg, auth.AudienceMCP, deps.Logger)
+	tokens, err := BuildVerifier(ctx, cfg, deps.SessionKeys, auth.AudienceMCP, deps.Logger)
 	if err != nil {
 		return nil, fmt.Errorf("oauth token exchange verifier: %w", err)
 	}

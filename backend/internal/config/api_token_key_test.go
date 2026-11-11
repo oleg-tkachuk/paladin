@@ -8,7 +8,6 @@ import "testing"
 func TestValidate_APITokenNeedsItsOwnHMACKey(t *testing.T) {
 	c := minimalValidConfig()
 	c.APIToken.Enabled = true
-	c.Auth.SigningKey = "a-session-key-that-no-longer-seeds-the-pepper"
 	mustReject(t, c, "api_token: hmac_key or hmac_key_secret is required")
 }
 

@@ -30,7 +30,7 @@ func adminCtx() context.Context {
 
 func secretBearingConfig() config.Config {
 	var c config.Config
-	c.Auth.SigningKey = "signing-key-never-print-me"
+	c.Runtime.HealthSnapshotToken = "health-token-never-print-me"
 	c.APIToken.HMACKey = "hmac-pepper-never-print-me"
 	c.Datastores.Postgres.Password = "postgres-password-never-print-me"
 	return c
@@ -67,7 +67,7 @@ func TestMarshalRedactedDoesNotEmitSecrets(t *testing.T) {
 	// miss here is not a formatting problem: it is a live credential rendered
 	// on an operator page.
 	for _, secret := range []string{
-		cfg.Auth.SigningKey,
+		cfg.Runtime.HealthSnapshotToken,
 		cfg.APIToken.HMACKey,
 		cfg.Datastores.Postgres.Password,
 	} {
@@ -115,7 +115,7 @@ func TestMarshalRedactedServesTheDefaults(t *testing.T) {
 	if !strings.Contains(defaults, "level: info") || !strings.Contains(running, "level: debug") {
 		t.Errorf("logger.level: defaults should say info and running debug")
 	}
-	for _, secret := range []string{cfg.Auth.SigningKey, cfg.APIToken.HMACKey, cfg.Datastores.Postgres.Password} {
+	for _, secret := range []string{cfg.Runtime.HealthSnapshotToken, cfg.APIToken.HMACKey, cfg.Datastores.Postgres.Password} {
 		if strings.Contains(defaults, secret) {
 			t.Errorf("the defaults carry %q", secret)
 		}

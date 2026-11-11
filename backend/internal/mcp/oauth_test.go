@@ -20,6 +20,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 )
 
 func TestBearerToken(t *testing.T) {
@@ -169,8 +170,8 @@ func TestRequireBearer(t *testing.T) {
 // The ADR-0036 edge: a paladin-mcp token opens a session; a plane token and
 // an API token, which work against the planes directly, do not.
 func TestRequireBearer_OnlyMCPAudience(t *testing.T) {
-	const key = "edge-test-signing-key-32-bytes-long!!"
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(key), AccessTokenTTL: time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	keys := sessiontest.Keys(t)
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: keys, AccessTokenTTL: time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +182,7 @@ func TestRequireBearer_OnlyMCPAudience(t *testing.T) {
 		}
 		return tok
 	}
-	verifier := &auth.JWTVerifier{Key: []byte(key), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceMCP}
+	verifier := sessiontest.Verifier(keys, "paladin", auth.AudienceMCP)
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	strict := RequireBearer(next, verifier, "", OnlyMCPAudience())
 	lenient := RequireBearer(next, verifier, "")

@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
@@ -96,6 +97,15 @@ func TestAPIMuxes_MountEveryService(t *testing.T) {
 				}
 			}
 		})
+	}
+
+	// The minting role publishes its session keys on the iam plane, and only
+	// there: every other role verifies by them (ADR-0047).
+	if !routed(t, iamMux, sessionkey.WellKnownPath) {
+		t.Errorf("%s is not served on the iam mux; no other role can verify a session", sessionkey.WellKnownPath)
+	}
+	if routed(t, dataMux, sessionkey.WellKnownPath) {
+		t.Errorf("%s is served on the data mux; the session keys are the iam plane's", sessionkey.WellKnownPath)
 	}
 
 	// Each plane serves only its own package. A data service reachable on the
