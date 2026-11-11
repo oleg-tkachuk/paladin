@@ -3,6 +3,8 @@
 - **Status:** Accepted. Implemented 2026-10-29. Amended 2026-10-29: one
   capability per token across replicas (decision 2), and ending a grant's
   session revokes it (consequences).
+- **Superseded in part** by [ADR-0047](0047-sessions-signed-by-iam-alone.md):
+  IAM tokens are ES256, no longer HS256.
 - **Related:** supersedes decisions 2 and 3 of
   [ADR-0036](0036-the-mcp-server-is-its-own-audience.md) (its `paladin-mcp`
   audience stays); amends [ADR-0010](0010-capability-as-establishing-credential.md)

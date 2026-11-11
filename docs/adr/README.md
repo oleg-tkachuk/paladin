@@ -15,7 +15,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0003](0003-transactional-outbox.md) | Transactional event outbox | Accepted |
 | [0004](0004-table-backed-audit-outbox.md) | Crash-durable (table-backed) audit outbox | Accepted |
 | [0005](0005-cnpg-ha-ownership.md) | CNPG Postgres HA ownership & verify-full TLS | Accepted |
-| [0006](0006-deferred-roadmap.md) | Deferred roadmap (single-binary planes, event sinks, …) | Superseded by BACKLOG.md, 0009, 0015 |
+| [0006](0006-deferred-roadmap.md) | Deferred roadmap (single-binary planes, event sinks, …) | Superseded by BACKLOG.md, 0009, 0015; superseded in part by 0047 |
 | [0007](0007-postgres-connection-headroom.md) | Postgres connection headroom & pooling ownership | Accepted |
 | [0008](0008-mcp-oauth-resource-server.md) | MCP server as an OAuth 2.1 Resource Server | Accepted |
 | [0009](0009-oauth-authorization-server.md) | OAuth 2.1 Authorization Server (IAM-as-AS) | Accepted |
@@ -50,12 +50,14 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0038](0038-a-capability-does-what-its-caveats-allow.md) | A capability does what its caveats allow, without a tenant policy | Accepted |
 | [0039](0039-the-name-is-qualified-where-it-is-published.md) | Paladin keeps its name, qualified wherever it is published | Accepted |
 | [0040](0040-policy-history-kept-by-triggers.md) | A policy's history is kept by triggers, with the writer the pool names | Accepted |
-| [0041](0041-the-mcp-server-exchanges-for-a-capability.md) | The MCP server exchanges the caller's token for a capability that acts for the user | Accepted |
+| [0041](0041-the-mcp-server-exchanges-for-a-capability.md) | The MCP server exchanges the caller's token for a capability that acts for the user | Accepted; superseded in part by 0047 |
 | [0042](0042-limes-errors-answered-by-code.md) | An error about a presented capability is answered by its limes code | Accepted |
 | [0043](0043-sdk-delivery-stabilization.md) | Stabilize how the SDKs are delivered | Accepted |
 | [0044](0044-event-fan-out-in-the-dispatcher.md) | An event is fanned out by the dispatcher, not in the producer's transaction | Accepted |
 | [0045](0045-the-product-restarts-at-0x.md) | The product restarts at 0.x, and a major is cut by hand | Accepted |
 | [0046](0046-rate-limits-off-the-request-path.md) | Request rate limits count in Valkey when one is configured, and in memory synced to Postgres otherwise | Accepted |
+| [0047](0047-sessions-signed-by-iam-alone.md) | Session tokens are signed with a key only the IAM role holds | Accepted |
+| [0048](0048-the-console-holds-no-token.md) | The console renders the UI, and a Go session edge holds the session | Proposed |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
