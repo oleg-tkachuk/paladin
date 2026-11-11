@@ -65,21 +65,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-### The Python SDK's fake leases reserve nothing against ceilings
-
-- **Status:** Deferred.
-- **Reason:** the Go fake counts and leases through limes's
-  `memstore.UsageStore`, as the server does through pgstore. The Python fake
-  has no limes to call, and models the visible part by hand: a request under
-  a lease is spent from it, and one past it refused. A lease's requests
-  are not reserved against the chain's request ceilings, so a lease is never
-  refused for want of room, and requests under it are not counted against the
-  ceilings above it.
-- **Definition of Done:** the Python fake reserves leased requests against
-  the chain's ceilings and refuses a lease past them, as
-  `memstore.UsageStore` does, and a test holds both fakes to the same answers.
-- **Blockers:** none, but no consumer has hit it.
-
 ## Deploy cutover: rename to `paladin`
 
 ### The `paladin` name has not been checked against trademark registers

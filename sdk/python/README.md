@@ -604,9 +604,11 @@ narrowing of a copy is a row of `sdk/testdata/biscuit_attenuations.json`,
 which the server's interceptor chain, the Go SDK's fake and this one run
 alike, each required to give the row's code, reason and message. Who may
 lease for a capability (`lease`, `get_lease`, `settle_lease`) is a row of
-`sdk/testdata/capability_leases.json`, which the server's handler, the Go
-SDK's fake and this one run alike; the fake counts no budget, so a lease's
-spent amount stays zero. The shared
+`sdk/testdata/capability_leases.json`, and how a lease's requests are held
+against the chain's request ceilings is a row of
+`sdk/testdata/capability_lease_ceilings.json`; the server's handler, the Go
+SDK's fake and this one run both alike. The fake counts no budget, so a
+lease's spent amount stays zero. The shared
 data-plane scenarios (`sdk/testdata/scenarios.json`) run against this fake
 in every CI run, as they run against the server in the stack gate, so a
 scenario the fake answers differently is red where it changed. Every

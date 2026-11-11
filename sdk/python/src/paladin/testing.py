@@ -812,6 +812,16 @@ class _CapabilityRecord:
     requests: int = 0
     """How many requests it was presented to, an ancestor counting its
     descendants', as the server counts them against a ceiling."""
+    reserved_requests: int = 0
+    """How many requests the open lease on it, or below it, holds and has not
+    yet counted on it: its ceiling admits a request only with room for
+    these too."""
+
+    @property
+    def requests_used(self) -> int:
+        """The requests its ceiling is held to: those made and those a lease
+        holds."""
+        return self.requests + self.reserved_requests
 
 
 @dataclass(frozen=True)
@@ -1063,9 +1073,11 @@ class _CapabilityService(CapabilityServiceSync):
     ) -> capability_service_pb2.CapabilityServiceLeaseResponse:
         """Open a lease on the capability named; on one it holds already,
         settle that and open a new one, under a new id, with what was left
-        plus the request. A request under the lease is spent from it. The fake
-        charges no budget: a lease's spent amount stays zero, and no ceiling of
-        the chain refuses it."""
+        plus the request. The requests a lease holds are reserved against the
+        capability's request ceiling and each ancestor's, and refused past
+        them, as limes's store holds them; a request under the lease is spent
+        from it. The fake charges no budget: a lease's spent amount stays
+        zero, and no budget ceiling refuses it."""
         fake = self._fake
         with fake._lock:
             record = fake._lease_target_locked(request.id, ctx)
@@ -1103,9 +1115,24 @@ class _CapabilityService(CapabilityServiceSync):
                 else DEFAULT_LEASE_TTL
             )
             end = min(now + ttl, record.msg.expires_at.ToDatetime(tzinfo=UTC))
+            chain = fake._chain_locked(record)
+            # An expired lease is settled first, and leaves nothing to the new
+            # one; the ceilings are checked with an open lease still held,
+            # which equals checking the new one once the old is settled.
+            stale = fake._leases.get(request.id)
+            if stale is not None and stale.expires_at.ToDatetime(tzinfo=UTC) <= now:
+                fake._settle_lease_locked(request.id)
+            if not all(
+                _admits_request(r.msg.caveats, r.requests_used + request.requests) for r in chain
+            ):
+                raise _capability_refusal(
+                    Code.RESOURCE_EXHAUSTED,
+                    error_reason_pb2.ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED,
+                    _TITLE_LIMIT_EXHAUSTED,
+                )
             # A top-up holds what the open lease had left: the fake charges no
             # budget, so all of its amount, and the requests not yet made.
-            open_lease = fake._leases.get(request.id)
+            open_lease = fake._settle_lease_locked(request.id)
             held = capability_service_pb2.CapabilityLease(
                 id=str(uuid.uuid4()),
                 capability_id=request.id,
@@ -1128,6 +1155,8 @@ class _CapabilityService(CapabilityServiceSync):
                 )
             )
             held.requests += request.requests
+            for r in chain:
+                r.reserved_requests += held.requests
             fake._leases[request.id] = held
             out = capability_service_pb2.CapabilityLease()
             out.CopyFrom(held)
@@ -1156,7 +1185,7 @@ class _CapabilityService(CapabilityServiceSync):
         fake = self._fake
         with fake._lock:
             fake._lease_target_locked(request.id, ctx)
-            held = fake._leases.pop(request.id, None)
+            held = fake._settle_lease_locked(request.id)
         if held is None:
             raise _limes_refusal(
                 Code.NOT_FOUND,
@@ -1646,7 +1675,7 @@ class FakePaladin(
         for token in record.credentials:
             self._credentials[token].revoked = True
         # The server settles a revoked capability's lease with its revoke.
-        self._leases.pop(capability, None)
+        self._settle_lease_locked(capability)
         if entry is not None and record.revocation is None:
             record.revocation = capability_service_pb2.CapabilityRevocation()
             record.revocation.CopyFrom(entry)
@@ -1732,11 +1761,7 @@ class FakePaladin(
         ``rec`` first, then its ancestors from the nearest. Under the nearest
         open lease on the chain, when it holds requests, the request is spent
         from the lease instead, as limes's store spends it."""
-        chain: list[_CapabilityRecord] = []
-        r: _CapabilityRecord | None = rec
-        while r is not None:
-            chain.append(r)
-            r = self._capabilities.get(r.msg.parent_id)
+        chain = self._chain_locked(rec)
         now = datetime.now(UTC)
         for k, r in enumerate(chain):
             held = self._leases.get(r.msg.id)
@@ -1747,7 +1772,7 @@ class FakePaladin(
                 return
             break
         for r in chain:
-            if _admits_request(r.msg.caveats, r.requests + 1):
+            if _admits_request(r.msg.caveats, r.requests_used + 1):
                 continue
             raise _capability_refusal(
                 Code.RESOURCE_EXHAUSTED,
@@ -1765,10 +1790,11 @@ class FakePaladin(
     ) -> None:
         """Count a request under ``holder``'s lease ``held``: on the capabilities
         ``below`` the leaseholder, each held to its own ceiling, on the
-        leaseholder, and on the lease, and on nothing above it. A lease whose
+        leaseholder, out of what the lease reserved on it, and on the lease,
+        and on nothing above it until the lease settles. A lease whose
         requests are all made refuses it."""
         for r in below:
-            if not _admits_request(r.msg.caveats, r.requests + 1):
+            if not _admits_request(r.msg.caveats, r.requests_used + 1):
                 raise _capability_refusal(
                     Code.RESOURCE_EXHAUSTED,
                     error_reason_pb2.ERROR_REASON_CAPABILITY_REQUEST_LIMIT_EXCEEDED,
@@ -1783,7 +1809,35 @@ class FakePaladin(
             )
         for r in [*below, holder]:
             r.requests += 1
+        holder.reserved_requests = max(holder.reserved_requests - 1, 0)
         held.requests_spent += 1
+
+    def _chain_locked(self, rec: _CapabilityRecord) -> list[_CapabilityRecord]:
+        """``rec`` and its ancestors, nearest first. The caller holds the lock."""
+        chain: list[_CapabilityRecord] = []
+        r: _CapabilityRecord | None = rec
+        while r is not None:
+            chain.append(r)
+            r = self._capabilities.get(r.msg.parent_id)
+        return chain
+
+    def _settle_lease_locked(self, capability: str) -> capability_service_pb2.CapabilityLease | None:
+        """End ``capability``'s lease, if it holds one, and return it: what it
+        holds is released from the leaseholder and its ancestors, and the
+        requests made under it are counted on the ancestors, as limes's store
+        settles one. The caller holds the lock."""
+        held = self._leases.pop(capability, None)
+        record = self._capabilities.get(capability)
+        if held is None or record is None:
+            return held
+        holder, *ancestors = self._chain_locked(record)
+        holder.reserved_requests = max(
+            holder.reserved_requests - (held.requests - held.requests_spent), 0
+        )
+        for r in ancestors:
+            r.reserved_requests = max(r.reserved_requests - held.requests, 0)
+            r.requests += held.requests_spent
+        return held
 
     def _allow_locked(self, ctx: Context, request: Message, resource: str, *ops: str) -> None:
         """Raise the server's refusal when the capability a call carries does
