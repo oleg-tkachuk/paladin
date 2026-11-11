@@ -1,12 +1,13 @@
 """paladin.testing serves the lease calls as the server answers them, against
-the table the server and the Go fake are held to
-(sdk/testdata/capability_leases.json)."""
+the tables the server and the Go fake are held to
+(sdk/testdata/capability_leases.json, capability_lease_ceilings.json)."""
 
 from __future__ import annotations
 
 import importlib.util
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -16,16 +17,22 @@ from connectrpc.errors import ConnectError
 from paladin import Op, Plane, attenuate
 from paladin.admin.v1 import capability_service_pb2 as pb
 from paladin.admin.v1 import types_pb2 as admin_types
+from paladin.data.v1 import object_service_pb2
 from paladin.errors import limes_code
 from paladin.testing import FakePaladin
 
 TABLE = Path(__file__).resolve().parents[2] / "testdata" / "capability_leases.json"
+CEILINGS = Path(__file__).resolve().parents[2] / "testdata" / "capability_lease_ceilings.json"
 HAS_BISCUIT = importlib.util.find_spec("biscuit_auth") is not None
 
 _UNKNOWN = "unknown"
 _COPY = "copy"
 _BISCUIT = "biscuit"
 _DELEGATE_TTL_SECONDS = 600
+_PARENT = "parent"
+_CHILD = "child"
+_REQUEST = "request"
+_CEILING_KEY = "k"
 
 
 def _cases() -> list[dict[str, Any]]:
@@ -143,3 +150,81 @@ def test_a_lease_call_answers_as_the_table_says(case: dict[str, Any]) -> None:
                     f"step {i} ({step['call']} of {step['of']}): lease {lease!r} after {prev!r}"
                 )
             prev = lease
+
+
+def _ceiling_cases() -> list[dict[str, Any]]:
+    return json.loads(CEILINGS.read_text())["cases"]
+
+
+def _ceiling(max_requests: int) -> pb.CapabilityCaveats:
+    return pb.CapabilityCaveats(
+        ops=[str(Op.GET), str(Op.SHARE)],
+        max_requests=max_requests,
+        unlimited_budget=admin_types.UnlimitedBudget(),
+    )
+
+
+@pytest.mark.parametrize("case", _ceiling_cases(), ids=lambda c: c["name"])
+def test_a_lease_is_held_against_the_chains_ceilings_as_the_table_says(
+    case: dict[str, Any],
+) -> None:
+    with FakePaladin(strict_auth=True) as fake:
+        obj = fake.put(fake.collection(), _CEILING_KEY, "text/plain", b"x")
+        operator = fake.connect(bearer_token=fake.issue_bearer_token(fake.tenant)).admin.capability
+        parent = operator.issue(
+            pb.CapabilityServiceIssueRequest(
+                subject=pb.CapabilityPrincipal(
+                    kind=pb.PRINCIPAL_KIND_AGENT, tenant_id=fake.tenant, subject="agent:lease"
+                ),
+                audience=[str(Plane.DATA), str(Plane.ADMIN)],
+                caveats=_ceiling(case["parent_max_requests"]),
+            )
+        )
+        child = fake.connect(capability=parent.token).admin.capability.delegate(
+            pb.CapabilityServiceDelegateRequest(
+                parent_id=parent.capability.id,
+                ttl_seconds=_DELEGATE_TTL_SECONDS,
+                caveats=_ceiling(case["child_max_requests"]),
+            )
+        )
+        roles = {_PARENT: parent, _CHILD: child}
+        for i, step in enumerate(case["steps"]):
+            target = roles[step["of"]]
+            calls = {
+                _REQUEST: lambda t=target: fake.connect(capability=t.token).data.object.get_object(
+                    object_service_pb2.GetObjectRequest(name=obj.name)
+                ),
+                "lease": lambda t=target, s=step: operator.lease(
+                    pb.CapabilityServiceLeaseRequest(id=t.capability.id, requests=s["requests"])
+                ),
+                "settle_lease": lambda t=target: operator.settle_lease(
+                    pb.CapabilityServiceSettleLeaseRequest(id=t.capability.id)
+                ),
+            }
+            got, _ = _answer(calls[step["call"]])
+            assert got == _want(step), f"step {i} ({step['call']} of {step['of']})"
+
+
+def test_a_top_up_of_an_expired_lease_holds_only_the_top_up() -> None:
+    """A lease that expired is settled by the next lease of its capability,
+    which holds only what it asks for, as limes's store opens it."""
+    with FakePaladin(strict_auth=True) as fake:
+        operator = fake.connect(bearer_token=fake.issue_bearer_token(fake.tenant)).admin.capability
+        issued = operator.issue(
+            pb.CapabilityServiceIssueRequest(
+                subject=pb.CapabilityPrincipal(
+                    kind=pb.PRINCIPAL_KIND_AGENT, tenant_id=fake.tenant, subject="agent:lease"
+                ),
+                audience=[str(Plane.DATA), str(Plane.ADMIN)],
+                caveats=_ceiling(3),
+            )
+        )
+        target = issued.capability.id
+        first = operator.lease(pb.CapabilityServiceLeaseRequest(id=target, requests=2)).lease
+        with fake._lock:
+            fake._leases[target].expires_at.FromDatetime(
+                datetime.now(UTC) - timedelta(seconds=1)
+            )
+        second = operator.lease(pb.CapabilityServiceLeaseRequest(id=target, requests=3)).lease
+        assert second.id != first.id
+        assert second.requests == 3

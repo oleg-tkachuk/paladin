@@ -65,21 +65,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-### The Python SDK's fake leases reserve nothing against ceilings
-
-- **Status:** Deferred.
-- **Reason:** the Go fake counts and leases through limes's
-  `memstore.UsageStore`, as the server does through pgstore. The Python fake
-  has no limes to call, and models the visible part by hand: a request under
-  a lease is spent from it, and one past it refused. A lease's requests
-  are not reserved against the chain's request ceilings, so a lease is never
-  refused for want of room, and requests under it are not counted against the
-  ceilings above it.
-- **Definition of Done:** the Python fake reserves leased requests against
-  the chain's ceilings and refuses a lease past them, as
-  `memstore.UsageStore` does, and a test holds both fakes to the same answers.
-- **Blockers:** none, but no consumer has hit it.
-
 ## Deploy cutover: rename to `paladin`
 
 ### The `paladin` name has not been checked against trademark registers
@@ -580,12 +565,10 @@ the same commit. Treat this file like a runtime invariant.
   UserSettings; SystemServer has no handler — a table over the RPCs
   asserting a handler failure reaches the caller wrapping the original, plus
   cases for the parsing, forwarding and SUCCESS paths a failing double cannot
-  reach. 78% after the seam alone, 96% after those, measured over 21 RPCs;
-  the table now holds 24 (ListOAuthGrants, RevokeOAuthGrant and
-  ListUserCapabilities came later) and the run has not been repeated.
-- **Not a sample:** a budget of 90 produced only 70 mutations, so the
-  operator set was exhausted. Every non-equivalent mutation in this package
-  was caught.
+  reach. 78% after the seam alone; 97% now, over all 24 RPCs (2026-11-11).
+- **Not a sample:** a budget of 300 produced only 92 mutations, so the
+  operator set is exhausted. Every non-equivalent mutation in this package
+  is caught.
 - **The three that remain, each proved equivalent by running the mutated
   predicate against its boundary input rather than by argument:**
   `parseUserResourceName`'s `len(name) <= len(prefix)` and

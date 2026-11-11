@@ -1,0 +1,63 @@
+{
+  "_comment": "How a lease of requests is held against the request ceilings of its chain, which the server and both SDKs' fakes are held to. Each case issues, in one tenant, parent with ops get and share and the request ceiling parent_max_requests, and child delegated from it with child_max_requests (no more than the parent's). The steps run in order: lease and settle_lease of a capability as an operator, with the requests a lease asks for; request is one data-plane call presenting the capability named. A step answers either a refusal — Connect's code and the ErrorInfo's limes_code (sdk/testdata/error_info.json) — or, when it succeeds, held: the requests the lease holds, none for a request. A lease holds its requests against its own ceiling and each ancestor's until it settles, when the requests made under it are counted on the ancestors.",
+  "cases": [
+    {
+      "name": "a lease past the capability's own ceiling is refused",
+      "parent_max_requests": 5,
+      "child_max_requests": 2,
+      "steps": [
+        {"call": "lease", "of": "child", "requests": 3, "code": "resource_exhausted", "limes_code": "request_limit_exceeded"},
+        {"call": "lease", "of": "child", "requests": 2, "held": 2},
+        {"call": "request", "of": "child"},
+        {"call": "request", "of": "child"},
+        {"call": "request", "of": "child", "code": "resource_exhausted", "limes_code": "lease_requests_exhausted"},
+        {"call": "settle_lease", "of": "child", "held": 2},
+        {"call": "request", "of": "child", "code": "resource_exhausted", "limes_code": "request_limit_exceeded"}
+      ]
+    },
+    {
+      "name": "a lease holds its requests against the parent's ceiling",
+      "parent_max_requests": 3,
+      "child_max_requests": 3,
+      "steps": [
+        {"call": "lease", "of": "child", "requests": 2, "held": 2},
+        {"call": "request", "of": "parent"},
+        {"call": "request", "of": "parent", "code": "resource_exhausted", "limes_code": "request_limit_exceeded"},
+        {"call": "lease", "of": "child", "requests": 1, "code": "resource_exhausted", "limes_code": "request_limit_exceeded"},
+        {"call": "settle_lease", "of": "child", "held": 2},
+        {"call": "request", "of": "parent"},
+        {"call": "request", "of": "parent"},
+        {"call": "request", "of": "parent", "code": "resource_exhausted", "limes_code": "request_limit_exceeded"}
+      ]
+    },
+    {
+      "name": "the requests made under a lease count on the parent once it settles",
+      "parent_max_requests": 3,
+      "child_max_requests": 3,
+      "steps": [
+        {"call": "lease", "of": "child", "requests": 2, "held": 2},
+        {"call": "request", "of": "child"},
+        {"call": "request", "of": "child"},
+        {"call": "settle_lease", "of": "child", "held": 2},
+        {"call": "request", "of": "parent"},
+        {"call": "request", "of": "parent", "code": "resource_exhausted", "limes_code": "request_limit_exceeded"}
+      ]
+    },
+    {
+      "name": "a top-up within the ceilings holds what was left and the new requests",
+      "parent_max_requests": 4,
+      "child_max_requests": 4,
+      "steps": [
+        {"call": "lease", "of": "child", "requests": 2, "held": 2},
+        {"call": "request", "of": "child"},
+        {"call": "lease", "of": "child", "requests": 2, "held": 3},
+        {"call": "request", "of": "parent", "code": "resource_exhausted", "limes_code": "request_limit_exceeded"},
+        {"call": "settle_lease", "of": "child", "held": 3},
+        {"call": "request", "of": "parent"},
+        {"call": "request", "of": "parent"},
+        {"call": "request", "of": "parent"},
+        {"call": "request", "of": "parent", "code": "resource_exhausted", "limes_code": "request_limit_exceeded"}
+      ]
+    }
+  ]
+}
