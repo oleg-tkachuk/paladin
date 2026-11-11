@@ -1,4 +1,4 @@
-## Unreleased — the Python SDK's fake holds a lease against the chain's ceilings
+## sdk/python/v0.145.6, sdk/go/v0.145.6 — the Python SDK's fake holds a lease against the chain's ceilings
 
 - Under `strict_auth=True`, the requests a lease holds are reserved against
   the capability's request ceiling and each ancestor's, as the server and
