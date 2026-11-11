@@ -56,7 +56,7 @@ runtime:
 		t.Fatalf("write overlay: %v", err)
 	}
 
-	cfg, err := Load([]string{base, overlay}, zap.NewNop())
+	cfg, err := Load([]string{base, overlay}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -111,7 +111,7 @@ runtime:
 		t.Fatalf("write overlay: %v", err)
 	}
 
-	if _, err := Load([]string{base, overlay}, zap.NewNop()); err == nil {
+	if _, err := Load([]string{base, overlay}, RoleAPI, zap.NewNop()); err == nil {
 		t.Fatalf("Load: want error on unknown key from overlay, got nil")
 	}
 }
@@ -120,10 +120,10 @@ runtime:
 // of silently loading an empty config and tripping on the first
 // missing field.
 func TestLoad_RejectsEmptyPaths(t *testing.T) {
-	if _, err := Load(nil, zap.NewNop()); err == nil {
+	if _, err := Load(nil, RoleAPI, zap.NewNop()); err == nil {
 		t.Fatalf("Load(nil): want error, got nil")
 	}
-	if _, err := Load([]string{}, zap.NewNop()); err == nil {
+	if _, err := Load([]string{}, RoleAPI, zap.NewNop()); err == nil {
 		t.Fatalf("Load([]): want error, got nil")
 	}
 }

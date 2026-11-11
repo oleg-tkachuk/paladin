@@ -83,7 +83,7 @@ func TestResolveConfig_InCluster_TokenPresent_Resolves(t *testing.T) {
 	r := newTestResolver(t, tokenPath, nsPath, secret("paladin", "pg", "password", "resolved-value"))
 
 	cfg := configWithSecretRef()
-	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+	if err := r.ResolveConfig(context.Background(), cfg, RoleAPI); err != nil {
 		t.Fatalf("ResolveConfig() error = %v, want nil", err)
 	}
 	if got := cfg.Datastores.Postgres.Password; got != "resolved-value" {
@@ -104,7 +104,7 @@ func TestResolveConfig_InCluster_TokenMissing_Errors(t *testing.T) {
 
 	r := newTestResolver(t, tokenPath, nsPath)
 
-	err := r.ResolveConfig(context.Background(), configWithSecretRef())
+	err := r.ResolveConfig(context.Background(), configWithSecretRef(), RoleAPI)
 	if err == nil {
 		t.Fatal("ResolveConfig() error = nil, want actionable error")
 	}
@@ -144,7 +144,7 @@ func TestResolveConfig_InCluster_WebhookSecret(t *testing.T) {
 	cfg := &Config{}
 	cfg.Ingest.Webhook.SharedSecretRef = SecretRef{Name: "paladin-ingest-hmac", Key: "secret"}
 
-	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+	if err := r.ResolveConfig(context.Background(), cfg, RoleIngest); err != nil {
 		t.Fatalf("ResolveConfig() error = %v, want nil", err)
 	}
 	if got := cfg.Ingest.Webhook.SharedSecret; got != "resolved-hmac" {
@@ -181,7 +181,7 @@ func TestResolveConfig_InCluster_IngestBrokerCredentials(t *testing.T) {
 	cfg.Ingest.NATS.TokenRef = SecretRef{Name: "paladin-ingest-nats", Key: "token"}
 	cfg.Ingest.RabbitMQ.URLRef = SecretRef{Name: "paladin-ingest-amqp", Key: "url"}
 
-	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+	if err := r.ResolveConfig(context.Background(), cfg, RoleIngest); err != nil {
 		t.Fatalf("ResolveConfig() error = %v, want nil", err)
 	}
 	if got := cfg.Ingest.NATS.Token; got != "resolved-nats-token" {
@@ -218,7 +218,7 @@ func TestResolveConfig_InCluster_IngestRefMissing(t *testing.T) {
 	} {
 		cfg := &Config{}
 		set(cfg)
-		err := r.ResolveConfig(context.Background(), cfg)
+		err := r.ResolveConfig(context.Background(), cfg, RoleIngest)
 		if err == nil || !strings.Contains(err.Error(), name) {
 			t.Errorf("%s: ResolveConfig() = %v, want an error naming the field", name, err)
 		}
@@ -247,7 +247,7 @@ func TestResolveConfig_InCluster_HealthSnapshotToken(t *testing.T) {
 	cfg := &Config{}
 	cfg.Runtime.HealthSnapshotTokenSecret = &SecretRef{Name: "paladin-health-snapshot", Key: "token"}
 
-	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+	if err := r.ResolveConfig(context.Background(), cfg, RoleAPI); err != nil {
 		t.Fatalf("ResolveConfig() error = %v, want nil", err)
 	}
 	if got := cfg.Runtime.HealthSnapshotToken; got != "resolved-health-token" {
@@ -261,7 +261,7 @@ func TestResolveConfig_InCluster_HealthSnapshotToken(t *testing.T) {
 	// leaving the snapshot open.
 	missing := &Config{}
 	missing.Runtime.HealthSnapshotTokenSecret = &SecretRef{Name: "absent", Key: "token"}
-	if err := r.ResolveConfig(context.Background(), missing); err == nil {
+	if err := r.ResolveConfig(context.Background(), missing, RoleAPI); err == nil {
 		t.Error("ResolveConfig() with a missing Secret = nil, want an error")
 	}
 }
@@ -289,7 +289,7 @@ func TestResolveConfig_OutOfCluster_NoToken_NoOp(t *testing.T) {
 			},
 		},
 	}
-	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+	if err := r.ResolveConfig(context.Background(), cfg, RoleAPI); err != nil {
 		t.Fatalf("ResolveConfig() error = %v, want nil", err)
 	}
 	if got := cfg.Datastores.Postgres.Password; got != "inline-pw" {
@@ -473,7 +473,7 @@ func TestResolveConfig_InCluster_OAuthSeedClientSecret(t *testing.T) {
 	// The MCP server reads the same Secret for its side of the exchange.
 	cfg.MCP.OAuth.Exchange = MCPOAuthExchange{ClientID: "mcp", ClientSecretRef: &SecretRef{Name: "paladin-mcp-oauth", Key: "client-secret"}}
 
-	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
+	if err := r.ResolveConfig(context.Background(), cfg, RoleMCPEmbedded); err != nil {
 		t.Fatalf("ResolveConfig() error = %v, want nil", err)
 	}
 	if got := cfg.Auth.OAuth.SeedClients[1].ClientSecret; got != "resolved-client-secret" {
@@ -496,7 +496,7 @@ func TestResolveConfig_InCluster_OAuthSeedClientSecret(t *testing.T) {
 	missing.Auth.OAuth.SeedClients = []OAuthSeedClient{
 		{ClientID: "mcp", ClientSecretRef: &SecretRef{Name: "absent", Key: "client-secret"}},
 	}
-	if err := r.ResolveConfig(context.Background(), missing); err == nil {
+	if err := r.ResolveConfig(context.Background(), missing, RoleMCPEmbedded); err == nil {
 		t.Error("ResolveConfig() with a missing Secret = nil, want an error")
 	}
 }

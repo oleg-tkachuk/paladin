@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 // configSource turns the --config flag and PALADIN_CONFIG_OVERLAYS into the paths
@@ -22,7 +24,7 @@ func TestConfigSourceMakesPathsAbsolute(t *testing.T) {
 	withConfigPath(t, "configs/config.yaml")
 	t.Setenv("PALADIN_CONFIG_OVERLAYS", "")
 
-	got := configSource()
+	got := configSource(config.RoleAPI)
 	if !filepath.IsAbs(got.Path) {
 		t.Errorf("Path = %q, want absolute — a relative path resolves against the "+
 			"working directory, which differs between a container and a laptop", got.Path)
@@ -33,7 +35,7 @@ func TestConfigSourceNoOverlaysByDefault(t *testing.T) {
 	withConfigPath(t, "configs/config.yaml")
 	t.Setenv("PALADIN_CONFIG_OVERLAYS", "")
 
-	if got := configSource(); len(got.Overlays) != 0 {
+	if got := configSource(config.RoleAPI); len(got.Overlays) != 0 {
 		t.Errorf("Overlays = %v, want none when the env var is empty", got.Overlays)
 	}
 }
@@ -42,7 +44,7 @@ func TestConfigSourceParsesOverlaysInOrder(t *testing.T) {
 	withConfigPath(t, "configs/config.yaml")
 	t.Setenv("PALADIN_CONFIG_OVERLAYS", "a.yaml:b.yaml:c.yaml")
 
-	got := configSource()
+	got := configSource(config.RoleAPI)
 	if len(got.Overlays) != 3 {
 		t.Fatalf("got %d overlays, want 3: %v", len(got.Overlays), got.Overlays)
 	}
@@ -61,7 +63,7 @@ func TestConfigSourceSkipsEmptyAndTrimsEntries(t *testing.T) {
 	withConfigPath(t, "configs/config.yaml")
 	t.Setenv("PALADIN_CONFIG_OVERLAYS", " a.yaml : : b.yaml ::")
 
-	got := configSource()
+	got := configSource(config.RoleAPI)
 	if len(got.Overlays) != 2 {
 		t.Fatalf("got %d overlays, want 2 (empties skipped): %v", len(got.Overlays), got.Overlays)
 	}
@@ -79,7 +81,7 @@ func TestConfigSourceAllOverlaysAbsolute(t *testing.T) {
 	withConfigPath(t, "configs/config.yaml")
 	t.Setenv("PALADIN_CONFIG_OVERLAYS", "rel/one.yaml:rel/two.yaml")
 
-	for _, o := range configSource().Overlays {
+	for _, o := range configSource(config.RoleAPI).Overlays {
 		if !filepath.IsAbs(o) {
 			t.Errorf("overlay %q must be absolute for the same reason the base path is", o)
 		}
@@ -100,5 +102,17 @@ func TestBuildMetaCarriesTheStamp(t *testing.T) {
 	// matters is that the fields are wired, not what they contain here.
 	if got.Version != version || got.Commit != commit || got.BuildTime != buildTime {
 		t.Error("buildMeta must forward the injected stamp verbatim")
+	}
+}
+
+// The role a command names travels with its config source, so the loader
+// reads that role's Secrets and no other's.
+func TestConfigSourceCarriesTheRole(t *testing.T) {
+	withConfigPath(t, "configs/config.yaml")
+	t.Setenv("PALADIN_CONFIG_OVERLAYS", "")
+	for _, r := range []config.Role{config.RoleWorker, config.RoleMCP, config.RoleMCPEmbedded} {
+		if got := configSource(r).Role; got != r {
+			t.Errorf("configSource(%s).Role = %s", r, got)
+		}
 	}
 }

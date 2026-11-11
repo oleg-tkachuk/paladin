@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	bootstrappkg "github.com/oleg-tkachuk/paladin/backend/internal/bootstrap"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 )
 
@@ -30,7 +31,7 @@ var bootstrapCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		cfg, l, db, otelShutdown := boot(ctx)
+		cfg, l, db, otelShutdown := boot(ctx, config.RoleBootstrap)
 		defer db.Close()
 		defer flushOTel(otelShutdown)
 

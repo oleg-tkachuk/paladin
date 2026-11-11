@@ -41,7 +41,7 @@ var serveWorkerCmd = &cobra.Command{
 	Short: "Run background workers with co-operative leader election",
 	Run: func(cmd *cobra.Command, args []string) {
 		fx.New(
-			fx.Supply(configSource()),
+			fx.Supply(configSource(config.RoleWorker)),
 			fx.Supply(buildMeta()),
 			workerModule,
 		).Run()

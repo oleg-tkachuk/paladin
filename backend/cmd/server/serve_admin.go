@@ -5,6 +5,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 // serveAdminCmd runs only the admin Connect listener on Uber fx. Sized for low
@@ -16,7 +17,7 @@ var serveAdminCmd = &cobra.Command{
 	Short: "Run admin Connect listener",
 	Run: func(cmd *cobra.Command, args []string) {
 		fx.New(
-			fx.Supply(configSource()),
+			fx.Supply(configSource(config.RoleAdmin)),
 			fx.Supply(buildMeta()),
 			app.AdminModule,
 		).Run()

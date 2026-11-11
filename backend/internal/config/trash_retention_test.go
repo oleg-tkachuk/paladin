@@ -32,7 +32,7 @@ func loadTrashRetention(t *testing.T, extra string) (Config, error) {
 	if err := os.WriteFile(path, []byte(trashRetentionBase+extra), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return Load([]string{path}, zap.NewNop())
+	return Load([]string{path}, RoleAPI, zap.NewNop())
 }
 
 // An operator who says nothing gets the owner's default: 30 days.

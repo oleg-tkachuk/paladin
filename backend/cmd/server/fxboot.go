@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 // configSource resolves the CLI config path + PALADIN_CONFIG_OVERLAYS chain into
 // the value the fx ConfigProvider consumes. Mirrors the resolution boot() does
 // (abs paths + colon-separated overlays, later wins); the two share the same
 // semantics so an fx and a non-fx role load config identically.
-func configSource() app.ConfigSource {
+func configSource(role config.Role) app.ConfigSource {
 	if abs, err := filepath.Abs(configPath); err == nil {
 		configPath = abs
 	}
@@ -29,7 +30,7 @@ func configSource() app.ConfigSource {
 			overlays = append(overlays, p)
 		}
 	}
-	return app.ConfigSource{Path: configPath, Overlays: overlays}
+	return app.ConfigSource{Path: configPath, Overlays: overlays, Role: role}
 }
 
 // buildMeta carries the version-stamp into the fx graph.

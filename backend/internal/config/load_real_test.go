@@ -56,7 +56,7 @@ func TestHelmValuesConfigBlock(t *testing.T) {
 	if err := os.WriteFile(path, []byte(rendered), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Load([]string{path}, zap.NewNop()); err != nil {
+	if _, err := Load([]string{path}, RoleAPI, zap.NewNop()); err != nil {
 		t.Fatalf("Load the config the chart renders for values-local.yaml: %v", err)
 	}
 }
@@ -84,7 +84,7 @@ storage:
 	if err := os.WriteFile(path, body, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	cfg, err := Load([]string{path}, zap.NewNop())
+	cfg, err := Load([]string{path}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load minimal yaml: %v", err)
 	}
@@ -125,7 +125,7 @@ storage:
 	if err := os.WriteFile(path, body, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	_, err := Load([]string{path}, zap.NewNop())
+	_, err := Load([]string{path}, RoleAPI, zap.NewNop())
 	if err == nil {
 		t.Fatal("Load accepted a backend with no auth.mode")
 	}
@@ -144,12 +144,12 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	} {
 		path := path
 		t.Run(path, func(t *testing.T) {
-			if _, err := Load([]string{path}, zap.NewNop()); err != nil {
+			if _, err := Load([]string{path}, RoleAPI, zap.NewNop()); err != nil {
 				t.Fatalf("Load %s: %v", path, err)
 			}
 		})
 	}
-	cfg, err := Load([]string{"../../configs/config.yaml"}, zap.NewNop())
+	cfg, err := Load([]string{"../../configs/config.yaml"}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load configs/config.yaml: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestLoadRealConfigYAML(t *testing.T) {
 // load-bearing, because a host-run stack on 8080 collides with another
 // local service.
 func TestShippedConfigDataPortMatchesSchema(t *testing.T) {
-	shipped, err := Load([]string{"../../configs/config.yaml"}, zap.NewNop())
+	shipped, err := Load([]string{"../../configs/config.yaml"}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load configs/config.yaml: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestShippedConfigDataPortMatchesSchema(t *testing.T) {
 	if err := os.WriteFile(minimal, []byte(minimalConfigYAML), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	defaults, err := Load([]string{minimal}, zap.NewNop())
+	defaults, err := Load([]string{minimal}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load minimal yaml: %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 )
 
@@ -27,7 +28,7 @@ var migrateCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		cfg, l, db, otelShutdown := boot(ctx)
+		cfg, l, db, otelShutdown := boot(ctx, config.RoleMigrate)
 		defer db.Close()
 		defer flushOTel(otelShutdown)
 

@@ -59,7 +59,7 @@ func TestLiveMCPDelegationConfig(t *testing.T) {
 	// The script hands the bridge its two secrets in the environment.
 	t.Setenv(EnvPrefix+"AUTH_SIGNING_KEY", "live-mcp-test-signing-key-6c1f0a9e2b7d4c58a3e1")
 	t.Setenv(EnvPrefix+"MCP_OAUTH_EXCHANGE_CLIENT_SECRET", "live-mcp-test-exchange-secret-91d2e4f7")
-	cfg, err := Load([]string{path}, zap.NewNop())
+	cfg, err := Load([]string{path}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load the bridge config the script renders: %v", err)
 	}

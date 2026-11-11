@@ -51,7 +51,7 @@ func TestOAuthClientReapDefaults(t *testing.T) {
 	if err := os.WriteFile(minPath, []byte(minimalConfigYAML), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load([]string{minPath}, zap.NewNop())
+	cfg, err := Load([]string{minPath}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
