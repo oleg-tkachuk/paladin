@@ -410,9 +410,35 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
+      # The browser is Playwright's own download, cached by its version. Its
+      # system libraries are the runner image's, which ships Chrome and the
+      # libraries it needs. `--with-deps` installed them through apt on every
+      # run, and while the runners could not resolve the Ubuntu mirrors every
+      # e2e job failed before a test ran.
+      - name: Read the Playwright version
+        id: playwright
+        working-directory: frontend
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright's Chromium
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}
+
       - name: Install Chromium
         working-directory: frontend
-        run: pnpm exec playwright install chromium --with-deps
+        run: pnpm exec playwright install chromium
+
+      # apt only when the image lacks a library Chromium needs, which no
+      # download from Playwright can supply.
+      - name: Install Chromium's system libraries, if the image lacks them
+        working-directory: frontend
+        run: |
+          if ! node -e "require('@playwright/test').chromium.launch().then((b) => b.close())"; then
+            echo "::warning::Chromium does not start on this runner image; installing its libraries through apt"
+            pnpm exec playwright install-deps chromium
+          fi
 
       - name: Fetch the images
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
