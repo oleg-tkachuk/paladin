@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
@@ -32,6 +33,11 @@ import (
 // cedar engine's Start() is called here but Stop() — if/when added —
 // must be invoked by the caller during graceful shutdown.
 type SharedDeps struct {
+	// SessionKeys is the session key set, loaded by the role that mints
+	// (AssembleAPIMuxes) and nil in every other role, which verifies by the
+	// JWKS instead (ADR-0047).
+	SessionKeys *sessionkey.Set
+
 	Cfg    config.Config
 	Logger *zap.Logger
 	DB     *postgres.DB

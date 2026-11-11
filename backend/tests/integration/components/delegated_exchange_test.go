@@ -20,17 +20,21 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 )
 
 // The IAM issuer the paladin-mcp tokens below come from, the agent they are
 // granted to, and the MCP server that exchanges them.
 const (
 	exchangeSubjectIssuer = "paladin"
-	exchangeSubjectKey    = "exchange-test-signing-key-32-bytes-long"
 	exchangeAgentClient   = "agent"
 	exchangeRelayClient   = "paladin-mcp-server"
 	exchangeSubjectTTL    = 10 * time.Minute
 )
+
+// exchangeSubjectKey is the session key set of the IAM issuer the subject
+// tokens come from (ADR-0047).
+var exchangeSubjectKey = sessiontest.MustKeys()
 
 // exchangeExpiryRounding is how much sooner than its token a capability may
 // expire: limes counts the token's remaining life, and the capability's
@@ -59,8 +63,8 @@ func newReplicaExchanger(t *testing.T, store *pgstore.Store, signer *limes.Signe
 	if err != nil {
 		t.Fatal(err)
 	}
-	subjects := delegation.NewSubjectVerifier(&auth.JWTVerifier{
-		Key: []byte(exchangeSubjectKey), ExpectedIssuer: exchangeSubjectIssuer, ExpectedAudience: auth.AudienceMCP,
+	subjects := delegation.NewSubjectVerifier(&auth.KeySetVerifier{
+		Keys: exchangeSubjectKey.Public(), ExpectedIssuer: exchangeSubjectIssuer, ExpectedAudience: auth.AudienceMCP,
 	}, exchangeSubjectIssuer)
 	ex, err := delegation.NewExchanger(capIssuer, subjects, pgstore.ScopedExchanges(store), exchangeUsers{user},
 		limes.AbstractUnitCode, slog.New(slog.DiscardHandler))
@@ -91,7 +95,7 @@ func TestDelegatedExchangeIssuesOneCapabilityPerToken(t *testing.T) {
 	}
 	one, other := newReplicaExchanger(t, store, signer, user), newReplicaExchanger(t, store, signer, user)
 	minter, err := issuer.New(issuer.Config{
-		Issuer: exchangeSubjectIssuer, SigningKey: []byte(exchangeSubjectKey),
+		Issuer: exchangeSubjectIssuer, Keys: exchangeSubjectKey,
 		AccessTokenTTL: exchangeSubjectTTL, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour,
 	})
 	if err != nil {

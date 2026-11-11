@@ -20,10 +20,9 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/ratecount"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 	"go.uber.org/zap"
 )
-
-const e2eSigningKey = "e2e-oauth-signing-key-at-least-32bytes!!"
 
 // TestOAuthFlowE2E drives the full ADR-0009 auth-code + PKCE flow over real
 // HTTP against real Postgres: /authorize (login+consent) → code → /token →
@@ -48,11 +47,12 @@ func TestOAuthFlowE2E(t *testing.T) {
 		`INSERT INTO users (id, tenant_id, subject, password_hash) VALUES ($1,$2,'svc@acme',$3)`,
 		userID, tenantID, hash)
 
-	iss, err := issuer.New(issuer.Config{Issuer: "paladin", SigningKey: []byte(e2eSigningKey), AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
+	keys := sessiontest.Keys(t)
+	iss, err := issuer.New(issuer.Config{Issuer: "paladin", Keys: keys, AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)
 	}
-	dec := &auth.RefreshDecoder{Verifier: &auth.JWTVerifier{Key: []byte(e2eSigningKey), ExpectedIssuer: "paladin", ExpectedAudience: auth.AudienceIAM}}
+	dec := &auth.RefreshDecoder{Verifier: sessiontest.Verifier(keys, "paladin", auth.AudienceIAM)}
 
 	store := oauth.NewPgxStore(pool)
 	if err := store.UpsertClient(ctx, oauth.Client{

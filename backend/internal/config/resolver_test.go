@@ -124,7 +124,7 @@ func TestResolveConfig_InCluster_TokenMissing_Errors(t *testing.T) {
 // SecretRef that Validate() accepts but the resolver historically never
 // walked — so a SealedSecret-backed prod deploy booted with an empty key.
 // This pins that both refs resolve in-cluster and are cleared after.
-func TestResolveConfig_InCluster_SigningKeyAndWebhookSecret(t *testing.T) {
+func TestResolveConfig_InCluster_WebhookSecret(t *testing.T) {
 	t.Setenv(DefaultK8sServiceHostEnvKey, "10.0.0.1")
 
 	dir := t.TempDir()
@@ -138,25 +138,14 @@ func TestResolveConfig_InCluster_SigningKeyAndWebhookSecret(t *testing.T) {
 	}
 
 	r := newTestResolver(t, tokenPath, nsPath,
-		secret("paladin", "paladin-signing-key", "key", "resolved-signing-key"),
 		secret("paladin", "paladin-ingest-hmac", "secret", "resolved-hmac"),
 	)
 
-	cfg := &Config{
-		Auth: Auth{
-			SigningKeySecret: &SecretRef{Name: "paladin-signing-key", Key: "key"},
-		},
-	}
+	cfg := &Config{}
 	cfg.Ingest.Webhook.SharedSecretRef = SecretRef{Name: "paladin-ingest-hmac", Key: "secret"}
 
 	if err := r.ResolveConfig(context.Background(), cfg); err != nil {
 		t.Fatalf("ResolveConfig() error = %v, want nil", err)
-	}
-	if got := cfg.Auth.SigningKey; got != "resolved-signing-key" {
-		t.Errorf("Auth.SigningKey = %q, want resolved-signing-key", got)
-	}
-	if cfg.Auth.SigningKeySecret != nil {
-		t.Errorf("Auth.SigningKeySecret = %+v, want cleared", cfg.Auth.SigningKeySecret)
 	}
 	if got := cfg.Ingest.Webhook.SharedSecret; got != "resolved-hmac" {
 		t.Errorf("Ingest.Webhook.SharedSecret = %q, want resolved-hmac", got)

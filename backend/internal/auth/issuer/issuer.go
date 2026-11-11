@@ -4,16 +4,17 @@
 //
 //   - Access — short-lived (default 15min), audience matches the target
 //     plane (paladin-data | paladin-admin | paladin-iam). Carries roles/scopes/tenant
-//     and the principal kind. Verified by the standard auth.JWTVerifier.
+//     and the principal kind.
 //
 //   - Refresh — longer-lived (default 7d), audience is always `paladin-iam`,
 //     subject is the user_id, includes a token_id (jti) so the IAM store
 //     can revoke it on rotate.
 //
-// Issuer is intentionally HS256-only for v1 — keys live in the secret store
-// (`auth.signing_key_secret_ref`). Rotation is supported via two-key window:
-// the issuer signs with key.Active and the verifier accepts both Active and
-// Previous for `key.GracePeriod`.
+// Both are signed ES256 by the session key set's active key, under its kid
+// (ADR-0047). Verifiers hold the set's public keys only: the issuer's own
+// process through auth.KeySetVerifier, every other role through the JWKS the
+// set serves. A rotation adds a key to the set and keeps the previous one
+// published, so tokens it signed still verify until they expire.
 package issuer
 
 import (
@@ -27,15 +28,16 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jws"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 )
 
 // Config bundles the static parameters for an Issuer.
 type Config struct {
-	Issuer            string        // "iss" claim value
-	SigningKey        []byte        // HS256 secret
-	AccessTokenTTL    time.Duration // typical 15m
-	RefreshTokenTTL   time.Duration // typical 168h (7d)
-	ScopedTokenMaxTTL time.Duration // upper bound on MintScopedToken (typical 24h)
+	Issuer            string          // "iss" claim value
+	Keys              *sessionkey.Set // signs with its active key
+	AccessTokenTTL    time.Duration   // typical 15m
+	RefreshTokenTTL   time.Duration   // typical 168h (7d)
+	ScopedTokenMaxTTL time.Duration   // upper bound on MintScopedToken (typical 24h)
 	Now               func() time.Time
 }
 
@@ -44,10 +46,6 @@ type Config struct {
 type Issuer struct {
 	cfg Config
 }
-
-// MinSigningKeyBytes is the shortest HMAC key New accepts: HS256's own
-// output size, below which the key, not the hash, bounds a forgery.
-const MinSigningKeyBytes = 32
 
 // What New takes for a TTL the config leaves at zero or below.
 const (
@@ -60,8 +58,8 @@ func New(cfg Config) (*Issuer, error) {
 	if cfg.Issuer == "" {
 		return nil, errors.New("issuer: Issuer claim is required")
 	}
-	if len(cfg.SigningKey) < MinSigningKeyBytes {
-		return nil, fmt.Errorf("issuer: SigningKey must be at least %d bytes", MinSigningKeyBytes)
+	if cfg.Keys == nil {
+		return nil, errors.New("issuer: Keys is required")
 	}
 	if cfg.AccessTokenTTL <= 0 {
 		cfg.AccessTokenTTL = DefaultAccessTokenTTL
@@ -149,7 +147,7 @@ func (i *Issuer) MintAccess(c AccessClaims) (string, time.Time, error) {
 	if c.SessionID != "" {
 		claims[auth.ClaimSessionID] = c.SessionID
 	}
-	tok, err := signHS256(i.cfg.SigningKey, claims)
+	tok, err := sign(i.cfg.Keys, claims)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -194,7 +192,7 @@ func (i *Issuer) MintRefresh(c RefreshClaims) (string, time.Time, error) {
 	if c.TenantID != uuid.Nil() {
 		claims["tenant"] = c.TenantID.String()
 	}
-	tok, err := signHS256(i.cfg.SigningKey, claims)
+	tok, err := sign(i.cfg.Keys, claims)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -216,9 +214,9 @@ func kindString(k auth.PrincipalKind) string {
 // tokenType is the typ header of every token the issuer mints.
 const tokenType = "JWT"
 
-// signHS256 is claims as a compact JWT signed with secret by HS256, through
-// jws.
-func signHS256(secret []byte, claims map[string]any) (string, error) {
+// sign is claims as a compact JWT signed ES256 by keys' active key, under
+// its kid, through jws.
+func sign(keys *sessionkey.Set, claims map[string]any) (string, error) {
 	payload, err := json.Marshal(claims)
 	if err != nil {
 		return "", fmt.Errorf("issuer: claims: %w", err)
@@ -227,7 +225,7 @@ func signHS256(secret []byte, claims map[string]any) (string, error) {
 	if err := hdr.Set(jws.TypeKey, tokenType); err != nil {
 		return "", fmt.Errorf("issuer: header: %w", err)
 	}
-	tok, err := jws.Sign(payload, jws.WithKey(jwa.HS256(), secret, jws.WithProtectedHeaders(hdr)))
+	tok, err := jws.Sign(payload, jws.WithKey(jwa.ES256(), keys.Signer(), jws.WithProtectedHeaders(hdr)))
 	if err != nil {
 		return "", fmt.Errorf("issuer: sign: %w", err)
 	}

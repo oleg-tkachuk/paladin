@@ -317,21 +317,28 @@ type Limits struct {
 	Presign               Presign  `yaml:"presign" json:"presign"`
 }
 
-// Auth configures JWT verification + minting. v2 issues tokens itself via
-// AuthService.Login / RefreshToken; the same SigningKey is used for both
-// signing (issuer) and verification (interceptor on each plane).
-//
-// JWKSURL, when set, switches token verification on the planes and the MCP
-// edge to that JWKS; SigningKey stays required for the tokens Paladin mints.
+// Auth configures the sessions Paladin's IAM mints and every plane verifies
+// (ADR-0047). The role that mints — `serve api`, and the embedded mode —
+// signs ES256 with the private key at SessionKeyPath and verifies with its
+// public keys; every other role verifies against the JWKS at JWKSURL, which
+// that role serves. No shared secret signs or verifies a session.
 type Auth struct {
-	Issuer            string        `yaml:"issuer" json:"issuer"`
-	JWKSURL           string        `yaml:"jwks_url" json:"jwks_url"`
-	SigningKey        string        `yaml:"signing_key" json:"signing_key"`
-	SigningKeySecret  *SecretRef    `yaml:"signing_key_secret" json:"signing_key_secret"`
-	Leeway            time.Duration `yaml:"leeway" json:"leeway"`
-	AccessTokenTTL    time.Duration `yaml:"access_token_ttl" json:"access_token_ttl"`
-	RefreshTokenTTL   time.Duration `yaml:"refresh_token_ttl" json:"refresh_token_ttl"`
-	ScopedTokenMaxTTL time.Duration `yaml:"scoped_token_max_ttl" json:"scoped_token_max_ttl"`
+	Issuer  string `yaml:"issuer" json:"issuer"`
+	JWKSURL string `yaml:"jwks_url" json:"jwks_url"`
+	// JWKSCAPath is the CA bundle (PEM) the JWKS fetch trusts, for a JWKS
+	// served under the internal CA; empty trusts the system roots.
+	JWKSCAPath string `yaml:"jwks_ca_path" json:"jwks_ca_path"`
+	// SessionKeyPath is the session signing key: ECDSA P-256, PEM PKCS#8.
+	// Only the role that mints reads it.
+	SessionKeyPath string `yaml:"session_key_path" json:"session_key_path"`
+	// PreviousSessionPublicKeyPaths are the public keys (PEM PKIX) of keys
+	// rotated out, published beside the active one until the tokens they
+	// signed expire.
+	PreviousSessionPublicKeyPaths []string      `yaml:"previous_session_public_key_paths" json:"previous_session_public_key_paths"`
+	Leeway                        time.Duration `yaml:"leeway" json:"leeway"`
+	AccessTokenTTL                time.Duration `yaml:"access_token_ttl" json:"access_token_ttl"`
+	RefreshTokenTTL               time.Duration `yaml:"refresh_token_ttl" json:"refresh_token_ttl"`
+	ScopedTokenMaxTTL             time.Duration `yaml:"scoped_token_max_ttl" json:"scoped_token_max_ttl"`
 
 	// LoginRateLimitPerSubjectPerMinute caps credential-bearing IAM RPCs
 	// (Login + RefreshToken) per (subject, IP) per minute — the credential-
@@ -353,7 +360,7 @@ type Auth struct {
 
 // OAuthAS configures the IAM-hosted OAuth 2.1 Authorization Server (ADR-0009).
 // Tokens are minted by the same issuer.Issuer the login path uses, so the
-// SigningKey / AccessTokenTTL / RefreshTokenTTL on the parent Auth block
+// session key / AccessTokenTTL / RefreshTokenTTL on the parent Auth block
 // apply; this block adds only the OAuth-specific knobs.
 type OAuthAS struct {
 	// Enabled mounts the /oauth/* endpoints. Off → IAM serves only the
@@ -1400,12 +1407,11 @@ type APIToken struct {
 	// like the auth signing key. Provide it out-of-band via HMACKeySecret
 	// (Kubernetes Secret) in real deployments; an inline value here is for
 	// dev only. One of the two is required when Enabled: it is never
-	// derived from Auth.SigningKey (ADR-0047).
+	// derived from the session key (ADR-0047).
 	HMACKey string `yaml:"hmac_key" json:"hmac_key"`
 
 	// HMACKeySecret resolves HMACKey from a Kubernetes Secret at boot.
-	// Takes precedence over an inline HMACKey. Same pattern as
-	// Auth.SigningKeySecret.
+	// Takes precedence over an inline HMACKey.
 	HMACKeySecret *SecretRef `yaml:"hmac_key_secret" json:"hmac_key_secret"`
 }
 

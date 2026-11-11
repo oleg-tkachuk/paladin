@@ -72,13 +72,6 @@ func TestValidate_SecretMutex_PostgresReaperPassword(t *testing.T) {
 	mustReject(t, c, "reaper_password and reaper_password_secret")
 }
 
-func TestValidate_SecretMutex_AuthSigningKey(t *testing.T) {
-	c := minimalValidConfig()
-	c.Auth.SigningKey = "32-bytes-of-secret-data-here-please"
-	c.Auth.SigningKeySecret = &SecretRef{Name: "x", Key: "k"}
-	mustReject(t, c, "auth: cannot specify both signing_key and signing_key_secret")
-}
-
 func TestValidate_SecretMutex_HealthSnapshotToken(t *testing.T) {
 	c := minimalValidConfig()
 	c.Runtime.HealthSnapshotToken = "inline"

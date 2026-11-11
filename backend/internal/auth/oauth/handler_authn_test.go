@@ -253,7 +253,7 @@ func postJSON(h *Handler, path string, body string) *httptest.ResponseRecorder {
 func mintRefresh(t *testing.T, userID, tenantID uuid.UUID) string {
 	t.Helper()
 	iss, err := issuer.New(issuer.Config{
-		Issuer: "paladin", SigningKey: []byte(testSigningKey),
+		Issuer: "paladin", Keys: testKeys,
 		AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour,
 	})
 	if err != nil {

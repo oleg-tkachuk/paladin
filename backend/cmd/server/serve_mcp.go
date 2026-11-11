@@ -23,6 +23,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/mcp"
@@ -126,6 +127,9 @@ type mcpRunner struct {
 	// capability that acts for its user (ADR-0041); nil when
 	// mcp.oauth.exchange names no client.
 	delegation *mcp.DelegationClient
+	// sessionKeys verifies sessions in process when the embedded mode mints
+	// them; nil for the bridge, which verifies by auth.jwks_url (ADR-0047).
+	sessionKeys *sessionkey.Set
 	// onStop releases mode-owned resources after the transport drains. Bridge
 	// owns none and leaves it nil.
 	onStop func(context.Context)
@@ -243,6 +247,7 @@ func provideMCPEmbeddedRunner(
 		// names a network the inline transport does not dial.
 		delegation: delegationClient(inlineExchange(cfg.MCP),
 			&http.Client{Transport: mcp.NewInlineTransport(inlineHandlers)}, mcp.InlineIAMURL),
+		sessionKeys: deps.SessionKeys,
 		onStop: func(context.Context) {
 			// Bounded (5s) fresh-context OTel flush — see the same note in the
 			// other roles: the fx OnStop context carries the 90s StopTimeout, so
@@ -297,7 +302,7 @@ func runMCPServer(lc fx.Lifecycle, sd fx.Shutdowner, r mcpRunner) {
 					}
 				case "http":
 					if clients, err = r.httpClients(); err == nil {
-						err = runHTTP(workCtx, r.cfg, r.l, r.modeLabel, clients, r.delegation)
+						err = runHTTP(workCtx, r.cfg, r.l, r.modeLabel, clients, r.delegation, r.sessionKeys)
 					}
 				default:
 					r.l.Error("unknown transport (expected stdio|http)", zap.String("transport", mcpTransport))
@@ -361,7 +366,7 @@ func runStdio(ctx context.Context, cfg config.Config, l *zap.Logger, clients *mc
 // runHTTP runs the streamable-HTTP MCP transport over one server and one set
 // of Clients. Credential-less requests are turned away with 401 before they
 // reach it — see RequireToken / RequireBearer below.
-func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel string, clients *mcp.Clients, delegation *mcp.DelegationClient) error {
+func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel string, clients *mcp.Clients, delegation *mcp.DelegationClient, keys *sessionkey.Set) error {
 	profile := pickProfile(mcpProfile, cfg.MCP.HTTP.Profile)
 	filter := mcp.NewToolFilter(cfg.MCP, profile)
 
@@ -386,7 +391,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// claim for the session's display label. Degrades to blank when no signing
 	// key is configured (a thin bridge) or the token is absent/invalid.
 	sessions := mcp.NewSessionRegistry()
-	subjectFn := agentSubjectFn(ctx, cfg.Auth, l)
+	subjectFn := agentSubjectFn(ctx, cfg.Auth, keys, l)
 	tracked := mcp.TrackSessions(handler, sessions, subjectFn)
 
 	mux := http.NewServeMux()
@@ -426,17 +431,17 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 		// The MCP server is its own audience (ADR-0036): it accepts
 		// paladin-mcp alone and exchanges it for the capability that acts for
 		// its user on every plane it calls (ADR-0041).
-		v, verr := app.BuildVerifier(ctx, cfg.Auth, auth.AudienceMCP, l)
+		v, verr := app.BuildVerifier(ctx, cfg.Auth, keys, auth.AudienceMCP, l)
 		if verr != nil {
 			return fmt.Errorf("mcp: a token exchange needs a verifier for %s: %w", auth.AudienceMCP, verr)
 		}
 		mcpHandler = mcp.RequireBearer(tracked, v, metadataURL, mcp.OnlyMCPAudience(), mcp.WithDelegation(delegation))
-	} else if v := buildAgentVerifier(ctx, cfg.Auth, l); v != nil {
+	} else if v := buildAgentVerifier(ctx, cfg.Auth, keys, l); v != nil {
 		mcpHandler = mcp.RequireBearer(tracked, v, metadataURL)
 	} else {
-		// A thin bridge with no signing key or JWKS cannot verify; the planes
-		// do. Sessions are still bound to the credential that opened them.
-		l.Warn("mcp: no JWT verifier (set auth.signing_key or auth.jwks_url) — tokens are checked only by the planes")
+		// A thin bridge with no JWKS cannot verify; the planes do. Sessions
+		// are still bound to the credential that opened them.
+		l.Warn("mcp: no session verifier (set auth.jwks_url) — tokens are checked only by the planes")
 		mcpHandler = mcp.RequireToken(tracked)
 	}
 	mux.Handle("/mcp", mcpHandler)
@@ -447,7 +452,7 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// the call is gated by the same RBAC as the admin service. If no usable
 	// verifier can be built (e.g. a bridge with no signing key configured),
 	// skip the endpoint; the admin proxy treats unreachable as an empty list.
-	if verifier, verr := app.BuildVerifier(ctx, cfg.Auth, auth.AudienceAdmin, l); verr != nil {
+	if verifier, verr := app.BuildVerifier(ctx, cfg.Auth, keys, auth.AudienceAdmin, l); verr != nil {
 		l.Warn("mcp /sessions disabled: no usable JWT verifier", zap.Error(verr))
 	} else {
 		mux.Handle("GET /sessions", mcp.SessionsHandler(sessions, verifier))
@@ -573,8 +578,8 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 // subject) when no usable verifier can be built (e.g. a thin bridge with no
 // signing key), so the column stays empty rather than trusting an unverified
 // token.
-func agentSubjectFn(ctx context.Context, a config.Auth, l *zap.Logger) func(*http.Request) string {
-	verifier := buildAgentVerifier(ctx, a, l)
+func agentSubjectFn(ctx context.Context, a config.Auth, keys *sessionkey.Set, l *zap.Logger) func(*http.Request) string {
+	verifier := buildAgentVerifier(ctx, a, keys, l)
 	if verifier == nil {
 		return func(*http.Request) string { return "" }
 	}
@@ -601,10 +606,13 @@ func agentSubjectFn(ctx context.Context, a config.Auth, l *zap.Logger) func(*htt
 // challenge (ADR-0008). Signature + issuer + expiry are checked;
 // ExpectedAudience is deliberately left empty because an agent token targets
 // whichever plane it calls (admin/data/iam) — the planes enforce audience
-// downstream. Returns nil when no key/JWKS is configured (a thin bridge),
-// so callers degrade gracefully rather than trusting unverified tokens.
-func buildAgentVerifier(ctx context.Context, a config.Auth, l *zap.Logger) auth.TokenVerifier {
+// downstream. Returns nil when no key set and no JWKS is configured (a thin
+// bridge), so callers degrade gracefully rather than trusting unverified
+// tokens.
+func buildAgentVerifier(ctx context.Context, a config.Auth, keys *sessionkey.Set, l *zap.Logger) auth.TokenVerifier {
 	switch {
+	case keys != nil:
+		return &auth.KeySetVerifier{Keys: keys.Public(), ExpectedIssuer: a.Issuer, Leeway: a.Leeway}
 	case a.JWKSURL != "":
 		v := auth.NewJWKSVerifier(a.JWKSURL)
 		v.ExpectedIssuer = a.Issuer
@@ -614,12 +622,6 @@ func buildAgentVerifier(ctx context.Context, a config.Auth, l *zap.Logger) auth.
 			return nil
 		}
 		return v
-	case a.SigningKey != "":
-		return &auth.JWTVerifier{
-			Key:            []byte(a.SigningKey),
-			ExpectedIssuer: a.Issuer,
-			Leeway:         a.Leeway,
-		}
 	default:
 		return nil
 	}

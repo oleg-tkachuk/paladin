@@ -21,7 +21,7 @@ func TestWeakSecretGateIsSilentInDisposableEnvs(t *testing.T) {
 	for env := range disposableEnvs {
 		c := minimalValidConfig()
 		c.App.Env = env
-		c.Auth.SigningKey = "dev-secret-change-me-32-bytes-min"
+		c.APIToken.HMACKey = "changeme-please"
 		if err := c.Validate(); err != nil {
 			t.Errorf("app.env=%q: committed default must be accepted, got %v", env, err)
 		}
@@ -34,11 +34,6 @@ func TestWeakSecretGateRejectsCommittedDefaults(t *testing.T) {
 		mutate func(*Config)
 		field  string
 	}{
-		{
-			name:   "auth signing key",
-			mutate: func(c *Config) { c.Auth.SigningKey = "dev-secret-change-me-32-bytes-min" },
-			field:  "auth.signing_key",
-		},
 		{
 			name:   "api token hmac key",
 			mutate: func(c *Config) { c.APIToken.HMACKey = "changeme-please" },
@@ -67,8 +62,8 @@ func TestWeakSecretGateRejectsCommittedDefaults(t *testing.T) {
 			// brackets, and the texts inside them differ per file — the
 			// shape is what is recognised, not the wording.
 			name:   "angle-bracket placeholder with unseen wording",
-			mutate: func(c *Config) { c.Auth.SigningKey = "<dev-cluster-signing-key>" },
-			field:  "auth.signing_key",
+			mutate: func(c *Config) { c.Runtime.HealthSnapshotToken = "<dev-cluster-health-token>" },
+			field:  "runtime.health_snapshot_token",
 		},
 		{
 			name: "storage backend secret key",
@@ -102,14 +97,14 @@ func TestWeakSecretGateRejectsCommittedDefaults(t *testing.T) {
 
 func TestWeakSecretGateReportsEveryOffenderAtOnce(t *testing.T) {
 	c := weakSecretConfig()
-	c.Auth.SigningKey = "dev-secret-change-me-32-bytes-min"
+	c.Runtime.HealthSnapshotToken = "<prod-health-token-from-sealed-secret>"
 	c.APIToken.HMACKey = "replace-me"
 
 	err := c.Validate()
 	if err == nil {
 		t.Fatal("expected rejection")
 	}
-	for _, want := range []string{"auth.signing_key", "api_token.hmac_key"} {
+	for _, want := range []string{"runtime.health_snapshot_token", "api_token.hmac_key"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("all offenders must be listed in one pass; %s missing from: %v", want, err)
 		}
@@ -125,7 +120,7 @@ func TestWeakSecretGateAcceptsRealSecrets(t *testing.T) {
 		"correct-horse-battery-staple-2026",
 	} {
 		c := weakSecretConfig()
-		c.Auth.SigningKey = secret
+		c.Runtime.HealthSnapshotToken = secret
 		if err := c.Validate(); err != nil {
 			t.Errorf("secret %q must be accepted, got %v", secret, err)
 		}
@@ -136,7 +131,7 @@ func TestWeakSecretGateIgnoresEmptyValues(t *testing.T) {
 	// Unset is a different failure with a different owner (the required-field
 	// checks). Reporting it here would give one mistake two error messages.
 	c := weakSecretConfig()
-	c.Auth.SigningKey = ""
+	c.Runtime.HealthSnapshotToken = ""
 	if err := c.Validate(); err != nil {
 		t.Errorf("empty value must not trip the weak-secret gate, got %v", err)
 	}

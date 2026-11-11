@@ -214,17 +214,17 @@ limits: {
   }
 }
 
-// Auth is the Paladin IAM-plane JWT issuer + verifier. The same signing_key is
-// used to mint tokens (Login / RefreshToken) and to verify them on each
-// plane interceptor; three audiences are recognised: paladin-data, paladin-admin,
-// paladin-iam. When jwks_url is set the planes and the MCP edge verify
-// tokens against that JWKS instead; signing_key still mints and verifies the
-// bootstrap admin's tokens.
+// Auth is the Paladin IAM-plane session issuer + verifier (ADR-0047). The
+// role that mints signs ES256 with session_key_path and verifies with its
+// public keys; every other role verifies against jwks_url, the JWKS that role
+// serves. Three audiences are recognised: paladin-data, paladin-admin,
+// paladin-iam.
 auth: {
-  issuer:               string | *"paladin"
-  signing_key:          string | *""
-  signing_key_secret?:  #SecretRef
-  jwks_url:             string | *""
+  issuer:                             string | *"paladin"
+  session_key_path:                   string | *""
+  previous_session_public_key_paths:  [...string] | *[]
+  jwks_url:                           string | *""
+  jwks_ca_path:                       string | *""
   leeway:               =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
   access_token_ttl:     =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   refresh_token_ttl:    =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"168h"

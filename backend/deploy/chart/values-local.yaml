@@ -11,7 +11,7 @@
 # Restores everything values.yaml deliberately keeps prod-safe:
 #
 #   - debug logging and gin debug mode
-#   - hard-coded auth.signing_key + issuer for dev convenience
+#   - a hard-coded auth.issuer for dev convenience
 #   - SeaweedFS dummy_* static keys
 #   - image.pullPolicy: Always (registry.local rebuilds same tag)
 #   - cert-manager off, reuse cluster-wide `traefik-tls` Secret
@@ -35,9 +35,6 @@ config:
 
   auth:
     issuer: "paladin-dev"
-    # 32-byte dev placeholder. Production rotates via signing_key_secret
-    # in a env overlay; local accepts the literal for convenience.
-    signing_key: "dev-secret-change-me-32-bytes-min"
 
   storage:
     backends:

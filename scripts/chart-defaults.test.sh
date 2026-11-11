@@ -65,33 +65,27 @@ check() {
     [[ "$got" == "$want" ]] || bad "$what: got '$got', want '$want'"
 }
 
-# ─── access-token signing key ────────────────────────────────────────────────
+# ─── release defaults ────────────────────────────────────────────────────────
 
 render defaults
 check "defaults: app.env" "$(config defaults .app.env)" "prod"
 check "defaults: issuer falls back to the release" "$(config defaults .auth.issuer)" "$RELEASE"
-check "defaults: config reads the generated key" "$(config defaults .auth.signing_key_secret.name)" "$SIGNING_SECRET"
-cases=$((cases + 1))
-secret_exists defaults "$SIGNING_SECRET" || bad "defaults: no $SIGNING_SECRET Secret rendered"
-cases=$((cases + 1))
-rbac_names defaults | grep -x "$SIGNING_SECRET" >/dev/null || bad "defaults: RBAC cannot read $SIGNING_SECRET"
 cases=$((cases + 1))
 secret_exists defaults paladin-bootstrap-admin || bad "defaults: no bootstrap admin Secret rendered"
 cases=$((cases + 1))
 rbac_names defaults | grep -x paladin-bootstrap-admin >/dev/null || bad "defaults: RBAC cannot read the bootstrap admin Secret"
 
-render inline --set config.auth.signing_key=inline-key --set config.auth.issuer=https://issuer.example
-check "inline key: issuer kept" "$(config inline .auth.issuer)" "https://issuer.example"
-check "inline key: no secret ref added" "$(config inline '.auth.signing_key_secret // "none"')" "none"
-cases=$((cases + 1))
-secret_exists inline "$SIGNING_SECRET" && bad "inline key: a signing key Secret was generated anyway"
+render issuer --set config.auth.issuer=https://issuer.example
+check "an issuer set is kept" "$(config issuer .auth.issuer)" "https://issuer.example"
 
-render existing --set auth.signingKey.existingSecret=my-signing-key
-check "existingSecret: config reads it" "$(config existing .auth.signing_key_secret.name)" "my-signing-key"
+# The shared HS256 key is gone (ADR-0047): nothing generates or reads it, even
+# from an overlay that still names one in auth.signingKey.
+render legacy-signing --set auth.signingKey.existingSecret=my-signing-key
 cases=$((cases + 1))
-secret_exists existing "$SIGNING_SECRET" && bad "existingSecret: a signing key Secret was generated anyway"
+secret_exists legacy-signing "$SIGNING_SECRET" && bad "a shared signing key Secret is still generated"
 cases=$((cases + 1))
-rbac_names existing | grep -x my-signing-key >/dev/null || bad "existingSecret: RBAC cannot read my-signing-key"
+rbac_names legacy-signing | grep -x my-signing-key >/dev/null && bad "a Role still reads the overlay's shared signing key"
+check "no shared signing key reaches the config" "$(config legacy-signing '.auth.signing_key_secret // "none"')" "none"
 
 # ─── session signing key ─────────────────────────────────────────────────────
 # ADR-0047: mounted as a file into the roles that mint sessions and no other,
@@ -112,6 +106,21 @@ rbac_names session-default | grep -x "$SESSION_SECRET" >/dev/null && bad "defaul
 check "defaults: the generated session key is P-256" \
     "$(yq -r 'select(.kind == "Secret" and .metadata.name == "'"$SESSION_SECRET"'") | .data["session-key.pem"]' "$scratch/session-default.yaml" |
         base64 -d | openssl ec -noout -text 2>/dev/null | sed -n 's/^NIST CURVE: //p')" "P-256"
+
+check "defaults: the minting role reads the mounted session key" \
+    "$(config session-default .auth.session_key_path)" "/etc/paladin-session/session-key.pem"
+check "defaults: the other roles fetch the api role's JWKS" \
+    "$(config session-default .auth.jwks_url)" "http://$RELEASE-api:8085/.well-known/jwks.json"
+check "defaults: no JWKS CA without internal TLS" "$(config session-default .auth.jwks_ca_path)" ""
+
+render session-tls --set internalTLS.enabled=true --set internalTLS.existingSecret=internal-tls
+check "internal TLS: the JWKS is fetched over https" \
+    "$(config session-tls .auth.jwks_url)" "https://$RELEASE-api:8085/.well-known/jwks.json"
+check "internal TLS: the JWKS fetch trusts the internal CA" \
+    "$(config session-tls .auth.jwks_ca_path)" "$(yq -r .internalTLS.mountPath "$CHART/values.yaml")/ca.crt"
+
+render session-path --set config.auth.session_key_path=/keys/mine.pem
+check "a session_key_path set is kept" "$(config session-path .auth.session_key_path)" "/keys/mine.pem"
 
 render session-existing --set auth.sessionKey.existingSecret=my-session-key
 cases=$((cases + 1))

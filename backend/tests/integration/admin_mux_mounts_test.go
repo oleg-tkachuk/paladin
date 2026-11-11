@@ -42,6 +42,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
@@ -71,7 +72,11 @@ func adminServiceNames(t *testing.T) []string {
 	return out
 }
 
-func assembleAdminMux(t *testing.T, h *pgharness.Harness, mutate func(*config.Config)) *http.ServeMux {
+// assembleAdminMux is the admin plane as `serve admin` builds it: holding no
+// session key, it verifies sessions by the JWKS the minting role serves, which
+// a test server stands in for here (ADR-0047). It returns the mux and the key
+// set a test mints admin sessions with.
+func assembleAdminMux(t *testing.T, h *pgharness.Harness, mutate func(*config.Config)) (*http.ServeMux, *sessionkey.Set) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -79,6 +84,10 @@ func assembleAdminMux(t *testing.T, h *pgharness.Harness, mutate func(*config.Co
 	if mutate != nil {
 		mutate(&cfg)
 	}
+	keys := wiringKeys(t, cfg)
+	jwksSrv := httptest.NewServer(keys.Handler())
+	t.Cleanup(jwksSrv.Close)
+	cfg.Auth.JWKSURL = jwksSrv.URL + sessionkey.WellKnownPath
 	db, err := postgres.New(ctx, cfg.Datastores.Postgres, zap.NewNop())
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -99,7 +108,7 @@ func assembleAdminMux(t *testing.T, h *pgharness.Harness, mutate func(*config.Co
 	if err != nil {
 		t.Fatalf("AssembleAdminMux: %v", err)
 	}
-	return mux
+	return mux, keys
 }
 
 func routed(t *testing.T, mux *http.ServeMux, path string) bool {
@@ -122,7 +131,7 @@ func TestAdminMux_MountsEveryAdminService(t *testing.T) {
 		{"subsystems enabled", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			mux := assembleAdminMux(t, h, func(c *config.Config) {
+			mux, _ := assembleAdminMux(t, h, func(c *config.Config) {
 				c.Capability.Enabled = tc.enabled
 				c.Capability.IssuerName = "test-issuer"
 				c.APIToken.Enabled = tc.enabled
@@ -151,7 +160,7 @@ func TestAdminMux_MountsEveryAdminService(t *testing.T) {
 // but route presence cannot tell which handler is behind it. This asks.
 func TestAdminMux_DisabledSubsystemAnswersThroughTheMux(t *testing.T) {
 	h := pgharness.Setup(t)
-	mux := assembleAdminMux(t, h, func(c *config.Config) {
+	mux, keys := assembleAdminMux(t, h, func(c *config.Config) {
 		c.Capability.Enabled = false
 		c.APIToken.Enabled = false
 	})
@@ -160,7 +169,7 @@ func TestAdminMux_DisabledSubsystemAnswersThroughTheMux(t *testing.T) {
 
 	cfg := wiringConfig(t, h.MigrateDSN)
 	iss, err := issuer.New(issuer.Config{
-		Issuer: cfg.Auth.Issuer, SigningKey: []byte(wiringSigningKey),
+		Issuer: cfg.Auth.Issuer, Keys: keys,
 		AccessTokenTTL: 15 * time.Minute,
 	})
 	if err != nil {

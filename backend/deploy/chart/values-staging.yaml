@@ -19,7 +19,6 @@ config:
 
   auth:
     issuer: "https://paladin.staging.example/"
-    signing_key: "<staging-signing-key>"
 
   storage:
     backends:

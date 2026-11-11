@@ -180,32 +180,6 @@ the map that name nothing get `<fullname>-s3-<backend>`.
 {{- end -}}
 
 {{/*
-chart.authSigningKey — where auth.signing_key comes from when config.auth
-names neither an inline key nor a Secret: a Secret this chart generates, or
-auth.signingKey.existingSecret. Returns JSON {active, create, name, key};
-inactive when config.auth already answers the question, so overlays that set
-it render exactly as before.
-*/}}
-{{- define "chart.authSigningKey" -}}
-{{- $sk := .Values.auth.signingKey -}}
-{{- $cfgAuth := .Values.config.auth | default dict -}}
-{{- $configured := false -}}
-{{- if or $cfgAuth.signing_key (and $cfgAuth.signing_key_secret $cfgAuth.signing_key_secret.name) -}}
-{{- $configured = true -}}
-{{- end -}}
-{{- $name := $sk.existingSecret | default (printf "%s-auth-signing-key" (include "chart.fullname" .)) -}}
-{{- $active := false -}}
-{{- if and (not $configured) (or $sk.generate $sk.existingSecret) -}}
-{{- $active = true -}}
-{{- end -}}
-{{- $create := false -}}
-{{- if and $active $sk.generate (not $sk.existingSecret) -}}
-{{- $create = true -}}
-{{- end -}}
-{{- dict "active" $active "create" $create "name" $name "key" $sk.key | toJson -}}
-{{- end -}}
-
-{{/*
 chart.sessionKey — the session signing key's Secret (ADR-0047): the one this
 chart generates, or auth.sessionKey.existingSecret. Mounted as a file into
 auth.sessionKey.roles only. Returns JSON {active, create, name, key,
@@ -261,8 +235,6 @@ depends on. Returns a JSON list.
 {{- if and $boot.enabled $boot.password_secret $boot.password_secret.name -}}
 {{- $names = append $names $boot.password_secret.name -}}
 {{- end -}}
-{{- $auth := fromJson (include "chart.authSigningKey" .) -}}
-{{- if $auth.active -}}{{- $names = append $names $auth.name -}}{{- end -}}
 {{- $pepper := fromJson (include "chart.apiTokenHMACKey" .) -}}
 {{- if $pepper.active -}}{{- $names = append $names $pepper.name -}}{{- end -}}
 {{- with ((.Values.config.api_token | default dict).hmac_key_secret) -}}

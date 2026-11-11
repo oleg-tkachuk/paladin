@@ -87,7 +87,7 @@ func newActingTenantFixture(t *testing.T) actingTenantFixture {
 	f.objects = paladindatav1connect.NewObjectServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, srv.URL)))
 
 	iss, err := issuer.New(issuer.Config{
-		Issuer: cfg.Auth.Issuer, SigningKey: []byte(wiringSigningKey), AccessTokenTTL: time.Hour,
+		Issuer: cfg.Auth.Issuer, Keys: wiringKeys(t, cfg), AccessTokenTTL: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("issuer: %v", err)

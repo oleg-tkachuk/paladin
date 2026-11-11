@@ -21,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/delegation"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
@@ -28,13 +29,15 @@ import (
 // delegation issuer of their capabilities, and the MCP server's client.
 const (
 	callerIssuer     = "paladin"
-	callerKey        = "caller-test-signing-key-32-bytes-long!"
 	delegationIssuer = "paladin-capability/mcp"
 	delegationTTL    = 15 * time.Minute
 	bridgeClientID   = "paladin-mcp-server"
 	bridgeSecret     = "bridge-secret"
 	callerClientID   = "agent"
 )
+
+// callerKey is the session key set of the IAM issuer of callers' tokens.
+var callerKey = sessiontest.MustKeys()
 
 // errNotTheBridge is a token request from any client but the bridge.
 var errNotTheBridge = errors.New("not the bridge")
@@ -88,8 +91,8 @@ func newDelegationWorld(t *testing.T) delegationWorld {
 	}
 
 	user := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	subjects := delegation.NewSubjectVerifier(&auth.JWTVerifier{
-		Key: []byte(callerKey), ExpectedIssuer: callerIssuer, ExpectedAudience: auth.AudienceMCP,
+	subjects := delegation.NewSubjectVerifier(&auth.KeySetVerifier{
+		Keys: callerKey.Public(), ExpectedIssuer: callerIssuer, ExpectedAudience: auth.AudienceMCP,
 	}, callerIssuer)
 	ex, err := delegation.NewExchanger(capIssuer, subjects, store, usersByID{user.UserID: user}, limes.AbstractUnitCode, slog.Default())
 	if err != nil {
@@ -115,7 +118,7 @@ func newDelegationWorld(t *testing.T) delegationWorld {
 	t.Cleanup(srv.Close)
 
 	tokens, err := issuer.New(issuer.Config{
-		Issuer: callerIssuer, SigningKey: []byte(callerKey),
+		Issuer: callerIssuer, Keys: callerKey,
 		AccessTokenTTL: time.Minute, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour,
 	})
 	if err != nil {
@@ -250,7 +253,7 @@ func TestRequireBearerDelegates(t *testing.T) {
 		seen, subject = r.Header.Clone(), SessionSubject(r)
 		rw.WriteHeader(http.StatusOK)
 	})
-	verifier := &auth.JWTVerifier{Key: []byte(callerKey), ExpectedIssuer: callerIssuer, ExpectedAudience: auth.AudienceMCP}
+	verifier := sessiontest.Verifier(callerKey, callerIssuer, auth.AudienceMCP)
 	edge := RequireBearer(next, verifier, "", OnlyMCPAudience(), WithDelegation(w.client))
 
 	rec := httptest.NewRecorder()

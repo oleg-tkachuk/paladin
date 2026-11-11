@@ -79,7 +79,9 @@ limits:
 
 auth:
   issuer: "paladin-dev"
-  signing_key: "dev-secret-change-me-32-bytes-min"
+  # One process on a laptop mints and verifies; generate the key once:
+  #   openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out .dev/session-key.pem
+  session_key_path: .dev/session-key.pem
   leeway: 30s
   access_token_ttl: 15m
   refresh_token_ttl: 168h

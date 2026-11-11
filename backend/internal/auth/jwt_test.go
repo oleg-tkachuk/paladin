@@ -2,10 +2,9 @@ package auth
 
 import (
 	"context"
-	"crypto/hmac"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -31,26 +30,15 @@ import (
 // package drives a rejection, and a verifier that rejects everything passes all
 // of them.
 
-func hs256(t *testing.T, secret []byte, claims map[string]any) string {
+// es256 is claims signed ES256 by key, as the session issuer signs them.
+func es256(t *testing.T, key *ecdsa.PrivateKey, claims map[string]any) string {
 	t.Helper()
-	enc := func(v any) string {
-		b, err := json.Marshal(v)
-		if err != nil {
-			t.Fatalf("marshal: %v", err)
-		}
-		return base64.RawURLEncoding.EncodeToString(b)
-	}
-	head := enc(map[string]string{"alg": "HS256", "typ": "JWT"})
-	body := enc(claims)
-	signing := head + "." + body
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(signing))
-	return signing + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return signedWith(t, jwa.ES256(), key, claims)
 }
 
-func newVerifier(secret []byte, now time.Time) *JWTVerifier {
+func newVerifier(key *ecdsa.PrivateKey, now time.Time) *JWTVerifier {
 	return &JWTVerifier{
-		Key:              secret,
+		Key:              &key.PublicKey,
 		ExpectedIssuer:   "paladin-test",
 		ExpectedAudience: "paladin-data",
 		Leeway:           time.Second,
@@ -74,11 +62,11 @@ func baseClaims(now time.Time) map[string]any {
 // verify — and the principal must carry what the claims said, since a verifier
 // that returns an empty principal is a different failure with the same shape.
 func TestValidTokenVerifies(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 
-	p, err := newVerifier(secret, now).Verify(context.Background(),
-		hs256(t, secret, baseClaims(now)))
+	p, err := newVerifier(key, now).Verify(context.Background(),
+		es256(t, key, baseClaims(now)))
 	if err != nil {
 		t.Fatalf("a valid token was rejected: %v", err)
 	}
@@ -99,7 +87,7 @@ func TestValidTokenVerifies(t *testing.T) {
 // Each rejection, and each one on its own so a verifier that rejects for the
 // wrong reason is not credited for rejecting.
 func TestVerifyRejects(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 
 	cases := []struct {
@@ -110,39 +98,39 @@ func TestVerifyRejects(t *testing.T) {
 		{"expired", func() string {
 			c := baseClaims(now)
 			c["exp"] = now.Add(-time.Hour).Unix()
-			return hs256(t, secret, c)
+			return es256(t, key, c)
 		}, "expired"},
 		{"not yet valid", func() string {
 			c := baseClaims(now)
 			c["nbf"] = now.Add(time.Hour).Unix()
-			return hs256(t, secret, c)
+			return es256(t, key, c)
 		}, "not yet valid"},
 		{"wrong issuer", func() string {
 			c := baseClaims(now)
 			c["iss"] = "someone-else"
-			return hs256(t, secret, c)
+			return es256(t, key, c)
 		}, "issuer"},
 		{"wrong audience", func() string {
 			c := baseClaims(now)
 			c["aud"] = "paladin-admin"
-			return hs256(t, secret, c)
+			return es256(t, key, c)
 		}, "audience"},
 		{"bad signature", func() string {
-			return hs256(t, []byte("a-different-secret-of-the-same-len"), baseClaims(now))
+			return es256(t, ecKey(t), baseClaims(now))
 		}, ""},
 		{"two segments, not three", func() string {
-			parts := strings.Split(hs256(t, secret, baseClaims(now)), ".")
+			parts := strings.Split(es256(t, key, baseClaims(now)), ".")
 			return parts[0] + "." + parts[1]
 		}, ""},
 		{"claims are not JSON", func() string {
-			parts := strings.Split(hs256(t, secret, baseClaims(now)), ".")
+			parts := strings.Split(es256(t, key, baseClaims(now)), ".")
 			parts[1] = base64.RawURLEncoding.EncodeToString([]byte("not json"))
 			return strings.Join(parts, ".")
 		}, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			p, err := newVerifier(secret, now).Verify(context.Background(), c.token())
+			p, err := newVerifier(key, now).Verify(context.Background(), c.token())
 			if err == nil {
 				t.Fatalf("accepted a token that is %s (principal %+v)", c.name, p)
 			}
@@ -159,14 +147,14 @@ func TestVerifyRejects(t *testing.T) {
 // went down a path nothing exercised, and inverting its unmarshal check
 // survived the mutation run.
 func TestAudienceAsArray(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 
 	t.Run("matches when the wanted audience is in the array", func(t *testing.T) {
 		c := baseClaims(now)
 		c["aud"] = []string{"paladin-admin", "paladin-data"}
-		if _, err := newVerifier(secret, now).Verify(context.Background(),
-			hs256(t, secret, c)); err != nil {
+		if _, err := newVerifier(key, now).Verify(context.Background(),
+			es256(t, key, c)); err != nil {
 			t.Errorf("an audience array containing the plane was rejected: %v", err)
 		}
 	})
@@ -174,8 +162,8 @@ func TestAudienceAsArray(t *testing.T) {
 	t.Run("rejects when it is not", func(t *testing.T) {
 		c := baseClaims(now)
 		c["aud"] = []string{"paladin-admin", "paladin-iam"}
-		if _, err := newVerifier(secret, now).Verify(context.Background(),
-			hs256(t, secret, c)); err == nil {
+		if _, err := newVerifier(key, now).Verify(context.Background(),
+			es256(t, key, c)); err == nil {
 			t.Error("an audience array without this plane was accepted — a token " +
 				"minted for another plane must not open this one")
 		}
@@ -186,15 +174,15 @@ func TestAudienceAsArray(t *testing.T) {
 // on both sides of the boundary, since a leeway that swallows an hour is as
 // wrong as one that swallows nothing.
 func TestExpiryLeeway(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 	exp := now.Add(-2 * time.Second)
 
 	c := baseClaims(now)
 	c["exp"] = exp.Unix()
-	tok := hs256(t, secret, c)
+	tok := es256(t, key, c)
 
-	v := newVerifier(secret, now)
+	v := newVerifier(key, now)
 	v.Leeway = 5 * time.Second
 	if _, err := v.Verify(context.Background(), tok); err != nil {
 		t.Errorf("a token 2s past expiry was rejected with 5s of leeway: %v", err)
@@ -209,7 +197,7 @@ func TestExpiryLeeway(t *testing.T) {
 // needs every audience the token carries — not only the one a plane expects —
 // and its expiry, to bind a session no longer than the token lives.
 func TestVerifyReportsEveryAudienceAndTheExpiry(t *testing.T) {
-	secret := []byte("0123456789abcdef0123456789abcdef")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 	exp := now.Add(time.Hour)
 	for name, aud := range map[string]any{
@@ -217,11 +205,11 @@ func TestVerifyReportsEveryAudienceAndTheExpiry(t *testing.T) {
 		"array":  []string{"paladin-admin", "paladin-data"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			tok := hs256(t, secret, map[string]any{
+			tok := es256(t, key, map[string]any{
 				"sub": "u1", "aud": aud, "exp": exp.Unix(),
 			})
 			// As the MCP edge builds it: no expected audience.
-			v := &JWTVerifier{Key: secret, Now: func() time.Time { return now }}
+			v := &JWTVerifier{Key: &key.PublicKey, Now: func() time.Time { return now }}
 			p, err := v.Verify(context.Background(), tok)
 			if err != nil {
 				t.Fatalf("verify: %v", err)
@@ -259,17 +247,26 @@ func signedWith(t *testing.T, alg jwa.SignatureAlgorithm, key any, claims map[st
 	return string(signed)
 }
 
+// sharedSecret is an HMAC key of HS256's length: what signed every session
+// before ADR-0047, which no verifier accepts now.
+var sharedSecret = []byte("dev-secret-change-me-32-bytes-min")
+
 // The key decides the algorithm, never the token: an unsigned token, a token
-// signed with another algorithm, and an RSA public key read as an HMAC secret
-// are all refused.
+// signed with another algorithm, and HS256 in every form — by a shared
+// secret, or keyed by a public key's own bytes — are all refused, and a
+// shared secret is no key at all (ADR-0047).
 func TestVerifyRefusesAnotherAlgorithm(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 	priv, err := rsa.GenerateKey(rand.Reader, rsaTestBits)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pubPEM, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	rsaDER, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ecDER, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,12 +279,14 @@ func TestVerifyRefusesAnotherAlgorithm(t *testing.T) {
 		key   any
 		token string
 	}{
-		{"an unsigned token", secret, unsigned},
-		{"RS256 against an HMAC secret", secret, signedWith(t, jwa.RS256(), priv, baseClaims(now))},
-		{"HS256 keyed by an RSA public key's bytes, against that key", &priv.PublicKey, signedWith(t, jwa.HS256(), pubPEM, baseClaims(now))},
-		{"HS256 against an RSA public key", &priv.PublicKey, hs256(t, secret, baseClaims(now))},
+		{"an unsigned token", &key.PublicKey, unsigned},
+		{"RS256 against an EC key", &key.PublicKey, signedWith(t, jwa.RS256(), priv, baseClaims(now))},
+		{"HS256 keyed by an RSA public key's bytes, against that key", &priv.PublicKey, signedWith(t, jwa.HS256(), rsaDER, baseClaims(now))},
+		{"HS256 keyed by an EC public key's bytes, against that key", &key.PublicKey, signedWith(t, jwa.HS256(), ecDER, baseClaims(now))},
+		{"HS256 by a shared secret, against an EC key", &key.PublicKey, signedWith(t, jwa.HS256(), sharedSecret, baseClaims(now))},
+		{"HS256 by a shared secret, against that secret", sharedSecret, signedWith(t, jwa.HS256(), sharedSecret, baseClaims(now))},
 	} {
-		v := newVerifier(secret, now)
+		v := newVerifier(key, now)
 		v.Key = tc.key
 		if p, err := v.Verify(context.Background(), tc.token); err == nil {
 			t.Errorf("%s: accepted as %+v", tc.name, p)
@@ -304,7 +303,7 @@ func TestVerifyRefusesAnotherAlgorithm(t *testing.T) {
 		{jwa.RS256(), priv, &priv.PublicKey},
 		{jwa.ES256(), ec, &ec.PublicKey},
 	} {
-		v := newVerifier(secret, now)
+		v := newVerifier(key, now)
 		v.Key = tc.pub
 		if _, err := v.Verify(context.Background(), signedWith(t, tc.alg, tc.key, baseClaims(now))); err != nil {
 			t.Errorf("%s: %v", tc.alg, err)
@@ -315,11 +314,11 @@ func TestVerifyRefusesAnotherAlgorithm(t *testing.T) {
 // A token minted a moment ahead of this replica's clock is accepted: validity
 // runs from nbf, and iat is not checked.
 func TestVerifyIgnoresIssuedAt(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 	c := baseClaims(now)
 	c["iat"] = now.Add(time.Hour).Unix()
-	if _, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, c)); err != nil {
+	if _, err := newVerifier(key, now).Verify(context.Background(), es256(t, key, c)); err != nil {
 		t.Errorf("a token issued ahead of the clock was refused: %v", err)
 	}
 }
@@ -327,14 +326,14 @@ func TestVerifyIgnoresIssuedAt(t *testing.T) {
 // A token an OAuth client holds names the client and its consented scopes; a
 // token with no exp has no expiry, not one in 1970.
 func TestVerifyMapsTheOAuthGrantAndAnOpenExpiry(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 
 	c := baseClaims(now)
 	c["client_id"] = "agent-client"
 	c["scope"] = "paladin.read paladin.write"
 	delete(c, "exp")
-	p, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, c))
+	p, err := newVerifier(key, now).Verify(context.Background(), es256(t, key, c))
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
@@ -345,7 +344,7 @@ func TestVerifyMapsTheOAuthGrantAndAnOpenExpiry(t *testing.T) {
 		t.Errorf("expiry = %v, want none for a token without exp", p.ExpiresAt)
 	}
 
-	plain, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, baseClaims(now)))
+	plain, err := newVerifier(key, now).Verify(context.Background(), es256(t, key, baseClaims(now)))
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
@@ -357,13 +356,13 @@ func TestVerifyMapsTheOAuthGrantAndAnOpenExpiry(t *testing.T) {
 // A token names itself by its jti, which the principal carries as it was
 // written; a token without one names none.
 func TestVerifyCarriesTheTokenID(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 	const jti = "0190a5b2-7c3e-7d4f-8a1b-2c3d4e5f6a7b"
 
 	c := baseClaims(now)
 	c["jti"] = jti
-	p, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, c))
+	p, err := newVerifier(key, now).Verify(context.Background(), es256(t, key, c))
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
@@ -371,7 +370,7 @@ func TestVerifyCarriesTheTokenID(t *testing.T) {
 		t.Errorf("TokenID = %q, want %q", p.TokenID, jti)
 	}
 
-	plain, err := newVerifier(secret, now).Verify(context.Background(), hs256(t, secret, baseClaims(now)))
+	plain, err := newVerifier(key, now).Verify(context.Background(), es256(t, key, baseClaims(now)))
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}

@@ -866,23 +866,17 @@ config:
       max_ttl: 168h
 
   auth:
-    # No issuer / signing_key defaults — every env overlay MUST set
-    # both. An empty signing_key surfaces as a startup error rather
-    # than a quietly-broken JWT verification path.
+    # No issuer default — every env overlay MUST set it.
     issuer: ""
-    # signing_key is the HMAC key used to both sign and verify every JWT.
-    # Provide it ONE of two ways (mutually exclusive — setting both is a
-    # startup error):
-    #   - signing_key: "<value>"     inline (dev / lab only)
-    #   - signing_key_secret: {...}  resolved from a K8s Secret at boot (prod:
-    #     keep the key in a SealedSecret / ExternalSecret, never in values).
-    #     Add its `name` to rbac.secretReader.secretNames below.
-    signing_key: ""
-    # signing_key_secret:
-    #   name: paladin-auth-signing-key
-    #   key: signing_key
-    #   namespace: ""              # "" → pod namespace
-    jwks_url: ""
+    # Sessions are signed ES256 by the key auth.sessionKey mounts into the
+    # roles that mint (ADR-0047); the chart points session_key_path at it.
+    # Every other role verifies by the JWKS the minting role serves: the
+    # chart points jwks_url at its IAM listener, and jwks_ca_path at the
+    # internal CA when internalTLS is on. Set either only to override.
+    session_key_path: ""
+    previous_session_public_key_paths: []
+    jwks_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-api:8085/.well-known/jwks.json'
+    jwks_ca_path: ""
     leeway: 30s
     access_token_ttl: 15m
     refresh_token_ttl: 168h
@@ -1316,14 +1310,10 @@ postgres:
     key: password
     namespace: ""
 
-# ─── Access-token signing key ────────────────────────────────────────────────
+# ─── Session signing key ─────────────────────────────────────────────────────
 #
-# Used only when config.auth sets neither `signing_key` nor
-# `signing_key_secret`. Then the chart generates a Secret named
-# <fullname>-auth-signing-key (kept across upgrades via lookup), or points the
-# config at `existingSecret` when that is set. Under ArgoCD or any client-side
-# render, set `existingSecret`: lookup cannot see the cluster there, and a
-# generated key would change on every sync.
+# signingKey is unused since sessions are ES256 (ADR-0047) and is accepted only
+# so an overlay that still sets it renders; it goes in a later release.
 auth:
   signingKey:
     generate: true
@@ -1335,9 +1325,9 @@ auth:
   # the roles that mint sessions and no other — no service account reads it
   # through the API, so it is not in rbac.secretReader. The chart generates a
   # Secret named <fullname>-session-key (kept across upgrades via lookup), or
-  # mounts `existingSecret`. Under ArgoCD set `existingSecret`, for the reason
-  # given for signingKey. The server reads it from a release that names it in
-  # config.auth.session_key_path; until then it is mounted and unread.
+  # mounts `existingSecret`. Under ArgoCD set `existingSecret`: lookup cannot
+  # see the cluster there, and a generated key would change on every sync.
+  # config.auth.session_key_path is pointed at it unless it is set.
   sessionKey:
     generate: true
     existingSecret: ""
@@ -1354,7 +1344,7 @@ auth:
 # named <fullname>-api-token-hmac (kept across upgrades via lookup), or points
 # the config at `existingSecret`. It is a secret of its own, never derived from
 # the session signing key (ADR-0047). Under ArgoCD, set `existingSecret`, for
-# the reason given for auth.signingKey.
+# the reason given for auth.sessionKey.
 apiToken:
   hmacKey:
     generate: true

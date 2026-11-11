@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/ecdsa"
 	"strings"
 	"testing"
 	"time"
@@ -8,7 +9,7 @@ import (
 )
 
 // refreshToken is an IAM refresh token for user in tenant, edited by edit.
-func refreshToken(t *testing.T, secret []byte, now time.Time, user, tenant, jti uuid.UUID, edit func(map[string]any)) string {
+func refreshToken(t *testing.T, key *ecdsa.PrivateKey, now time.Time, user, tenant, jti uuid.UUID, edit func(map[string]any)) string {
 	t.Helper()
 	c := map[string]any{
 		"iss":     "paladin-test",
@@ -23,11 +24,11 @@ func refreshToken(t *testing.T, secret []byte, now time.Time, user, tenant, jti 
 	if edit != nil {
 		edit(c)
 	}
-	return hs256(t, secret, c)
+	return es256(t, key, c)
 }
 
-func refreshDecoder(secret []byte, now time.Time) *RefreshDecoder {
-	v := newVerifier(secret, now)
+func refreshDecoder(key *ecdsa.PrivateKey, now time.Time) *RefreshDecoder {
+	v := newVerifier(key, now)
 	v.ExpectedAudience = AudienceIAM
 	return &RefreshDecoder{Verifier: v}
 }
@@ -35,11 +36,11 @@ func refreshDecoder(secret []byte, now time.Time) *RefreshDecoder {
 // A refresh token names the session it continues: its id, its user and its
 // tenant.
 func TestDecodeRefresh(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 	user, tenant, jti := uuid.New(), uuid.New(), uuid.New()
 
-	gotJTI, gotUser, gotTenant, err := refreshDecoder(secret, now).DecodeRefresh(refreshToken(t, secret, now, user, tenant, jti, nil))
+	gotJTI, gotUser, gotTenant, err := refreshDecoder(key, now).DecodeRefresh(refreshToken(t, key, now, user, tenant, jti, nil))
 	if err != nil {
 		t.Fatalf("DecodeRefresh: %v", err)
 	}
@@ -50,11 +51,11 @@ func TestDecodeRefresh(t *testing.T) {
 
 // Only a signed, unexpired IAM refresh token that names its session is one.
 func TestDecodeRefreshRefuses(t *testing.T) {
-	secret := []byte("dev-secret-change-me-32-bytes-min")
+	key := ecKey(t)
 	now := time.Unix(1_700_000_000, 0)
 	user, tenant, jti := uuid.New(), uuid.New(), uuid.New()
 	token := func(edit func(map[string]any)) string {
-		return refreshToken(t, secret, now, user, tenant, jti, edit)
+		return refreshToken(t, key, now, user, tenant, jti, edit)
 	}
 	for _, tc := range []struct {
 		name  string
@@ -66,9 +67,9 @@ func TestDecodeRefreshRefuses(t *testing.T) {
 		{"a session id that is not one", token(func(c map[string]any) { c["jti"] = "x" }), "jti"},
 		{"a user that is not one", token(func(c map[string]any) { c["user_id"] = "x" }), "user_id"},
 		{"expired", token(func(c map[string]any) { c["exp"] = now.Add(-time.Hour).Unix() }), "expired"},
-		{"another key's signature", refreshToken(t, []byte("a-different-secret-of-the-same-len"), now, user, tenant, jti, nil), "signature"},
+		{"another key's signature", refreshToken(t, ecKey(t), now, user, tenant, jti, nil), "signature"},
 	} {
-		if _, _, _, err := refreshDecoder(secret, now).DecodeRefresh(tc.token); err == nil || !strings.Contains(err.Error(), tc.want) {
+		if _, _, _, err := refreshDecoder(key, now).DecodeRefresh(tc.token); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want one naming %q", tc.name, err, tc.want)
 		}
 	}

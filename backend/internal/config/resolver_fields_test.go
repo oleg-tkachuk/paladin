@@ -71,9 +71,6 @@ func secretFields() []secretField {
 			func(c *Config) (string, bool) {
 				return c.Bootstrap.Admin.Password, c.Bootstrap.Admin.PasswordSecret == nil
 			}},
-		{"auth.signing_key_secret",
-			func(c *Config, r SecretRef) { c.Auth.SigningKeySecret = ptrRef(r) },
-			func(c *Config) (string, bool) { return c.Auth.SigningKey, c.Auth.SigningKeySecret == nil }},
 		{"api_token.hmac_key_secret",
 			func(c *Config, r SecretRef) { c.APIToken.HMACKeySecret = ptrRef(r) },
 			func(c *Config) (string, bool) { return c.APIToken.HMACKey, c.APIToken.HMACKeySecret == nil }},

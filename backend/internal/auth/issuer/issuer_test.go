@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"uuid"
@@ -11,13 +12,28 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jws"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
+	"github.com/oleg-tkachuk/paladin/backend/tests/sessiontest"
 )
+
+// testKeys is the session key set every issuer and verifier in this package
+// signs and verifies with, made once.
+var (
+	testKeysOnce sync.Once
+	testKeysSet  *sessionkey.Set
+)
+
+func testKeys(t *testing.T) *sessionkey.Set {
+	t.Helper()
+	testKeysOnce.Do(func() { testKeysSet = sessiontest.Keys(t) })
+	return testKeysSet
+}
 
 func newTestIssuer(t *testing.T) *Issuer {
 	t.Helper()
 	iss, err := New(Config{
 		Issuer:            "paladin-test",
-		SigningKey:        []byte("test-signing-key-32-bytes-min--padding"),
+		Keys:              testKeys(t),
 		AccessTokenTTL:    15 * time.Minute,
 		RefreshTokenTTL:   7 * 24 * time.Hour,
 		ScopedTokenMaxTTL: 24 * time.Hour,
@@ -51,8 +67,8 @@ func TestMintAndVerifyAccess(t *testing.T) {
 		t.Fatalf("expiry not in future: %v", exp)
 	}
 
-	v := &auth.JWTVerifier{
-		Key:              []byte("test-signing-key-32-bytes-min--padding"),
+	v := &auth.KeySetVerifier{
+		Keys:             testKeys(t).Public(),
 		ExpectedIssuer:   "paladin-test",
 		ExpectedAudience: auth.AudienceData,
 	}
@@ -89,8 +105,8 @@ func TestMintAccessWrongAudience(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v := &auth.JWTVerifier{
-		Key:              []byte("test-signing-key-32-bytes-min--padding"),
+	v := &auth.KeySetVerifier{
+		Keys:             testKeys(t).Public(),
 		ExpectedAudience: auth.AudienceData, // mismatch
 	}
 	if _, err := v.Verify(context.Background(), tok); err == nil {
@@ -114,8 +130,8 @@ func TestMintRefreshDecode(t *testing.T) {
 		t.Fatal(err)
 	}
 	dec := &auth.RefreshDecoder{
-		Verifier: &auth.JWTVerifier{
-			Key:              []byte("test-signing-key-32-bytes-min--padding"),
+		Verifier: &auth.KeySetVerifier{
+			Keys:             testKeys(t).Public(),
 			ExpectedIssuer:   "paladin-test",
 			ExpectedAudience: auth.AudienceIAM,
 		},
@@ -145,8 +161,8 @@ func TestRefreshDecoderRejectsAccessToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	dec := &auth.RefreshDecoder{
-		Verifier: &auth.JWTVerifier{
-			Key:              []byte("test-signing-key-32-bytes-min--padding"),
+		Verifier: &auth.KeySetVerifier{
+			Keys:             testKeys(t).Public(),
 			ExpectedIssuer:   "paladin-test",
 			ExpectedAudience: auth.AudienceIAM,
 		},
@@ -180,8 +196,8 @@ func TestMintRefreshSignsAGivenExpiry(t *testing.T) {
 // a token with no client carries none (ADR-0035).
 func TestMintAccessCarriesTheOAuthGrant(t *testing.T) {
 	iss := newTestIssuer(t)
-	v := &auth.JWTVerifier{
-		Key:              []byte("test-signing-key-32-bytes-min--padding"),
+	v := &auth.KeySetVerifier{
+		Keys:             testKeys(t).Public(),
 		ExpectedIssuer:   "paladin-test",
 		ExpectedAudience: auth.AudienceData,
 	}
@@ -235,8 +251,9 @@ func TestMintAccessHeader(t *testing.T) {
 	hdr := msg.Signatures()[0].ProtectedHeaders()
 	alg, _ := hdr.Algorithm()
 	typ, _ := hdr.Type()
-	if alg != jwa.HS256() || typ != tokenType {
-		t.Errorf("header alg %s typ %q, want HS256 and %q", alg, typ, tokenType)
+	kid, _ := hdr.KeyID()
+	if alg != jwa.ES256() || typ != tokenType || kid != testKeys(t).KeyID() {
+		t.Errorf("header alg %s typ %q kid %q, want ES256, %q and the active key's %q", alg, typ, kid, tokenType, testKeys(t).KeyID())
 	}
 }
 
@@ -246,9 +263,9 @@ var issuerNow = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 func issuerWith(t *testing.T, edit func(*Config)) *Issuer {
 	t.Helper()
 	cfg := Config{
-		Issuer:     "paladin-test",
-		SigningKey: []byte(strings.Repeat("k", MinSigningKeyBytes)),
-		Now:        func() time.Time { return issuerNow },
+		Issuer: "paladin-test",
+		Keys:   testKeys(t),
+		Now:    func() time.Time { return issuerNow },
 	}
 	if edit != nil {
 		edit(&cfg)
@@ -270,12 +287,10 @@ func accessTTL(t *testing.T, iss *Issuer, ttl time.Duration) time.Duration {
 	return exp.Sub(issuerNow)
 }
 
-// A signing key shorter than HS256's output is refused; one of that length is
-// not.
-func TestNewSigningKeyLength(t *testing.T) {
-	short := strings.Repeat("k", MinSigningKeyBytes-1)
-	if _, err := New(Config{Issuer: "i", SigningKey: []byte(short)}); err == nil {
-		t.Errorf("a %d-byte key was accepted", len(short))
+// An issuer without a key set is refused; one with a set is not.
+func TestNewRequiresKeys(t *testing.T) {
+	if _, err := New(Config{Issuer: "i"}); err == nil {
+		t.Error("an issuer without keys was built")
 	}
 	issuerWith(t, nil)
 }
@@ -362,8 +377,8 @@ func TestMintAccessLeavesOutEmptyClaims(t *testing.T) {
 // back; one minted in none carries no `sid`.
 func TestMintAccessNamesItsSession(t *testing.T) {
 	iss := newTestIssuer(t)
-	v := &auth.JWTVerifier{
-		Key:              []byte("test-signing-key-32-bytes-min--padding"),
+	v := &auth.KeySetVerifier{
+		Keys:             testKeys(t).Public(),
 		ExpectedIssuer:   "paladin-test",
 		ExpectedAudience: auth.AudienceData,
 	}

@@ -32,7 +32,7 @@ datastores:
   postgres:
     dsn: "postgres://localhost/test"
 auth:
-  signing_key: "dev-secret-change-me-32-bytes-min"
+  session_key_path: /keys/session.pem
 storage:
   backends:
     primary: { auth: { mode: default_chain } }

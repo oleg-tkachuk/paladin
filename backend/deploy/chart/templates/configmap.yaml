@@ -73,9 +73,12 @@ data:
     {{- end }}
     {{- $_ := set $cfg.mcp.upstreams "tls" (merge (deepCopy $files) (deepCopy $cfg.mcp.upstreams.tls)) }}
     {{- end }}
-    {{- $sk := fromJson (include "chart.authSigningKey" .) }}
-    {{- if $sk.active }}
-    {{- $_ := set $cfg.auth "signing_key_secret" (dict "name" $sk.name "key" $sk.key) }}
+    {{- $session := fromJson (include "chart.sessionKey" .) }}
+    {{- if and $session.active (not $cfg.auth.session_key_path) }}
+    {{- $_ := set $cfg.auth "session_key_path" (printf "%s/%s" $session.mountPath $session.key) }}
+    {{- end }}
+    {{- if and .Values.internalTLS.enabled (not $cfg.auth.jwks_ca_path) }}
+    {{- $_ := set $cfg.auth "jwks_ca_path" (printf "%s/ca.crt" .Values.internalTLS.mountPath) }}
     {{- end }}
     {{- $pepper := fromJson (include "chart.apiTokenHMACKey" .) }}
     {{- if $pepper.active }}

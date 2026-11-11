@@ -116,28 +116,68 @@ func refreshEvery(interval time.Duration) time.Duration {
 // names, checked by jws against the set, then the claims as JWTVerifier
 // accepts them, then the Principal they name.
 func (v *JWKSVerifier) Verify(ctx context.Context, token string) (*Principal, error) {
-	msg, err := jws.ParseString(token)
+	kid, err := tokenKeyID(token)
 	if err != nil {
-		return nil, fmt.Errorf("jwt: malformed token: %w", err)
+		return nil, err
 	}
-	sigs := msg.Signatures()
-	if len(sigs) != 1 {
-		return nil, errors.New("jwt: want exactly one signature")
-	}
-	kid, _ := sigs[0].ProtectedHeaders().KeyID()
 	set, err := v.keySetWith(ctx, kid)
 	if err != nil {
 		return nil, err
 	}
+	return verifyBySet(token, set, v.ExpectedIssuer, v.ExpectedAudience, v.Leeway, v.Now)
+}
+
+// KeySetVerifier verifies a token by the key its kid names in a fixed set:
+// the session issuer's own public keys, where it verifies what it signed
+// (ADR-0047). Every other role fetches the same set through JWKSVerifier.
+type KeySetVerifier struct {
+	Keys             jwk.Set
+	ExpectedIssuer   string
+	ExpectedAudience string
+	Leeway           time.Duration
+	Now              func() time.Time
+}
+
+// Verify implements TokenVerifier, as JWKSVerifier does against a set that
+// never changes.
+func (v *KeySetVerifier) Verify(_ context.Context, token string) (*Principal, error) {
+	kid, err := tokenKeyID(token)
+	if err != nil {
+		return nil, err
+	}
+	if !holds(v.Keys, kid) {
+		return nil, fmt.Errorf("jwt: unknown kid %q", kid)
+	}
+	return verifyBySet(token, v.Keys, v.ExpectedIssuer, v.ExpectedAudience, v.Leeway, v.Now)
+}
+
+// tokenKeyID is the kid of token's one signature.
+func tokenKeyID(token string) (string, error) {
+	msg, err := jws.ParseString(token)
+	if err != nil {
+		return "", fmt.Errorf("jwt: malformed token: %w", err)
+	}
+	sigs := msg.Signatures()
+	if len(sigs) != 1 {
+		return "", errors.New("jwt: want exactly one signature")
+	}
+	kid, _ := sigs[0].ProtectedHeaders().KeyID()
+	return kid, nil
+}
+
+// verifyBySet checks token's signature by set, the algorithm taken from the
+// key and never from the token, then its claims, and returns the Principal
+// they name.
+func verifyBySet(token string, set jwk.Set, issuer, audience string, leeway time.Duration, now func() time.Time) (*Principal, error) {
 	payload, err := jws.Verify([]byte(token), jws.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)))
 	if err != nil {
 		return nil, fmt.Errorf("jwt: signature: %w", err)
 	}
-	c, err := acceptedClaims(payload, v.ExpectedIssuer, v.ExpectedAudience, v.Leeway, v.Now)
+	c, err := acceptedClaims(payload, issuer, audience, leeway, now)
 	if err != nil {
 		return nil, err
 	}
-	return principalFromClaims(c, v.ExpectedAudience)
+	return principalFromClaims(c, audience)
 }
 
 // keySetWith returns the cached key set once it holds kid; on a miss it

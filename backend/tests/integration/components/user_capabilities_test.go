@@ -61,7 +61,7 @@ func TestListUserCapabilitiesListsWhatActsForTheUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	minter, err := issuer.New(issuer.Config{
-		Issuer: exchangeSubjectIssuer, SigningKey: []byte(exchangeSubjectKey),
+		Issuer: exchangeSubjectIssuer, Keys: exchangeSubjectKey,
 		AccessTokenTTL: exchangeSubjectTTL, RefreshTokenTTL: time.Hour, ScopedTokenMaxTTL: time.Hour,
 	})
 	if err != nil {

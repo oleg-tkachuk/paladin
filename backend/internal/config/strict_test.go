@@ -23,7 +23,7 @@ app:
   name: paladin
   env: local
 auth:
-  signing_key: "x"
+  session_key_path: "x"
 storage:
   backends:
     primary:
@@ -42,7 +42,7 @@ app:
   name: paladin
   env: local
 authorization:           # typo for "auth"
-  signing_key: "x"
+  session_key_path: "x"
 `)
 	err := validateNoUnknownKeys(path)
 	if err == nil {
@@ -56,14 +56,14 @@ authorization:           # typo for "auth"
 func TestValidateNoUnknownKeys_NestedTypoFails(t *testing.T) {
 	path := writeYAML(t, `
 auth:
-  signing_key: "x"
-  singing_key: "y"        # typo for signing_key
+  session_key_path: "x"
+  sesion_key_path: "y"    # typo for session_key_path
 `)
 	err := validateNoUnknownKeys(path)
 	if err == nil {
 		t.Fatal("expected error for nested typo")
 	}
-	if !strings.Contains(err.Error(), "auth.singing_key") {
+	if !strings.Contains(err.Error(), "auth.sesion_key_path") {
 		t.Errorf("error must include nested path, got: %v", err)
 	}
 }

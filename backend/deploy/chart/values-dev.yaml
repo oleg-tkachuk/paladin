@@ -22,9 +22,6 @@ config:
 
   auth:
     issuer: "https://paladin.dev.example/"
-    # signing_key on dev — reference a Secret in a follow-up overlay;
-    # plaintext placeholder is unsafe even for shared dev.
-    signing_key: "<dev-cluster-signing-key>"
 
   storage:
     backends:

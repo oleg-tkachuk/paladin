@@ -1,15 +1,14 @@
 package delegation
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"testing"
 	"time"
 	"uuid"
 
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jws"
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/exchange"
 	"github.com/oleg-tkachuk/limes/exchange/exchangetest"
@@ -45,8 +44,8 @@ func TestExchangerIssuesOneCapabilityPerToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	user := authstore.User{UserID: uuid.New(), TenantID: uuid.New()}
-	subjects := NewSubjectVerifier(&auth.JWTVerifier{
-		Key: []byte(subjectKey), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
+	subjects := NewSubjectVerifier(&auth.KeySetVerifier{
+		Keys: subjectKey.Public(), ExpectedIssuer: subjectIssuer, ExpectedAudience: auth.AudienceMCP,
 	}, subjectIssuer)
 	ex, err := NewExchanger(capIssuer, subjects, store, usersByID{users: map[uuid.UUID]authstore.User{user.UserID: user}},
 		limes.AbstractUnitCode, slog.New(slog.DiscardHandler))
@@ -91,21 +90,19 @@ func TestExchangerIssuesOneCapabilityPerToken(t *testing.T) {
 func withoutJTI(t *testing.T, user authstore.User) string {
 	t.Helper()
 	now := time.Now()
-	enc := func(v any) string {
-		b, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return base64.RawURLEncoding.EncodeToString(b)
-	}
-	signing := enc(map[string]string{"alg": "HS256", "typ": "JWT"}) + "." + enc(map[string]any{
+	claims, err := json.Marshal(map[string]any{
 		"iss": subjectIssuer, "sub": user.UserID.String(), "aud": auth.AudienceMCP,
 		"nbf": now.Unix(), "exp": now.Add(subjectTokenTTL).Unix(),
 		"tenant": user.TenantID.String(), "client_id": subjectClientID, "scope": auth.OAuthScopeRead,
 	})
-	mac := hmac.New(sha256.New, []byte(subjectKey))
-	mac.Write([]byte(signing))
-	return signing + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := jws.Sign(claims, jws.WithKey(jwa.ES256(), subjectKey.Signer()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(tok)
 }
 
 // userAccess is the claims of a paladin-mcp token the agent holds for user.

@@ -16,11 +16,12 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
-// JWTVerifier verifies a JWT signed with one key — HS256 by an HMAC secret,
-// RS256 or ES256 by a public key — through jwx, and returns the Principal its
-// claims name.
+// JWTVerifier verifies a JWT signed with one public key — RS256 or ES256 —
+// through jwx, and returns the Principal its claims name. No shared secret
+// verifies anything: a key that can check a session could mint one
+// (ADR-0047).
 type JWTVerifier struct {
-	// Key may be *rsa.PublicKey, *ecdsa.PublicKey, or []byte (HS256 secret).
+	// Key is an *rsa.PublicKey or an *ecdsa.PublicKey.
 	Key any
 	// ExpectedIssuer must match the `iss` claim.
 	ExpectedIssuer string
@@ -70,8 +71,9 @@ func (c *jwtClaims) tenantClaim() string {
 }
 
 // Verify validates the token and returns a Principal. The key decides the
-// algorithm, never the token's header: an HMAC secret verifies HS256 only, an
-// RSA key RS256 and an EC key ES256, so "none" and HS-on-RSA-key tokens fail.
+// algorithm, never the token's header: an RSA key verifies RS256 and an EC
+// key ES256, so "none" and HS256 — keyed by the public key or anything else —
+// fail.
 func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error) {
 	alg, err := signatureAlgorithm(v.Key)
 	if err != nil {
@@ -91,8 +93,6 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 // signatureAlgorithm is the one algorithm key verifies.
 func signatureAlgorithm(key any) (jwa.SignatureAlgorithm, error) {
 	switch key.(type) {
-	case []byte:
-		return jwa.HS256(), nil
 	case *rsa.PublicKey:
 		return jwa.RS256(), nil
 	case *ecdsa.PublicKey:
