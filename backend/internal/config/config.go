@@ -275,6 +275,9 @@ func (c *Config) Validate() error {
 	if err := c.MCP.Upstreams.Validate(); err != nil {
 		return err
 	}
+	if err := c.MCP.OAuth.validate(); err != nil {
+		return err
+	}
 
 	if err := c.validateCapabilityBounds(); err != nil {
 		return err

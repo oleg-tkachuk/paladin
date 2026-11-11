@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 	"uuid"
+
+	"github.com/oleg-tkachuk/limes/exchange"
 
 	apitoken "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
@@ -47,32 +51,54 @@ func TestBearerToken(t *testing.T) {
 	}
 }
 
+// The RFC 9728 document is limes's, served where RFC 9728 §3.1 puts it for
+// a resource with a path — the well-known path, then the resource's — and
+// at the bare well-known path too, for a client that looks there.
 func TestProtectedResourceMetadata(t *testing.T) {
-	h := ProtectedResourceMetadataHandler(config.MCPOAuth{
-		ResourceURL:          "https://paladin.example.com/mcp",
-		AuthorizationServers: []string{"https://paladin.example.com"},
+	const (
+		resource = "https://paladin.example.com/mcp"
+		issuer   = "https://paladin.example.com"
+	)
+	h, err := ProtectedResourceMetadataHandler(config.MCPOAuth{
+		ResourceURL:          resource,
+		AuthorizationServers: []string{issuer},
 		ScopesSupported:      []string{"paladin.read", "paladin.write"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths, err := ProtectedResourceMetadataPaths(resource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{exchange.WellKnownProtectedResource + "/mcp", exchange.WellKnownProtectedResource}; !slices.Equal(paths, want) {
+		t.Errorf("paths = %v, want %v", paths, want)
+	}
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, WellKnownProtectedResource, nil))
-
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, paths[0], nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	var doc map[string]any
+	if got, want := rec.Header().Get("Cache-Control"), fmt.Sprintf("max-age=%d", int(exchange.MetadataMaxAge/time.Second)); got != want {
+		t.Errorf("Cache-Control = %q, want %q", got, want)
+	}
+	var doc exchange.ResourceMetadata
 	if err := json.Unmarshal(rec.Body.Bytes(), &doc); err != nil {
 		t.Fatalf("body not JSON: %v", err)
 	}
-	if doc["resource"] != "https://paladin.example.com/mcp" {
-		t.Errorf("resource = %v", doc["resource"])
+	if doc.Resource != resource || !slices.Equal(doc.AuthorizationServers, []string{issuer}) ||
+		!slices.Equal(doc.BearerMethodsSupported, []string{exchange.BearerMethodHeader}) {
+		t.Errorf("document = %+v", doc)
 	}
-	servers, _ := doc["authorization_servers"].([]any)
-	if len(servers) != 1 || servers[0] != "https://paladin.example.com" {
-		t.Errorf("authorization_servers = %v", doc["authorization_servers"])
-	}
-	methods, _ := doc["bearer_methods_supported"].([]any)
-	if len(methods) != 1 || methods[0] != "header" {
-		t.Errorf("bearer_methods_supported = %v", doc["bearer_methods_supported"])
+}
+
+// A resource that is not https has no document: limes refuses it, and the
+// configuration does first.
+func TestProtectedResourceMetadataRefusesHTTP(t *testing.T) {
+	if _, err := ProtectedResourceMetadataHandler(config.MCPOAuth{
+		ResourceURL: "http://localhost:8095/mcp", AuthorizationServers: []string{"https://localhost:8085"},
+	}); err == nil {
+		t.Error("an http resource was served")
 	}
 }
 

@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/limes/exchange"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 
@@ -401,11 +401,25 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// and a failure on every call, and anyone could hold sessions open.
 	metadataURL := ""
 	if cfg.MCP.OAuth.Enabled {
-		mux.Handle(mcp.WellKnownProtectedResource, mcp.ProtectedResourceMetadataHandler(cfg.MCP.OAuth))
+		// config.Validate holds both identifiers to limes's rules, so none of
+		// these fails on a configuration that loaded.
+		meta, err := mcp.ProtectedResourceMetadataHandler(cfg.MCP.OAuth)
+		if err != nil {
+			return fmt.Errorf("mcp: protected-resource metadata: %w", err)
+		}
+		paths, err := mcp.ProtectedResourceMetadataPaths(cfg.MCP.OAuth.ResourceURL)
+		if err != nil {
+			return fmt.Errorf("mcp: protected-resource metadata path: %w", err)
+		}
+		for _, path := range paths {
+			mux.Handle(path, meta)
+		}
 		if cfg.MCP.OAuth.AuthorizationServer.Issuer != "" {
 			mux.Handle(oauth.WellKnownAuthorizationServer, oauth.MetadataHandler(cfg.MCP.OAuth.AuthorizationServer, cfg.Auth.OAuth.TokenExchangeEnabled()))
 		}
-		metadataURL = oauthResourceMetadataURL(cfg.MCP.OAuth.ResourceURL)
+		if metadataURL, err = exchange.ResourceMetadataURL(cfg.MCP.OAuth.ResourceURL); err != nil {
+			return fmt.Errorf("mcp: protected-resource metadata URL: %w", err)
+		}
 	}
 	var mcpHandler http.Handler
 	if delegation != nil {
@@ -609,22 +623,6 @@ func buildAgentVerifier(ctx context.Context, a config.Auth, l *zap.Logger) auth.
 	default:
 		return nil
 	}
-}
-
-// oauthResourceMetadataURL builds the absolute URL of the RFC 9728
-// protected-resource document from the configured resource URL's origin. The
-// WWW-Authenticate challenge points clients here to begin discovery. Falls
-// back to the root-relative path when resourceURL is empty/unparseable —
-// clients resolve it against the request origin.
-func oauthResourceMetadataURL(resourceURL string) string {
-	if resourceURL == "" {
-		return mcp.WellKnownProtectedResource
-	}
-	u, err := url.Parse(resourceURL)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return mcp.WellKnownProtectedResource
-	}
-	return u.Scheme + "://" + u.Host + mcp.WellKnownProtectedResource
 }
 
 // upstreamHTTPClient builds the transport the bridge uses to reach the admin /

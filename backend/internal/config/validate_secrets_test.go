@@ -180,7 +180,10 @@ func TestValidate_OAuthSeedClientAuthentication(t *testing.T) {
 
 func TestValidate_MCPExchange(t *testing.T) {
 	ref := &SecretRef{Name: "x", Key: "k"}
-	on := func(ex MCPOAuthExchange) MCPOAuth { return MCPOAuth{Enabled: true, Exchange: ex} }
+	// The edge on, with the identifiers its metadata requires.
+	on := func(ex MCPOAuthExchange) MCPOAuth {
+		return MCPOAuth{Enabled: true, ResourceURL: "https://mcp.example.com/mcp", AuthorizationServers: []string{"https://api.example.com"}, Exchange: ex}
+	}
 	for _, tc := range []struct {
 		name  string
 		oauth MCPOAuth
