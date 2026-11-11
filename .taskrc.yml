@@ -1,0 +1,11 @@
+# Task reads this from the repository root, for every entry point and for a
+# component run from its own directory.
+#
+# Offline by default: each remote include resolves from the lock committed
+# under .task/remote, so no command clones the task library. Task 3.54 does not
+# read TASK_OFFLINE from the environment; this file and the --offline flag are
+# what it honours. The one command that goes online says so itself:
+#
+#   task -t Taskfile.dev.yaml --yes --offline=false --download tasklib:lock
+remote:
+  offline: true

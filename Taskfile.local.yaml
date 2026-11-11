@@ -25,30 +25,16 @@ vars:
   K8S_CONTEXT: '{{.K8S_CONTEXT | default "orbstack"}}'
   # Shared task library — github.com/oleg-tkachuk/taskfiles, pinned. Another
   # copy of the pin in Taskfile.yaml, for the reason given in Taskfile.dev.yaml.
-  # renovate: datasource=github-tags depName=oleg-tkachuk/taskfiles
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.4.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.7.1'
   # Status marker, the same vocabulary as the shared library.
   _OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
 
 includes:
-  # ─── components ────────────────────────────────────────────────────────────
-  # DUPLICATED from Taskfile.yaml, deliberately, and guarded. Keep these
-  # blocks byte-identical; `verify:taskfile-drift` in Taskfile.dev.yaml is what
-  # notices.
-  backend:
-    taskfile: backend/Taskfile.yaml
-    dir: backend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
-  frontend:
-    taskfile: frontend/Taskfile.yaml
-    dir: frontend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
-
   # ─── registry check ────────────────────────────────────────────────────────
   # Only registry:check is taken. The module's own deploy fan-out runs a child
   # `task deploy` in each component, which receives none of the vars above and
-  # would publish nowhere; `deploy` below calls the components through their
-  # includes instead.
+  # would publish nowhere; `deploy` below goes through `backend:*` and
+  # `frontend:*`, which hand them on.
   monorepo:
     taskfile: '{{printf .TASKLIB "monorepo"}}'
     dir: .
@@ -63,6 +49,41 @@ includes:
     vars: { K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
 
 tasks:
+  # ─── components ────────────────────────────────────────────────────────────
+  # `task backend:<task>` runs `task <task>` in backend/ as a child process,
+  # and the same for frontend. A process of its own is what keeps a
+  # component's variables its own: included by path, both components' top-level
+  # `vars:` land in one pool, and a library module then read PROJECT_NAME,
+  # DOCKER_CONTEXT or the helm flags of the other component in a share of its
+  # runs.
+  #
+  # DUPLICATED from Taskfile.yaml, deliberately, and guarded. Keep these three
+  # tasks byte-identical; `verify:taskfile-drift` in Taskfile.dev.yaml is what
+  # notices.
+  #
+  # A variable set on the command line stops at this process. The four named
+  # in _component are handed on; any other goes in front of the command
+  # (`NAME=value task backend:…`) or after `cd` into the component.
+  _component:
+    internal: true
+    dir: "{{.COMPONENT}}"
+    requires: { vars: [COMPONENT, TARGET] }
+    # Assigned on the command rather than through `env:`, which does not
+    # replace a variable the calling shell already exports.
+    cmd: >-
+      GLOBAL_REGISTRY={{.GLOBAL_REGISTRY | q}}
+      IMAGE_NAMESPACE={{.IMAGE_NAMESPACE | q}}
+      K8S_CONTEXT={{.K8S_CONTEXT | q}}
+      {{if .APP_VERSION}}APP_VERSION={{.APP_VERSION | q}}{{end}}
+      task {{.TARGET | q}} -- {{.CLI_ARGS}}
+
+  "backend:*":
+    desc: "Run a task of backend/ (task backend:default lists them)"
+    cmds: [{ task: _component, vars: { COMPONENT: backend, TARGET: "{{index .MATCH 0}}" } }]
+  "frontend:*":
+    desc: "Run a task of frontend/ (task frontend:default lists them)"
+    cmds: [{ task: _component, vars: { COMPONENT: frontend, TARGET: "{{index .MATCH 0}}" } }]
+
   default:
     desc: "The commands for the local registry and cluster"
     cmds:

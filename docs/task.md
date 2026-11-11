@@ -8,8 +8,8 @@ cluster fed from the working tree, or through the gates while you work on the
 code.
 
 There are three entry points, split by who runs the command. Each one on its
-own prints its handful of commands, and `--list` after any of them prints
-everything it reaches.
+own prints its handful of commands, and `--list` after any of them prints its
+tasks.
 
 | Entry point | For |
 |-------------|-----|
@@ -20,7 +20,10 @@ everything it reaches.
 Every flow needs [Task](https://taskfile.dev/installation/) 3.54+. CI pins
 3.54.0. The shared [task library](https://github.com/oleg-tkachuk/taskfiles)
 is a remote include, cached under `.task/remote/`, so a clone runs without
-network access to it.
+network access to it. [`.taskrc.yml`](../.taskrc.yml) makes that the default:
+every command reads the committed cache and fetches nothing. See
+[Moving the task library](#moving-the-task-library) for the one command that
+goes online.
 
 ## The whole stack in compose
 
@@ -113,3 +116,42 @@ conventions they enforce.
 
 Per half, from any entry point: `task backend:test`,
 `task backend:test:integration`, `task frontend:test`, `task frontend:build`.
+
+### Component tasks
+
+`backend/` and `frontend/` each have a Taskfile of their own. An entry point
+does not include them: `task backend:<task>` starts `task <task>` in
+`backend/` as a separate process, and the same for `frontend`. Each component
+therefore reads only its own variables, and a few things follow:
+
+- `--list` shows one `backend:*` and one `frontend:*` line. `task
+  backend:default` and `task frontend:default` list a component's tasks.
+- Of the variables given on the command line, `GLOBAL_REGISTRY`,
+  `IMAGE_NAMESPACE`, `K8S_CONTEXT` and `APP_VERSION` reach the component. Put
+  any other in front of the command, `NAME=value task backend:<task>`. One the
+  component's Taskfile declares itself, such as `K8S_NAMESPACE`, is overridden
+  only from the component's directory: `cd backend && task <task> NAME=value`.
+- Arguments after `--` reach the component's task unchanged.
+- Flags such as `--dry` and `--force` apply to the entry point, not to the
+  component's task. Use them from the component's directory.
+
+### Moving the task library
+
+All five Taskfiles pin the library at one tag, and each directory that holds
+one keeps the modules it includes under `.task/remote/`. One command moves the
+pins and replaces the caches:
+
+```bash
+task -t Taskfile.dev.yaml tasklib:bump VERSION=v14.6.2
+```
+
+Renovate proposes the same bump, but moves only the pins. On its branch
+`task -t Taskfile.dev.yaml tasklib:check`, part of `verify-all`, fails until
+the caches are refreshed and committed:
+
+```bash
+task -t Taskfile.dev.yaml --yes --offline=false --download tasklib:lock
+```
+
+`--yes` accepts what the new tag serves, so read the diff of `.task/remote/`
+as you would a dependency bump.

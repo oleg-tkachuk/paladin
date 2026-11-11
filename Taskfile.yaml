@@ -24,10 +24,11 @@ version: "3"
 # command line, so a hidden task cannot be called at all. Separate entry points
 # are the mechanism Task offers.
 #
-# The component includes are duplicated into the other entry points rather
-# than shared, and `task -t Taskfile.dev.yaml verify:taskfile-drift` fails when
-# the copies stop agreeing. See that task for why a shared copy is not on
-# offer.
+# No entry point includes a component's Taskfile: `backend:*` and `frontend:*`
+# start `task` in the component's directory, for the reason given above those
+# tasks. They are duplicated into the other entry points, and
+# `task -t Taskfile.dev.yaml verify:taskfile-drift` fails when the copies stop
+# agreeing.
 
 silent: true
 
@@ -46,23 +47,9 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../taskfiles/%s'
-  # renovate: datasource=github-tags depName=oleg-tkachuk/taskfiles
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.4.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.7.1'
 
 includes:
-  # ─── components ────────────────────────────────────────────────────────────
-  # DUPLICATED into Taskfile.local.yaml and Taskfile.dev.yaml, deliberately,
-  # and guarded. Keep these blocks byte-identical; `verify:taskfile-drift` is
-  # what notices.
-  backend:
-    taskfile: backend/Taskfile.yaml
-    dir: backend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
-  frontend:
-    taskfile: frontend/Taskfile.yaml
-    dir: frontend
-    vars: { GLOBAL_REGISTRY: "{{.GLOBAL_REGISTRY}}", IMAGE_NAMESPACE: "{{.IMAGE_NAMESPACE}}", K8S_CONTEXT: "{{.K8S_CONTEXT}}" }
-
   # ─── local stack ───────────────────────────────────────────────────────────
   # The integrated compose stack. backend's compose file is the single source
   # of truth — it builds the backend services and mounts the frontend as the
@@ -77,12 +64,46 @@ includes:
     vars: { COMPOSE_FILE: ./backend/deploy/docker-compose.yaml, PROJECT_NAME: paladin }
 
 tasks:
+  # ─── components ────────────────────────────────────────────────────────────
+  # `task backend:<task>` runs `task <task>` in backend/ as a child process,
+  # and the same for frontend. A process of its own is what keeps a
+  # component's variables its own: included by path, both components' top-level
+  # `vars:` land in one pool, and a library module then read PROJECT_NAME,
+  # DOCKER_CONTEXT or the helm flags of the other component in a share of its
+  # runs.
+  #
+  # DUPLICATED into Taskfile.local.yaml and Taskfile.dev.yaml, deliberately,
+  # and guarded. Keep these three tasks byte-identical; `verify:taskfile-drift`
+  # is what notices.
+  #
+  # A variable set on the command line stops at this process. The four named
+  # in _component are handed on; any other goes in front of the command
+  # (`NAME=value task backend:…`) or after `cd` into the component.
+  _component:
+    internal: true
+    dir: "{{.COMPONENT}}"
+    requires: { vars: [COMPONENT, TARGET] }
+    # Assigned on the command rather than through `env:`, which does not
+    # replace a variable the calling shell already exports.
+    cmd: >-
+      GLOBAL_REGISTRY={{.GLOBAL_REGISTRY | q}}
+      IMAGE_NAMESPACE={{.IMAGE_NAMESPACE | q}}
+      K8S_CONTEXT={{.K8S_CONTEXT | q}}
+      {{if .APP_VERSION}}APP_VERSION={{.APP_VERSION | q}}{{end}}
+      task {{.TARGET | q}} -- {{.CLI_ARGS}}
+
+  "backend:*":
+    desc: "Run a task of backend/ (task backend:default lists them)"
+    cmds: [{ task: _component, vars: { COMPONENT: backend, TARGET: "{{index .MATCH 0}}" } }]
+  "frontend:*":
+    desc: "Run a task of frontend/ (task frontend:default lists them)"
+    cmds: [{ task: _component, vars: { COMPONENT: frontend, TARGET: "{{index .MATCH 0}}" } }]
+
   default:
     desc: "The commands for operating the stack"
-    # Written out rather than `task --list`, which prints 100-odd lines here:
-    # each component contributes thirty-odd library verbs, all of them carrying
-    # a desc. That list is a reference, not a front door. Both are reachable
-    # below.
+    # Written out rather than `task --list`: that names `backend:*` and
+    # `frontend:*` once each, not the tasks behind them, and a component's own
+    # list is a reference, not a front door. Both are reachable below.
     cmds:
       - cmd: |
           printf '%s\n' \
@@ -95,6 +116,8 @@ tasks:
             "  task backend:k8s:logs              follow its logs" \
             "  task frontend:k8s:logs" \
             "" \
-            "  task --list                        every operator task, component by component" \
+            "  task --list                        every task of this entry point" \
+            "  task backend:default               every task of the backend" \
+            "  task frontend:default              every task of the console" \
             "  task -t Taskfile.local.yaml        publish to registry.local, sync the ArgoCD apps" \
             "  task -t Taskfile.dev.yaml          gates, codegen and dependency bumps"

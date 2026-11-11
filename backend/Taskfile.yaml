@@ -14,17 +14,15 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../../taskfiles/%s'
-  # renovate: datasource=github-tags depName=oleg-tkachuk/taskfiles
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.4.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.7.1'
   PROJECT_NAME: paladin-core
   K8S_NAMESPACE: paladin
   # GLOBAL_REGISTRY, IMAGE_NAMESPACE and K8S_CONTEXT are deliberately NOT
-  # declared: Task 3.53.1 evaluates an included file's own vars before the
-  # include's `vars:`, so a declaration here — even one wrapped in `default` —
-  # always wins over what the entry point forwards. Undeclared, they arrive
-  # from the entry point (orbstack by default), the command line or the
-  # environment; deploy requires the first two, the cluster tasks the third
-  # (scripts/taskfile-forwarded-vars.test.sh).
+  # declared: an entry point starts this Taskfile as a child process and hands
+  # the three over in its environment, and a value declared here wins over the
+  # environment. Undeclared, they arrive from the entry point (orbstack by
+  # default), the command line or the environment; deploy requires the first
+  # two, the cluster tasks the third (scripts/taskfile-forwarded-vars.test.sh).
   # Only the product's release/v* tags version this image (ADR-0045): the
   # library reads no other, so the old v* releases, api/*, sdk/* and the
   # retired capability/* never restamp it, and needs no exclude for them.
@@ -78,10 +76,8 @@ includes:
       # drift gate below then reports the output as stale when it was fine and
       # the gate itself had just dirtied it.
       SQLC_MODULE: github.com/sqlc-dev/sqlc/cmd/sqlc
-      # Must match `out:` in sqlc.yaml. sqlc writes there and the gate diffs
-      # there; nothing reconciles the two spellings, and a gate pointed at the
-      # wrong directory passes by finding nothing.
-      SQLC_DIR: internal/store/postgres/sqlc
+      # No SQLC_DIR: the gate diffs the `out:` path it reads from sqlc.yaml, so
+      # where sqlc writes and where the gate looks are spelled once.
   # The SeaweedFS filer messages ingest decodes, generated from the subset of
   # upstream's filer.proto kept beside them.
   filerpb:
