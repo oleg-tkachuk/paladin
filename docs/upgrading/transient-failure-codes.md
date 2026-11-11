@@ -1,4 +1,4 @@
-## Unreleased — transient failures answered with their own codes
+## release/v0.2.0 — transient failures answered with their own codes
 
 - An RPC that fails because the database cannot be reached, or is shutting
   down or starting, now answers `UNAVAILABLE` with a generic message instead

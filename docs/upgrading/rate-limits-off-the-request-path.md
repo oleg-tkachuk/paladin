@@ -1,4 +1,4 @@
-## Unreleased — rate limits count off the request path
+## release/v0.2.0 — rate limits count off the request path
 
 - The tenant and token rate limits no longer write Postgres on every request
   ([ADR-0046](../adr/0046-rate-limits-off-the-request-path.md)). With the

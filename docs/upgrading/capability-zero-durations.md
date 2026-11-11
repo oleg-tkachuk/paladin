@@ -1,4 +1,4 @@
-## Unreleased — a zero capability duration means what it says
+## release/v0.2.0 — a zero capability duration means what it says
 
 - `capability.verifier_leeway: 0s` now gives no clock skew on `nbf` and `exp`.
   Before, it gave limes's default of 30 seconds.

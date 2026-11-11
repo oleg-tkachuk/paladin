@@ -1,4 +1,4 @@
-## Unreleased — the MCP edge's resource metadata comes from limes
+## release/v0.2.0 — the MCP edge's resource metadata comes from limes
 
 - With `mcp.oauth.enabled`, `mcp.oauth.resource_url` and every
   `mcp.oauth.authorization_servers` entry must be https URLs, and at least one

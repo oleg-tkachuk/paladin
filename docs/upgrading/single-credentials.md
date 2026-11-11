@@ -1,4 +1,4 @@
-## Unreleased — a credential presented twice is refused
+## release/v0.2.0 — a credential presented twice is refused
 
 - The data, IAM and admin planes now answer `INVALID_ARGUMENT` to a call that
   carries more than one `Authorization` header or more than one `DPoP` proof
