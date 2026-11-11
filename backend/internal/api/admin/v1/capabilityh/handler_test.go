@@ -226,7 +226,7 @@ func TestDelegate_RecordsTheChildInTheParentsTenant(t *testing.T) {
 
 // TestDelegate_CapabilityPath_DeniedWithoutOpShare confirms a capability
 // without OpShare in its caveats cannot delegate, even if parent_id
-// matches.
+// matches. limes refuses it, and the caller is told its code.
 func TestDelegate_CapabilityPath_DeniedWithoutOpShare(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent := mintParent(t, m, limes.OpGet, limes.OpList) // no OpShare
@@ -235,6 +235,9 @@ func TestDelegate_CapabilityPath_DeniedWithoutOpShare(t *testing.T) {
 	_, err := h.Delegate(auth.WithCapability(context.Background(), parent), delegateReq(parent))
 	if got := connect.CodeOf(err); got != connect.CodePermissionDenied {
 		t.Errorf("code: got %v, want PermissionDenied (%v)", got, err)
+	}
+	if got := leaseLimesCode(err); got != string(limes.CodeOpNotAllowed) {
+		t.Errorf("limes code: got %q, want %q (%v)", got, limes.CodeOpNotAllowed, err)
 	}
 }
 
