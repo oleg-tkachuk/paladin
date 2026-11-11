@@ -65,6 +65,19 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+### The Go SDK's fake re-models metering instead of using memstore
+
+- **Status:** Deferred.
+- **Reason:** `sdk/go/paladintest` counts requests up the ancestor chain
+  (`caveats.go`) and models budget leases (`lease.go`) by hand, beside
+  `memstore.UsageStore`, which does both as the server's store does. The
+  fake deliberately counts no spend, which memstore would, so the switch
+  needs that choice revisited first.
+- **Definition of Done:** the fake's request counts and leases go through
+  `memstore.UsageStore`, and its own counting and lease code is deleted.
+  `sdk_fake_fidelity_test.go` and `lease_fidelity_test.go` still pass.
+- **Blockers:** deciding whether the fake should count spend.
+
 ## Deploy cutover: rename to `paladin`
 
 ### The `paladin` name has not been checked against trademark registers
@@ -147,6 +160,28 @@ the same commit. Treat this file like a runtime invariant.
   and the TTL it may hold.
 - **Blockers:** a product call; no current ask.
 
+### RFC 9728 metadata and challenges through limes's exchange
+
+- **Status:** Deferred.
+- **Reason:** `internal/mcp/oauth.go` builds the protected-resource
+  document and the `WWW-Authenticate` challenge by hand. It serves the
+  document at the root well-known path only, where RFC 9728 §3.1 puts the
+  resource's path after it (`/.well-known/oauth-protected-resource/mcp`),
+  and it does not escape quotes in `error_description`.
+  `exchange.NewResourceMetadataHandler` and `exchange.ResourceMetadataURL`
+  do all of this, but they refuse a resource that is not https, and
+  compose runs the MCP resource at `http://localhost:8095/mcp`.
+- **Definition of Done:**
+  - Compose names the MCP resource by an https URL.
+  - The document is served through `exchange.NewResourceMetadataHandler`
+    at `exchange.ResourceMetadataURL`'s path, with the root path kept for
+    clients that look there.
+  - Challenges come from `exchange.ResourceChallenge` and
+    `exchange.WithResourceMetadata`.
+  - `protectedResourceMetadata`, `oauthResourceMetadataURL` and the
+    hand-built challenge are deleted.
+- **Blockers:** TLS for the MCP listener in compose.
+
 ## Agentic plane / single-binary multi-mode migration
 
 ### Streaming RPCs through the inline transport
@@ -185,9 +220,10 @@ the same commit. Treat this file like a runtime invariant.
   - `cfg.Capability.SigningKeyKMS` block with provider selector
     (aws-kms / gcp-kms / vault-transit) plus per-provider opts
     (key ARN / resource name / mount path).
-  - `internal/capability/kms` package with KMS-backed Signer
-    implementations. The Signer.Sign call emits a Sign-API request
-    instead of holding the key locally.
+  - `internal/capability/kms` package with KMS-backed implementations
+    of limes's `ContextSigner`, whose Sign call emits a Sign-API request
+    instead of holding the key locally. limes signs through it as it
+    does through a local key, so no signer of Paladin's own is needed.
   - SigningKeyPath stays as fallback for dev / on-prem deploys
     without KMS access.
 - **Blockers:** none functional, but it's a compliance-driver feature;
