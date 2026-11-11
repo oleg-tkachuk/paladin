@@ -212,11 +212,13 @@ the same commit. Treat this file like a runtime invariant.
 ### Role split: `scheduler` (extract cron-like triggers from worker)
 
 - **Status:** Aspirational
-- **Reason:** `worker` runs ALL background jobs today — lifecycle
-  reaper (30m), refresh-token reaper (1h), capability/api_token
-  reaper (1h), housekeeping (1h), replication (5m), lifecycle
-  enforcement (30m). All compete for the same lease pool. As the
-  job set grows, lease contention starts to dominate.
+- **Reason:** `worker` runs ALL background jobs today — 22 of them in
+  `internal/app/build_jobs.go`: the reapers, purgers, reconcilers,
+  partition maintenance, replication and lifecycle enforcement. Each
+  holds its own `paladin.<Type>` lease (`cmd/server/serve_worker.go`),
+  so one job cannot starve another of a lease; what they share is the
+  pod's CPU and the reaper DB pool, and one resource limit covers every
+  job class.
 - **Definition of Done:**
   - New `serve scheduler` role: a single-replica process holding
     cron-style schedule definitions (interval-based) that emits
@@ -227,10 +229,10 @@ the same commit. Treat this file like a runtime invariant.
     component-typed Deployments (e.g. `worker-reapers`,
     `worker-replication`) so resource limits don't spill across
     job classes.
-- **Trigger to do:** when the job set grows past ~10 concurrent
-  tasks, OR when one heavy job (replication) starts dominating
-  shared CPU / DB connection budget, OR when an operator reports
-  a reaper missing its window because replication held the lease.
+- **Trigger to do:** when one heavy job (replication) starts
+  dominating the shared CPU or DB connection budget, OR when an
+  operator reports a job missing its window because the pod was
+  saturated.
 
 ### Role split: `indexer` / `embedder` (semantic search)
 
@@ -283,9 +285,10 @@ the same commit. Treat this file like a runtime invariant.
   apply a tighter NetworkPolicy on the OAuth endpoints, and run
   separate replicas for auth traffic vs request traffic.
 - **Definition of Done:**
-  - `serve auth-server` role hosting `/oauth/authorize`, `/token`,
-    `/register`, `/.well-known/oauth-authorization-server`,
-    `/.well-known/jwks.json`.
+  - `serve auth-server` role hosting `/oauth/authorize`, `/oauth/token`,
+    `/oauth/register`, `/.well-known/oauth-authorization-server`, and
+    the JWKS of the OAuth token keys (the admin plane's
+    `/.well-known/jwks.json` serves capability keys and stays there).
   - Independent JWKS rotation runbook.
   - api / admin verify tokens against the auth-server's JWKS — the same
     JWKS-verify path the planes already use.
@@ -358,15 +361,16 @@ the same commit. Treat this file like a runtime invariant.
 ### Audit-log encryption at rest beyond filesystem-level
 
 - **Status:** Deferred
-- **Reason:** `audit_log.before_json` / `after_json` are BYTEA. They
-  can carry policy diffs, secret refs, and PII-bearing tenant labels.
+- **Reason:** `audit_log.request_json`, `state_before_json` and
+  `state_after_json` are BYTEA (migrations 094 and 099). They can carry
+  policy diffs, secret refs, and PII-bearing tenant labels.
   Today they're protected only by Postgres filesystem-level encryption
   (whatever the deploy storage provides).
 - **Definition of Done:**
   - Per-tenant data-encryption keys (DEK) wrapped by a KMS-managed
     key (KEK).
-  - Audit middleware encrypts `before_json` / `after_json` with the
-    tenant DEK before insert.
+  - Audit middleware encrypts `request_json`, `state_before_json` and
+    `state_after_json` with the tenant DEK before insert.
   - Read path decrypts on `ListAuditLog` / `ExportAuditLog`.
   - DEK rotation runbook.
 - **Blockers:** KMS choice (AWS KMS vs Vault Transit vs cloud-agnostic
@@ -380,7 +384,7 @@ the same commit. Treat this file like a runtime invariant.
 
 - **Status:** Blocked
 - **Reason:** [the consolidated baseline](backend/migrations/001_initial_schema.sql) (was migration 008 before consolidation)
-  set fillfactor on hot-update tables but didn't touch
+  set fillfactor on one table (`users`) but didn't touch
   `autovacuum_vacuum_scale_factor` / `autovacuum_analyze_scale_factor`
   per table — needs live bloat metrics to choose values that aren't
   guesses. A snapshot of `pg_stat_user_tables` on the local cluster
@@ -457,12 +461,13 @@ the same commit. Treat this file like a runtime invariant.
 - **State as of 2026-05-10:** Producer wiring complete across
   every handler class that today's customer surface needs:
     - **Lifecycle classes** (always-on): tenant / bucket /
-      objectKey / quota / object. Pattern in
+      collection / quota / object / backend. Pattern in
       `internal/api/admin/v1/tenanth/handler.go::EventProducer`,
-      reused across the four sibling handlers; admin pod
+      reused across the sibling handlers; admin pod
       wiring in `build_listeners_admin.go`, api pod wiring
       in `build_listeners_api.go::apiEvents`. Event
-      classes: `paladin.{tenant,bucket,object_key,quota,object}.*`.
+      classes: `paladin.{tenant,bucket,collection,quota,object}.*`
+      and `paladin.backend.credentials_rotated`.
     - **Cross-cutting classes** (opt-in): capability charge
       + audit-log mirror, both gated on cfg.Dispatcher
       toggles (`charge_events_enabled` /
@@ -471,7 +476,8 @@ the same commit. Treat this file like a runtime invariant.
       bridge `*worker.EventRecorder` to
       `auth.ChargeEventEmitter` and
       `middleware.AuditMirrorEmitter`. Event classes:
-      `paladin.capability.charged` and `paladin.audit.<action>`.
+      `paladin.capability.{charged,refunded}` and
+      `paladin.audit.<action>`.
     - **Not applicable:** `policy` event class — the data-
       plane policy handler is read-only; Cedar policy
       mutations go through parent `*.updated` events.
@@ -483,13 +489,9 @@ the same commit. Treat this file like a runtime invariant.
     Both default OFF; subscribers MUST add a CEL filter on
     their EventSubscription so a noisy tenant doesn't drown
     the dispatcher's outbox loop.
-- **Trigger to do:** any of —
-    - Adding a 6th lifecycle handler that follows the same
-      pattern (e.g. object_tags, when its lifecycle becomes
-      first-class).
-    - First customer that flips charge / audit events on —
-      validate the cardinality assumption holds for their
-      tenant.
+- **Trigger to do:** the first customer that flips charge /
+  audit events on — validate the cardinality assumption holds
+  for their tenant.
 
 ### Event dispatcher: per-tenant Kafka topic prefix
 
@@ -536,9 +538,12 @@ the same commit. Treat this file like a runtime invariant.
   filters, retries and audit.
 - **Definition of Done:** nothing here. One mechanism per concern — tenant-level
   push is events, platform-level observation is the audit log.
-- **If a consumer genuinely needs push** rather than a query, the ask is
-  "stream the audit log", which is a general capability and a different item.
-  It is not a special case of tenant events, and should not be built as one.
+- **If a consumer genuinely needs push** rather than a query, the audit log
+  is already streamed: `/audit/stream` on the admin plane
+  (`internal/auditstream`, fed by migration 013). It routes by
+  `actor_tenant_id`, so a platform-wide feed of purges is a change to that
+  stream's audience, not a special case of tenant events, and should not be
+  built as one.
 
 ---
 
@@ -552,23 +557,16 @@ the same commit. Treat this file like a runtime invariant.
 - **Reason (per candidate):**
   - **`objects (tenant_id, state) INCLUDE (size_bytes)`** — would turn the
     /stats object census and the quota reconciler's recompute into index-only
-    scans. Rejected: `state` is UPDATEd on every PENDING→AVAILABLE promote and
-    every delete, so the index makes the hottest write path's UPDATEs non-HOT,
-    working directly against the `objects` `fillfactor` tuning in
-    `001_initial_schema.sql`, applied for
-    that exact reason. Paying on every upload to speed a 15-minute background
-    job and a dashboard poll is the wrong trade.
-  - **`audit_log (at DESC, entry_id DESC)`** — ListAuditEntries pages by that
+    scans. Not added: `objects_tenant_state_idx (tenant_id, state)` already
+    makes the promote and delete UPDATEs non-HOT, so widening it would cost
+    only index size — but it would speed a 15-minute background job and a
+    dashboard poll, which no measurement has yet shown to be slow.
+  - **`audit_log (at DESC, id DESC)`** — ListAuditEntries pages by that
     composite keyset while `idx_audit_log_at` covers only `at`. Rejected: ties
-    on `at` are rare, audit_log is partitioned and already carries six
-    indexes, and every Paladin mutation writes a row — a seventh index taxes the
-    write path of the whole control plane for a tiebreak.
-  - **`objects (tenant_id, object_key, key text_pattern_ops)`** — would make
-    ListObjects' `key LIKE 'prefix%'` a range scan instead of a recheck.
-    Rejected for now: the `(tenant_id, object_key)` equality already bounds
-    the scan to one collection, so the recheck is over a page, not the table.
-    Revisit if a single collection grows large enough that prefix browsing
-    shows up in `pg_stat_statements`.
+    on `at` are rare, audit_log is partitioned and already carries its
+    primary key and five indexes, and every Paladin mutation writes a row —
+    another index taxes the write path of the whole control plane for a
+    tiebreak.
 - **Definition of Done:** revisit each when there is production evidence —
   `pg_stat_statements` mean_exec_time, or `pg_stat_user_tables` seq_scan
   counts — rather than on inspection.
@@ -579,13 +577,15 @@ the same commit. Treat this file like a runtime invariant.
 - **Status:** Deferred (the seam and the tests landed; this entry records why
   the score stops at 96%).
 - **What landed:** an interface per handler-backed server — Auth, User,
-  UserSettings; SystemServer has no handler — a table over all 21 RPCs
+  UserSettings; SystemServer has no handler — a table over the RPCs
   asserting a handler failure reaches the caller wrapping the original, plus
   cases for the parsing, forwarding and SUCCESS paths a failing double cannot
-  reach. 78% after the seam alone, 96% after those.
-- **Not a sample, unlike the admin entry above:** a budget of 90 produced only
-  70 mutations, so the operator set is exhausted. Every non-equivalent
-  mutation in this package is caught.
+  reach. 78% after the seam alone, 96% after those, measured over 21 RPCs;
+  the table now holds 24 (ListOAuthGrants, RevokeOAuthGrant and
+  ListUserCapabilities came later) and the run has not been repeated.
+- **Not a sample:** a budget of 90 produced only 70 mutations, so the
+  operator set was exhausted. Every non-equivalent mutation in this package
+  was caught.
 - **The three that remain, each proved equivalent by running the mutated
   predicate against its boundary input rather than by argument:**
   `parseUserResourceName`'s `len(name) <= len(prefix)` and
@@ -716,9 +716,8 @@ the same commit. Treat this file like a runtime invariant.
 
 The entries below are one programme, agreed on 2026-10-19, to make the console
 faster to work in and more finished to look at. Each lands as its own pull
-request with tests and is deleted here by the one that closes it. Every entry
-is `Aspirational` with no blocker unless it says otherwise; the order is the
-order they are being taken up.
+request with tests and is deleted here by the one that closes it. What is
+left waits on the owner: each entry says what was decided.
 
 #### Motion: view transitions and micro-animations
 
