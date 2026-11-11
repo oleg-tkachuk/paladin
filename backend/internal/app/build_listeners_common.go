@@ -73,10 +73,9 @@ func BuildHTTPServer(c config.HTTPServer, mux http.Handler, l *zap.Logger) (*htt
 }
 
 // BuildVerifier returns a TokenVerifier pinned to a specific audience.
-// JWKS-mode wins when auth.jwks_url is set (federated IdP); otherwise the
-// HMAC verifier reads auth.signing_key. The bootstrap codepath leaves
-// signing_key required for the local-admin token flow even when JWKS is
-// configured for tenant traffic.
+// JWKS-mode wins when auth.jwks_url is set; otherwise the HMAC verifier
+// reads auth.signing_key, and with neither it refuses: an HMAC over the
+// empty key would accept a token HMAC'd with nothing.
 func BuildVerifier(ctx context.Context, a config.Auth, audience string, l *zap.Logger) (auth.TokenVerifier, error) {
 	if a.JWKSURL != "" {
 		v := auth.NewJWKSVerifier(a.JWKSURL)
@@ -89,6 +88,9 @@ func BuildVerifier(ctx context.Context, a config.Auth, audience string, l *zap.L
 		}
 		l.Info("using jwks verifier", zap.String("audience", audience), logfield.URL("url", a.JWKSURL))
 		return v, nil
+	}
+	if a.SigningKey == "" {
+		return nil, fmt.Errorf("verifier(%s): auth.signing_key (or signing_key_secret) or auth.jwks_url is required", audience)
 	}
 	return &auth.JWTVerifier{
 		Key:              []byte(a.SigningKey),

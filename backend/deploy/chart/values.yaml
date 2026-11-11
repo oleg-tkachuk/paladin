@@ -1332,6 +1332,22 @@ auth:
     # Characters in a generated key.
     generatedLength: 64
 
+# ─── API-token digest pepper ────────────────────────────────────────────────
+#
+# Used only when config.api_token.enabled is true and config.api_token sets
+# neither `hmac_key` nor `hmac_key_secret`. Then the chart generates a Secret
+# named <fullname>-api-token-hmac (kept across upgrades via lookup), or points
+# the config at `existingSecret`. It is a secret of its own, never derived from
+# the session signing key (ADR-0047). Under ArgoCD, set `existingSecret`, for
+# the reason given for auth.signingKey.
+apiToken:
+  hmacKey:
+    generate: true
+    existingSecret: ""
+    key: hmac_key
+    # Characters in a generated pepper; api_token requires at least 32 bytes.
+    generatedLength: 64
+
 # ─── Primary storage backend credentials ────────────────────────────────────
 #
 # Sibling K8s Secret holding the S3 / SeaweedFS access_key + secret_key for

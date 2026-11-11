@@ -70,14 +70,6 @@ func TestBuildSharedDeps_RefusesBeforeTouchingTheDatabase(t *testing.T) {
 			// here turns a boot error into a panic on the first request.
 			wantErr: "not *pgxpool.Pool",
 		},
-		"no signing key": {
-			db: &postgres.DB{Pool: &pgxpool.Pool{}},
-			// Without it nothing can mint or verify a token, so every
-			// authenticated call would fail — after the listeners bound and
-			// the pod reported ready.
-			cfg:     config.Config{Storage: goodStorage},
-			wantErr: "auth.signing_key",
-		},
 		"no storage backends": {
 			db: &postgres.DB{Pool: &pgxpool.Pool{}},
 			// The registry has no default backend, so an empty map is not a

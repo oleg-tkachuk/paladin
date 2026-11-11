@@ -1399,11 +1399,8 @@ type APIToken struct {
 	// "pepper"): rotating it invalidates every issued token, so treat it
 	// like the auth signing key. Provide it out-of-band via HMACKeySecret
 	// (Kubernetes Secret) in real deployments; an inline value here is for
-	// dev only. When BOTH are empty the subsystem derives a key from
-	// Auth.SigningKey (domain-separated) so dev works out of the box —
-	// acceptable because that key is already a managed secret, but a
-	// dedicated HMACKeySecret is preferred in production for key
-	// separation (so rotating the JWT signing key doesn't drop tokens).
+	// dev only. One of the two is required when Enabled: it is never
+	// derived from Auth.SigningKey (ADR-0047).
 	HMACKey string `yaml:"hmac_key" json:"hmac_key"`
 
 	// HMACKeySecret resolves HMACKey from a Kubernetes Secret at boot.

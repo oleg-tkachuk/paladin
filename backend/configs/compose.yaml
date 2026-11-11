@@ -274,6 +274,9 @@ capability:
   currency: XXX
 api_token:
   enabled: false
+  # The digest pepper, a secret of its own (ADR-0047); the e2e stack turns
+  # the subsystem on and needs it. A compose-only value: never a real key.
+  hmac_key: compose-api-token-pepper-not-a-secret
 
 # Ingest plane is ON by default in compose so SeaweedFS-uploaded files
 # auto-promote PENDING → AVAILABLE without an explicit Complete RPC.

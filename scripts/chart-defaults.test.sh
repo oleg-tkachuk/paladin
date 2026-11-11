@@ -18,6 +18,7 @@ readonly CHART=backend/deploy/chart
 readonly RELEASE=paladin-core
 readonly NAMESPACE=paladin
 readonly SIGNING_SECRET="$RELEASE-auth-signing-key"
+readonly PEPPER_SECRET="$RELEASE-api-token-hmac"
 readonly REQUIRED_VALUES=ci/required-values.yaml
 
 for tool in helm yq; do
@@ -90,6 +91,36 @@ cases=$((cases + 1))
 secret_exists existing "$SIGNING_SECRET" && bad "existingSecret: a signing key Secret was generated anyway"
 cases=$((cases + 1))
 rbac_names existing | grep -x my-signing-key >/dev/null || bad "existingSecret: RBAC cannot read my-signing-key"
+
+# ─── API-token digest pepper ─────────────────────────────────────────────────
+# A secret of its own, never the session key (ADR-0047): generated when API
+# tokens are on and nothing names one, absent while they are off, and left
+# alone when the overlay names one.
+
+render pepper-off
+cases=$((cases + 1))
+secret_exists pepper-off "$PEPPER_SECRET" && bad "api tokens off: a pepper Secret was generated anyway"
+check "api tokens off: no pepper ref added" "$(config pepper-off '.api_token.hmac_key_secret // "none"')" "none"
+
+render pepper-on --set config.api_token.enabled=true
+cases=$((cases + 1))
+secret_exists pepper-on "$PEPPER_SECRET" || bad "api tokens on: no pepper Secret was generated"
+check "api tokens on: config reads the generated pepper" "$(config pepper-on .api_token.hmac_key_secret.name)" "$PEPPER_SECRET"
+cases=$((cases + 1))
+rbac_names pepper-on | grep -x "$PEPPER_SECRET" >/dev/null || bad "api tokens on: RBAC cannot read $PEPPER_SECRET"
+
+render pepper-configured --set config.api_token.enabled=true \
+    --set config.api_token.hmac_key_secret.name=my-pepper --set config.api_token.hmac_key_secret.key=hmac_key
+cases=$((cases + 1))
+secret_exists pepper-configured "$PEPPER_SECRET" && bad "configured pepper: a pepper Secret was generated anyway"
+check "configured pepper: config keeps it" "$(config pepper-configured .api_token.hmac_key_secret.name)" "my-pepper"
+cases=$((cases + 1))
+rbac_names pepper-configured | grep -x my-pepper >/dev/null || bad "configured pepper: RBAC cannot read my-pepper"
+
+render pepper-existing --set config.api_token.enabled=true --set apiToken.hmacKey.existingSecret=their-pepper
+cases=$((cases + 1))
+secret_exists pepper-existing "$PEPPER_SECRET" && bad "existingSecret pepper: a pepper Secret was generated anyway"
+check "existingSecret pepper: config reads it" "$(config pepper-existing .api_token.hmac_key_secret.name)" "their-pepper"
 
 render replaced-list --set 'rbac.secretReader.secretNames={only-this}'
 cases=$((cases + 1))
