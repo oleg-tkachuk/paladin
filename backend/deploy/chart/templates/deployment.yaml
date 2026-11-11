@@ -15,6 +15,8 @@
 {{- if $spec.enabled }}
 {{- $fullname := include "chart.roleFullname" (dict "ctx" $ "role" $role) }}
 {{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec) }}
+{{- $sessionKey := fromJson (include "chart.sessionKey" $) }}
+{{- $mintsSessions := and $sessionKey.active (has $role $sessionKey.roles) }}
 
 ---
 apiVersion: apps/v1
@@ -145,6 +147,13 @@ spec:
               mountPath: {{ $.Values.capabilitySigningKeySecret.mountPath }}
               readOnly: true
             {{- end }}
+            {{- if $mintsSessions }}
+            # Only the roles that mint sessions (ADR-0047); for the reason the
+            # capability key is mounted here rather than through defaults.
+            - name: session-key
+              mountPath: {{ $sessionKey.mountPath }}
+              readOnly: true
+            {{- end }}
             {{- with default $defaults.volumeMounts $spec.volumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -169,6 +178,14 @@ spec:
             items:
               - key: {{ $.Values.capabilitySigningKeySecret.key }}
                 path: {{ $.Values.capabilitySigningKeySecret.key }}
+        {{- end }}
+        {{- if $mintsSessions }}
+        - name: session-key
+          secret:
+            secretName: {{ $sessionKey.name }}
+            items:
+              - key: {{ $sessionKey.key }}
+                path: {{ $sessionKey.key }}
         {{- end }}
         {{- with default $defaults.volumes $spec.volumes }}
         {{- toYaml . | nindent 8 }}

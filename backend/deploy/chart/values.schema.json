@@ -24,6 +24,32 @@
             }
           },
           "type": "object"
+        },
+        "sessionKey": {
+          "additionalProperties": false,
+          "properties": {
+            "generate": {
+              "type": "boolean"
+            },
+            "existingSecret": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1
+            },
+            "mountPath": {
+              "type": "string",
+              "minLength": 1
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"

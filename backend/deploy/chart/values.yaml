@@ -1331,6 +1331,21 @@ auth:
     key: signing_key
     # Characters in a generated key.
     generatedLength: 64
+  # The session signing key (ADR-0047): ECDSA P-256, mounted as a file into
+  # the roles that mint sessions and no other — no service account reads it
+  # through the API, so it is not in rbac.secretReader. The chart generates a
+  # Secret named <fullname>-session-key (kept across upgrades via lookup), or
+  # mounts `existingSecret`. Under ArgoCD set `existingSecret`, for the reason
+  # given for signingKey. The server reads it from a release that names it in
+  # config.auth.session_key_path; until then it is mounted and unread.
+  sessionKey:
+    generate: true
+    existingSecret: ""
+    # The Secret's key holding the PEM (PKCS#8 or SEC1) and the file it mounts as.
+    key: session-key.pem
+    mountPath: /etc/paladin-session
+    # The roles that mint sessions: the IAM plane's.
+    roles: [api]
 
 # ─── API-token digest pepper ────────────────────────────────────────────────
 #
