@@ -131,13 +131,23 @@ func TestSummaryOfAnEmptyPeriod(t *testing.T) {
 	}
 }
 
-// A ledger that fails is the server's failure, whatever it failed with —
-// a scope mismatch included.
-func TestSummaryOfAFailedLedgerIsInternal(t *testing.T) {
-	ledger := &fakeLedger{err: limes.ErrScopeMismatch}
-	_, err := NewHandler(ledger, nil, allowAuthorizer{}).GetTenantSummary(ctxWithAdmin(t), uuid.New(), time.Time{}, time.Time{})
-	if connect.CodeOf(err) != connect.CodeInternal || !errors.Is(err, limes.ErrScopeMismatch) {
-		t.Errorf("err = %v, want Internal wrapping ErrScopeMismatch", err)
+// A ledger that fails is answered by its limes code: a store down or timed
+// out is Unavailable, worth a retry; a scope mismatch is the server's own
+// failure.
+func TestSummaryOfAFailedLedgerIsAnsweredByItsCode(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want connect.Code
+	}{
+		{limes.ErrStoreUnavailable, connect.CodeUnavailable},
+		{limes.ErrStoreTimeout, connect.CodeUnavailable},
+		{limes.ErrScopeMismatch, connect.CodeInternal},
+	} {
+		ledger := &fakeLedger{err: tc.err}
+		_, err := NewHandler(ledger, nil, allowAuthorizer{}).GetTenantSummary(ctxWithAdmin(t), uuid.New(), time.Time{}, time.Time{})
+		if connect.CodeOf(err) != tc.want || !errors.Is(err, tc.err) {
+			t.Errorf("%v: err = %v (%s), want %s", tc.err, err, connect.CodeOf(err), tc.want)
+		}
 	}
 }
 
@@ -213,7 +223,7 @@ func TestSumChargesWalksThePages(t *testing.T) {
 
 	repeating := &repeatingLedger{}
 	err := (&Handler{ledger: repeating}).sumCharges(context.Background(), meter.SumChargesRequest{}, func(meter.ChargeSum) bool { return true })
-	if !errors.Is(err, limes.ErrCursorRepeated) || connect.CodeOf(err) != connect.CodeInternal {
+	if !errors.Is(err, limes.ErrCursorRepeated) || connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Errorf("a repeated cursor: err = %v after %d calls, want ErrCursorRepeated as Internal", err, repeating.calls)
 	}
 }

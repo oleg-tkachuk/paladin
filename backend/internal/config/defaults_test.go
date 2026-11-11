@@ -5,9 +5,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/dpop"
 	"github.com/oleg-tkachuk/limes/meter"
 )
@@ -45,6 +47,18 @@ func TestDefaultsAreWhatLoadFillsIn(t *testing.T) {
 	if got := d.Capability.DPoPReplay.EntriesPerHolder; got != dpop.DefaultReplayEntriesPerHolder || loaded.Capability.DPoPReplay != d.Capability.DPoPReplay {
 		t.Errorf("capability.dpop_replay.entries_per_holder defaults to %d (Load: %d), want limes' %d",
 			got, loaded.Capability.DPoPReplay.EntriesPerHolder, dpop.DefaultReplayEntriesPerHolder)
+	}
+	// The capability durations default to limes's own: a limes bump that
+	// moves one is then a decision here, not a drift.
+	for name, pair := range map[string][2]time.Duration{
+		"capability.default_ttl":          {d.Capability.DefaultTTL, limes.DefaultIssueTTL},
+		"capability.verifier_leeway":      {d.Capability.VerifierLeeway, limes.DefaultLeeway},
+		"capability.revocation_cache_ttl": {d.Capability.RevocationCacheTTL, limes.DefaultRevocationCacheTTL},
+		"capability.dpop_nonce.lifetime":  {d.Capability.DPoPNonce.Lifetime, dpop.DefaultNonceLifetime},
+	} {
+		if pair[0] != pair[1] {
+			t.Errorf("%s defaults to %s, want limes's %s", name, pair[0], pair[1])
+		}
 	}
 	if d.Worker.Jobs.Capability.ChargesOlderThan != meter.MinChargeRetention {
 		t.Errorf("charges_older_than defaults to %s", d.Worker.Jobs.Capability.ChargesOlderThan)

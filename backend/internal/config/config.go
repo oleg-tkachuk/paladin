@@ -345,6 +345,7 @@ const (
 	revocationCacheSyncedTTLKey = "revocation_cache_synced_ttl"
 	revocationCacheMaxStaleKey  = "revocation_cache_max_stale"
 	chargesOlderThanKey         = "charges_older_than"
+	dpopNonceLifetimeKey        = "dpop_nonce.lifetime"
 )
 
 // validateCapabilityBounds holds the capability durations to the bounds limes
@@ -353,10 +354,22 @@ const (
 // limes.MaxLeeway, and a purge retention shorter than limes.MinPurgeRetention,
 // which would drop a revocation while a verifier still honours its token, and
 // a revocation cache TTL past limes.MaxRevocationCacheSyncedTTL, and a
-// stale answer kept past limes.MaxRevocationCacheStale.
+// stale answer kept past limes.MaxRevocationCacheStale; and a zero revocation
+// cache TTL or DPoP nonce lifetime, which limes would take as its default.
 func (c *Config) validateCapabilityBounds() error {
 	if l := c.Capability.VerifierLeeway; l < 0 || l > limes.MaxLeeway {
 		return fmt.Errorf("capability: verifier_leeway %s is outside 0..%s", l, limes.MaxLeeway)
+	}
+	// limes reads a zero TTL or nonce lifetime as its own default, so a zero
+	// would not do what it says: there is no cache-less verifier and no
+	// nonce that lapses at once.
+	for key, d := range map[string]time.Duration{
+		revocationCacheTTLKey: c.Capability.RevocationCacheTTL,
+		dpopNonceLifetimeKey:  c.Capability.DPoPNonce.Lifetime,
+	} {
+		if d <= 0 {
+			return fmt.Errorf("capability: %s %s must be positive", key, d)
+		}
 	}
 	// limes caches for the longer of the two, and refuses past its ceiling.
 	for key, ttl := range map[string]time.Duration{

@@ -8,11 +8,9 @@ import (
 	"slices"
 	"time"
 
-	"connectrpc.com/connect/v2"
-
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
-	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
 // The granularities GetTenantTimeSeries takes (billing_service.proto names
@@ -52,7 +50,9 @@ func (h *Handler) sumCharges(ctx context.Context, req meter.SumChargesRequest, k
 	req.Limit = ledgerPage
 	for s, err := range meter.AllChargeSums(ctx, h.ledger, req) {
 		if err != nil {
-			return rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: sum charges: %w", err))
+			// By its limes code: a store that is down or timed out is
+			// Unavailable, worth a retry, not the server's own fault.
+			return auth.AnswerCapabilityError(fmt.Errorf("billing: sum charges: %w", err), nil)
 		}
 		if !keep(s) {
 			return nil

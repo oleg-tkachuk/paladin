@@ -690,7 +690,9 @@ capability: {
   signing_key_path:         string | *""
   signing_key_kid:          string | *""
   default_ttl:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
+  // Clock skew allowed on nbf and exp; 0 holds them to the clock exactly.
   verifier_leeway:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+  // Must be positive: there is no verifier without a revocation cache.
   revocation_cache_ttl:     =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2s"
   // How long a revocation answer is cached while the revocation watcher
   // listens; the TTL above bounds it while the watcher is down.

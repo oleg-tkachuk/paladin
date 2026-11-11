@@ -171,3 +171,25 @@ func TestChargeRetentionDefaultIsLimesFloor(t *testing.T) {
 		t.Error("purge_charges is on by default")
 	}
 }
+
+// A zero revocation cache TTL or DPoP nonce lifetime is refused: limes takes
+// either zero as its own default, so the configuration would not do what it
+// says.
+func TestValidateZeroTakenAsLimesDefaultIsRefused(t *testing.T) {
+	for key, set := range map[string]func(*Config, time.Duration){
+		revocationCacheTTLKey: func(c *Config, d time.Duration) { c.Capability.RevocationCacheTTL = d },
+		dpopNonceLifetimeKey:  func(c *Config, d time.Duration) { c.Capability.DPoPNonce.Lifetime = d },
+	} {
+		t.Run(key, func(t *testing.T) {
+			c := minimalValidConfig()
+			set(&c, time.Nanosecond)
+			if err := c.Validate(); err != nil {
+				t.Fatalf("%s of a nanosecond refused: %v", key, err)
+			}
+			for _, d := range []time.Duration{0, -time.Nanosecond} {
+				set(&c, d)
+				mustReject(t, c, key)
+			}
+		})
+	}
+}

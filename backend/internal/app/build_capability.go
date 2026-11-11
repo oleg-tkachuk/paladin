@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -231,12 +232,14 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: DPoP verifier: %w", err)
 	}
 
+	leeway, noLeeway := verifierLeeway(cfg.VerifierLeeway)
 	verifier, err := limes.NewVerifier(limes.VerifierConfig{
 		Keys:           issuers.keys,
 		Revocations:    cache,
 		TrustedIssuers: issuers.trusted,
 		KeyIssuers:     issuers.keyIssuers,
-		Leeway:         cfg.VerifierLeeway,
+		Leeway:         leeway,
+		NoLeeway:       noLeeway,
 		// Every capability is also handed out as a Biscuit its holder can
 		// narrow offline (CapabilityService.Issue), so every plane takes one.
 		// The capability interceptor passes a copy's own limits to the usage
@@ -410,4 +413,11 @@ func usageStoreEvents() (meter.StoreEvents, error) {
 // refunded. Paladin counts none of them itself.
 func meteredUsage(store meter.UsageStore) (meter.UsageStore, error) {
 	return otelmetric.Instrument(store, otelmetric.WithTenantAttribute())
+}
+
+// verifierLeeway is capability.verifier_leeway as limes takes it. A zero
+// leeway holds nbf and exp to the clock exactly, which limes reads only from
+// NoLeeway: a zero Leeway alone is its default.
+func verifierLeeway(configured time.Duration) (leeway time.Duration, none bool) {
+	return configured, configured == 0
 }

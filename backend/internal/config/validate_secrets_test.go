@@ -1,11 +1,12 @@
 package config
 
 import (
-	"github.com/oleg-tkachuk/limes"
-
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/limes/dpop"
 )
 
 // Each test below builds the smallest Config that passes the
@@ -21,9 +22,14 @@ func minimalValidConfig() Config {
 		Datastores: Datastores{
 			Postgres: Postgres{DSN: "postgres://x@y/z"},
 		},
-		Limits:     validLimits(),
-		Admin:      Admin{Tenants: AdminTenants{TrashRetention: 720 * time.Hour}},
-		Capability: Capability{Currency: limes.AbstractUnitCode},
+		Limits: validLimits(),
+		Admin:  Admin{Tenants: AdminTenants{TrashRetention: 720 * time.Hour}},
+		// What schema.cue fills in, which Validate requires positive.
+		Capability: Capability{
+			Currency:           limes.AbstractUnitCode,
+			RevocationCacheTTL: limes.DefaultRevocationCacheTTL,
+			DPoPNonce:          DPoPNonce{Lifetime: dpop.DefaultNonceLifetime},
+		},
 		Storage: Storage{
 			Backends: map[string]StorageBackend{
 				"primary": {

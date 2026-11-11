@@ -3,6 +3,7 @@ package capabilityh
 import (
 	"context"
 	"fmt"
+	"slices"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -156,7 +157,7 @@ func (h *Handler) presentedLeaseTarget(ctx context.Context, verified limes.Verif
 		return nil, uuid.Nil(), connect.NewError(connect.CodeFailedPrecondition, errLeaseByCopy)
 	}
 	holder := verified.Capability()
-	if !hasOp(holder.Caveats.Ops, limes.OpShare) {
+	if !slices.Contains(holder.Caveats.Ops, limes.OpShare) {
 		return nil, uuid.Nil(), connect.NewError(connect.CodePermissionDenied, errLeaseWithoutShare)
 	}
 	ctx = auth.WithActingTenant(ctx, holder.Subject.TenantID)

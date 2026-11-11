@@ -127,18 +127,6 @@ func (h *Handler) WithRevoker(r CapabilityRevoker) *Handler {
 	return h
 }
 
-// hasOp reports whether the caveat op-set includes the requested op.
-// Empty op-set means "no operation allowed", so the result is false in
-// that case.
-func hasOp(ops []limes.Op, want limes.Op) bool {
-	for _, o := range ops {
-		if o == want {
-			return true
-		}
-	}
-	return false
-}
-
 // authorize gates an RPC against Cedar, with the caller's own tenant as the
 // resource. platform.admin and platform.capability-issuer are admitted by the
 // built-in policy (cedar.builtinPolicy); a tenant policy may grant the actions
@@ -301,10 +289,9 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			"capability: delegation narrows a presented capability; send it in the "+auth.HeaderCapability+" header")
 	}
+	// A parent without OpShare is limes's to refuse (Issuer.Delegate), which
+	// tells the caller its code.
 	parent := verified.Capability()
-	if !hasOp(parent.Caveats.Ops, limes.OpShare) {
-		return nil, connect.NewError(connect.CodePermissionDenied, "capability: caller lacks OpShare")
-	}
 	if parent.ID != parentID {
 		return nil, connect.NewError(connect.CodePermissionDenied, "capability: parent_id must equal caller's own capability id")
 	}
