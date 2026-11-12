@@ -52,6 +52,12 @@ export const IN_GROUP_CONTROL = "focus-visible:outline-none";
  */
 export const STICKY_BELOW_TOPBAR = "sticky top-14 z-20";
 
+/**
+ * The same from lg up only, for a side column that stacks above its page
+ * below lg and would cover it if it stuck there.
+ */
+export const STICKY_BELOW_TOPBAR_FROM_LG = "lg:sticky lg:top-14 lg:z-20";
+
 /** Frosted glass for what scrolls over content: the page shows through, blurred. */
 export const FROSTED = "bg-background/80 backdrop-blur-md";
 

@@ -20,7 +20,7 @@ import { LiveToggle } from "@/components/ui/LiveToggle";
 import { liveState } from "@/lib/live";
 
 import { cn } from "@/lib/utils";
-import { FOCUS_RING } from "@/lib/ui/states";
+import { FOCUS_RING, STICKY_BELOW_TOPBAR_FROM_LG } from "@/lib/ui/states";
 import { textParam, useUrlState } from "@/hooks/useUrlState";
 import { STATUS_TONE, StatusTone } from "@/lib/ui/status";
 import { StatusDot, StatusLabel } from "@/components/ui/StatusIcon";
@@ -381,7 +381,7 @@ function RoleRail({
     current.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [selected]);
   return (
-    <nav aria-label="Roles" className="lg:sticky lg:top-4">
+    <nav aria-label="Roles" className={STICKY_BELOW_TOPBAR_FROM_LG}>
       <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
         {cards.map((s) => {
           const m = META[s.status];
