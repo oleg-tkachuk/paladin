@@ -37,6 +37,14 @@ const (
 // returns its URL, and the tenant its user belongs to.
 func sessionRole(t *testing.T, rotateAfter time.Duration) (string, string) {
 	t.Helper()
+	bases, tenant := sessionReplicas(t, rotateAfter, 1)
+	return bases[0], tenant
+}
+
+// sessionReplicas serves replicas of the session role, each its own process
+// as far as anything it remembers goes, in front of one iam and data role.
+func sessionReplicas(t *testing.T, rotateAfter time.Duration, replicas int) ([]string, string) {
+	t.Helper()
 	h := pgharness.Setup(t)
 	tenant := mustCreateTenant(t, h.PoolMigrate, "session-role")
 	mustCreateCollection(t, h.PoolMigrate, tenant, "docs")
@@ -67,13 +75,17 @@ func sessionRole(t *testing.T, rotateAfter time.Duration) (string, string) {
 	cfg.Session.Upstreams.DataURL = data.URL
 	cfg.Session.Upstreams.AdminURL = data.URL
 	cfg.Session.RotateAfter = rotateAfter
-	handler, err := app.BuildSessionHandler(context.Background(), cfg, app.BuildMeta{Version: "test"}, zap.NewNop())
-	if err != nil {
-		t.Fatalf("BuildSessionHandler: %v", err)
+	var bases []string
+	for range replicas {
+		handler, err := app.BuildSessionHandler(context.Background(), cfg, app.BuildMeta{Version: "test"}, zap.NewNop())
+		if err != nil {
+			t.Fatalf("BuildSessionHandler: %v", err)
+		}
+		srv := httptest.NewServer(handler)
+		t.Cleanup(srv.Close)
+		bases = append(bases, srv.URL)
 	}
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	return srv.URL, tenant.String()
+	return bases, tenant.String()
 }
 
 // sessionAnswer is what the browser keeps of one answer: its status and the
@@ -186,5 +198,21 @@ func TestSessionRole_LeavesAYoungRefreshTokenAlone(t *testing.T) {
 	res := sessionPost(t, base, session.PathRefresh, cookie, "")
 	if res.status != http.StatusNoContent || res.cookie != nil {
 		t.Fatalf("refresh = %d, cookie %v; want 204 and no new cookie", res.status, res.cookie)
+	}
+}
+
+// Signed out at one replica, a copied cookie is refused at the other at once:
+// no replica answers from what it remembers of the session.
+func TestSessionRole_ASignOutReachesEveryReplica(t *testing.T) {
+	bases, tenant := sessionReplicas(t, time.Hour, 2)
+	cookie := sessionLogin(t, bases[0])
+	if err := listObjects(t, bases[1], cookie, tenant); err != nil {
+		t.Fatalf("the other replica, before sign-out: %v", err)
+	}
+	if out := sessionPost(t, bases[0], session.PathLogout, cookie, ""); out.status != http.StatusNoContent {
+		t.Fatalf("logout = %d", out.status)
+	}
+	if err := listObjects(t, bases[1], cookie, tenant); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Errorf("the other replica, after sign-out: %v, want unauthenticated", err)
 	}
 }

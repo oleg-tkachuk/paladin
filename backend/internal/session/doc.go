@@ -2,8 +2,8 @@
 //
 // It holds the console's session: the refresh token lives in an httpOnly
 // cookie it alone sets and reads, and the access token each plane needs is
-// minted from it at the iam plane, kept here until it expires, and attached
-// to the console's calls as this role forwards them. The browser holds no
+// minted from it at the iam plane for each call this role forwards, so a
+// session revoked anywhere is refused everywhere at once. The browser holds no
 // token, and the role holds no key: the planes verify what it attaches as
 // they verify any other caller.
 //
