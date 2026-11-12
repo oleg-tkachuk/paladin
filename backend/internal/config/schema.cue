@@ -663,7 +663,6 @@ mcp: {
       authorization_endpoint: string | *""
       token_endpoint:         string | *""
       registration_endpoint:  string | *""
-      jwks_uri:               string | *""
     }
     // RFC 8693 exchange for a delegated capability (ADR-0041). Empty client_id: off.
     exchange: {

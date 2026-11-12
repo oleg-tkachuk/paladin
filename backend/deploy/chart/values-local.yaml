@@ -91,6 +91,9 @@ deployments:
   api:
     enabled: true
     replicas: 1
+  iam:
+    enabled: true
+    replicas: 1
   admin:
     enabled: true
     replicas: 1
@@ -161,7 +164,6 @@ rbac:
       - paladin-postgresql-reaper-user
       - paladin-admin-key
       - paladin-bootstrap-admin
-      - paladin-auth-signing-key
       - paladin-ingest-hmac
 
 # TLS between the planes, from the certificate cert-manager issues into the

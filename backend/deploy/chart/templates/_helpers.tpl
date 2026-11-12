@@ -406,7 +406,7 @@ The roles that serve /metrics, as JSON. mcp is not one: it holds no
 instruments of its own (serve_mcp.go).
 */}}
 {{- define "chart.metricsRoles" -}}
-{{- list "api" "admin" "worker" "dispatcher" "ingest" | toJson -}}
+{{- list "api" "iam" "admin" "worker" "dispatcher" "ingest" | toJson -}}
 {{- end -}}
 
 {{/*

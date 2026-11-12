@@ -14,7 +14,11 @@ type Role string
 
 // The roles, as the binary's commands name them.
 const (
+	// RoleAPI serves the data plane; RoleIAM the IAM plane, the OAuth
+	// authorization server and the session JWKS, and alone holds the session
+	// key (ADR-0047).
 	RoleAPI        Role = "api"
+	RoleIAM        Role = "iam"
 	RoleAdmin      Role = "admin"
 	RoleWorker     Role = "worker"
 	RoleDispatcher Role = "dispatcher"
@@ -22,7 +26,8 @@ const (
 	// RoleMCP is the standalone bridge: no database, only its own credentials.
 	RoleMCP Role = "mcp"
 	// RoleMCPEmbedded co-hosts the api and admin planes beside the bridge
-	// (`serve mcp --embedded`), and reads what all three do.
+	// (`serve mcp --embedded`), and reads what all three do (iam's set
+	// includes api's).
 	RoleMCPEmbedded Role = "mcp-embedded"
 	RoleMigrate     Role = "migrate"
 	RoleBootstrap   Role = "bootstrap"
@@ -64,8 +69,9 @@ var sharedDepsSecrets = []string{
 // consumes them. A role absent here is refused rather than given nothing.
 var roleSecrets = map[Role][]string{
 	// The planes: shared deps, the rate limits in Valkey, the health
-	// snapshot; api also seeds the OAuth clients (AssembleAPIMuxes).
-	RoleAPI:   concat(sharedDepsSecrets, secretValkeyPassword, secretHealthSnapshotToken, secretOAuthSeedClients),
+	// snapshot; iam also seeds the OAuth clients (AssembleIAMMux).
+	RoleAPI:   concat(sharedDepsSecrets, secretValkeyPassword, secretHealthSnapshotToken),
+	RoleIAM:   concat(sharedDepsSecrets, secretValkeyPassword, secretHealthSnapshotToken, secretOAuthSeedClients),
 	RoleAdmin: concat(sharedDepsSecrets, secretValkeyPassword, secretHealthSnapshotToken),
 	// The partition pool is the migrate role's; the reaper pool its own.
 	RoleWorker: concat(sharedDepsSecrets, secretHealthSnapshotToken,
@@ -91,7 +97,7 @@ var roleSecrets = map[Role][]string{
 var runtimeSecretReaders = []Role{RoleAdmin, RoleBootstrap, RoleDispatcher, RoleMCPEmbedded}
 
 func init() {
-	roleSecrets[RoleMCPEmbedded] = concat(roleSecrets[RoleAPI],
+	roleSecrets[RoleMCPEmbedded] = concat(roleSecrets[RoleIAM],
 		append(slices.Clone(roleSecrets[RoleAdmin]), roleSecrets[RoleMCP]...)...)
 }
 

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -39,7 +40,7 @@ func TestMetadataHandler(t *testing.T) {
 		Issuer:                "https://paladin.example.com",
 		AuthorizationEndpoint: "https://paladin.example.com/oauth/authorize",
 		TokenEndpoint:         "https://paladin.example.com/oauth/token",
-		// RegistrationEndpoint + JWKSURI left empty → must be omitted.
+		// RegistrationEndpoint left empty → must be omitted.
 	}
 	doc := metadataDoc(t, as, false)
 	if doc["issuer"] != as.Issuer || doc["token_endpoint"] != as.TokenEndpoint {
@@ -91,6 +92,33 @@ func TestMetadataHandler_RevocationEndpoint(t *testing.T) {
 			}
 			if m := docStrings(doc, "revocation_endpoint_auth_methods_supported"); !slices.Equal(m, tokenEndpointAuthMethodsSupported) {
 				t.Errorf("revocation auth methods = %v, want the token endpoint's", m)
+			}
+		})
+	}
+}
+
+// jwks_uri is derived, not configured: the session JWKS the IAM plane serves
+// at the issuer's origin (ADR-0047), so it cannot name a key set nobody serves.
+func TestMetadataHandler_JWKSURI(t *testing.T) {
+	cases := []struct {
+		name, issuer, want string
+	}{
+		{"the issuer's well-known path", "https://iam.example.com", "https://iam.example.com" + sessionkey.WellKnownPath},
+		{"a trailing slash", "https://iam.example.com/", "https://iam.example.com" + sessionkey.WellKnownPath},
+		{"no issuer", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := metadataDoc(t, config.MCPOAuthAS{Issuer: tc.issuer}, false)
+			got, present := doc["jwks_uri"]
+			if tc.want == "" {
+				if present {
+					t.Errorf("jwks_uri = %v, want omitted", got)
+				}
+				return
+			}
+			if got != tc.want {
+				t.Errorf("jwks_uri = %v, want %q", got, tc.want)
 			}
 		})
 	}

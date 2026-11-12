@@ -6,7 +6,9 @@
 # always one image with N pods carrying disjoint responsibilities.
 #
 # Roles (default keys):
-#   api      — data + iam Connect listeners (public-ish traffic)
+#   api      — data Connect listener (public-ish traffic)
+#   iam      — IAM Connect listener, OAuth AS and session JWKS; alone holds
+#              the session key (ADR-0047)
 #   admin    — admin Connect listener (privileged operations)
 #   worker   — background jobs with Postgres-leased leadership
 #   mcp      — Model Context Protocol bridge (LLM-facing)
@@ -162,8 +164,6 @@ deployments:
     ports:
       - name: data
         containerPort: 8080
-      - name: iam
-        containerPort: 8085
     livenessProbe:
       httpGet:
         path: /livez
@@ -200,11 +200,57 @@ deployments:
         - name: data
           port: 8080
           targetPort: data
+    # The internal TLS certificate is mounted by the chart when
+    # internalTLS.enabled; see internalTLS below.
+    volumes:
+      - name: tmp
+        emptyDir: {}
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+  # The IAM plane: login and the token RPCs, the OAuth authorization server
+  # and the session JWKS. The one role auth.sessionKey mounts the session key
+  # into (ADR-0047).
+  iam:
+    enabled: true
+    replicas: 2
+    args:
+      - "serve"
+      - "iam"
+    ports:
+      - name: iam
+        containerPort: 8085
+    livenessProbe:
+      httpGet:
+        path: /livez
+        port: iam
+      initialDelaySeconds: 15
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: iam
+      initialDelaySeconds: 10
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    startupProbe:
+      httpGet:
+        path: /startupz
+        port: iam
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 24
+    service:
+      type: ClusterIP
+      ports:
         - name: iam
           port: 8085
           targetPort: iam
-    # The internal TLS certificate is mounted by the chart when
-    # internalTLS.enabled; see internalTLS below.
     volumes:
       - name: tmp
         emptyDir: {}
@@ -875,7 +921,7 @@ config:
     # internal CA when internalTLS is on. Set either only to override.
     session_key_path: ""
     previous_session_public_key_paths: []
-    jwks_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-api:8085/.well-known/jwks.json'
+    jwks_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-iam:8085/.well-known/jwks.json'
     jwks_ca_path: ""
     leeway: 30s
     access_token_ttl: 15m
@@ -1085,7 +1131,7 @@ config:
       # Paladin install) or when terminating TLS in front of those Services.
       admin_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-admin:8090'
       data_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-api:8080'
-      iam_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-api:8085'
+      iam_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-iam:8085'
       # The scheme follows internalTLS, and so do the paths below: with it on,
       # the chart points them at the mounted certificate, whose CA the system
       # roots do not contain. The certificate's SANs must cover the bare
@@ -1285,10 +1331,10 @@ internalTLS:
   mountPath: /etc/paladin-mtls
   # Roles that mount the certificate: the three listeners' hosts and the
   # bridge that dials them.
-  roles: [api, admin, mcp]
+  roles: [api, iam, admin, mcp]
   # Roles whose probes switch to HTTPS: the ones whose probe port is a TLS
   # listener.
-  serverRoles: [api, admin]
+  serverRoles: [api, iam, admin]
 
 # ─── PostgreSQL ──────────────────────────────────────────────────────────────
 #
@@ -1319,16 +1365,7 @@ postgres:
     namespace: ""
 
 # ─── Session signing key ─────────────────────────────────────────────────────
-#
-# signingKey is unused since sessions are ES256 (ADR-0047) and is accepted only
-# so an overlay that still sets it renders; it goes in a later release.
 auth:
-  signingKey:
-    generate: true
-    existingSecret: ""
-    key: signing_key
-    # Characters in a generated key.
-    generatedLength: 64
   # The session signing key (ADR-0047): ECDSA P-256, mounted as a file into
   # the roles that mint sessions and no other — no service account reads it
   # through the API, so it is not in rbac.secretReader. The chart generates a
@@ -1343,7 +1380,7 @@ auth:
     key: session-key.pem
     mountPath: /etc/paladin-session
     # The roles that mint sessions: the IAM plane's.
-    roles: [api]
+    roles: [iam]
 
 # ─── API-token digest pepper ────────────────────────────────────────────────
 #
@@ -1439,7 +1476,7 @@ storage:
 
 # ─── Traefik IngressRoute ──────────────────────────────────────────────────
 #
-# Targets the api Service (data + iam ports) per env. Admin gets no
+# Targets the api Service (data) and the iam Service per env. Admin gets no
 # public ingress by default — operators bring their own behind mTLS /
 # VPN / bastion. To expose admin externally, render a separate
 # IngressRoute in the env overlay or fork this chart.
@@ -1481,7 +1518,7 @@ traefik:
     port: 8095
   # Connect-RPC plane routing. iam + admin are dispatched by
   # procedure-prefix; everything else falls through to data. Each rule
-  # is gated by its backing role (deployments.api / deployments.admin)
+  # is gated by its backing role (deployments.api / iam / admin)
   # so a disabled role never leaves an orphaned route.
   planes:
     iam:
@@ -1491,7 +1528,9 @@ traefik:
       oauthPathPrefix: /oauth/
       # Its RFC 8414 metadata, at the origin the issuer names.
       oauthMetadataPath: /.well-known/oauth-authorization-server
-      port: 8085   # served by the api role
+      # The session JWKS the metadata's jwks_uri names (ADR-0047).
+      jwksPath: /.well-known/jwks.json
+      port: 8085   # served by the iam role
     admin:
       pathPrefix: /paladin.admin.v1.
       port: 8090   # served by the admin role
@@ -1518,9 +1557,9 @@ traefik:
 
 # ─── Ingress ─────────────────────────────────────────────────────────────────
 #
-# A standard networking.k8s.io/v1 Ingress for the api role: the IAM plane
-# under iam.path, the data plane for the rest. Off by default; leave it off to
-# route to the api Service with your own ingress or gateway.
+# A standard networking.k8s.io/v1 Ingress for the planes: the iam role's IAM
+# plane under iam.path, the api role's data plane for the rest. Off by default;
+# leave it off to route to the Services with your own ingress or gateway.
 #
 # The defaults are for the Caddy ingress controller, which obtains
 # certificates itself when tls is empty. Another controller needs its own
@@ -1544,6 +1583,8 @@ ingress:
     oauthPath: /oauth
     # Its RFC 8414 metadata, matched Exact.
     oauthMetadataPath: /.well-known/oauth-authorization-server
+    # The session JWKS the metadata's jwks_uri names, matched Exact.
+    jwksPath: /.well-known/jwks.json
     port: 8085
   data:
     port: 8080

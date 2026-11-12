@@ -302,11 +302,6 @@ services:
     init: true
     restart: on-failure
     command: ["serve", "api", "--config", "/app/configs/compose.yaml"]
-    # The base's volumes, and the session key only this role reads.
-    volumes:
-      - ../../../backend/configs:/app/configs:ro
-      - capability-key:/app/keys:ro
-      - session-key:/app/session:ro
     # The MCP server's upstreams in backend/configs/compose.yaml name the
     # dev-loop stack's hosts.
     networks:
@@ -314,7 +309,6 @@ services:
         aliases: [paladin-api]
     ports:
       - "${PALADIN_E2E_PORT_DATA:-8083}:8080" # data
-      - "${PALADIN_E2E_PORT_IAM:-8085}:8085" # iam
     depends_on:
       bootstrap:
         condition: service_completed_successfully
@@ -327,6 +321,27 @@ services:
     # within ~1s of "plane listening"; downstream services gate on
     # service_started and the suite's own readiness waits cover the gap.
     # /readyz is verified from the host instead (see run instructions).
+
+  # The IAM plane, the OAuth AS and the session JWKS (ADR-0047).
+  iam:
+    <<: *paladin-base
+    init: true
+    restart: on-failure
+    command: ["serve", "iam", "--config", "/app/configs/compose.yaml"]
+    # The base's volumes, and the session key only this role reads.
+    volumes:
+      - ../../../backend/configs:/app/configs:ro
+      - capability-key:/app/keys:ro
+      - session-key:/app/session:ro
+    networks:
+      default:
+        aliases: [paladin-iam]
+    ports:
+      - "${PALADIN_E2E_PORT_IAM:-8085}:8085"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    # Distroless image — no in-container HTTP probe possible (see api).
 
   # The event-ingest pipeline on its webhook driver (backend/configs/compose.yaml
   # ingest:), so a storage event can be posted the way SeaweedFS posts one
@@ -361,7 +376,7 @@ services:
     # Distroless image — no in-container HTTP probe possible (see api).
 
   # The streamable-HTTP MCP server, its own audience (ADR-0036): it exchanges
-  # each agent's paladin-mcp token at the api's IAM listener
+  # each agent's paladin-mcp token at the IAM listener
   # (tests/e2e/mcp-exchange.spec.ts).
   mcp:
     <<: *paladin-base
@@ -377,6 +392,8 @@ services:
       - "${PALADIN_E2E_PORT_MCP:-8095}:8095"
     depends_on:
       api:
+        condition: service_started
+      iam:
         condition: service_started
       admin:
         condition: service_started
@@ -394,7 +411,7 @@ services:
       # what the BFF reads (src/lib/auth/bff.ts + api/rpc route):
       # PALADIN_DATA_URL / PALADIN_IAM_URL / PALADIN_ADMIN_URL.
       PALADIN_DATA_URL: http://api:8080
-      PALADIN_IAM_URL: http://api:8085
+      PALADIN_IAM_URL: http://iam:8085
       PALADIN_ADMIN_URL: http://admin:8090
       # The storage origin the browser uploads to: the primary backend's
       # public_endpoint above. The console's CSP allows only the origins
@@ -411,6 +428,8 @@ services:
       # so gate on service_started; the ui's own healthcheck + the
       # suite's readiness waits absorb the sub-second startup gap.
       api:
+        condition: service_started
+      iam:
         condition: service_started
       admin:
         condition: service_started

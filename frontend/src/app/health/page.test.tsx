@@ -71,6 +71,24 @@ describe("HealthPage role cards", () => {
     expect(grid.children).toHaveLength(fivePayload.roles.length);
   });
 
+  // The IAM plane is a request path of its own (ADR-0047): its card sits
+  // beside api's, not with the unknown roles at the bottom.
+  it("puts the iam card right after api", async () => {
+    payload = {
+      roles: ["worker", "admin", "iam", "api"].map((role) => ({
+        role,
+        status: "healthy",
+        components: [component("postgres", true)],
+      })),
+    };
+    render(<HealthPage />);
+    const grid = (await roleCard("iam")).parentElement!;
+    const titles = Array.from(
+      grid.querySelectorAll('[data-slot="card-title"]'),
+    ).map((el) => el.textContent);
+    expect(titles).toEqual(["api", "iam", "admin", "worker"]);
+  });
+
   // The card's default gap and padding stacked on the header's own left a
   // blank band between a role's name and its components.
   it("adds no card gap between the header and the rows", async () => {

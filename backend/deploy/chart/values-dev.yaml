@@ -86,7 +86,6 @@ rbac:
       - paladin-postgresql-reaper-user
       - paladin-admin-key
       - paladin-bootstrap-admin
-      - paladin-auth-signing-key
       - paladin-ingest-hmac
 
 # TLS between the planes, from the certificate cert-manager issues into the

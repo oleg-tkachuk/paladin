@@ -259,29 +259,19 @@ the same commit. Treat this file like a runtime invariant.
   enough (rule of thumb: ~1M rows) that the on-the-fly aggregation is
   slower than the SLA.
 
-### Session keys held by IAM alone (ADR-0047)
+### Roles build bundles they never use (ADR-0047 leftover)
 
-- **Status:** In-Progress (ADR-0047 accepted 2026-11-11).
-- **Reason:** every role reads the HS256 session secret, so every verifier
-  can mint an operator session; the IAM endpoints share the `api` pods with
-  the data plane.
-- **Definition of Done**, one pull request per step, each deployable alone:
-  4. `serve iam` runs the IAM plane, the OAuth AS and the JWKS as its own
-     Deployment; `serve api` serves the data plane alone (decision 7).
-     The OAuth AS metadata's `jwks_uri` then names that role's JWKS rather
-     than `mcp.oauth.authorization_server.jwks_uri`, and the chart's
-     `auth.signingKey` values, accepted unused since the ES256 cut, go.
-- **Checks that close it:** a token signed HS256, or HMAC'd with the public
-  key, is refused (held by the auth tests since the ES256 cut); a chart render
-  shows the session-key Secret mounted by the minting role alone and named by
-  no Role (scripts/chart-defaults.test.sh); on the cluster,
-  `kubectl auth can-i get secret/<name> --as=system:serviceaccount:paladin:<role>`
-  answers `no` for every Secret a role does not use.
-- **Blockers:** step 4 changes chart values and Deployments, and local-iac
-  takes every chart release, so local-iac is prepared before each merges.
-- **Left over from step 3:** worker, dispatcher and ingest still read the
-  API-token pepper and the DPoP nonce key, only because `BuildSharedDeps`
-  builds those bundles in every role.
+- **Status:** Deferred.
+- **Reason:** worker, dispatcher and ingest still read the API-token pepper
+  and the DPoP nonce key, and iam every storage backend's credentials (with
+  egress to storage), only because `BuildSharedDeps` builds those bundles in
+  every role; their Roles therefore name Secrets their code never uses.
+- **Definition of Done:** the bundles are built by the roles that verify API
+  tokens or DPoP proofs alone, `sharedDepsSecrets` in
+  `backend/internal/config/roles.go` loses both paths, the storage
+  backends leave iam's set, and the per-role Roles and NetworkPolicies
+  regenerated from them no longer name what each role does not use.
+- **Blockers:** none.
 
 ### Console session terminated in Go (ADR-0048)
 
@@ -293,8 +283,8 @@ the same commit. Treat this file like a runtime invariant.
   cookie and the tokens and forwards Connect calls as bytes; platform health
   is an admin RPC; the console's auth routes, token store, JWT decoding and
   RPC bridge are deleted.
-- **Blockers:** ADR-0047 step 4, so the edge is never the role that holds
-  the private key.
+- **Blockers:** none; ADR-0047 left the session key with the iam role alone,
+  so the edge is never the role that holds it.
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
 - **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays

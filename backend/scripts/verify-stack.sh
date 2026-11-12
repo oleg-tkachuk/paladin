@@ -64,7 +64,7 @@ compose=(docker compose -p "$project" -f frontend/tests/e2e/docker-compose.test.
 # shellcheck source=SCRIPTDIR/../../scripts/stack-ports.sh
 source "$root/scripts/stack-ports.sh"
 # mint_session <audience> <subject> <claims> — a dev session, signed ES256 by
-# the key compose generated under the kid the api role's JWKS names, as the
+# the key compose generated under the kid the iam role's JWKS names, as the
 # minting role signs one (ADR-0047). Through the backend's own Taskfile, for
 # the reason given at phase_dev_bootstrap.
 mint_session() {
@@ -224,7 +224,7 @@ trap cleanup EXIT
 
 require_free_ports "task backend:test:stack" || exit 1
 
-# `api admin` rather than the whole file. The console image is the Playwright
+# `api iam admin` rather than the whole file. The console image is the Playwright
 # suite's dependency; none of these gates opens a browser, and requiring a
 # frontend build to run backend gates is how a gate acquires a reason to be
 # skipped. compose still pulls in postgres, migrate, promote-app-role,
@@ -232,16 +232,16 @@ require_free_ports "task backend:test:stack" || exit 1
 stack_pull_thirdparty frontend/tests/e2e/docker-compose.test.yaml
 stack_use_built_image "$STACK_CORE_TAG_VAR" "$STACK_CORE_INFO" "${PALADIN_IMAGE_PREFIX}/${STACK_CORE_IMAGE}" || exit 1
 
-echo ">>> [stack] booting api + admin (${STACK_CORE_IMAGE}:${PALADIN_CORE_TAG})"
-"${compose[@]}" up --wait api admin
+echo ">>> [stack] booting api + iam + admin (${STACK_CORE_IMAGE}:${PALADIN_CORE_TAG})"
+"${compose[@]}" up --wait api iam admin
 
 # Matches backend/configs/compose.yaml (auth.issuer).
 export PALADIN_JWT_ISSUER=paladin-dev
 stack_export_urls
 
-# The session key compose generated into the api container's volume, read
+# The session key compose generated into the iam container's volume, read
 # through the one-shot container that wrote it, and its kid from the JWKS the
-# api role serves: the dev tokens below are signed as the server signs them.
+# iam role serves: the dev tokens below are signed as the server signs them.
 export PALADIN_SESSION_KEY_FILE="$session_dir/session-key.pem"
 "${compose[@]}" run --rm --no-deps --entrypoint cat capability-key /session/session-key.pem >"$PALADIN_SESSION_KEY_FILE"
 PALADIN_SESSION_KID=$(curl -fsS "$stack_iam_url/.well-known/jwks.json" | jq -r '.keys[0].kid')

@@ -25,14 +25,17 @@ import type { Snapshot } from "@/lib/health";
 // synthetic component carrying the network error message.
 
 const ROLES: { name: string; envKey: string; defaultUrl: string }[] = [
-  // The api binary opens both data + iam Connect listeners in one
-  // process; either port serves the same /system/health.json. We pick
-  // iam (8085) because that's what the rest of the BFF already uses
-  // for SystemService — no new firewall surface.
+  // The data plane and the IAM plane are separate roles (ADR-0047); each
+  // serves /system/health.json on its Connect listener.
   {
     name: "api",
+    envKey: "PALADIN_DATA_URL",
+    defaultUrl: "http://paladin-core-api:8080",
+  },
+  {
+    name: "iam",
     envKey: "PALADIN_IAM_URL",
-    defaultUrl: "http://paladin-core-api:8085",
+    defaultUrl: "http://paladin-core-iam:8085",
   },
   {
     name: "admin",

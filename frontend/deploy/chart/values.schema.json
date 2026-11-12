@@ -49,7 +49,15 @@
         "healthRoles": {
           "type": "array",
           "items": {
-            "enum": ["api", "admin", "worker", "mcp", "dispatcher", "ingest"]
+            "enum": [
+              "api",
+              "iam",
+              "admin",
+              "worker",
+              "mcp",
+              "dispatcher",
+              "ingest"
+            ]
           }
         },
         "namespace": {

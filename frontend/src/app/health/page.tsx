@@ -47,7 +47,7 @@ import {
 /** How often the health page asks again while Live. */
 const HEALTH_POLL_MS = 15_000;
 
-// Role render order. Operators read top-down; api/admin first because
+// Role render order. Operators read top-down; api/iam/admin first because
 // they're the request paths. worker/mcp/dispatcher/ingest are
 // background/auxiliary and land below the fold on narrow viewports.
 // New roles default to alphabetical order at the bottom; pinning
@@ -55,6 +55,7 @@ const HEALTH_POLL_MS = 15_000;
 // outbox/storage event-pipeline trio reads as a group.
 const ROLE_ORDER = [
   "api",
+  "iam",
   "admin",
   "worker",
   "dispatcher",

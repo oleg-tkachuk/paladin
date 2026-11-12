@@ -2,12 +2,10 @@ package app
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
-	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -47,182 +45,82 @@ type BuildMeta struct {
 	ConfigPath string
 }
 
-// AssembleAPIMuxes builds the data and iam Connect mux'es plus their
-// shared *health.Handler. Pure mux assembly — no http.Server wrapping,
-// no port binding. Both `serve api` (which wraps these in TCP listeners)
-// and `serve mcp --embedded` (which hands them to the inline transport)
-// reuse this function.
+// planeShared is what the data and IAM interceptor stacks share, built once
+// per process: two planes co-hosted (embedded mode, tests) then share one
+// tenant-state watcher and one health handler, so a SIGTERM flips both
+// /readyz to 503 at once.
+type planeShared struct {
+	validate     connect.ServerInterceptor
+	idempotency  connect.ServerInterceptor
+	otel         connect.ServerInterceptor
+	tenantGate   connect.ServerInterceptor
+	tenantFreeze connect.ServerInterceptor
+	tenantRL     *middleware.TenantRateLimitInterceptor
+	health       *health.Handler
+	// role labels the health handler and the HealthService answers.
+	role config.Role
+}
+
+// AssembleAPIMuxes builds the data and iam Connect mux'es in one process with
+// their shared *health.Handler: the embedded mode (`serve mcp --embedded`)
+// and the in-process tests. Pure mux assembly — no http.Server wrapping, no
+// port binding. In a cluster each plane is its own role (ADR-0047): `serve
+// iam` builds AssembleIAMMux, `serve api` AssembleDataMux.
 //
-// One health handler is shared between data and iam so a SIGTERM flips
-// both /readyz to 503 simultaneously when the planes co-host.
+// IAM first: it loads the session key, which the data plane then verifies
+// with in memory rather than through the JWKS.
 func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (dataMux, iamMux *http.ServeMux, healthH *health.Handler, err error) {
+	shared, err := newPlaneShared(deps, config.RoleAPI)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if iamMux, err = assembleIAMMux(ctx, deps, meta, shared); err != nil {
+		return nil, nil, nil, err
+	}
+	if dataMux, err = assembleDataMux(ctx, deps, shared); err != nil {
+		return nil, nil, nil, err
+	}
+	return dataMux, iamMux, shared.health, nil
+}
+
+// AssembleDataMux builds the data plane alone, for `serve api`. Sessions are
+// verified by the IAM role's JWKS (auth.jwks_url): this role holds no key.
+func AssembleDataMux(ctx context.Context, deps *SharedDeps) (*http.ServeMux, *health.Handler, error) {
+	shared, err := newPlaneShared(deps, config.RoleAPI)
+	if err != nil {
+		return nil, nil, err
+	}
+	mux, err := assembleDataMux(ctx, deps, shared)
+	if err != nil {
+		return nil, nil, err
+	}
+	return mux, shared.health, nil
+}
+
+// AssembleIAMMux builds the IAM plane alone, for `serve iam`: login and the
+// token RPCs, the OAuth authorization server and the session JWKS.
+func AssembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*http.ServeMux, *health.Handler, error) {
+	shared, err := newPlaneShared(deps, config.RoleIAM)
+	if err != nil {
+		return nil, nil, err
+	}
+	mux, err := assembleIAMMux(ctx, deps, meta, shared)
+	if err != nil {
+		return nil, nil, err
+	}
+	return mux, shared.health, nil
+}
+
+// newPlaneShared builds the interceptors both planes mount and the health
+// handler they answer readiness with.
+func newPlaneShared(deps *SharedDeps, role config.Role) (planeShared, error) {
 	cfg := deps.Cfg
 	l := deps.Logger
 	repos := deps.Repos
-	storage := deps.Storage
-	polEngine := deps.PolEngine
 
-	// ─── Data-plane handlers ─────────────────────────────────────────────
-	objH := wire.ProvideObjectHandler(repos, storage, polEngine, deps.CELEval, deps.SM, cfg)
-	opH := wire.ProvideOperationHandler(repos, polEngine, cfg)
-	batchH := wire.ProvideBatchHandler(repos, opH, polEngine)
-	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
-	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, deps.SM, cfg)
-	versionH := wire.ProvideVersionHandler(repos, polEngine)
-	lockH := wire.ProvideLockHandler(repos, polEngine)
-	taintH := wire.ProvideTaintHandler(repos, polEngine)
-	quotaUpdater := adapters.NewQuotaRepoV2(deps.DB.Queries, deps.Pool)
-	objH.SetVersionHandler(versionH)
-	objH.SetQuotaUpdater(quotaUpdater)
-
-	// Object lifecycle producer wiring — CompleteObject / DeleteObject /
-	// RestoreObject / UpdateObject / CopyObject record their events on their
-	// own transactions; the dispatcher pod fans them out (ADR-0044).
-	apiEvents := worker.NewEventRecorder(l.Named("api-event-dispatcher"))
-	objH.SetEventProducer(apiEvents)
-	objH.SetLogger(l.Named("object-events"))
-	mpH.SetVersionRecorder(&multipartVersionAdapter{v: versionH})
-	mpH.SetQuotaUpdater(quotaUpdater)
-
-	// Storage self-provisioning (StorageBootstrapService) — a tenant ensures
-	// its own bucket + collections with its data-plane PAT (aud=data), no
-	// admin credential. Reuses the admin bucket-create path (bucketh) and the
-	// collection create path (collection), each wired to the api dispatcher so
-	// a self-provision emits the same paladin.bucket.created / paladin.collection.created
-	// lifecycle events an admin create would. repos.BucketV2 doubles as the
-	// backend-existence checker (a tenant may not create backends).
-	bucketBootstrapH := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
-	bucketBootstrapH.SetEventProducer(apiEvents)
-	bucketBootstrapH.SetLogger(l.Named("bucket-events"))
-	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
-	collectionBootstrapH.SetEventProducer(apiEvents)
-	collectionBootstrapH.SetLogger(l.Named("collection-events"))
-	storageBootstrapH := storagebootstraph.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
-
-	// ─── IAM-plane handlers ──────────────────────────────────────────────
-	// This role mints sessions, so it alone loads the private key; the admin
-	// plane of an embedded process verifies with the same set (ADR-0047).
-	keys, err := sessionkey.Load(cfg.Auth.SessionKeyPath, cfg.Auth.PreviousSessionPublicKeyPaths)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("auth.session_key_path: %w", err)
-	}
-	deps.SessionKeys = keys
-	l.Info("session key loaded", zap.String("kid", keys.KeyID()), zap.Int("published", keys.Public().Len()))
-	iss, err := wire.ProvideIssuer(cfg, keys)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	dec := wire.ProvideRefreshDecoder(cfg, keys)
-	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine).
-		WithReuseAudit(repos.Audit, l).
-		WithCollectionRoutes(wire.ProvideCollectionRouteLister(repos, polEngine, cfg))
-	userH := wire.ProvideUserHandler(repos, polEngine)
-	if deps.Capability != nil {
-		userH.WithSessionRevoker(deps.Capability.BulkRevocation).
-			WithCapabilities(deps.Capability.Records)
-	}
-	userSettingsH := usersettingsh.NewHandler(
-		adapters.NewUserSettingsRepo(deps.DB.Queries),
-		repos.IAMUser,
-		polEngine,
-	)
-
-	// ─── Per-plane interceptor stacks ────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("init protovalidate: %w", err)
-	}
-	verifierData, err := BuildVerifier(ctx, cfg.Auth, keys, auth.AudienceData, l)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	verifierIAM, err := BuildVerifier(ctx, cfg.Auth, keys, auth.AudienceIAM, l)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// Capability interceptor on the data plane — additive. When the
-	// capability subsystem is off (deps.Capability == nil) the helper
-	// returns a no-op, so existing JWT-only deploys are unaffected.
-	// When a capability token IS supplied, the interceptor stamps
-	// *limes.Capability on the context and handlers branch via
-	// auth.CapabilityFromContext.
-	//
-	// IAM plane intentionally has NO capability interceptor: capabilities
-	// don't have an "iam" audience (the audiences are data / admin /
-	// mcp). User-authn flows that go through iam are not the agent path.
-	var capData connect.ServerInterceptor
-	if deps.Capability != nil {
-		// Same opt-in event-emitter pattern as the admin pod —
-		// the api dispatcher fan-out into event_deliveries when
-		// cfg.Dispatcher.ChargeEventsEnabled is on. Object lifecycle
-		// is the highest-cardinality producer, capability charges
-		// are the second; subscribers must filter on `type` (or the
-		// coarser `kind`) to keep their queue depth bounded.
-		var chargeEm auth.ChargeEventEmitter
-		if cfg.Dispatcher.ChargeEventsEnabled {
-			chargeEm = NewChargeEmitter(apiEvents, l.Named("charge-events"))
-		}
-		// Establishing on the data plane: a capability names its tenant and
-		// the verifier has checked signature, expiry and revocation, so it is
-		// enough to authenticate ITS tenant's object operations. That is what
-		// lets a consumer reach a tenant without holding a long-lived
-		// credential for it. A capability presented alongside a JWT or API
-		// token stays additive — the existing principal wins.
-		// The taint lookup is what gives AllowTaintedRead something to act
-		// on: a capability without it is refused reads of flagged objects.
-		// A capability the MCP server exchanged acts for its user (ADR-0041).
-		capOpts := []auth.CapabilityOption{delegationOption(deps.Capability, repos.IAMUser)}
-		if taintH != nil {
-			capOpts = append(capOpts, auth.WithTaintLookup(taintH.Tainted))
-		}
-		capData = auth.CapabilityEstablishingInterceptor(
-			deps.Capability.Verifier,
-			auth.TokenPlaneData,
-			deps.Capability.Usage,
-			cfg.Capability.ChargePerRequestAmount,
-			chargeEm,
-			capOpts...,
-		)
-	} else {
-		capData = auth.CapabilityInterceptor(nil, "", nil, 0)
-	}
-
-	// The IAM plane serves Login and the token RPCs without a credential;
-	// with the capability subsystem on, a capability-only call passes the
-	// JWT gate to capIAM, which accepts the delegation issuer's alone.
-	iamGate := auth.NewPermissiveInterceptor(verifierIAM,
-		"Login",
-		"RefreshToken",
-		"ExchangeAudience",
-	)
-	capIAM := auth.CapabilityInterceptor(nil, "", nil, 0)
-	if deps.Capability != nil {
-		iamGate.SkipCapabilities = true
-		capIAM = auth.CapabilityInterceptor(
-			deps.Capability.Verifier,
-			auth.TokenPlaneIAM,
-			deps.Capability.Usage,
-			cfg.Capability.ChargePerRequestAmount,
-			delegationOption(deps.Capability, repos.IAMUser),
-		)
-	}
-
-	// APIToken interceptor — additive, parallel to capability and JWT.
-	// Mounted on data + iam (the public-facing planes); admin gets its
-	// own in build_listeners_admin.go. Audience-pinned per plane.
-	// Limiter wired so per-token rate caps apply on the data + iam
-	// planes (high-QPS surfaces); admin uses the same limiter.
-	var apiTokData, apiTokIAM connect.ServerInterceptor
-	if deps.APIToken != nil {
-		// Data plane: the API-token interceptor ESTABLISHES the principal, so a service
-		// can authenticate uploads with a long-lived `paladin_pat_…` key alone
-		// (paired with auth.InterceptorSkipAPITokens below). IAM plane stays additive.
-		apiTokData = auth.APITokenAuthInterceptor(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneData)
-		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneIAM)
-	} else {
-		apiTokData = auth.APITokenInterceptor(nil, "")
-		apiTokIAM = auth.APITokenInterceptor(nil, "")
+		return planeShared{}, fmt.Errorf("init protovalidate: %w", err)
 	}
 
 	// Shared Idempotency-Key gate (see internal/middleware/idempotency.go).
@@ -277,7 +175,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	}
 	tenantGate, tenantFreeze, err := buildTenantGate(deps)
 	if err != nil {
-		return nil, nil, nil, err
+		return planeShared{}, err
 	}
 
 	// Per-tenant request rate limit (middleware.rate_limit). The config block
@@ -294,13 +192,137 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	}
 	tenantRL := middleware.NewTenantRateLimitInterceptor(tenantRLCfg)
 
+	healthH := NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole(string(role))
+	// Each subsystem is listed whether on or off: the page says which.
+	AddComponent(healthH, capabilityComponent(deps))
+	AddComponent(healthH, capabilityRevocationsComponent(deps))
+	AddComponent(healthH, apiTokenComponent(deps))
+	AddComponent(healthH, valkeyComponent(cfg.Datastores.Valkey.Addr, deps.RateLimits().Shared))
+
+	return planeShared{
+		validate:     validateInterceptor,
+		idempotency:  idempotencyInterceptor,
+		otel:         otelInt,
+		tenantGate:   tenantGate,
+		tenantFreeze: tenantFreeze,
+		tenantRL:     tenantRL,
+		health:       healthH,
+		role:         role,
+	}, nil
+}
+
+// assembleDataMux builds the data plane on the shared interceptors.
+func assembleDataMux(ctx context.Context, deps *SharedDeps, shared planeShared) (*http.ServeMux, error) {
+	cfg := deps.Cfg
+	l := deps.Logger
+	repos := deps.Repos
+	storage := deps.Storage
+	polEngine := deps.PolEngine
+
+	// ─── Data-plane handlers ─────────────────────────────────────────────
+	objH := wire.ProvideObjectHandler(repos, storage, polEngine, deps.CELEval, deps.SM, cfg)
+	opH := wire.ProvideOperationHandler(repos, polEngine, cfg)
+	batchH := wire.ProvideBatchHandler(repos, opH, polEngine)
+	presignH := wire.ProvidePresignHandler(repos, storage, polEngine, cfg)
+	mpH := wire.ProvideMultipartHandler(repos, storage, polEngine, deps.SM, cfg)
+	versionH := wire.ProvideVersionHandler(repos, polEngine)
+	lockH := wire.ProvideLockHandler(repos, polEngine)
+	taintH := wire.ProvideTaintHandler(repos, polEngine)
+	quotaUpdater := adapters.NewQuotaRepoV2(deps.DB.Queries, deps.Pool)
+	objH.SetVersionHandler(versionH)
+	objH.SetQuotaUpdater(quotaUpdater)
+
+	// Object lifecycle producer wiring — CompleteObject / DeleteObject /
+	// RestoreObject / UpdateObject / CopyObject record their events on their
+	// own transactions; the dispatcher pod fans them out (ADR-0044).
+	apiEvents := worker.NewEventRecorder(l.Named("api-event-dispatcher"))
+	objH.SetEventProducer(apiEvents)
+	objH.SetLogger(l.Named("object-events"))
+	mpH.SetVersionRecorder(&multipartVersionAdapter{v: versionH})
+	mpH.SetQuotaUpdater(quotaUpdater)
+
+	// Storage self-provisioning (StorageBootstrapService) — a tenant ensures
+	// its own bucket + collections with its data-plane PAT (aud=data), no
+	// admin credential. Reuses the admin bucket-create path (bucketh) and the
+	// collection create path (collection), each wired to the api dispatcher so
+	// a self-provision emits the same paladin.bucket.created / paladin.collection.created
+	// lifecycle events an admin create would. repos.BucketV2 doubles as the
+	// backend-existence checker (a tenant may not create backends).
+	bucketBootstrapH := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
+	bucketBootstrapH.SetEventProducer(apiEvents)
+	bucketBootstrapH.SetLogger(l.Named("bucket-events"))
+	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
+	collectionBootstrapH.SetEventProducer(apiEvents)
+	collectionBootstrapH.SetLogger(l.Named("collection-events"))
+	storageBootstrapH := storagebootstraph.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
+
+	// The session key is in memory only where IAM is co-hosted; otherwise
+	// BuildVerifier verifies by the IAM role's JWKS.
+	verifierData, err := BuildVerifier(ctx, cfg.Auth, deps.SessionKeys, auth.AudienceData, l)
+	if err != nil {
+		return nil, err
+	}
+
+	// Capability interceptor on the data plane — additive. When the
+	// capability subsystem is off (deps.Capability == nil) the helper
+	// returns a no-op, so existing JWT-only deploys are unaffected.
+	// When a capability token IS supplied, the interceptor stamps
+	// *limes.Capability on the context and handlers branch via
+	// auth.CapabilityFromContext.
+	//
+	// IAM plane intentionally has NO capability interceptor: capabilities
+	// don't have an "iam" audience (the audiences are data / admin /
+	// mcp). User-authn flows that go through iam are not the agent path.
+	var capData connect.ServerInterceptor
+	if deps.Capability != nil {
+		// Same opt-in event-emitter pattern as the admin pod —
+		// the api dispatcher fan-out into event_deliveries when
+		// cfg.Dispatcher.ChargeEventsEnabled is on. Object lifecycle
+		// is the highest-cardinality producer, capability charges
+		// are the second; subscribers must filter on `type` (or the
+		// coarser `kind`) to keep their queue depth bounded.
+		var chargeEm auth.ChargeEventEmitter
+		if cfg.Dispatcher.ChargeEventsEnabled {
+			chargeEm = NewChargeEmitter(apiEvents, l.Named("charge-events"))
+		}
+		// Establishing on the data plane: a capability names its tenant and
+		// the verifier has checked signature, expiry and revocation, so it is
+		// enough to authenticate ITS tenant's object operations. That is what
+		// lets a consumer reach a tenant without holding a long-lived
+		// credential for it. A capability presented alongside a JWT or API
+		// token stays additive — the existing principal wins.
+		// The taint lookup is what gives AllowTaintedRead something to act
+		// on: a capability without it is refused reads of flagged objects.
+		// A capability the MCP server exchanged acts for its user (ADR-0041).
+		capOpts := []auth.CapabilityOption{delegationOption(deps.Capability, repos.IAMUser)}
+		if taintH != nil {
+			capOpts = append(capOpts, auth.WithTaintLookup(taintH.Tainted))
+		}
+		capData = auth.CapabilityEstablishingInterceptor(
+			deps.Capability.Verifier,
+			auth.TokenPlaneData,
+			deps.Capability.Usage,
+			cfg.Capability.ChargePerRequestAmount,
+			chargeEm,
+			capOpts...,
+		)
+	} else {
+		capData = auth.CapabilityInterceptor(nil, "", nil, 0)
+	}
+
+	// API tokens ESTABLISH the principal here, so a service can authenticate
+	// uploads with a long-lived `paladin_pat_…` key alone (paired with
+	// auth.InterceptorSkipAPITokens below). Per-token rate caps apply.
+	apiTokData := auth.APITokenInterceptor(nil, "")
+	if deps.APIToken != nil {
+		apiTokData = auth.APITokenAuthInterceptor(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneData)
+	}
+
 	// The plane's interceptors; the codec, size limits and compression it
 	// shares with the others are rpcMountOptions.
 	// The readers the audit log takes each change's before and after with,
-	// filled once the servers they read through exist (dataStateServers,
-	// iamStateServers).
+	// filled once the servers they read through exist (dataStateServers).
 	dataStateReaders := middleware.StateReaders{}
-	iamStateReaders := middleware.StateReaders{}
 	dataServer := connect.NewServer(
 		// Outermost of all: a panic anywhere below is answered as an
 		// internal error and logged with its stack.
@@ -309,7 +331,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// internal error as it happened; the caller sees its code and a
 		// request id, not a driver's message.
 		middleware.ScrubInternal(),
-		otelInt,
+		shared.otel,
 		// Outermost after tracing, and BEFORE auth on purpose: connect
 		// applies the first-listed interceptor outermost, so anything
 		// installed after auth cannot see auth's own rejections — and a
@@ -343,16 +365,16 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// Refuses a trashed or purged tenant's credentials; after every
 		// interceptor that establishes a principal, before validation and
 		// idempotency, so a refused call is never answered from memo.
-		tenantGate,
+		shared.tenantGate,
 		// Refuses a change to a tenant in the trash, whoever asks.
-		tenantFreeze,
+		shared.tenantFreeze,
 		// A platform admin's request acts on the tenant it names; everything
 		// below keys on that tenant, so it is set before any of them.
 		middleware.ActOnNamedTenant(),
 		// After auth so the tenant is known, and before the quota and
 		// idempotency work so a throttled caller is turned away before it
 		// costs a database round-trip.
-		tenantRL.Intercept,
+		shared.tenantRL.Intercept,
 		// After otel (span exists) and after auth (principal known), so the
 		// request logger carries trace_id, span_id, request_id and tenant_id
 		// for every line the handlers write through logger.FromContext.
@@ -364,14 +386,115 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// nothing. Both scopes cost a point lookup on the upload path —
 		// collections by PK, then quotas by its unique index.
 		middleware.NewQuotaSoftCheck(repos.Quota).WithBucketScope(repos.Object).Interceptor(),
-		validateInterceptor,
-		idempotencyInterceptor,
+		shared.validate,
+		shared.idempotency,
 		// Every write, whoever makes it: a tenant's own agents and users, and
 		// a platform admin acting in the tenant it named. After idempotency,
 		// so a replayed response writes no second row. No mirror: an object
 		// write already emits its own paladin.object.* event.
 		middleware.AuditWithState(repos.Audit, auth.AudienceData, false, nil, dataStateReaders),
 	)
+
+	// Storage-backend reachability probes are tracked in BACKLOG —
+	// the existing S3 adapter doesn't expose a HEAD/ListBuckets
+	// method suited to a sub-second probe. Adding one is a separate
+	// PR; until then, storage failures surface as RPC-level errors
+	// on PutObject / Presign rather than as /readyz failures.
+
+	dataMux := http.NewServeMux()
+	// A procedure this release lacks is a Connect Unimplemented, which
+	// carries the release header (see middleware.ServerVersion).
+	dataMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
+	shared.health.Register(dataMux)
+	dataServices := servicesIn(protoregistry.GlobalFiles, dataPackage)
+	mountGRPCStandards(dataMux, shared.health.GRPCChecker(dataServices...), dataServices)
+	dataState := dataStateServers{
+		object: connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH),
+		tags:   connectdata.NewObjectTagServer(objH),
+	}
+	dataState.fill(dataStateReaders)
+	paladindatav1connect.RegisterObjectServiceHandler(dataServer, dataState.object)
+	paladindatav1connect.RegisterMultipartUploadServiceHandler(dataServer, connectdata.NewMultipartServer(mpH))
+	paladindatav1connect.RegisterPresignServiceHandler(dataServer, connectdata.NewPresignServer(presignH))
+	paladindatav1connect.RegisterObjectTagServiceHandler(dataServer, dataState.tags)
+	paladindatav1connect.RegisterBatchServiceHandler(dataServer, connectdata.NewBatchServer(batchH))
+	paladindatav1connect.RegisterOperationServiceHandler(dataServer, connectdata.NewOperationServer(opH))
+	// StorageBootstrapService shares the data-plane interceptor stack
+	// (dataServer) so the api_token principal + RequireAudience(data) apply — an
+	// aud=data PAT can reach EnsureTenantStorage.
+	paladindatav1connect.RegisterStorageBootstrapServiceHandler(dataServer, connectdata.NewStorageBootstrapServer(storageBootstrapH))
+	connecthttp.Mount(dataMux, dataServer, rpcMountOptions()...)
+	return dataMux, nil
+}
+
+// assembleIAMMux builds the IAM plane on the shared interceptors. It mints
+// sessions, so it alone loads the private key, and leaves the key set on deps
+// for a co-hosted plane to verify with (ADR-0047).
+func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, shared planeShared) (*http.ServeMux, error) {
+	cfg := deps.Cfg
+	l := deps.Logger
+	repos := deps.Repos
+	polEngine := deps.PolEngine
+
+	keys, err := sessionkey.Load(cfg.Auth.SessionKeyPath, cfg.Auth.PreviousSessionPublicKeyPaths)
+	if err != nil {
+		return nil, fmt.Errorf("auth.session_key_path: %w", err)
+	}
+	deps.SessionKeys = keys
+	l.Info("session key loaded", zap.String("kid", keys.KeyID()), zap.Int("published", keys.Public().Len()))
+	iss, err := wire.ProvideIssuer(cfg, keys)
+	if err != nil {
+		return nil, err
+	}
+	dec := wire.ProvideRefreshDecoder(cfg, keys)
+	authH := wire.ProvideAuthHandler(repos, iss, dec, polEngine).
+		WithReuseAudit(repos.Audit, l).
+		WithCollectionRoutes(wire.ProvideCollectionRouteLister(repos, polEngine, cfg))
+	userH := wire.ProvideUserHandler(repos, polEngine)
+	if deps.Capability != nil {
+		userH.WithSessionRevoker(deps.Capability.BulkRevocation).
+			WithCapabilities(deps.Capability.Records)
+	}
+	userSettingsH := usersettingsh.NewHandler(
+		adapters.NewUserSettingsRepo(deps.DB.Queries),
+		repos.IAMUser,
+		polEngine,
+	)
+	verifierIAM, err := BuildVerifier(ctx, cfg.Auth, keys, auth.AudienceIAM, l)
+	if err != nil {
+		return nil, err
+	}
+
+	// The IAM plane serves Login and the token RPCs without a credential;
+	// with the capability subsystem on, a capability-only call passes the
+	// JWT gate to capIAM, which accepts the delegation issuer's alone.
+	iamGate := auth.NewPermissiveInterceptor(verifierIAM,
+		"Login",
+		"RefreshToken",
+		"ExchangeAudience",
+	)
+	capIAM := auth.CapabilityInterceptor(nil, "", nil, 0)
+	if deps.Capability != nil {
+		iamGate.SkipCapabilities = true
+		capIAM = auth.CapabilityInterceptor(
+			deps.Capability.Verifier,
+			auth.TokenPlaneIAM,
+			deps.Capability.Usage,
+			cfg.Capability.ChargePerRequestAmount,
+			delegationOption(deps.Capability, repos.IAMUser),
+		)
+	}
+
+	// API tokens are additive on this plane, audience-pinned, rate-capped.
+	apiTokIAM := auth.APITokenInterceptor(nil, "")
+	if deps.APIToken != nil {
+		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneIAM)
+	}
+
+	// The readers the audit log takes each change's before and after with,
+	// filled once the servers they read through exist (iamStateServers).
+	iamStateReaders := middleware.StateReaders{}
+
 	// The plane's interceptors; the codec, size limits and compression it
 	// shares with the others are rpcMountOptions.
 	iamServer := connect.NewServer(
@@ -382,7 +505,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// internal error as it happened; the caller sees its code and a
 		// request id, not a driver's message.
 		middleware.ScrubInternal(),
-		otelInt,
+		shared.otel,
 		// Outermost after tracing, and BEFORE auth on purpose: connect
 		// applies the first-listed interceptor outermost, so anything
 		// installed after auth cannot see auth's own rejections — and a
@@ -408,9 +531,9 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// Refuses a trashed or purged tenant's credentials; after every
 		// interceptor that establishes a principal, before validation and
 		// idempotency, so a refused call is never answered from memo.
-		tenantGate,
+		shared.tenantGate,
 		// Refuses a change to a tenant in the trash, whoever asks.
-		tenantFreeze,
+		shared.tenantFreeze,
 		middleware.NewLoginRateLimiter(
 			deps.RateLimits().Keys, l.Named("login-ratelimit"),
 			cfg.Auth.LoginRateLimitPerSubjectPerMinute,
@@ -427,84 +550,22 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		// Tenant-scoped IAM calls (memberships, password change) are charged
 		// to their tenant; Login and RefreshToken carry no tenant yet and are
 		// covered by the login limiter above.
-		tenantRL.Intercept,
+		shared.tenantRL.Intercept,
 		// See the data plane: after otel and after auth. On IAM the principal
 		// is often absent (Login, RefreshToken are permissive), so these lines
 		// carry trace and request id without a tenant — which is correct, not
 		// a gap. An anonymous failed login is exactly the line worth finding.
 		middleware.LogContext(l),
-		validateInterceptor,
-		idempotencyInterceptor,
+		shared.validate,
+		shared.idempotency,
 	)
 
-	healthH = NewHealthHandler(deps.DB, cfg.Runtime, l).WithRole("api")
-
-	// Each subsystem is listed whether on or off: the page says which.
-	AddComponent(healthH, capabilityComponent(deps))
-	AddComponent(healthH, capabilityRevocationsComponent(deps))
-	AddComponent(healthH, apiTokenComponent(deps))
-	AddComponent(healthH, valkeyComponent(cfg.Datastores.Valkey.Addr, deps.RateLimits().Shared))
-
-	// The api role serves two listeners — data and iam — and Kubernetes
-	// allows one readiness probe per container, which points at data. So iam
-	// could stop accepting while the pod stayed Ready, kept its Service
-	// endpoint, and failed every login and token exchange behind it: the whole
-	// console, since the token exchange rides iam.
-	//
-	// This closes that by making the readiness the probe DOES reach depend on
-	// the listener it does not. A TCP dial is the right depth: it proves the
-	// listener is accepting, which is precisely the failure a shared process
-	// can have — if the process itself were wedged, this handler would not be
-	// answering either.
-	//
-	// Critical=true: a pod that cannot authenticate anyone has no business in
-	// the Service's endpoint list.
-	if addr := cfg.API.Server.IAM.Addr; addr != "" {
-		iamTLS := cfg.API.Server.IAM.TLS.Enabled
-		AddComponent(healthH, health.Check{
-			Name:     "iam_listener",
-			Category: health.CategorySubsystem,
-			Critical: true,
-			Func:     func(ctx context.Context) error { return dialLocalListener(ctx, addr, iamTLS) },
-		})
-	}
-
-	// Storage-backend reachability probes are tracked in BACKLOG —
-	// the existing S3 adapter doesn't expose a HEAD/ListBuckets
-	// method suited to a sub-second probe. Adding one is a separate
-	// PR; until then, storage failures surface as RPC-level errors
-	// on PutObject / Presign rather than as /readyz failures.
-
-	dataMux = http.NewServeMux()
-	// A procedure this release lacks is a Connect Unimplemented, which
-	// carries the release header (see middleware.ServerVersion).
-	dataMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
-	healthH.Register(dataMux)
-	dataServices := servicesIn(protoregistry.GlobalFiles, dataPackage)
-	mountGRPCStandards(dataMux, healthH.GRPCChecker(dataServices...), dataServices)
-	dataState := dataStateServers{
-		object: connectdata.NewObjectServer(objH, versionH).WithLocks(lockH).WithTaints(taintH),
-		tags:   connectdata.NewObjectTagServer(objH),
-	}
-	dataState.fill(dataStateReaders)
-	paladindatav1connect.RegisterObjectServiceHandler(dataServer, dataState.object)
-	paladindatav1connect.RegisterMultipartUploadServiceHandler(dataServer, connectdata.NewMultipartServer(mpH))
-	paladindatav1connect.RegisterPresignServiceHandler(dataServer, connectdata.NewPresignServer(presignH))
-	paladindatav1connect.RegisterObjectTagServiceHandler(dataServer, dataState.tags)
-	paladindatav1connect.RegisterBatchServiceHandler(dataServer, connectdata.NewBatchServer(batchH))
-	paladindatav1connect.RegisterOperationServiceHandler(dataServer, connectdata.NewOperationServer(opH))
-	// StorageBootstrapService shares the data-plane interceptor stack
-	// (dataServer) so the api_token principal + RequireAudience(data) apply — an
-	// aud=data PAT can reach EnsureTenantStorage.
-	paladindatav1connect.RegisterStorageBootstrapServiceHandler(dataServer, connectdata.NewStorageBootstrapServer(storageBootstrapH))
-	connecthttp.Mount(dataMux, dataServer, rpcMountOptions()...)
-
-	iamMux = http.NewServeMux()
+	iamMux := http.NewServeMux()
 	iamMux.Handle(middleware.UnknownProcedurePattern, middleware.UnknownProcedure())
-	healthH.Register(iamMux)
+	shared.health.Register(iamMux)
 	iamMux.Handle(sessionkey.WellKnownPath, keys.Handler())
 	iamServices := servicesIn(protoregistry.GlobalFiles, iamPackage)
-	mountGRPCStandards(iamMux, healthH.GRPCChecker(iamServices...), iamServices)
+	mountGRPCStandards(iamMux, shared.health.GRPCChecker(iamServices...), iamServices)
 	paladiniamv1connect.RegisterAuthServiceHandler(iamServer, connectiam.NewAuthServer(authH))
 	iamState := iamStateServers{
 		user:     connectiam.NewUserServer(userH, repos.Tenant),
@@ -512,7 +573,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 	}
 	iamState.fill(iamStateReaders)
 	paladiniamv1connect.RegisterUserServiceHandler(iamServer, iamState.user)
-	paladiniamv1connect.RegisterHealthServiceHandler(iamServer, connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), "api", healthH))
+	paladiniamv1connect.RegisterHealthServiceHandler(iamServer, connectiam.NewSystemServer(meta.Version, meta.Commit, ParseBuildTime(meta.BuildTime), string(shared.role), shared.health))
 
 	paladiniamv1connect.RegisterUserSettingsServiceHandler(iamServer, iamState.settings)
 	connecthttp.Mount(iamMux, iamServer, rpcMountOptions()...)
@@ -528,10 +589,10 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		for _, sc := range cfg.Auth.OAuth.SeedClients {
 			client, serr := oauth.SeedClient(sc)
 			if serr != nil {
-				return nil, nil, nil, serr
+				return nil, serr
 			}
 			if serr := oauthStore.UpsertClient(ctx, client); serr != nil {
-				return nil, nil, nil, fmt.Errorf("oauth seed client %q: %w", sc.ClientID, serr)
+				return nil, fmt.Errorf("oauth seed client %q: %w", sc.ClientID, serr)
 			}
 			if sc.SkipConsent {
 				skipConsent[sc.ClientID] = true
@@ -551,7 +612,7 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		if len(exchangers) > 0 {
 			var xerr error
 			if as, xerr = withDelegationExchange(ctx, as, deps, exchangers, repos.IAMUser); xerr != nil {
-				return nil, nil, nil, xerr
+				return nil, xerr
 			}
 		}
 		as.Mount(iamMux)
@@ -563,14 +624,13 @@ func AssembleAPIMuxes(ctx context.Context, deps *SharedDeps, meta BuildMeta) (da
 		l.Info("oauth authorization server enabled", zap.Int("seed_clients", len(cfg.Auth.OAuth.SeedClients)))
 	}
 
-	return dataMux, iamMux, healthH, nil
+	return iamMux, nil
 }
 
-// BuildAPIListeners materialises the data and iam Connect listeners.
-// Wraps the muxes returned by AssembleAPIMuxes in h2c-enabled http.Servers
-// bound to cfg.API.Server.Data / IAMHTTP.
+// BuildAPIListeners materialises the data Connect listener of `serve api`,
+// an h2c-enabled http.Server bound to cfg.API.Server.Data.
 func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([]HTTPListener, *health.Handler, error) {
-	dataMux, iamMux, healthH, err := AssembleAPIMuxes(ctx, deps, meta)
+	dataMux, healthH, err := AssembleDataMux(ctx, deps)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -581,15 +641,22 @@ func BuildAPIListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([
 	if err != nil {
 		return nil, nil, err
 	}
+	return []HTTPListener{{Plane: "data", Server: dataSrv, TLS: cfg.API.Server.Data.TLS}}, healthH, nil
+}
+
+// BuildIAMListeners materialises the IAM Connect listener of `serve iam`,
+// bound to cfg.API.Server.IAM.
+func BuildIAMListeners(ctx context.Context, deps *SharedDeps, meta BuildMeta) ([]HTTPListener, *health.Handler, error) {
+	iamMux, healthH, err := AssembleIAMMux(ctx, deps, meta)
+	if err != nil {
+		return nil, nil, err
+	}
+	cfg := deps.Cfg
 	iamSrv, err := BuildHTTPServer(cfg.API.Server.IAM, middleware.ServerVersion(meta.Version, iamMux), deps.Logger)
 	if err != nil {
 		return nil, nil, err
 	}
-	listeners := []HTTPListener{
-		{Plane: "data", Server: dataSrv, TLS: cfg.API.Server.Data.TLS},
-		{Plane: "iam", Server: iamSrv, TLS: cfg.API.Server.IAM.TLS},
-	}
-	return listeners, healthH, nil
+	return []HTTPListener{{Plane: "iam", Server: iamSrv, TLS: cfg.API.Server.IAM.TLS}}, healthH, nil
 }
 
 // multipartVersionAdapter bridges multipart.VersionRecorder onto the object
@@ -617,48 +684,4 @@ func (a *multipartVersionAdapter) OnPromote(ctx context.Context, vo multiparth.V
 		Metadata:              vo.Metadata,
 		Tags:                  vo.Tags,
 	})
-}
-
-// dialLocalListener reports whether this process is accepting connections on
-// addr's port.
-//
-// Dials the loopback rather than the address as configured: "0.0.0.0:8085" is
-// a bind address, not a destination, and the question is whether this process
-// accepts — not how it advertises itself.
-//
-// A connection is the right depth. It catches a listener that failed to start
-// or died while the process lived, which is the failure a second listener in a
-// shared process can have on its own; an HTTP round trip would re-test what
-// the health handler answering this check has already proved.
-//
-// On a TLS listener the connection completes the handshake rather than
-// hanging up on it. A bare TCP dial is enough to prove the port accepts, but
-// closing mid-handshake is indistinguishable from a client that gave up, so
-// the server logged "TLS handshake error ... EOF" on every readiness probe —
-// six warnings a minute, in the very log where an unexplained handshake error
-// was being investigated. The certificate is not verified: this dials itself,
-// so identity is not the question and a probe must not start failing on the
-// day the cert's SANs change.
-func dialLocalListener(ctx context.Context, addr string, useTLS bool) error {
-	_, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return fmt.Errorf("listener address %q: %w", addr, err)
-	}
-	target := net.JoinHostPort("127.0.0.1", port)
-	d := net.Dialer{Timeout: 2 * time.Second}
-
-	if useTLS {
-		td := &tls.Dialer{NetDialer: &d, Config: &tls.Config{InsecureSkipVerify: true}} // #nosec G402 -- dialling ourselves; identity is not what this probes
-		conn, err := td.DialContext(ctx, "tcp", target)
-		if err != nil {
-			return fmt.Errorf("not accepting TLS on port %s: %w", port, err)
-		}
-		return conn.Close()
-	}
-
-	conn, err := d.DialContext(ctx, "tcp", target)
-	if err != nil {
-		return fmt.Errorf("not accepting on port %s: %w", port, err)
-	}
-	return conn.Close()
 }

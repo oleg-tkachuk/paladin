@@ -79,9 +79,11 @@ limits:
 
 auth:
   issuer: "paladin-dev"
-  # One process on a laptop mints and verifies; generate the key once:
+  # `serve iam` mints with the key; every other role verifies by its JWKS
+  # (ADR-0047). Generate the key once:
   #   openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out .dev/session-key.pem
   session_key_path: .dev/session-key.pem
+  jwks_url: http://127.0.0.1:8085/.well-known/jwks.json
   leeway: 30s
   access_token_ttl: 15m
   refresh_token_ttl: 168h

@@ -149,8 +149,7 @@ config:
         authorization_endpoint: "https://paladin.example.com/oauth/authorize"
         token_endpoint: "https://paladin.example.com/oauth/token"
         # registration_endpoint omitted — DCR is off in prod (auth.oauth).
-        # jwks_uri omitted — IAM access tokens are HS256 (symmetric), verified
-        # server-side, so there is no public key set for clients to fetch.
+        # jwks_uri is not configured: it is the issuer's session JWKS.
 
 # Primary-backend credentials Secret. Prod convention: ExternalSecret
 # (managed by SOPS / Vault / AWS Secrets Manager controller) provisions
@@ -198,6 +197,9 @@ deployments:
       minReplicas: 3
       maxReplicas: 12
       targetCPUUtilizationPercentage: 70
+  # Login and token refresh: two replicas survive a drain and earn a PDB.
+  iam:
+    replicas: 2
   admin:
     replicas: 2
   worker:

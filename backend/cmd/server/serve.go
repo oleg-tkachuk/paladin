@@ -19,5 +19,5 @@ var serveCmd = &cobra.Command{
 }
 
 func init() {
-	serveCmd.AddCommand(serveAPICmd, serveAdminCmd, serveWorkerCmd, serveMCPCmd, serveIngestCmd, serveDispatcherCmd)
+	serveCmd.AddCommand(serveAPICmd, serveIAMCmd, serveAdminCmd, serveWorkerCmd, serveMCPCmd, serveIngestCmd, serveDispatcherCmd)
 }

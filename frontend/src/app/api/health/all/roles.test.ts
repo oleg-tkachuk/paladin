@@ -33,7 +33,8 @@ async function polled(): Promise<string[]> {
 describe("health aggregator role selection", () => {
   beforeEach(() => {
     for (const [role, key] of [
-      ["api", "PALADIN_IAM_URL"],
+      ["api", "PALADIN_DATA_URL"],
+      ["iam", "PALADIN_IAM_URL"],
       ["admin", "PALADIN_ADMIN_URL"],
       ["worker", "PALADIN_WORKER_URL"],
       ["mcp", "PALADIN_MCP_URL"],
@@ -54,6 +55,7 @@ describe("health aggregator role selection", () => {
       "admin",
       "api",
       "dispatcher",
+      "iam",
       "ingest",
       "mcp",
       "worker",

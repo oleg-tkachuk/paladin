@@ -67,6 +67,7 @@ readonly ADMIN_SERVICE=paladin-core-admin
 readonly ADMIN_SERVICE_PORT=8090
 readonly API_SERVICE=paladin-core-api
 readonly DATA_SERVICE_PORT=8080
+readonly IAM_SERVICE=paladin-core-iam
 readonly IAM_SERVICE_PORT=8085
 readonly ADMIN_LOCAL_PORT="${ADMIN_LOCAL_PORT:-28390}"
 readonly DATA_LOCAL_PORT="${DATA_LOCAL_PORT:-28380}"
@@ -147,7 +148,7 @@ readonly HOLD_ACTOR=live-mcp-delegation
 readonly ABSTRACT_UNIT=XXX
 # The line a bulk revocation logs (backend/internal/auth: logRevoked), and
 # the components whose pods serve the operator's revocations: the IAM plane
-# runs in the api component.
+# runs in the iam component (ADR-0047).
 readonly BULK_REVOKED_MSG="capabilities revoked in bulk"
 # The line the admin plane's Revoke logs (backend/internal/auth:
 # ReleaseRevoked), and the capability it issues to revoke: an agent's, for
@@ -157,7 +158,7 @@ readonly SINGLE_SUBJECT=live-mcp-delegation
 readonly SINGLE_AGENT_TYPE=live-check
 readonly SINGLE_TTL_SECONDS=600
 readonly COMPONENT_LABEL=app.kubernetes.io/component
-readonly IAM_COMPONENT=api
+readonly IAM_COMPONENT=iam
 readonly ADMIN_COMPONENT=admin
 readonly HTTP_OK=200
 readonly HTTP_CREATED=201
@@ -289,8 +290,9 @@ fi
 # ── the planes, forwarded ───────────────────────────────────────────────────
 "${kube[@]}" port-forward "svc/$ADMIN_SERVICE" "$ADMIN_LOCAL_PORT:$ADMIN_SERVICE_PORT" >/dev/null 2>&1 &
 forwards+=($!)
-"${kube[@]}" port-forward "svc/$API_SERVICE" "$DATA_LOCAL_PORT:$DATA_SERVICE_PORT" \
-    "$IAM_LOCAL_PORT:$IAM_SERVICE_PORT" >/dev/null 2>&1 &
+"${kube[@]}" port-forward "svc/$API_SERVICE" "$DATA_LOCAL_PORT:$DATA_SERVICE_PORT" >/dev/null 2>&1 &
+forwards+=($!)
+"${kube[@]}" port-forward "svc/$IAM_SERVICE" "$IAM_LOCAL_PORT:$IAM_SERVICE_PORT" >/dev/null 2>&1 &
 forwards+=($!)
 for _ in $(seq "$FORWARD_WAIT_SECONDS"); do
     curl -s -o /dev/null --max-time 1 "$admin/" && curl -s -o /dev/null --max-time 1 "$IAM_URL/" && break
