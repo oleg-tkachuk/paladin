@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/httppaths"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -378,7 +379,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	deps.RegisterWatcherStop(hubCancel)
 	auditHub := auditstream.NewHub(l.Named("audit-stream"))
 	go auditHub.Run(hubCtx, deps.Pool)
-	mux.Handle("/audit/stream", auditHub.SSEHandler(verifierAdmin))
+	mux.Handle(httppaths.AuditStream, auditHub.SSEHandler(verifierAdmin))
 
 	// JWKS endpoint — public, unauthenticated. Verifiers in other pods
 	// fetch and cache the issuer's public key set so capability checks

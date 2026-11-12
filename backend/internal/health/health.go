@@ -138,7 +138,7 @@ func (h *Handler) IsShuttingDown() bool {
 // per plane mux — handlers themselves close over the same Handler so the
 // shutting-down state is shared across planes.
 func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("GET /livez", h.serveLive)
+	mux.HandleFunc("GET "+LivePath, h.serveLive)
 	mux.HandleFunc("GET /readyz", h.serveReady)
 	mux.HandleFunc("GET /startupz", h.serveStartup)
 	mux.HandleFunc("GET "+SnapshotPath, h.serveSnapshot)
@@ -374,6 +374,8 @@ type Component struct {
 // SnapshotPath is where every role serves its Snapshot as JSON, and
 // SnapshotTokenHeader the header that carries the snapshot token to it.
 const (
+	// LivePath answers 200 while the process runs, touching nothing.
+	LivePath            = "/livez"
 	SnapshotPath        = "/system/health.json"
 	SnapshotTokenHeader = "X-Health-Token"
 )
