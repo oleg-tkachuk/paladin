@@ -1,6 +1,6 @@
-// The health page's model: the wire format of backend/internal/health
-// snapshots, as the BFF's /api/health/all returns them, and the database
-// view built from them.
+// The health page's model: each role's backend/internal/health snapshot, as
+// the admin role's GetPlatformHealth returns them (lib/platformHealth.ts),
+// and the database view built from them.
 
 // A role is healthy, degraded or unhealthy; a component can also be disabled,
 // switched off, which is never probed and never counts toward a role.
