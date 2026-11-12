@@ -32,7 +32,7 @@ REQUIRED_VALUES = "ci/required-values.yaml"
 
 # The gate enables them itself, together with every role, since a role that is
 # off renders no policy and would otherwise leave a hole in what this checks.
-ROLES = ["api", "admin", "worker", "dispatcher", "mcp", "ingest"]
+ROLES = ["api", "iam", "admin", "worker", "dispatcher", "mcp", "ingest"]
 
 # Observability as a cluster that pulls metrics runs it. The two values the
 # policies derive ports from are set to something other than the chart's
@@ -56,7 +56,7 @@ KUBE_API_PORT = 26443
 KUBE_API = {"networkPolicies.kubeAPIPorts": f"{{{KUBE_API_PORT}}}"}
 # The roles that serve /metrics, each on the metrics port alone (ADR-0023);
 # mcp serves none.
-SCRAPE_LISTENER_ROLES = ("api", "admin", "worker", "dispatcher", "ingest")
+SCRAPE_LISTENER_ROLES = ("api", "iam", "admin", "worker", "dispatcher", "ingest")
 
 
 def render(chart: Path, extra: dict[str, str] | None = None) -> list[dict]:
@@ -174,7 +174,7 @@ def ports_admitting(doc: dict, role: str) -> set[int]:
 
 # The roles that call a storage backend: the planes and workers move bytes,
 # and ingest HEADs an object before believing a delete event about it.
-STORAGE_ROLES = ("api", "admin", "worker", "ingest")
+STORAGE_ROLES = ("api", "iam", "admin", "worker", "ingest")
 STORAGE_NS = "storage"
 
 
@@ -215,13 +215,18 @@ IN_RELEASE_CALLS = [
     ("admin", "dispatcher", "SystemService.GetDispatcherStats"),
     ("admin", "mcp", "MCPInspectService status and sessions via mcp.http.sessions_url"),
     ("mcp", "api", "the MCP bridge"),
+    ("mcp", "iam", "the MCP bridge and its session JWKS"),
     ("mcp", "admin", "the MCP bridge"),
+    # Every role that verifies sessions without the key fetches the iam
+    # role's JWKS (ADR-0047).
+    ("api", "iam", "the session JWKS"),
+    ("admin", "iam", "the session JWKS"),
 ]
 
 
 # Roles the console dials directly: /api/health/all reads each one's health
 # snapshot. Refused, the console's health page shows the role as down.
-UI_HEALTH_CALLS = ["api", "admin", "worker", "dispatcher", "mcp", "ingest"]
+UI_HEALTH_CALLS = ["api", "iam", "admin", "worker", "dispatcher", "mcp", "ingest"]
 UI_LABELS = {"app.kubernetes.io/name": "paladin-console"}
 
 
@@ -323,8 +328,8 @@ def egress_rule_names(rule: dict, namespace: str, port: int) -> bool:
 
 
 # The roles that apply the rate limits, and so build the counter (ADR-0046):
-# the api and admin planes. No other role dials Valkey.
-RATE_LIMIT_ROLES = {"api", "admin"}
+# the api, iam and admin planes. No other role dials Valkey.
+RATE_LIMIT_ROLES = {"api", "iam", "admin"}
 
 
 def valkey_problems(chart: Path) -> list[str]:

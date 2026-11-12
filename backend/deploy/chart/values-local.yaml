@@ -91,6 +91,9 @@ deployments:
   api:
     enabled: true
     replicas: 1
+  iam:
+    enabled: true
+    replicas: 1
   admin:
     enabled: true
     replicas: 1

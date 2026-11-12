@@ -100,7 +100,7 @@ mounters() {
 render session-default
 cases=$((cases + 1))
 secret_exists session-default "$SESSION_SECRET" || bad "defaults: no session key Secret was generated"
-check "defaults: only api mounts the session key" "$(mounters session-default "$SESSION_SECRET")" "$RELEASE-api"
+check "defaults: only iam mounts the session key" "$(mounters session-default "$SESSION_SECRET")" "$RELEASE-iam"
 cases=$((cases + 1))
 rbac_names session-default | grep -x "$SESSION_SECRET" >/dev/null && bad "defaults: a Role can read the session key"
 check "defaults: the generated session key is P-256" \
@@ -109,13 +109,13 @@ check "defaults: the generated session key is P-256" \
 
 check "defaults: the minting role reads the mounted session key" \
     "$(config session-default .auth.session_key_path)" "/etc/paladin-session/session-key.pem"
-check "defaults: the other roles fetch the api role's JWKS" \
-    "$(config session-default .auth.jwks_url)" "http://$RELEASE-api:8085/.well-known/jwks.json"
+check "defaults: the other roles fetch the iam role's JWKS" \
+    "$(config session-default .auth.jwks_url)" "http://$RELEASE-iam:8085/.well-known/jwks.json"
 check "defaults: no JWKS CA without internal TLS" "$(config session-default .auth.jwks_ca_path)" ""
 
 render session-tls --set internalTLS.enabled=true --set internalTLS.existingSecret=internal-tls
 check "internal TLS: the JWKS is fetched over https" \
-    "$(config session-tls .auth.jwks_url)" "https://$RELEASE-api:8085/.well-known/jwks.json"
+    "$(config session-tls .auth.jwks_url)" "https://$RELEASE-iam:8085/.well-known/jwks.json"
 check "internal TLS: the JWKS fetch trusts the internal CA" \
     "$(config session-tls .auth.jwks_ca_path)" "$(yq -r .internalTLS.mountPath "$CHART/values.yaml")/ca.crt"
 
@@ -125,7 +125,7 @@ check "a session_key_path set is kept" "$(config session-path .auth.session_key_
 render session-existing --set auth.sessionKey.existingSecret=my-session-key
 cases=$((cases + 1))
 secret_exists session-existing "$SESSION_SECRET" && bad "existingSecret: a session key Secret was generated anyway"
-check "existingSecret: only api mounts it" "$(mounters session-existing my-session-key)" "$RELEASE-api"
+check "existingSecret: only iam mounts it" "$(mounters session-existing my-session-key)" "$RELEASE-iam"
 
 render session-off --set auth.sessionKey.generate=false
 check "no session key: nothing mounts one" "$(mounters session-off "$SESSION_SECRET")" ""
@@ -155,6 +155,16 @@ cases=$((cases + 1))
     bad "a Role names no Secret, which grants every Secret"
 cases=$((cases + 1))
 rbac_names rbac-roles | grep -qx "$SESSION_SECRET" && bad "a Role names the session key"
+
+# The OAuth seed clients are seeded by the iam role alone (ADR-0047).
+render rbac-oauth --set config.auth.oauth.enabled=true \
+    --set 'config.auth.oauth.seed_clients[0].client_id=c' \
+    --set 'config.auth.oauth.seed_clients[0].client_secret_ref.name=seed-client' \
+    --set 'config.auth.oauth.seed_clients[0].client_secret_ref.key=secret'
+cases=$((cases + 1))
+role_names rbac-oauth iam | tr ',' '\n' | grep -qx seed-client || bad "iam cannot read the OAuth seed client's secret"
+cases=$((cases + 1))
+role_names rbac-oauth api | tr ',' '\n' | grep -qx seed-client && bad "api reads the OAuth seed client's secret, which only iam seeds"
 
 render runtime-secrets --set config.runtime_secrets.namespace=paladin-credentials
 check "runtime secrets: one Role, in their namespace" \
@@ -299,13 +309,14 @@ for listener in .api.server.data .api.server.iam .admin.server; do
 done
 check "tls on: bridge dials https" "$(config tls .mcp.upstreams.admin_url)" "https://$RELEASE-admin:8090"
 check "tls on: bridge trusts the CA" "$(config tls .mcp.upstreams.tls.ca_path)" "/etc/paladin-mtls/ca.crt"
-for role in api admin mcp; do
+for role in api iam admin mcp; do
     check "tls on: $role mounts the certificate" \
         "$(deployment tls "$role" '.spec.template.spec.volumes[] | select(.name == "internal-tls") | .secret.secretName')" "planes-tls"
 done
 check "tls on: worker does not mount it" \
     "$(deployment tls worker '[.spec.template.spec.volumes[] | select(.name == "internal-tls")] | length')" "0"
 check "tls on: api probe over HTTPS" "$(deployment tls api '.spec.template.spec.containers[0].readinessProbe.httpGet.scheme')" "HTTPS"
+check "tls on: iam probe over HTTPS" "$(deployment tls iam '.spec.template.spec.containers[0].readinessProbe.httpGet.scheme')" "HTTPS"
 check "tls on: mcp probe stays plain" "$(deployment tls mcp '.spec.template.spec.containers[0].livenessProbe.httpGet.scheme // "HTTP"')" "HTTP"
 
 refuse tls-no-secret "internalTLS.existingSecret is required" -f "$CHART/$REQUIRED_VALUES" --set internalTLS.enabled=true
@@ -328,7 +339,9 @@ console() {
 console defaults
 check "console: data URL from the default release" "$(console_env defaults PALADIN_DATA_URL)" \
     "http://paladin-core-api.$NAMESPACE.svc.cluster.local:8080"
-check "console: health roles" "$(console_env defaults PALADIN_HEALTH_ROLES)" "api,admin,worker,mcp,dispatcher"
+check "console: iam URL is the iam role's" "$(console_env defaults PALADIN_IAM_URL)" \
+    "http://paladin-core-iam.$NAMESPACE.svc.cluster.local:8085"
+check "console: health roles" "$(console_env defaults PALADIN_HEALTH_ROLES)" "api,iam,admin,worker,mcp,dispatcher"
 
 # The CSP allows the storage origins this names and no other; none by default.
 readonly STORAGE_A=https://s3.example.com
@@ -418,6 +431,11 @@ check "ingress: iam to the iam port" "$(ingress ingress '.spec.rules[0].http.pat
 ingress_port() { ingress "$1" '.spec.rules[0].http.paths[] | select(.path == "'"$2"'") | .backend.service.port.number'; }
 check "ingress: OAuth to the iam port" "$(ingress_port ingress /oauth)" "8085"
 check "ingress: OAuth metadata to the iam port" "$(ingress_port ingress /.well-known/oauth-authorization-server)" "8085"
+check "ingress: the session JWKS to the iam port" "$(ingress_port ingress /.well-known/jwks.json)" "8085"
+# ingress_service <name> <path> — the Service the Ingress sends that path to.
+ingress_service() { ingress "$1" '.spec.rules[0].http.paths[] | select(.path == "'"$2"'") | .backend.service.name'; }
+check "ingress: IAM to the iam role" "$(ingress_service ingress /paladin.iam.v1.*)" "$RELEASE-iam"
+check "ingress: the data plane to the api role" "$(ingress_service ingress /)" "$RELEASE-api"
 check "ingress: the rest to the data port" "$(ingress_port ingress /)" "8080"
 check "ingress: plain backends need no protocol annotation" \
     "$(ingress ingress '.metadata.annotations["caddy.ingress.kubernetes.io/backend-protocol"] // "none"')" "none"
@@ -445,11 +463,19 @@ route_port() {
     yq ea -r '[select(.kind == "IngressRoute")] | .[0] | .spec.routes[] | select(.match == "'"$2"'") | .services[0].port' \
         "$scratch/$1.yaml"
 }
-check "traefik: OAuth to the iam port" \
-    "$(route_port traefik 'Host(`api.example.com`) && (PathPrefix(`/oauth/`) || Path(`/.well-known/oauth-authorization-server`))')" "8085"
+check "traefik: OAuth and the session JWKS to the iam port" \
+    "$(route_port traefik 'Host(`api.example.com`) && (PathPrefix(`/oauth/`) || Path(`/.well-known/oauth-authorization-server`) || Path(`/.well-known/jwks.json`))')" "8085"
 check "traefik: iam RPCs to the iam port" \
     "$(route_port traefik 'Host(`api.example.com`) && PathPrefix(`/paladin.iam.v1.`)')" "8085"
 check "traefik: the rest to the data port" "$(route_port traefik 'Host(`api.example.com`)')" "8080"
+# route_service <name> <match> — the Service of the IngressRoute rule with that match.
+route_service() {
+    yq ea -r '[select(.kind == "IngressRoute")] | .[0] | .spec.routes[] | select(.match == "'"$2"'") | .services[0].name' \
+        "$scratch/$1.yaml"
+}
+check "traefik: iam RPCs to the iam role" \
+    "$(route_service traefik 'Host(`api.example.com`) && PathPrefix(`/paladin.iam.v1.`)')" "$RELEASE-iam"
+check "traefik: the rest to the api role" "$(route_service traefik 'Host(`api.example.com`)')" "$RELEASE-api"
 
 # The MCP server on a host of its own, plain HTTP to the pod; none by default.
 mcp_route() {
@@ -473,7 +499,7 @@ yq -r 'select(.kind == "Certificate") | .spec.dnsNames[]' "$scratch/mcp-cert.yam
 
 # Kubernetes keeps ten old ReplicaSets per Deployment unless told otherwise.
 readonly HISTORY_DEFAULT=3
-for role in api admin worker mcp dispatcher; do
+for role in api iam admin worker mcp dispatcher; do
     check "history: $role keeps the default" "$(deployment defaults "$role" .spec.revisionHistoryLimit)" "$HISTORY_DEFAULT"
 done
 # 0 is a limit, not "unset": a per-role override of 0 must survive.

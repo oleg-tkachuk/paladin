@@ -5,9 +5,11 @@
   rationale; the short version:
 
     api        ← ingress-controller / UI / mcp     → common + storage
-    api        ← admin (session JWKS, 8085)
+                                                     + iam (session JWKS)
+    iam        ← ingress-controller / UI / mcp     → common + storage
+               ← admin / api (session JWKS, 8085)
     admin      ← ingress-controller / UI / mcp     → common + storage + NATS
-                                                     + api (session JWKS)
+                                                     + iam (session JWKS)
                                                      + adminBrokerPorts (Test)
                                                      + dispatcher/worker ops
     worker     ← monitoring / admin / UI (ops)     → common + storage
@@ -16,13 +18,13 @@
     ingest     ← storage ns (webhook) / monitoring → common + storage + NATS
                  / UI (health)                       (a delete event is checked
                                                      with a HEAD)
-    mcp        ← ingress-controller / monitoring   → common + api/admin pods
+    mcp        ← ingress-controller / monitoring   → common + api/iam/admin pods
                  / admin (sessions) / UI (health)
 
   "common" egress = DNS (kube-system:53), 443 anywhere (https webhooks/JWKS),
   networkPolicies.kubeAPIPorts anywhere (K8s API for the secret resolver),
   Postgres, and the OTLP collector on the port config.otel.endpoint names.
-  api and admin, the roles that apply the rate limits, are also let out to
+  api, iam and admin, the roles that apply the rate limits, are also let out to
   Valkey on the port config.datastores.valkey.addr names when the limits count
   there.
 
@@ -67,8 +69,8 @@
 {{- $scrape := dict "from" (list (dict "namespaceSelector" (dict "matchLabels" (dict "kubernetes.io/metadata.name" .Values.networkPolicies.monitoring.namespace)))) "ports" (list (dict "protocol" "TCP" "port" (int .Values.metrics.port))) }}
 {{- $common = list $dns $https $pg $otlp }}
 {{/*
-  Valkey, when the rate limits count there (ADR-0046): only api and admin
-  apply the limits and build the counter, so only they are let out to it. The
+  Valkey, when the rate limits count there (ADR-0046): only api, iam and
+  admin apply the limits and build the counter, so only they are let out to it. The
   port is read from the address the client dials, like the OTLP one. Refused,
   every limit decision falls back to the per-replica count and
   paladin_ratelimit_degraded_total climbs.
@@ -87,6 +89,14 @@
 {{- $mcpPort := splitList ":" .Values.config.mcp.http.addr | last | int }}
 {{- $fromMCP := dict "podSelector" (dict "matchLabels" (dict "app.kubernetes.io/component" "mcp" "app.kubernetes.io/instance" .Release.Name)) }}
 {{- $fromAdmin := dict "podSelector" (dict "matchLabels" (dict "app.kubernetes.io/component" "admin" "app.kubernetes.io/instance" .Release.Name)) }}
+{{- $fromAPI := dict "podSelector" (dict "matchLabels" (dict "app.kubernetes.io/component" "api" "app.kubernetes.io/instance" .Release.Name)) }}
+{{/*
+  The iam role's listener, read from its config like the OTLP port, and the
+  session JWKS on it (ADR-0047): every role that verifies sessions without the
+  key is let out to it.
+*/}}
+{{- $iamPort := splitList ":" .Values.config.api.server.iam.addr | last | int }}
+{{- $toIAMJWKS := dict "to" (list (dict "podSelector" (dict "matchLabels" (dict "app.kubernetes.io/component" "iam" "app.kubernetes.io/instance" .Release.Name)))) "ports" (list (dict "protocol" "TCP" "port" $iamPort)) }}
 ---
 # Baseline: default-deny both directions for every pod of this release.
 # Per-role policies below are purely additive allows.
@@ -121,13 +131,6 @@ spec:
         - {{ $fromMCP | toJson }}
       ports:
         - { protocol: TCP, port: 8080 }
-        - { protocol: TCP, port: 8085 }
-    # The admin plane verifies sessions by the JWKS the IAM listener serves
-    # (ADR-0047); it reaches nothing else here.
-    - from:
-        - {{ $fromAdmin | toJson }}
-      ports:
-        - { protocol: TCP, port: 8085 }
     {{- if $metricsPulled }}
     - {{ $scrape | toJson }}
     {{- end }}
@@ -135,6 +138,41 @@ spec:
     {{- range $r := concat $common $rateLimitEgress }}
     - {{ $r | toJson }}
     {{- end }}
+    - {{ $storageEgress | toJson }}
+    # Sessions are verified by the JWKS the iam role serves (ADR-0047).
+    - {{ $toIAMJWKS | toJson }}
+{{- end }}
+{{- if .Values.deployments.iam.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "chart.fullname" . }}-iam
+  labels:
+    {{- include "chart.roleLabels" (dict "ctx" . "role" "iam") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "chart.roleSelectorLabels" (dict "ctx" . "role" "iam") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - {{ $fromController | toJson }}
+        - {{ $fromUI | toJson }}
+        - {{ $fromMCP | toJson }}
+        # The planes that verify sessions by the JWKS it serves (ADR-0047).
+        - {{ $fromAdmin | toJson }}
+        - {{ $fromAPI | toJson }}
+      ports:
+        - { protocol: TCP, port: {{ $iamPort }} }
+    {{- if $metricsPulled }}
+    - {{ $scrape | toJson }}
+    {{- end }}
+  egress:
+    {{- range $r := concat $common $rateLimitEgress }}
+    - {{ $r | toJson }}
+    {{- end }}
+    # The shared dependencies warm every storage backend's client.
     - {{ $storageEgress | toJson }}
 {{- end }}
 {{- if .Values.deployments.admin.enabled }}
@@ -174,15 +212,8 @@ spec:
         - { protocol: TCP, port: {{ $p }} }
         {{- end }}
     {{- end }}
-    # Sessions are verified by the JWKS the api role's IAM listener serves
-    # (ADR-0047).
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/instance: {{ .Release.Name }}
-              app.kubernetes.io/component: api
-      ports:
-        - { protocol: TCP, port: 8085 }
+    # Sessions are verified by the JWKS the iam role serves (ADR-0047).
+    - {{ $toIAMJWKS | toJson }}
     # SystemService.GetDispatcherStats proxies the dispatcher's ops listener.
     - to:
         - podSelector:
@@ -352,12 +383,17 @@ spec:
     {{- range $r := $common }}
     - {{ $r | toJson }}
     {{- end }}
-    # Bridge mode proxies MCP tool calls to the api / admin planes.
+    # Bridge mode proxies MCP tool calls to the api / iam / admin planes,
+    # and verifies sessions by the iam role's JWKS.
     - to:
         - podSelector:
             matchLabels:
               app.kubernetes.io/instance: {{ .Release.Name }}
               app.kubernetes.io/component: api
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: iam
         - podSelector:
             matchLabels:
               app.kubernetes.io/instance: {{ .Release.Name }}

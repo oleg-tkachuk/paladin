@@ -197,6 +197,9 @@ deployments:
       minReplicas: 3
       maxReplicas: 12
       targetCPUUtilizationPercentage: 70
+  # Login and token refresh: two replicas survive a drain and earn a PDB.
+  iam:
+    replicas: 2
   admin:
     replicas: 2
   worker:

@@ -1,7 +1,8 @@
 {{- /*
-A standard Ingress for the api role: the IAM plane under ingress.iam.path and
-its OAuth endpoints under ingress.iam.oauthPath and their metadata at
-ingress.iam.oauthMetadataPath, the data plane for everything else. The admin plane gets no public route, as with
+A standard Ingress for the planes: the iam role's IAM plane under
+ingress.iam.path, its OAuth endpoints under ingress.iam.oauthPath, their
+metadata at ingress.iam.oauthMetadataPath and the session JWKS at
+ingress.iam.jwksPath; the api role's data plane for everything else. The admin plane gets no public route, as with
 the Traefik IngressRoute; expose it separately behind whatever guards it.
 
 The defaults target the Caddy ingress controller: its path matcher takes
@@ -11,6 +12,8 @@ Another controller needs its own path syntax and annotations.
 */ -}}
 {{- if .Values.ingress.enabled -}}
 {{- $apiFullname := include "chart.roleFullname" (dict "ctx" . "role" "api") -}}
+{{- $iamFullname := include "chart.roleFullname" (dict "ctx" . "role" "iam") -}}
+{{- $iamEnabled := (index .Values.deployments "iam").enabled -}}
 {{- $ing := .Values.ingress -}}
 {{- $hosts := required "ingress.hosts must name at least one host when ingress.enabled" (first $ing.hosts) -}}
 {{- $annotations := deepCopy ($ing.annotations | default dict) -}}
@@ -41,27 +44,36 @@ spec:
     - host: {{ $host | quote }}
       http:
         paths:
+          {{- if $iamEnabled }}
           - path: {{ $ing.iam.path }}
             pathType: {{ $ing.iam.pathType }}
             backend:
               service:
-                name: {{ $apiFullname }}
+                name: {{ $iamFullname }}
                 port:
                   number: {{ $ing.iam.port }}
           - path: {{ $ing.iam.oauthPath }}
             pathType: Prefix
             backend:
               service:
-                name: {{ $apiFullname }}
+                name: {{ $iamFullname }}
                 port:
                   number: {{ $ing.iam.port }}
           - path: {{ $ing.iam.oauthMetadataPath }}
             pathType: Exact
             backend:
               service:
-                name: {{ $apiFullname }}
+                name: {{ $iamFullname }}
                 port:
                   number: {{ $ing.iam.port }}
+          - path: {{ $ing.iam.jwksPath }}
+            pathType: Exact
+            backend:
+              service:
+                name: {{ $iamFullname }}
+                port:
+                  number: {{ $ing.iam.port }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:

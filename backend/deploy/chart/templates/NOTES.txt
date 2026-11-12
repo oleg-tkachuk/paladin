@@ -2,7 +2,8 @@
 
 Paladin runs as one binary in multiple Deployments — one per role:
 
-  api      data + iam Connect listeners (public-ish traffic)
+  api      data Connect listener (public-ish traffic)
+  iam      IAM Connect listener, OAuth AS and session JWKS (holds the session key)
   admin    admin Connect listener (privileged operations)
   worker   background jobs with Postgres-leased leadership
   mcp      Model Context Protocol bridge (LLM-facing)
@@ -25,7 +26,7 @@ Per-role pods:
 
 ──────────────────────────────────────────────────────────────────────────
 
-Reach the api plane (data + iam):
+Reach the data plane:
 {{- $scheme := include "chart.internalScheme" . }}
 {{- $apiSvc := include "chart.roleFullname" (dict "ctx" . "role" "api") }}
 
@@ -62,7 +63,7 @@ Sign in as the platform admin, subject `{{ .Values.config.bootstrap.admin.subjec
 ──────────────────────────────────────────────────────────────────────────
 
 Disable a role: `--set deployments.<role>.enabled=false`. Toggling the
-api role takes the public listeners offline; toggling the worker or mcp
+api role takes the data plane offline, the iam role login and token refresh; toggling the worker or mcp
 roles is safe (no client traffic).
 
 Worker leases, via psql:
