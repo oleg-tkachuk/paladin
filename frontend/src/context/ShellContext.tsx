@@ -1,13 +1,12 @@
 "use client";
 
-// ShellContext — the console chrome's own state, fetched in one call.
+// ShellContext — the console chrome's own state.
 //
-// The badges, the background-ops drawer and the tenant context each used to
-// poll their own RPC, so every page paid for the whole chrome before it
-// rendered anything of its own, and a page's availability was the product of
-// several services. /api/shell does that fan-out server-side and reports each
-// section separately, so a health probe that is down greys one badge instead
-// of taking the page with it.
+// The iam plane's version and health, the caller's operations, and the
+// operator's banner. Each section is fetched and reported on its own, so a
+// health probe that is down greys one badge instead of taking the page with
+// it. The RPCs go through the session role like every other call (ADR-0048);
+// the banner is the console's own configuration, served by /api/banner.
 
 import React, {
   useEffect,
@@ -19,21 +18,16 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
-import { fromJson, type JsonValue } from "@bufbuild/protobuf";
 
 import {
-  VersionInfoSchema,
-  HealthInfoSchema,
   type VersionInfo,
   type HealthInfo,
 } from "@/gen/paladin/iam/v1/health_service_pb";
-import {
-  ListOperationsResponseSchema,
-  type Operation,
-} from "@/gen/paladin/admin/v1/operation_service_pb";
-import { anyRegistry } from "@/lib/connect/any-registry";
-import { getAccessToken } from "@/lib/auth/tokenStore";
-import { AUDIENCES } from "@/constants";
+import { type Operation } from "@/gen/paladin/admin/v1/operation_service_pb";
+import { SortOrder } from "@/gen/paladin/common/v1/pagination_pb";
+import { adminOperationClient, iamHealthClient } from "@/lib/connect/client";
+import { BANNER_PATH } from "@/constants";
+import { settledSection } from "@/lib/shell/section";
 import { canUseAdminPlane } from "@/constants/roles";
 import { useAuth } from "@/context/AuthContext";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
@@ -54,7 +48,7 @@ interface ShellState {
   version: ShellSection<VersionInfo>;
   health: ShellSection<HealthInfo>;
   operations: ShellSection<Operation[]>;
-  /** The operator's banner (/api/shell's banner section), or null. */
+  /** The operator's banner (/api/banner), or null. */
   banner: PlatformBanner | null;
   /** Set when the aggregate itself could not be reached at all. */
   error: string | null;
@@ -68,32 +62,12 @@ const NO_OPERATIONS: Operation[] = [];
 
 const ShellContext = createContext<ShellState | undefined>(undefined);
 
-interface WireSection {
-  status: "ok" | "unavailable";
-  reason?: string;
-  data?: JsonValue;
-}
+/** How many of the caller's operations the drawer lists. */
+const OPERATIONS_PAGE = 50;
 
-function decode<T>(
-  raw: WireSection | undefined,
-  parse: (json: JsonValue) => T,
-): ShellSection<T> {
-  if (!raw)
-    return { status: "unavailable", reason: "missing section", data: null };
-  if (raw.status !== "ok" || raw.data === undefined) {
-    return { status: "unavailable", reason: raw.reason, data: null };
-  }
-  try {
-    return { status: "ok", data: parse(raw.data) };
-  } catch (err) {
-    // A section that decodes to garbage is unavailable, not fatal: the rest
-    // of the chrome has nothing to do with it.
-    return {
-      status: "unavailable",
-      reason: err instanceof Error ? err.message : String(err),
-      data: null,
-    };
-  }
+/** A section unavailable because the shell itself failed. */
+function unavailable(reason: string): ShellSection<never> {
+  return { status: "unavailable", reason, data: null };
 }
 
 export function ShellProvider({ children }: { children: ReactNode }) {
@@ -116,77 +90,45 @@ export function ShellProvider({ children }: { children: ReactNode }) {
 
   const fetchShell = useCallback(async () => {
     try {
-      // Two tokens: the sections live on two planes and each plane verifies
-      // its own audience. The iam one is allowed to fail on its own — that
-      // costs the version and health sections, not the operations list.
-      //
-      // Sequential, not Promise.all. Minting a token for an audience rotates
-      // the single refresh token in the session cookie, and the BFF's dedup
-      // is keyed on (audience, token) — so two mints for DIFFERENT audiences
-      // starting from the same cookie both send the same refresh token, the
-      // loser replays a consumed one, and the backend reads that as RFC-6819
-      // reuse and revokes the whole family. That logs the operator out. Only
-      // the first poll of a cold session pays for the extra round trip; the
-      // token store caches both afterwards.
-      const adminToken = adminAllowed
-        ? await getAccessToken(AUDIENCES.admin)
-        : null;
-      const iamToken = await getAccessToken(AUDIENCES.iam).catch(() => null);
-      const res = await fetch("/api/shell", {
-        headers: {
-          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {}),
-          ...(iamToken
-            ? { "X-Paladin-Iam-Authorization": `Bearer ${iamToken}` }
-            : {}),
-        },
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        throw new Error(`shell: HTTP ${res.status}`);
-      }
-      // A session whose refresh cookie has expired gets redirected to the
-      // login page by the edge middleware, and fetch follows the redirect —
-      // so "200 OK" here can be an HTML page. Say that, rather than letting
-      // the JSON parser report a stray "<".
-      if (!res.headers.get("content-type")?.includes("application/json")) {
-        throw new Error("shell: not signed in");
-      }
-      const body = (await res.json()) as Record<string, WireSection>;
-      setVersion(decode(body.version, (j) => fromJson(VersionInfoSchema, j)));
-      setHealth(decode(body.health, (j) => fromJson(HealthInfoSchema, j)));
-      setOperations(
-        decode(body.operations, (j) => {
-          const parsed = fromJson(ListOperationsResponseSchema, j, {
-            registry: anyRegistry,
-          });
-          return parsed.operations;
+      const [v, h, ops, bannerRes] = await Promise.allSettled([
+        iamHealthClient.getVersion({}),
+        iamHealthClient.getHealth({}),
+        // IAM never issues a pure tenant.user the admin audience; asking
+        // only collects a refusal.
+        adminAllowed
+          ? adminOperationClient.listOperations({
+              page: { pageSize: OPERATIONS_PAGE, pageToken: "" },
+              filter: "",
+              sortOrder: SortOrder.DESC,
+              mine: true,
+            })
+          : Promise.reject(new Error("the admin plane is not this user's")),
+        fetch(BANNER_PATH, { cache: "no-store" }).then((r) => {
+          if (!r.ok) throw new Error(`banner: HTTP ${r.status}`);
+          return r.json() as Promise<unknown>;
         }),
-      );
-      // An unreadable banner section leaves the last banner up rather than
-      // taking it down: the notice it carried is still the operator's.
-      if (body.banner?.status === "ok") {
-        setBanner(bannerFromJson(body.banner.data ?? null));
+      ]);
+      setVersion(settledSection(v));
+      setHealth(settledSection(h));
+      setOperations(settledSection(ops, (res) => res.operations));
+      // An unreadable banner leaves the last banner up rather than taking it
+      // down: the notice it carried is still the operator's.
+      if (bannerRes.status === "fulfilled") {
+        setBanner(bannerFromJson(bannerRes.value));
       }
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
-      // The aggregate itself is down (or the token is). Every section is
-      // unknown, and the chrome says so rather than showing stale badges as
-      // if they were current.
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
-      setVersion({ status: "unavailable", reason: message, data: null });
-      setHealth({ status: "unavailable", reason: message, data: null });
-      setOperations({ status: "unavailable", reason: message, data: null });
-      // The banner is kept: a maintenance notice is most needed exactly when
-      // the console cannot reach what it announces.
+      setVersion(unavailable(message));
+      setHealth(unavailable(message));
+      setOperations(unavailable(message));
     }
   }, [adminAllowed]);
 
-  // One fetch at a time. The poll and the sign-in refresh below can land in
-  // the same tick, and two fetches minting tokens for different audiences
-  // from one cookie is the refresh-token replay the comment in fetchShell
-  // describes — it revokes the session.
+  // One fetch at a time: the poll and the sign-in refresh below can land in
+  // the same tick.
   const refresh = useCallback(() => {
     if (!session) return Promise.resolve();
     inFlight.current ??= fetchShell().finally(() => {

@@ -28,7 +28,8 @@ flowchart TB
     agent(["AI agent · MCP client"])
     app(["Application · SDK"])
 
-    bff["<b>paladin-console</b><br/>Next.js BFF · :3000"]
+    console["<b>paladin-console</b><br/>Next.js UI · :3000"]
+    session["<b>session</b> · :8086"]
     mcp["<b>mcp</b> · :8095"]
 
     subgraph planes ["paladin-core planes"]
@@ -40,9 +41,10 @@ flowchart TB
 
     s3[("<b>S3 backends</b>")]
 
-    browser --> bff
+    browser -- "pages" --> console
+    browser -- "/session/" --> session
     agent --> mcp
-    bff --> planes
+    session --> planes
     mcp --> planes
     app --> api & iam
     app -. "object bytes over presigned URLs" .-> s3
@@ -54,14 +56,15 @@ flowchart TB
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class browser,app,agent client
-    class bff ui
-    class api,iam,admin,mcp role
+    class console ui
+    class api,iam,admin,mcp,session role
     class s3 store
     style planes fill:#F8FAFC,stroke:#16A34A
 ```
 
 What each role reaches. Every role but `mcp` (in its default bridge mode)
-uses PostgreSQL; `api`, `iam` and `admin` count the rate limits in Valkey when
+and `session`, which reaches only the planes, uses PostgreSQL; `api`, `iam`
+and `admin` count the rate limits in Valkey when
 `middleware.rate_limit.backend` is `valkey`; `ingest` also receives storage notifications, over a webhook,
 NATS, RabbitMQ or SQS. The S3 calls each role makes are in [Storage](#storage).
 `admin` also reads three other roles' listeners: the worker's ops listener for
@@ -264,10 +267,13 @@ tests, and run the same scenarios against the server in CI. The layers are in
 
 ## The admin console
 
-Next.js, with a BFF between the browser and the planes. The browser never
-holds a plane URL or the refresh token, which stays in an httpOnly cookie; it
-calls `/api/rpc/{data,iam,admin}` with short-lived access tokens, and the BFF
-forwards over Connect. Both halves generate their
+Next.js renders the UI; a Go session role, `serve session`, holds the
+session (ADR-0048). The browser holds no token: the role keeps the refresh
+token in an httpOnly `__Host-` cookie, and the browser calls
+`/session/rpc/<package.Service>/<Method>` on the console's own origin. The
+role forwards each call as bytes to the plane its proto package names,
+attaching an access token for that plane minted at IAM and cached in the role.
+Both halves generate their
 clients from the same `proto/` directory, which is the main
 reason they share a repository — a wire change is a two-sided change and
 should be one commit.
@@ -284,7 +290,7 @@ the schema and the deployment. The path from a pull request to a signed release 
 
 ```
 backend/      Go control plane — see backend/README.md
-frontend/     Next.js BFF + admin console — see frontend/README.md
+frontend/     Next.js admin console — see frontend/README.md
 docs/         ADRs, runbooks, configuration reference
 specs/        spec-driven-development artifacts per feature
 proto/        the API contract the backend, console and SDKs generate from

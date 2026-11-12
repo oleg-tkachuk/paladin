@@ -259,11 +259,10 @@ deployments:
         mountPath: /tmp
   # The console's session role (ADR-0048): the console's session cookie, the
   # tokens behind it, and the calls it forwards to the planes. No database,
-  # no key. Off until config.session.console_origins names the console's
-  # origin: the role refuses to start without one. The console chart routes
-  # its /session/ paths here (session.service in that chart).
+  # no key. The console chart routes its /session/ paths here
+  # (session.service in that chart), and the console calls nothing else.
   session:
-    enabled: false
+    enabled: true
     replicas: 2
     args:
       - "serve"
@@ -909,8 +908,9 @@ config:
     server:
       <<: *http_defaults
       addr: "0.0.0.0:8086"
-    # The origins the console is served from: a call that changes state
-    # must carry one of them in Origin.
+    # Origins the console is served from besides the host a call arrives on:
+    # a call that changes state must carry an Origin naming that host, or one
+    # of these.
     console_origins: []
     upstreams:
       admin_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-admin:8090'

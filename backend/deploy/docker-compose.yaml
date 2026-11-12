@@ -275,9 +275,8 @@ services:
       paladin-bootstrap:
         condition: service_completed_successfully
 
-  # UI BFF (Next.js). Browser hits localhost:3002 → /api/rpc/<plane>/...
-  # is proxied by the UI process to paladin-api / paladin-admin via container
-  # DNS. No host.docker.internal: same network as the planes.
+  # The console (Next.js): it renders the UI. The browser reaches it, and the
+  # session role beside it, through paladin-front on localhost:3002.
   #
   # Build context is the sibling repo. If you don't have it checked out,
   # bring up the backend with `--scale paladin-console=0` to skip this service.
@@ -294,23 +293,33 @@ services:
         BUILD_TIME: ${BUILD_TIME:-now}
     init: true
     restart: on-failure
-    ports:
-      # Host 3002 → container 3000. Matches the UI repo's standalone
-      # compose so dev muscle memory carries over.
-      - "3002:3000"
     environment:
-      # Per-plane backend URLs read by the BFF (src/app/api/rpc/...
-      # /route.ts and src/lib/auth/bff.ts). Browser never sees these —
-      # it only ever hits /api/rpc on this container.
-      PALADIN_DATA_URL: http://paladin-api:8080
+      # The OAuth consent form's relay; every other call the browser makes
+      # goes through the session role (ADR-0048).
       PALADIN_IAM_URL: http://paladin-iam:8085
-      PALADIN_ADMIN_URL: http://paladin-admin:8090
     depends_on:
-      paladin-api:
-        condition: service_started
       paladin-iam:
         condition: service_started
-      paladin-admin:
+
+  # The console's one origin, as the ingress makes it on a cluster: host 3002
+  # (the UI repo's standalone port, kept for muscle memory) serves the console,
+  # and its /session/* paths reach the session role (deploy/front/Caddyfile).
+  paladin-front:
+    image: caddy:2.11.9-alpine
+    container_name: paladin-front
+    restart: on-failure
+    volumes:
+      - ./front:/etc/caddy:ro
+    environment:
+      FRONT_PORT: "3000"
+      SESSION_UPSTREAM: paladin-session:8086
+      CONSOLE_UPSTREAM: paladin-console:3000
+    ports:
+      - "3002:3000"
+    depends_on:
+      paladin-console:
+        condition: service_started
+      paladin-session:
         condition: service_started
 
 volumes:

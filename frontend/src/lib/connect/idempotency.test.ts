@@ -28,16 +28,7 @@ describe("idempotencyInterceptor", () => {
         const headers = new Headers(
           (init?.headers as HeadersInit | undefined) ?? req.headers,
         );
-        if (url.includes("/api/auth/exchange")) {
-          return new Response(
-            JSON.stringify({
-              token: "test-token",
-              expiresAt: 9_999_999_999_000,
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          );
-        }
-        if (url.includes("/api/rpc/")) rpcHeaders = headers;
+        if (url.includes("/session/rpc/")) rpcHeaders = headers;
         return new Response(new Uint8Array(), { status: 500 });
       }),
     );

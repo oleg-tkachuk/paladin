@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { AUDIENCES } from "@/constants";
-import { refreshCookieName } from "@/lib/auth/cookies";
+import { SESSION_COOKIE } from "@/constants";
 import {
   CSP_HEADER,
   OAUTH_CONSENT_PATH,
@@ -18,28 +17,21 @@ import {
  * Next 16.2.x compiled a `proxy.ts` without writing it into
  * `middleware-manifest.json`, so the standalone server never ran it and
  * the gate silently did nothing. On 16.3.7 the standalone server executes
- * it; `tests/e2e/auth.spec.ts` pins that by expecting the CSRF refusal
- * below, which nothing else in the stack produces.
+ * it; `tests/e2e/auth.spec.ts` pins that by the deep-link redirect below.
  *
- * Treats the presence of the iam refresh-token cookie as a coarse "logged-in"
- * signal: if it's missing, redirect to /login with the original path as
- * `?next=`. This is a UX gate (skip rendering the shell for an obvious-anon
- * visitor), NOT the security boundary — the real identity/authz checks are
- * the backend JWT + Cedar interceptors, with the BFF validating audience
- * before forwarding (see app/api/rpc/[[...connect]]/route.ts).
+ * Treats the presence of the session cookie as a coarse "logged-in" signal:
+ * if it's missing, redirect to /login with the original path as `?next=`.
+ * This is a UX gate (skip rendering the shell for an obvious-anon visitor),
+ * NOT the security boundary — the session role judges the cookie on every
+ * call, and the planes the token it attaches (ADR-0048).
  *
  * Excluded:
  *   - /login itself
- *   - /api/auth/* (login/logout/refresh/exchange/me — must stay reachable
- *     while logged-out)
  *   - Static assets (_next, favicon, public files)
  */
 
-const IAM_REFRESH_COOKIE = refreshCookieName(AUDIENCES.iam);
-
 const PUBLIC_PREFIXES = [
   "/login",
-  "/api/auth",
   // Health probes (kubelet liveness/readiness) are unauthenticated and
   // must NOT be redirected to /login — otherwise the probe gets a 307
   // (which kubelet treats as success) and the real liveness route never
@@ -134,7 +126,9 @@ function gate(req: NextRequest): NextResponse {
     return NextResponse.next();
   }
 
-  const hasSession = req.cookies.get(IAM_REFRESH_COOKIE)?.value;
+  // Whether a session cookie is present at all decides only where to send the
+  // page; the session role judges the cookie on every call (ADR-0048).
+  const hasSession = req.cookies.get(SESSION_COOKIE)?.value;
   if (hasSession) return NextResponse.next();
 
   const loginUrl = req.nextUrl.clone();

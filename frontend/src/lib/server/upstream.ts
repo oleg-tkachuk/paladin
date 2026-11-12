@@ -1,21 +1,10 @@
-import { createGrpcWebTransport } from "@connectrpc/connect-web";
-import { ConnectError } from "@connectrpc/connect";
 import { Agent, fetch as undiciFetch } from "undici";
 
-import type { Plane } from "@/constants";
-
-// The BFF's outbound leg to the three planes.
-//
-// Extracted from the RPC bridge route once a second server route (the shell
-// aggregate) needed to reach the same backends: two modules each building
-// their own undici Agent would each get their own connection cap, which is
-// the opposite of what the cap is for.
-
-export const planeBackendUrls: Record<Plane, string> = {
-  data: process.env.PALADIN_DATA_URL || "http://paladin-core:8080",
-  iam: process.env.PALADIN_IAM_URL || "http://paladin-core:8085",
-  admin: process.env.PALADIN_ADMIN_URL || "http://paladin-core:8090",
-};
+// The console server's one outbound leg: the OAuth consent form's relay to
+// the iam plane (app/oauth/authorize). Every other call the console makes goes
+// from the browser through the session role (ADR-0048).
+export const iamBackendUrl =
+  process.env.PALADIN_IAM_URL || "http://paladin-core-iam:8085";
 
 // Bounded connection pool for the outbound leg.
 //
@@ -60,25 +49,3 @@ export const upstreamFetch: typeof fetch = (input, init) =>
     input as Parameters<typeof undiciFetch>[0],
     { ...init, dispatcher: upstreamAgent } as Parameters<typeof undiciFetch>[1],
   ) as unknown as Promise<Response>;
-
-/** A grpc-web transport to one plane, over the shared connection pool. */
-export function planeTransport(plane: Plane) {
-  return createGrpcWebTransport({
-    baseUrl: planeBackendUrls[plane],
-    fetch: upstreamFetch,
-    interceptors: [
-      (next) => async (req) => {
-        try {
-          return await next(req);
-        } catch (err) {
-          if (err instanceof ConnectError && err.metadata) {
-            err.metadata.delete("content-type");
-            err.metadata.delete("content-length");
-            err.metadata.delete("transfer-encoding");
-          }
-          throw err;
-        }
-      },
-    ],
-  });
-}

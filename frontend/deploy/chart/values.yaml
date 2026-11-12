@@ -160,10 +160,10 @@ service:
 # The console's session role (ADR-0048), deployed by the backend chart under
 # deployments.session: the console's ingress sends pathPrefix to its Service,
 # on the console's own hosts, so the session cookie is the console's origin.
-# An empty service.name sends nothing there.
+# The console calls nothing else: name the backend release's session Service.
 session:
   service:
-    name: ""
+    name: paladin-core-session
     port: 8086
   pathPrefix: /session/
 

@@ -1,5 +1,6 @@
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { anyRegistry } from "./any-registry";
+
 import {
   ConnectError,
   Code,
@@ -8,32 +9,17 @@ import {
 } from "@connectrpc/connect";
 
 import { kNotFoundIsAnswer } from "./expected";
-import {
-  RPC_API_PREFIX,
-  RPC_PLANE_PREFIXES,
-  AUDIENCES,
-  type Plane,
-  type Audience,
-} from "@/constants";
-import {
-  configureTokenStore,
-  getAccessToken,
-  markAudienceStale,
-} from "@/lib/auth/tokenStore";
-
-const HTTP_FORBIDDEN = 403;
+import { SESSION_RPC_PREFIX } from "@/constants";
+import { signalSessionEnded } from "@/lib/session/ended";
 
 /**
- * Multi-plane transport layer.
+ * The console's one transport (ADR-0048). Every call goes to the session
+ * role under SESSION_RPC_PREFIX with the session cookie and nothing else: the
+ * role attaches the access token the call's plane needs, picking the plane by
+ * the procedure's proto package. The browser holds no token.
  *
- * Each backend plane (data/iam/admin) runs on its own port with its own JWT
- * audience. The browser hits a single Next.js BFF prefix (/api/rpc/<plane>)
- * which proxies to the in-cluster service. Clients pick a transport by the
- * plane the service belongs to — see lib/connect/client.ts.
- *
- * Tenant resolution: backend reads the tenant from the JWT `tenant` claim.
- * The UI never sends X-Tenant-ID anymore (we removed that header in the
- * 1:1 user-tenant refactor — there's no impersonation surface in the UI).
+ * Tenant resolution: the backend reads the tenant from the token the session
+ * role attaches. The UI never sends X-Tenant-ID.
  */
 
 /**
@@ -139,139 +125,39 @@ const loggingInterceptor: Interceptor = (next) => async (req) => {
     ) {
       throw err;
     }
-    // No token-cache work here — the auth interceptor (inner) owns
-    // the 401 self-heal path. An earlier version eagerly cleared
-    // the entire cache on every 401 even after the auth interceptor
-    // had already self-healed; that wiped fresh tokens for OTHER
-    // audiences and forced redundant /exchange round-trips on every
-    // subsequent RPC.
     console.error(`[RPC Error] ${req.method.name}:`, err);
     throw err;
   }
 };
 
 /**
- * Hooked into tokenStore at module load.
- *
- * Resolution: POST /api/auth/exchange { audience } — the BFF reads the
- * iam refresh-token cookie set at /api/auth/login, calls
- * AuthService.ExchangeAudience for non-iam audiences (or RefreshToken
- * for iam itself), and returns a short-lived per-audience access token.
- *
- * The earlier dev-token branch (a single fixed JWT injected via
- * <meta name="paladin-dev-token"> from the YAML config) was a stopgap before
- * Login was wired. It was removed because the dev token was then minted
- * with audience "paladin-api" — not one of the three plane audiences — so
- * once login worked it started poisoning the per-plane caches and every
- * data/admin RPC failed with `[unauthenticated] jwt: audience mismatch`.
- * SREs who need to bypass Login can still inject tokens directly via
- * `setAccessToken(audience, …)` from DevTools.
+ * A call the session role answers Unauthenticated has no session behind it:
+ * the cookie expired or was signed out elsewhere. The app is told once, and
+ * the error still reaches the caller.
  */
-configureTokenStore(async (audience: Audience) => {
-  const res = await fetch("/api/auth/exchange", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ audience }),
-    credentials: "same-origin",
-  });
-  // 403: IAM will not issue this audience to this principal — a pure
-  // tenant.user asking for paladin-admin. Typed, so the auth interceptor can
-  // fail the call rather than send it and re-mint on the 401.
-  if (res.status === HTTP_FORBIDDEN) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new ConnectError(
-      body.error || `audience ${audience} refused`,
-      Code.PermissionDenied,
-    );
+const sessionInterceptor: Interceptor = (next) => async (req) => {
+  try {
+    return await next(req);
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
+      signalSessionEnded();
+    }
+    throw err;
   }
-  if (!res.ok) {
-    throw new Error(`exchange failed (${res.status}) for audience=${audience}`);
-  }
-  const body = (await res.json()) as { token: string; expiresAt: number };
-  return { token: body.token, expiresAt: body.expiresAt };
+};
+
+export const sessionTransport: Transport = createConnectTransport({
+  baseUrl: SESSION_RPC_PREFIX,
+  jsonOptions: { registry: anyRegistry },
+  interceptors: [
+    idempotencyInterceptor,
+    loggingInterceptor,
+    sessionInterceptor,
+  ],
 });
 
-function describe(err: unknown): string {
-  if (err instanceof ConnectError) return err.rawMessage;
-  if (err instanceof Error) return err.message;
-  return String(err);
-}
-
-function authInterceptorFor(audience: Audience): Interceptor {
-  return (next) => async (req) => {
-    // Why the mint error is kept rather than thrown: an unauthenticated
-    // request reaching the backend is the self-heal path below, and it works.
-    // But when it does NOT heal, the error the operator sees is the backend's
-    // "missing Authorization header", which describes the symptom and hides
-    // the cause — a revoked refresh family reads as a console that forgot to
-    // send a header. One e2e failure was diagnosed twice for that reason.
-    let mintErr: unknown;
-    try {
-      const token = await getAccessToken(audience);
-      req.header.set("Authorization", `Bearer ${token}`);
-    } catch (err) {
-      // Refused, not missing: no retry can change the answer.
-      if (err instanceof ConnectError && err.code === Code.PermissionDenied) {
-        throw err;
-      }
-      // No token available — let the request go out unauthenticated.
-      // Backend will return 401, the catch below self-heals.
-      mintErr = err;
-    }
-    try {
-      return await next(req);
-    } catch (err) {
-      // Self-heal on 401: the cached access token expired (or was
-      // signed by a now-rotated key) but the refresh-token cookie is
-      // still good. Mark THIS audience stale, fetch a fresh access
-      // token (single-flight via inflight Map), retry once.
-      //
-      // Don't use clearAllTokens here: it drops the inflight Map too,
-      // so parallel 401s would each fire their own /exchange call
-      // against the BFF and clobber each other's cache writes —
-      // which then races the BFF's refresh-token cookie rotation
-      // and intermittently wedges the page (the symptom that lives
-      // on as "page sometimes blank on refresh").
-      if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
-        markAudienceStale(audience);
-        try {
-          const fresh = await getAccessToken(audience);
-          req.header.set("Authorization", `Bearer ${fresh}`);
-          return await next(req);
-        } catch (retryErr) {
-          // Refresh path is also broken. Report why the token could not be
-          // minted — that is the actual failure — instead of the backend's
-          // complaint about the header that was missing because of it.
-          throw new ConnectError(
-            `no ${audience} access token: ${describe(mintErr ?? retryErr)}`,
-            Code.Unauthenticated,
-            undefined,
-            undefined,
-            err,
-          );
-        }
-      }
-      throw err;
-    }
-  };
-}
-
-function makePlaneTransport(plane: Plane, audience: Audience): Transport {
-  return createConnectTransport({
-    baseUrl: `${RPC_API_PREFIX}${RPC_PLANE_PREFIXES[plane]}`,
-    jsonOptions: { registry: anyRegistry },
-    // Order: idempotency runs first (header injection happens
-    // before auth/logging see the request). Auth has to wrap the
-    // network call so 401 self-heal works; logging is outermost so
-    // it observes the final outcome.
-    interceptors: [
-      idempotencyInterceptor,
-      loggingInterceptor,
-      authInterceptorFor(audience),
-    ],
-  });
-}
-
-export const dataTransport = makePlaneTransport("data", AUDIENCES.data);
-export const iamTransport = makePlaneTransport("iam", AUDIENCES.iam);
-export const adminTransport = makePlaneTransport("admin", AUDIENCES.admin);
+// The plane names stay for the clients built on them (lib/connect/client.ts);
+// the session role routes each call to its plane itself.
+export const dataTransport = sessionTransport;
+export const iamTransport = sessionTransport;
+export const adminTransport = sessionTransport;

@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ConnectError, Code } from "@connectrpc/connect";
 import { fireEvent, render, screen, waitFor } from "@/test/utils";
 
+import { BANNER_PATH } from "@/constants";
+
 const h = vi.hoisted(() => ({
-  token: vi.fn(),
+  getVersion: vi.fn(),
+  getHealth: vi.fn(),
+  listOperations: vi.fn(),
   roles: ["platform.admin"] as string[],
   signedIn: true,
 }));
@@ -10,9 +15,14 @@ const h = vi.hoisted(() => ({
 vi.mock("@/hooks/usePreference", () => ({
   usePreference: () => [false, vi.fn()],
 }));
-vi.mock("@/lib/auth/tokenStore", () => ({ getAccessToken: h.token }));
+vi.mock("@/lib/connect/client", () => ({
+  iamHealthClient: { getVersion: h.getVersion, getHealth: h.getHealth },
+  adminOperationClient: { listOperations: h.listOperations },
+}));
 vi.mock("@/context/AuthContext", () => ({
-  useAuth: () => ({ user: h.signedIn ? { roles: h.roles } : null }),
+  useAuth: () => ({
+    user: h.signedIn ? { roles: h.roles, tenantId: "t", userId: "u" } : null,
+  }),
 }));
 
 import { ShellProvider, useShell } from "./ShellContext";
@@ -35,340 +45,98 @@ function Probe() {
   );
 }
 
-function mockShellResponse(body: unknown, ok = true) {
+const renderShell = () =>
+  render(
+    <ShellProvider>
+      <Probe />
+    </ShellProvider>,
+  );
+
+function bannerAnswers(body: unknown, ok = true) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
       ok,
       status: ok ? 200 : 500,
-      headers: new Headers({ "content-type": "application/json" }),
       json: async () => body,
     }),
   );
 }
 
+const text = (id: string) => screen.getByTestId(id).textContent;
+
 describe("ShellContext", () => {
   beforeEach(() => {
-    h.token.mockReset();
-    h.token.mockResolvedValue("tok");
+    h.getVersion.mockReset().mockResolvedValue({ version: "1.2.3" });
+    h.getHealth.mockReset().mockResolvedValue({ components: [] });
+    h.listOperations.mockReset().mockResolvedValue({ operations: [{}, {}] });
     h.roles = ["platform.admin"];
     h.signedIn = true;
     vi.unstubAllGlobals();
+    bannerAnswers(null);
   });
 
-  // The provider sits on the login page too. Asking there only collected a
-  // 401, and the chrome read "Unknown" after sign-in until the next poll.
+  // The provider sits on the login page too: asking there only collects a
+  // refusal, and the chrome read "Unknown" after sign-in until the next poll.
   it("asks nothing before anyone is signed in", async () => {
     h.signedIn = false;
-    mockShellResponse({});
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
+    renderShell();
     await new Promise((r) => setTimeout(r, 0));
+    expect(h.getVersion).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
-    expect(h.token).not.toHaveBeenCalled();
   });
 
-  it("asks as soon as someone signs in, without waiting for a poll", async () => {
-    h.signedIn = false;
-    mockShellResponse({
-      version: { status: "ok", data: { version: "1.2.3" } },
-      health: { status: "ok", data: {} },
-      operations: { status: "ok", data: {} },
-    });
-    const view = render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-    h.signedIn = true;
-    view.rerender(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("health")).toHaveTextContent("ok"),
-    );
+  it("reads every section through its own call", async () => {
+    renderShell();
+    await waitFor(() => expect(text("ops-count")).toBe("2"));
+    expect(text("version")).toBe("ok");
+    expect(text("health")).toBe("ok");
+    expect(fetch).toHaveBeenCalledWith(BANNER_PATH, expect.anything());
   });
 
-  // Mount runs the first poll and the sign-in refresh in the same tick. Two
-  // fetches would mint tokens for different audiences from one cookie, which
-  // the backend reads as refresh-token reuse and answers by revoking the
-  // session.
   it("folds refreshes that overlap into one fetch", async () => {
-    mockShellResponse({
-      version: { status: "ok", data: { version: "1.2.3" } },
-      health: { status: "ok", data: {} },
-      operations: { status: "ok", data: {} },
-    });
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("health")).toHaveTextContent("ok"),
-    );
-    expect(fetch).toHaveBeenCalledTimes(1);
+    renderShell();
+    await waitFor(() => expect(text("version")).toBe("ok"));
+    h.getVersion.mockClear();
+    fireEvent.click(screen.getByText("refresh"));
+    fireEvent.click(screen.getByText("refresh"));
+    await waitFor(() => expect(h.getVersion).toHaveBeenCalledTimes(1));
   });
 
-  // IAM refuses a pure tenant.user the admin audience. Asking anyway failed
-  // the whole shell, so the header sat on "checking" with health reachable.
-  it("asks a tenant.user's shell for no admin token", async () => {
+  it("asks a tenant.user's shell for no operations on the admin plane", async () => {
     h.roles = ["tenant.user"];
-    mockShellResponse({
-      version: { status: "ok", data: { version: "1.2.3" } },
-      health: { status: "ok", data: {} },
-      operations: { status: "unavailable", reason: "missing Authorization" },
-    });
-
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId("health")).toHaveTextContent("ok"),
-    );
-    expect(h.token).not.toHaveBeenCalledWith("paladin-admin");
-    const headers = (fetch as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[0][1].headers as Record<string, string>;
-    expect(headers.Authorization).toBeUndefined();
+    renderShell();
+    await waitFor(() => expect(text("operations")).toBe("unavailable"));
+    expect(h.listOperations).not.toHaveBeenCalled();
+    expect(text("version")).toBe("ok");
   });
 
-  // The point of the aggregate: one section being down must not cost the
-  // others. A single failed fetch used to take the whole chrome with it.
-  it("keeps healthy sections when one is unavailable", async () => {
-    mockShellResponse({
-      version: { status: "ok", data: { version: "1.2.3" } },
-      health: { status: "unavailable", reason: "UNAVAILABLE: no route" },
-      operations: { status: "ok", data: { operations: [] } },
-    });
-
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
+  it("keeps healthy sections when one is unavailable, and says why", async () => {
+    h.getHealth.mockRejectedValue(
+      new ConnectError("probe down", Code.Unavailable),
     );
-
-    await waitFor(() =>
-      expect(screen.getByTestId("version")).toHaveTextContent("ok"),
-    );
-    expect(screen.getByTestId("health")).toHaveTextContent("unavailable");
-    expect(screen.getByTestId("health-reason")).toHaveTextContent("no route");
-    expect(screen.getByTestId("operations")).toHaveTextContent("ok");
-    expect(screen.getByTestId("ops-count")).toHaveTextContent("0");
-  });
-
-  // A section whose payload does not decode is that section's problem.
-  it("degrades one section on a malformed payload", async () => {
-    mockShellResponse({
-      version: { status: "ok", data: { notAVersionField: true } },
-      health: { status: "ok", data: {} },
-      operations: { status: "ok", data: { operations: [] } },
-    });
-
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId("version")).toHaveTextContent("unavailable"),
-    );
-    expect(screen.getByTestId("health")).toHaveTextContent("ok");
-  });
-
-  // The aggregate itself being down is not "everything is fine and empty".
-  it("marks every section unavailable when the call fails", async () => {
-    mockShellResponse({}, false);
-
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId("operations")).toHaveTextContent("unavailable"),
-    );
-    expect(screen.getByTestId("version")).toHaveTextContent("unavailable");
-    expect(screen.getByTestId("health")).toHaveTextContent("unavailable");
-    expect(screen.getByTestId("ops-count")).toHaveTextContent("-1");
+    renderShell();
+    await waitFor(() => expect(text("health")).toBe("unavailable"));
+    expect(text("health-reason")).toBe("Unavailable: probe down");
+    expect(text("version")).toBe("ok");
+    expect(text("operations")).toBe("ok");
   });
 
   it("hands the operator's banner to the chrome", async () => {
-    mockShellResponse({
-      version: { status: "ok", data: { version: "1.2.3" } },
-      health: { status: "ok", data: {} },
-      operations: { status: "ok", data: {} },
-      banner: {
-        status: "ok",
-        data: { content: "Maintenance tonight", position: "top" },
-      },
-    });
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("banner")).toHaveTextContent(
-        "Maintenance tonight",
-      ),
-    );
+    bannerAnswers({ content: "Maintenance at 18:00", severity: "warning" });
+    renderShell();
+    await waitFor(() => expect(text("banner")).toBe("Maintenance at 18:00"));
   });
 
-  // A maintenance notice is most needed when the console cannot reach what
-  // it announces, so a failed poll does not take it down.
-  it("keeps the banner when the next poll fails", async () => {
-    mockShellResponse({
-      banner: { status: "ok", data: { content: "Planes restarting" } },
-    });
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("banner")).toHaveTextContent(
-        "Planes restarting",
-      ),
-    );
-    mockShellResponse({}, false);
-    fireEvent.click(screen.getByRole("button", { name: "refresh" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("version")).toHaveTextContent("unavailable"),
-    );
-    expect(screen.getByTestId("banner")).toHaveTextContent("Planes restarting");
-  });
-});
-
-// The version and health sections live on the iam plane, the operations
-// section on admin, and each plane verifies its own audience. Sending one
-// token to both would make the health badge permanently unavailable with an
-// authentication error — and the plane would be right to refuse it.
-describe("ShellContext tokens", () => {
-  beforeEach(() => {
-    h.token.mockReset();
-    vi.unstubAllGlobals();
-  });
-
-  it("sends the admin and iam tokens on their own headers", async () => {
-    let inflight = 0;
-    let overlapped = false;
-    h.token.mockImplementation(async (aud: string) => {
-      inflight += 1;
-      if (inflight > 1) overlapped = true;
-      await Promise.resolve();
-      inflight -= 1;
-      return `tok-${aud}`;
-    });
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ "content-type": "application/json" }),
-      json: async () => ({
-        version: { status: "ok", data: {} },
-        health: { status: "ok", data: {} },
-        operations: { status: "ok", data: { operations: [] } },
-      }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    // Sequentially, never at once: two mints starting from the same cookie
-    // make the loser replay a consumed refresh token, which the backend reads
-    // as reuse and answers by revoking the family — logging the operator out.
-    expect(overlapped).toBe(false);
-    const init = fetchMock.mock.calls[0][1] as {
-      headers: Record<string, string>;
-    };
-    expect(init.headers.Authorization).toMatch(/^Bearer tok-/);
-    expect(init.headers["X-Paladin-Iam-Authorization"]).toMatch(/^Bearer tok-/);
-    expect(init.headers.Authorization).not.toBe(
-      init.headers["X-Paladin-Iam-Authorization"],
-    );
-  });
-
-  // A failed iam exchange costs the two sections that need it, not the call.
-  it("still asks for the shell when the iam token cannot be minted", async () => {
-    h.token.mockImplementation(async (aud: string) => {
-      if (aud.includes("iam")) throw new Error("exchange failed");
-      return "tok-admin";
-    });
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ "content-type": "application/json" }),
-      json: async () => ({
-        version: { status: "unavailable", reason: "missing token" },
-        health: { status: "unavailable", reason: "missing token" },
-        operations: { status: "ok", data: { operations: [] } },
-      }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId("operations")).toHaveTextContent("ok"),
-    );
-    const init = fetchMock.mock.calls[0][1] as {
-      headers: Record<string, string>;
-    };
-    expect(init.headers["X-Paladin-Iam-Authorization"]).toBeUndefined();
-    expect(screen.getByTestId("health")).toHaveTextContent("unavailable");
-  });
-});
-
-describe("ShellContext session", () => {
-  beforeEach(() => {
-    h.token.mockReset();
-    vi.unstubAllGlobals();
-  });
-  // An expired session is redirected to the login page by the edge middleware,
-  // and fetch follows redirects — so a 200 here can be an HTML page.
-  it("reports a signed-out session instead of a JSON parse error", async () => {
-    h.token.mockResolvedValue("tok");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
-        json: async () => {
-          throw new SyntaxError("Unexpected token '<'");
-        },
-      }),
-    );
-
-    render(
-      <ShellProvider>
-        <Probe />
-      </ShellProvider>,
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId("health")).toHaveTextContent("unavailable"),
-    );
-    expect(screen.getByTestId("health-reason")).toHaveTextContent(
-      "not signed in",
-    );
+  // A maintenance notice is most needed exactly when the console cannot reach
+  // what it announces.
+  it("keeps the banner when the next poll cannot read it", async () => {
+    bannerAnswers({ content: "Maintenance at 18:00", severity: "warning" });
+    renderShell();
+    await waitFor(() => expect(text("banner")).toBe("Maintenance at 18:00"));
+    bannerAnswers({}, false);
+    fireEvent.click(screen.getByText("refresh"));
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
+    expect(text("banner")).toBe("Maintenance at 18:00");
   });
 });

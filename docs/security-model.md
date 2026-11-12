@@ -17,8 +17,8 @@ The interesting attack surface, roughly in order of how much we care:
   primary control here, so an RLS bypass is in scope even without a
   demonstrated data leak.
 - **Authentication** — JWT validation, API-token verification, the OAuth
-  authorisation server, the MCP resource server, and the BFF's session
-  handling.
+  authorisation server, the MCP resource server, and the console's session
+  role.
 - **Object storage** — presigned URL scope, bucket routing, and anything
   that lets one tenant's key resolve to another tenant's bytes.
 - **Supply chain** — the published container images and Helm charts.
@@ -78,14 +78,18 @@ closed with a pointer here.
   A tool appearing in a profile is therefore not a finding when the
   caller's own policy permits the RPC; a write that lands without that
   permission is.
-- **Console session.** The BFF keeps the refresh token in an `httpOnly`,
-  `SameSite=Strict` cookie, `Secure` in production builds
-  (`frontend/src/lib/auth/bff.ts`). Access tokens live in page memory only,
-  never in `localStorage` or `sessionStorage`
-  (`frontend/src/lib/auth/tokenStore.ts`); `localStorage` holds UI
-  preferences. The console must be reached only through a proxy that
-  replaces a client-sent `X-Forwarded-For`; its NetworkPolicy admits only the
-  ingress controller.
+- **Console session.** The browser holds no token (ADR-0048). The session
+  role keeps the refresh token in the `__Host-paladin_session` cookie —
+  `httpOnly`, `Secure`, `SameSite=Strict` (`backend/internal/session`) — and
+  attaches each plane's access token to the calls it forwards; it never
+  forwards the IAM procedures that hand out tokens. A state-changing call
+  must carry an `Origin` naming the host it arrived on or one of
+  `session.console_origins`. An XSS in the console can act through the cookie
+  while the page is open, but cannot read a token; `localStorage` holds UI
+  preferences. The session role must be reached only through a proxy that
+  replaces a client-sent `X-Forwarded-For` and `X-Forwarded-Host`; its
+  NetworkPolicy admits only the ingress controller, and the admin role for its
+  health.
 - **Policy layers.** Built-in, tenant, bucket and collection policies are
   joined in that order; a `forbid` in any layer wins. A layer that does not
   parse freezes its scope except for its own repair. See

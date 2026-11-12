@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const h = vi.hoisted(() => ({ fetch: vi.fn() }));
 
 vi.mock("@/lib/server/upstream", () => ({
-  planeBackendUrls: { iam: "http://iam.test:8085" },
+  iamBackendUrl: "http://iam.test:8085",
   upstreamFetch: h.fetch,
 }));
 

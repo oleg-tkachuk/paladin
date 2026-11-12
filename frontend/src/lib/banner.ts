@@ -2,7 +2,7 @@
 // console — a maintenance window, a migration, a policy change — after Argo
 // CD's ui.bannercontent. It is the deployment's to say, so it comes from the
 // BFF's environment and is read on every request rather than baked into the
-// image; /api/shell hands it to the console with the rest of the chrome.
+// image; /api/banner hands it to the console's chrome.
 import { readNotice, type Notice } from "@/lib/notice";
 
 /** The environment variables the banner is set through (the chart's `banner`). */
@@ -61,7 +61,7 @@ export function bannerFromEnv(
 }
 
 /**
- * The banner /api/shell sent, checked again in the browser: the section is
+ * The banner /api/banner sent, checked again in the browser: the answer is
  * JSON, and a field the console does not expect should cost the banner, not
  * the shell.
  */

@@ -1,4 +1,4 @@
-import { planeBackendUrls, upstreamFetch } from "@/lib/server/upstream";
+import { iamBackendUrl, upstreamFetch } from "@/lib/server/upstream";
 import { OAUTH_AUTHORIZE_PATH } from "@/lib/auth/oauthAuthorize";
 
 /**
@@ -26,15 +26,12 @@ const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
 const RELAYED_HEADERS = ["location", "content-type", "cache-control"];
 
 export async function POST(req: Request): Promise<Response> {
-  const upstream = await upstreamFetch(
-    planeBackendUrls.iam + OAUTH_AUTHORIZE_PATH,
-    {
-      method: "POST",
-      headers: { "content-type": FORM_CONTENT_TYPE },
-      body: await req.text(),
-      redirect: "manual",
-    },
-  );
+  const upstream = await upstreamFetch(iamBackendUrl + OAUTH_AUTHORIZE_PATH, {
+    method: "POST",
+    headers: { "content-type": FORM_CONTENT_TYPE },
+    body: await req.text(),
+    redirect: "manual",
+  });
   const headers = new Headers();
   for (const name of RELAYED_HEADERS) {
     const value = upstream.headers.get(name);

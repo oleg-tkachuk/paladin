@@ -262,33 +262,44 @@ flowchart LR
 
 ## Console session
 
-The browser holds only short-lived access tokens; the refresh token stays in an
-httpOnly cookie the BFF reads. Every plane call goes through the BFF.
+The browser holds no token (ADR-0048). The front — the console's ingress, or
+Caddy in compose — sends `/session/` on the console's host to the session role
+and everything else to the console. The role keeps the refresh token in the
+httpOnly `__Host-paladin_session` cookie, rotates it once it is
+`session.rotate_after` old, and attaches a per-plane access token, minted at
+IAM and cached in the role, to each call it forwards.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant B as Browser
-    box rgb(237,233,254) paladin-console
-        participant P as proxy.ts
-        participant F as BFF /api
-    end
+    participant F as front · ingress
+    participant C as console · Next.js
+    participant S as session role · :8086
     participant I as iam
     participant D as data · admin
 
-    B->>P: any page or /api call
-    Note over P: no paladin_rt_iam cookie → /login<br/>unsafe /api call from a foreign Origin → 403
-    B->>F: /api/auth/login
-    F->>I: Login
-    F-->>B: iam access token · Set-Cookie paladin_rt_iam
-    B->>F: /api/auth/exchange {audience}
-    F->>I: ExchangeAudience
-    F-->>B: access token for that plane
-    B->>F: /api/rpc/{plane}/… with Bearer
-    Note over F: token audience must match the plane
-    F->>D: Connect · Authorization · Idempotency-Key · X-Forwarded-For
+    B->>F: page
+    F->>C: page
+    Note over C: no session cookie → /login
+    B->>F: POST /session/login
+    F->>S: POST /session/login
+    Note over S: state-changing call from a foreign Origin → 403
+    S->>I: Login
+    S-->>B: user · Set-Cookie __Host-paladin_session
+    B->>S: /session/rpc/{package.Service}/{Method} · cookie, via the front
+    Note over S: plane from the proto package<br/>token-handing IAM procedures refused
+    S->>I: ExchangeAudience, unless the plane's token is cached
+    S->>D: Connect bytes · Authorization · X-Forwarded-For<br/>no Cookie or Origin
     D-->>B: response
+    B->>S: POST /session/refresh, via the front
+    S->>I: RefreshToken, once rotate_after has passed
+    S-->>B: Set-Cookie with the rotated token
 ```
+
+The browser reaches `iam` only through the role's own endpoints and the
+forwarded `paladin.iam.v1` calls; `/session/audit/stream` forwards the admin
+plane's audit stream.
 
 ## Contract fan-out
 
@@ -461,11 +472,12 @@ flowchart TB
 
     subgraph ns ["namespace"]
         direction TB
-        console["<b>paladin-console</b><br/>BFF · :3000"]
+        console["<b>paladin-console</b><br/>Next.js · :3000"]
         subgraph core ["paladin-core"]
             direction LR
             api["<b>api</b><br/>:8080"]
             iam["<b>iam</b><br/>:8085"]
+            session["<b>session</b><br/>:8086"]
             admin["<b>admin</b><br/>:8090"]
             mcp["<b>mcp</b><br/>:8095"]
             worker["<b>worker</b>"]
@@ -482,16 +494,16 @@ flowchart TB
     ingress -- "/paladin.iam.v1.* · /oauth/ · JWKS → :8085" --> iam
     ingress -- "rest → :8080" --> api
     ingress -- "/paladin.admin.v1.* → :8090<br/>IngressRoute only" --> admin
-    ingress --> console
+    ingress -- "console hosts" --> console
+    ingress -- "/session/ on the console hosts → :8086" --> session
     ingress -- "traefik.mcp.hosts<br/>IngressRoute only" --> mcp
-    console --> api
-    console --> iam
-    console --> admin
+    session --> api & iam & admin
+    console -- "OAuth consent relay" --> iam
     mcp -- "bridge mode" --> api & admin
     admin -. "ops :8099 · /stats census" .-> worker
     admin -. "ops :8099 · queue stats" .-> dispatcher
     admin -. "MCP sessions" .-> mcp
-    core --> pg
+    api & iam & admin & worker & dispatcher & ingest --> pg
     jobs --> pg
     jobs -. "bootstrap: feature probe" .-> s3
     api --> s3
@@ -507,7 +519,7 @@ flowchart TB
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     classDef k8s fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     class console ui
-    class api,iam,admin,mcp,worker,dispatcher role
+    class api,iam,session,admin,mcp,worker,dispatcher role
     class ingest,ingress,vk optional
     class pg,s3 store
     class jobs k8s
@@ -519,11 +531,16 @@ The standard Ingress routes the api and iam roles: the IAM plane, OAuth and
 the session JWKS to `iam`, the rest to `api`. The Traefik IngressRoute also
 routes `/paladin.admin.v1.*` to `admin` on the shared host, or moves the admin
 plane to its own host when `traefik.planes.admin.hosts` is set; either way the
-console reaches `admin` inside the cluster. Both route the OAuth
+session role reaches `admin` inside the cluster. Both route the OAuth
 Authorization Server's `/oauth/` endpoints and its
 `/.well-known/oauth-authorization-server` metadata to the iam listener. With
 `traefik.mcp.hosts` set, a further IngressRoute gives `mcp` a host of its own.
-Every role except `mcp` (in bridge mode, as the chart runs it) uses PostgreSQL;
+The console chart's ingress sends `/session/` on the console's hosts to the
+backend release's session Service (`session.service.name`, default
+`paladin-core-session`) and the rest to the console; the console itself calls
+only `iam`, to relay the OAuth consent form.
+Every role except `session` and `mcp` (in bridge mode, as the chart runs it)
+uses PostgreSQL;
 `api`, `admin` and `worker` call S3, and so does the bootstrap Job when it
 probes a backend's features. `api`, `iam` and `admin` count the rate limits in Valkey when
 `middleware.rate_limit.backend` is `valkey`; without it they count in

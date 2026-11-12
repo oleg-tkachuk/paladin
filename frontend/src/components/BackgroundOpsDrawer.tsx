@@ -4,7 +4,7 @@
 // long-running operations. Surfaces counts in a small badge ("2 in progress ·
 // 1 failed") and expands into a Sheet with cancel actions per op.
 //
-// The list arrives with the rest of the shell (ShellContext / /api/shell)
+// The list arrives with the rest of the shell (ShellContext)
 // rather than from a poller of its own: this widget is on every page, and its
 // own listOperations call was one of the ~6 chrome RPCs each page used to pay
 // for. While the sheet is open it asks the shell to refresh faster than the

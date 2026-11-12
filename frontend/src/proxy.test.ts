@@ -1,8 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AUDIENCES } from "@/constants";
-import { refreshCookieName } from "@/lib/auth/cookies";
+import { SESSION_COOKIE } from "@/constants";
 import { CSP_HEADER } from "@/lib/security/csp";
 import { STORAGE_ORIGINS_ENV } from "@/lib/security/storageOrigins";
 
@@ -67,7 +66,7 @@ describe("proxy CSP", () => {
       proxy(request("/oauth/consent")).headers.get(CSP_HEADER),
     ).not.toContain("form-action");
     const signedIn = request("/tenants");
-    signedIn.cookies.set(refreshCookieName(AUDIENCES.iam), "token");
+    signedIn.cookies.set(SESSION_COOKIE, "token");
     expect(proxy(signedIn).headers.get(CSP_HEADER)).toContain(
       "form-action 'self'",
     );

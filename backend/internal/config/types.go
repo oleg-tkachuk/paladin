@@ -140,9 +140,9 @@ type Runtime struct {
 	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`
 	// HealthSnapshotToken gates the `/system/health.json` snapshot endpoint
 	// (component tree + subsystem + Postgres reachability). Empty (default)
-	// leaves it open — fine for dev. In prod, set a shared secret here and
-	// on the frontend BFF aggregator (PALADIN_HEALTH_SNAPSHOT_TOKEN) so the
-	// detail is only reachable with the token. The kubelet probe endpoints
+	// leaves it open — fine for dev. In prod, set a shared secret here: the
+	// admin role reads every role's snapshot with it (GetPlatformHealth), so
+	// the detail is only reachable with the token. The kubelet probe endpoints
 	// (/livez /readyz /startupz) are NEVER gated.
 	HealthSnapshotToken string `yaml:"health_snapshot_token" json:"health_snapshot_token"`
 	// HealthSnapshotTokenSecret resolves HealthSnapshotToken from a Secret at
@@ -579,9 +579,9 @@ type AdminHealthRole struct {
 // console's calls to the planes.
 type Session struct {
 	Server HTTPServer `yaml:"server" json:"server"`
-	// ConsoleOrigins are the origins the console is served from. A call that
-	// changes state must carry one of them in Origin; none configured refuses
-	// every such call.
+	// ConsoleOrigins are further origins the console is served from. A call
+	// that changes state must carry an Origin naming the host it was made to,
+	// or one of these; empty allows the host alone.
 	ConsoleOrigins []string `yaml:"console_origins" json:"console_origins"`
 	// Upstreams are the planes it forwards to; it mints every token at the
 	// iam plane.

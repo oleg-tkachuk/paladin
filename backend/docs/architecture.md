@@ -42,7 +42,8 @@ plane runs without `BYPASSRLS`, so a missing policy is a missing wall.
 
 - **Applications and SDKs** — the data plane; bytes go to S3 over presigned
   URLs.
-- **The console** — through its BFF, the data, admin and iam planes.
+- **The console** — through the session role (`serve session`), the data,
+  admin and iam planes.
 - **AI agents** — through `serve mcp`.
 
 ### Data flow
