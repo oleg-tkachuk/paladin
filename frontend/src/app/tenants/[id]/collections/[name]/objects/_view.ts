@@ -1,6 +1,6 @@
 // Pure view model for the Collection objects page. No React — just the
 // saved-view shape (with its runtime schema) and the sort the table shows.
-import { z } from "zod";
+import { z } from "zod/mini";
 
 export interface ViewFilters {
   search?: string;
@@ -32,12 +32,12 @@ export const SavedViewSchema = z.object({
   // were, with those facets unset. status and type took one choice before
   // they took several, so a view may name either form.
   filters: z.object({
-    search: z.string().optional(),
-    status: FACET_CHOICE.optional(),
-    tag: z.string().optional(),
-    type: FACET_CHOICE.optional(),
-    meta: z.string().optional(),
-    recursive: z.boolean().optional(),
+    search: z.optional(z.string()),
+    status: z.optional(FACET_CHOICE),
+    tag: z.optional(z.string()),
+    type: z.optional(FACET_CHOICE),
+    meta: z.optional(z.string()),
+    recursive: z.optional(z.boolean()),
   }),
 });
 

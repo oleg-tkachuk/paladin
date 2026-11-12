@@ -2,7 +2,7 @@
 // changes or the whole text, and in one column or two. Kept in
 // console.diff and read through a schema, so a value another client wrote
 // reads as the default rather than breaking the view.
-import { z } from "zod";
+import { z } from "zod/mini";
 
 export interface DiffPrefs {
   /** Only the changed lines and the lines around them. */
@@ -16,8 +16,8 @@ export interface DiffPrefs {
 const DEFAULT_DIFF_PREFS: DiffPrefs = { compact: true, split: false };
 
 const DiffPrefsSchema = z.object({
-  compact: z.boolean().optional(),
-  split: z.boolean().optional(),
+  compact: z.optional(z.boolean()),
+  split: z.optional(z.boolean()),
 });
 
 /** The stored preference, each part the default when it is missing or bad. */

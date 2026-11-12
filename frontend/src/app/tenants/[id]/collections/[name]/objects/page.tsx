@@ -32,7 +32,7 @@ import { useObjects } from "@/hooks/useObjects";
 import { useDistinctTags } from "@/hooks/useDistinctTags";
 import { useNotification } from "@/components/ui/Notification";
 import { STORAGE_KEYS } from "@/constants";
-import { z } from "zod";
+import { z } from "zod/mini";
 import { safeParseJson } from "@/lib/parseJson";
 import { ObjectInspector } from "@/components/features/ObjectInspector";
 import { ObjectsFilterBar } from "@/components/features/objects/ObjectsFilterBar";

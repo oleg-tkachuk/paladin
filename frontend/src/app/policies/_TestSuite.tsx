@@ -29,7 +29,7 @@ import {
   TrashIcon,
   XCircleIcon,
 } from "@heroicons/react/24/outline";
-import { z } from "zod";
+import { z } from "zod/mini";
 
 import { safeParseJson } from "@/lib/parseJson";
 import {
@@ -81,14 +81,15 @@ const TestCaseSchema = z.object({
   principalTenantId: z.string(),
   rolesText: z.string(),
   // Suites saved before the kind was asked for simulate a signed-in user.
-  principalKind: z
-    .enum(
+  principalKind: z._default(
+    z.enum(
       PRINCIPAL_KINDS.map((k) => k.value) as [
         PrincipalKindName,
         ...PrincipalKindName[],
       ],
-    )
-    .default(DEFAULT_PRINCIPAL_KIND),
+    ),
+    DEFAULT_PRINCIPAL_KIND,
+  ),
   action: z.string(),
   resourceName: z.string(),
   expected: z.enum(["allow", "deny", "any"]),
