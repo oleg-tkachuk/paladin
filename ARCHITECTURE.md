@@ -34,7 +34,8 @@ flowchart TB
     subgraph planes ["paladin-core planes"]
         direction LR
         admin["<b>admin</b> · :8090"]
-        api["<b>api</b><br/>:8080 data · :8085 iam"]
+        api["<b>api</b> · :8080"]
+        iam["<b>iam</b> · :8085"]
     end
 
     s3[("<b>S3 backends</b>")]
@@ -43,7 +44,7 @@ flowchart TB
     agent --> mcp
     bff --> planes
     mcp --> planes
-    app --> api
+    app --> api & iam
     app -. "object bytes over presigned URLs" .-> s3
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
@@ -54,13 +55,14 @@ flowchart TB
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     class browser,app,agent client
     class bff ui
-    class api,admin,mcp role
+    class api,iam,admin,mcp role
     class s3 store
     style planes fill:#F8FAFC,stroke:#16A34A
 ```
 
 What each role reaches. Every role but `mcp` (in its default bridge mode)
-uses PostgreSQL; `ingest` also receives storage notifications, over a webhook,
+uses PostgreSQL; `api`, `iam` and `admin` count the rate limits in Valkey when
+`middleware.rate_limit.backend` is `valkey`; `ingest` also receives storage notifications, over a webhook,
 NATS, RabbitMQ or SQS. The S3 calls each role makes are in [Storage](#storage).
 `admin` also reads three other roles' listeners: the worker's ops listener for
 the console's `/stats` census, the dispatcher's for its queue view (see
@@ -70,6 +72,7 @@ sessions.
 ```mermaid
 flowchart LR
     api["<b>api</b>"]
+    iam["<b>iam</b>"]
     admin["<b>admin</b>"]
     worker["<b>worker</b>"]
     ingest["<b>ingest</b><br/>off by default"]
@@ -78,12 +81,14 @@ flowchart LR
 
     s3[("<b>S3 backends</b>")]
     pg[("<b>PostgreSQL</b><br/>row-level security")]
+    vk[("<b>Valkey</b><br/>rate limits · optional")]
     sinks{{"<b>Event sinks</b><br/>HTTP · NATS · Kafka<br/>RabbitMQ · SQS"}}
 
     api --> s3
     admin --> s3
     worker --> s3
     api --> pg
+    iam --> pg
     admin --> pg
     worker --> pg
     ingest --> pg
@@ -92,6 +97,7 @@ flowchart LR
     admin -. "ops: /stats census" .-> worker
     admin -. "ops: queue stats" .-> dispatcher
     admin -. "MCP sessions" .-> mcp
+    api & iam & admin -. "rate limits" .-> vk
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
@@ -99,8 +105,8 @@ flowchart LR
     classDef optional fill:#F1F5F9,stroke:#64748B,color:#334155,stroke-dasharray:5 4
     classDef store fill:#FEF3C7,stroke:#D97706,color:#78350F
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
-    class api,admin,worker,dispatcher,mcp role
-    class ingest optional
+    class api,iam,admin,worker,dispatcher,mcp role
+    class ingest,vk optional
     class pg,s3 store
     class sinks external
 ```
