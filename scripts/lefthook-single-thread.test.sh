@@ -29,8 +29,19 @@ for hook in "${HOOKS[@]}"; do
     done < <(yq ".\"$hook\".jobs[] | select(.run | test(\"(^|\\\\s)(go (test|vet|build)|golangci-lint run)\")) | .name" "$CONFIG")
 done
 
-go_test=$(yq '.pre-push.jobs[] | select(.name == "backend-test") | .run' "$CONFIG")
-[[ "$go_test" == *"-p 1 -parallel 1"* ]] || fail "backend-test runs tests in parallel: $go_test"
+# The Go tests run through go-test-changed.sh, whose default flags hold them to
+# one package and one test at a time; the job must leave that default alone.
+readonly GO_TEST_JOB=go-test-changed
+readonly GO_TEST_SCRIPT=scripts/go-test-changed.sh
+readonly SINGLE_THREAD_FLAGS="-p 1 -parallel 1"
+go_test=".pre-push.jobs[] | select(.name == \"$GO_TEST_JOB\")"
+[[ "$(yq "$go_test | .run" "$CONFIG")" == *"$GO_TEST_SCRIPT"* ]] ||
+    fail "$GO_TEST_JOB does not run $GO_TEST_SCRIPT"
+[ "$(yq "$go_test | .env.GO_TEST_FLAGS" "$CONFIG")" = "null" ] ||
+    fail "$GO_TEST_JOB overrides GO_TEST_FLAGS"
+grep -qF ": \"\${GO_TEST_FLAGS:=$SINGLE_THREAD_FLAGS" "$root/$GO_TEST_SCRIPT" ||
+    fail "$GO_TEST_SCRIPT does not default to $SINGLE_THREAD_FLAGS"
+[ "$(yq "$go_test | .env.GOMAXPROCS" "$CONFIG")" = "1" ] || fail "$GO_TEST_JOB: GOMAXPROCS is not 1"
 lint=$(yq '.pre-push.jobs[] | select(.name == "backend-golangci") | .run' "$CONFIG")
 [[ "$lint" == *"--concurrency=1"* ]] || fail "backend-golangci runs on more than one thread"
 
