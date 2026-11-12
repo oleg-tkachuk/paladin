@@ -25,8 +25,23 @@ export function parseRepo(fullName: string): Repo {
 
 // MergeState is how far GitHub says a pull request is from mergeable: BEHIND
 // is the one state updating its branch fixes; a conflict, DIRTY, needs a
-// person.
-export const MergeState = { Behind: "BEHIND", Dirty: "DIRTY", Clean: "CLEAN" } as const;
+// person; BLOCKED waits on a required check or review. CLEAN, UNSTABLE (a
+// check that is not required fails) and HAS_HOOKS can merge now.
+export const MergeState = {
+  Behind: "BEHIND",
+  Dirty: "DIRTY",
+  Blocked: "BLOCKED",
+  Clean: "CLEAN",
+  Unstable: "UNSTABLE",
+  HasHooks: "HAS_HOOKS",
+} as const;
+
+// PullRequestState is a pull request's head commit and merge state, read
+// together so a merge can be pinned to the head that was judged.
+export interface PullRequestState {
+  head: string;
+  mergeState: string;
+}
 
 // OpenPullRequest is what the merge automation reads of an open pull request.
 export interface OpenPullRequest {
@@ -59,6 +74,10 @@ export interface GitHub {
   // enableAutoMerge queues a pull request to merge, with a merge commit, once
   // its required checks pass.
   enableAutoMerge(number: number): Promise<void>;
+  pullRequestState(number: number): Promise<PullRequestState>;
+  // merge merges a pull request now, with a merge commit, if its head is
+  // still head.
+  merge(number: number, head: string): Promise<void>;
   // openPullRequestsInto is every open pull request into base.
   openPullRequestsInto(base: string): Promise<OpenPullRequest[]>;
   // updateBranch brings a pull request's branch up to date with its base.
@@ -103,8 +122,10 @@ async function existsBy(lookup: () => Promise<unknown>): Promise<boolean> {
   }
 }
 
-// MERGE_METHOD is how a queued pull request merges: a merge commit.
+// MERGE_METHOD is how a queued pull request merges: a merge commit;
+// REST_MERGE_METHOD spells the same for the REST merge.
 const MERGE_METHOD = "MERGE";
+const REST_MERGE_METHOD = "merge";
 // PAGE_SIZE is the most items the API returns in one page.
 export const PAGE_SIZE = 100;
 
@@ -112,6 +133,17 @@ const ENABLE_AUTO_MERGE = `
   mutation($id: ID!, $mergeMethod: PullRequestMergeMethod!) {
     enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: $mergeMethod }) { clientMutationId }
   }`;
+
+const PULL_REQUEST_STATE = `
+  query($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) { headRefOid mergeStateStatus }
+    }
+  }`;
+
+interface PullRequestStatePage {
+  repository: { pullRequest: { headRefOid: string; mergeStateStatus: string } };
+}
 
 // mergeStateStatus is in GraphQL alone; the REST list leaves it out.
 const OPEN_PULL_REQUESTS = `
@@ -139,6 +171,13 @@ export function gitHubOver(octokit: Octokit, repo: Repo): GitHub {
     async enableAutoMerge(number) {
       const { data } = await octokit.rest.pulls.get({ ...repo, pull_number: number });
       await octokit.graphql(ENABLE_AUTO_MERGE, { id: data.node_id, mergeMethod: MERGE_METHOD });
+    },
+    async pullRequestState(number) {
+      const page = await octokit.graphql<PullRequestStatePage>(PULL_REQUEST_STATE, { ...repo, number });
+      return { head: page.repository.pullRequest.headRefOid, mergeState: page.repository.pullRequest.mergeStateStatus };
+    },
+    async merge(number, head) {
+      await octokit.rest.pulls.merge({ ...repo, pull_number: number, sha: head, merge_method: REST_MERGE_METHOD });
     },
     async openPullRequestsInto(base) {
       const page = await octokit.graphql.paginate<OpenPullRequestsPage>(OPEN_PULL_REQUESTS, { ...repo, base });

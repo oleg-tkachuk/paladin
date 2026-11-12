@@ -48,6 +48,21 @@ test("enableAutoMerge queues the pull request's node with a merge commit", async
   assert.deepEqual(requests[1]?.body?.variables, { id: "PR_node", mergeMethod: "MERGE" });
 });
 
+test("pullRequestState reads the head and merge state together", async () => {
+  const { github, requests } = recording(() => ({ data: { repository: { pullRequest: { headRefOid: "abc123", mergeStateStatus: "CLEAN" } } } }));
+  assert.deepEqual(await github.pullRequestState(7), { head: "abc123", mergeState: "CLEAN" });
+  assert.equal(requests[0]?.path, GRAPHQL);
+  assert.deepEqual(requests[0]?.body?.variables, { owner: "o", repo: "r", number: 7 });
+});
+
+test("merge merges with a merge commit, pinned to the head", async () => {
+  const { github, requests } = recording(() => ({ merged: true }));
+  await github.merge(7, "abc123");
+  assert.equal(requests[0]?.method, "PUT");
+  assert.equal(requests[0]?.path, "/repos/o/r/pulls/7/merge");
+  assert.deepEqual(requests[0]?.body, { sha: "abc123", merge_method: "merge" });
+});
+
 test("openPullRequestsInto reads every page", async () => {
   const pages = [
     { nodes: [{ number: 1, isDraft: false, isCrossRepository: false, mergeStateStatus: "BEHIND" }], pageInfo: { hasNextPage: true, endCursor: "c1" } },
