@@ -90,7 +90,7 @@ check "no shared signing key reaches the config" "$(config defaults '.auth.signi
 # mounters <name> <secret> — the Deployments that mount that Secret.
 mounters() {
     yq -r 'select(.kind == "Deployment") | select(.spec.template.spec.volumes[]?.secret.secretName == "'"$2"'") | .metadata.name' \
-        "$scratch/$1.yaml" | sort -u | paste -sd, -
+        "$scratch/$1.yaml" | sed '/^---$/d' | sort -u | paste -sd, -
 }
 
 render session-default
@@ -125,6 +125,15 @@ check "existingSecret: only iam mounts it" "$(mounters session-existing my-sessi
 
 render session-off --set auth.sessionKey.generate=false
 check "no session key: nothing mounts one" "$(mounters session-off "$SESSION_SECRET")" ""
+
+# ─── capability signing key ──────────────────────────────────────────────────
+# Mounted into the roles that verify and issue capabilities
+# (files/role-secrets.json tokenAuthRoles) and no other: the worker purges
+# them over their stores and holds no key.
+
+render capability-key --set capabilitySigningKeySecret.name=capability-key
+check "capability key: only the token-auth planes mount it" \
+    "$(mounters capability-key capability-key)" "$RELEASE-admin,$RELEASE-api,$RELEASE-iam"
 
 # ─── RBAC per role ───────────────────────────────────────────────────────────
 # ADR-0047: each role's service account reads only the Secrets its config makes

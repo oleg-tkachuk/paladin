@@ -21,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/issuer"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/policies"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
@@ -73,7 +74,7 @@ func newActingTenantFixture(t *testing.T) actingTenantFixture {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(db.Close)
-	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop())
+	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop(), config.RoleMCPEmbedded.Builds())
 	if err != nil {
 		t.Fatalf("BuildSharedDeps: %v", err)
 	}

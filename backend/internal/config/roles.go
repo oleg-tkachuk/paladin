@@ -59,13 +59,52 @@ const (
 	secretStorageBackends = "storage.backends."
 )
 
-// sharedDepsSecrets are what every role building the shared dependencies
-// reads (app.BuildSharedDeps): its database pool and replica, every storage
-// backend's credentials (registry warm-up), the API-token pepper and the DPoP
-// nonce key.
-var sharedDepsSecrets = []string{
-	secretPostgresPassword, secretPostgresReplicaPassword, secretStorageBackends,
-	secretAPITokenHMACKey, secretDPoPNonceKey,
+// Builds is what a role's shared dependencies (app.BuildSharedDeps) build
+// beyond the database, and so which of their Secrets the role reads: a role
+// reads a Secret only for a part it builds (ADR-0047).
+type Builds struct {
+	// Storage is a client for every storage backend, from its credentials.
+	Storage bool
+	// TokenAuth is what verifies and issues API tokens and capabilities:
+	// the API-token hasher, from its pepper, and the capability verifier and
+	// issuers, with the DPoP nonces from their key. Without it a role holds
+	// the token and capability stores alone.
+	TokenAuth bool
+}
+
+// roleBuilds is what each role that builds the shared dependencies builds,
+// from the code that consumes each part. A role absent here builds none.
+var roleBuilds = map[Role]Builds{
+	RoleAPI:   {Storage: true, TokenAuth: true},
+	RoleIAM:   {TokenAuth: true},
+	RoleAdmin: {Storage: true, TokenAuth: true},
+	// Storage for the reapers and the object jobs; the token and capability
+	// purgers need the stores alone.
+	RoleWorker:     {Storage: true},
+	RoleDispatcher: {},
+	// Storage for the reconciler's probe of an object a delete event names.
+	RoleIngest: {Storage: true},
+	// The api, iam and admin planes beside the bridge.
+	RoleMCPEmbedded: {Storage: true, TokenAuth: true},
+}
+
+// Builds is what r's shared dependencies build.
+func (r Role) Builds() Builds { return roleBuilds[r] }
+
+// sharedDepsSecrets are what a role building the shared dependencies reads
+// for them: the database pool and replica always, every storage backend's
+// credentials for Storage, the API-token pepper and the DPoP nonce key for
+// TokenAuth.
+func sharedDepsSecrets(r Role) []string {
+	b := r.Builds()
+	paths := []string{secretPostgresPassword, secretPostgresReplicaPassword}
+	if b.Storage {
+		paths = append(paths, secretStorageBackends)
+	}
+	if b.TokenAuth {
+		paths = append(paths, secretAPITokenHMACKey, secretDPoPNonceKey)
+	}
+	return paths
 }
 
 // roleSecrets is the binding paths each role reads, from the code that
@@ -73,16 +112,16 @@ var sharedDepsSecrets = []string{
 var roleSecrets = map[Role][]string{
 	// The planes: shared deps, the rate limits in Valkey, the health
 	// snapshot; iam also seeds the OAuth clients (AssembleIAMMux).
-	RoleAPI:   concat(sharedDepsSecrets, secretValkeyPassword, secretHealthSnapshotToken),
-	RoleIAM:   concat(sharedDepsSecrets, secretValkeyPassword, secretHealthSnapshotToken, secretOAuthSeedClients),
-	RoleAdmin: concat(sharedDepsSecrets, secretValkeyPassword, secretHealthSnapshotToken),
+	RoleAPI:   concat(sharedDepsSecrets(RoleAPI), secretValkeyPassword, secretHealthSnapshotToken),
+	RoleIAM:   concat(sharedDepsSecrets(RoleIAM), secretValkeyPassword, secretHealthSnapshotToken, secretOAuthSeedClients),
+	RoleAdmin: concat(sharedDepsSecrets(RoleAdmin), secretValkeyPassword, secretHealthSnapshotToken),
 	// The partition pool is the migrate role's; the reaper pool its own.
-	RoleWorker: concat(sharedDepsSecrets, secretHealthSnapshotToken,
+	RoleWorker: concat(sharedDepsSecrets(RoleWorker), secretHealthSnapshotToken,
 		secretPostgresMigratePassword, secretPostgresReaperPassword),
 	// The bypass-RLS pool: reaper credentials, else migrate ones.
-	RoleDispatcher: concat(sharedDepsSecrets, secretHealthSnapshotToken,
+	RoleDispatcher: concat(sharedDepsSecrets(RoleDispatcher), secretHealthSnapshotToken,
 		secretPostgresMigratePassword, secretPostgresReaperPassword),
-	RoleIngest: concat(sharedDepsSecrets, secretHealthSnapshotToken,
+	RoleIngest: concat(sharedDepsSecrets(RoleIngest), secretHealthSnapshotToken,
 		secretPostgresMigratePassword, secretPostgresReaperPassword,
 		secretIngestWebhook, secretIngestNATSToken, secretIngestRabbitMQURL),
 	// No database: the bridge's DPoP key and its token-exchange client.
@@ -101,9 +140,15 @@ var roleSecrets = map[Role][]string{
 // bootstrap probes the backends it seeds.
 var runtimeSecretReaders = []Role{RoleAdmin, RoleBootstrap, RoleDispatcher, RoleMCPEmbedded}
 
+// The embedded bridge reads what the api, iam and admin planes and the
+// bridge each read, every path once.
 func init() {
-	roleSecrets[RoleMCPEmbedded] = concat(roleSecrets[RoleIAM],
-		append(slices.Clone(roleSecrets[RoleAdmin]), roleSecrets[RoleMCP]...)...)
+	var union []string
+	for _, r := range []Role{RoleAPI, RoleIAM, RoleAdmin, RoleMCP} {
+		union = append(union, roleSecrets[r]...)
+	}
+	slices.Sort(union)
+	roleSecrets[RoleMCPEmbedded] = slices.Compact(union)
 }
 
 // ParseRole is role when the binary knows it, else an error.

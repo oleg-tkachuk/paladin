@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
@@ -46,7 +47,7 @@ func TestBuildSharedDeps_FailedBootLeavesThePoolClosable(t *testing.T) {
 		t.Fatalf("open db: %v", err)
 	}
 
-	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop())
+	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop(), config.RoleMCPEmbedded.Builds())
 	if err == nil {
 		t.Fatalf("BuildSharedDeps accepted a %d-byte HMAC key", len(cfg.APIToken.HMACKey))
 	}

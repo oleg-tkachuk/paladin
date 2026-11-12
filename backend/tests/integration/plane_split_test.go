@@ -39,8 +39,9 @@ import (
 // splitCallTimeout bounds one RPC, a JWKS fetch included.
 const splitCallTimeout = 20 * time.Second
 
-// splitDeps builds the shared dependencies for one role's process.
-func splitDeps(t *testing.T, cfg config.Config) *app.SharedDeps {
+// splitDeps builds the shared dependencies for one role's process, with the
+// parts that role builds.
+func splitDeps(t *testing.T, cfg config.Config, role config.Role) *app.SharedDeps {
 	t.Helper()
 	ctx := context.Background()
 	db, err := postgres.New(ctx, cfg.Datastores.Postgres, zap.NewNop())
@@ -48,7 +49,7 @@ func splitDeps(t *testing.T, cfg config.Config) *app.SharedDeps {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(db.Close)
-	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop())
+	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop(), role.Builds())
 	if err != nil {
 		t.Fatalf("BuildSharedDeps: %v", err)
 	}
@@ -63,7 +64,7 @@ func iamRole(t *testing.T, h *pgharness.Harness) (config.Config, string) {
 	t.Helper()
 	cfg := wiringConfig(t, h.MigrateDSN)
 	cfg.Auth.OAuth.Enabled = true
-	mux, _, err := app.AssembleIAMMux(context.Background(), splitDeps(t, cfg), app.BuildMeta{Version: "test"})
+	mux, _, err := app.AssembleIAMMux(context.Background(), splitDeps(t, cfg, config.RoleIAM), app.BuildMeta{Version: "test"})
 	if err != nil {
 		t.Fatalf("AssembleIAMMux: %v", err)
 	}
@@ -116,7 +117,7 @@ func TestPlaneSplit_DataVerifiesByTheIAMRolesJWKS(t *testing.T) {
 	mustCreateCollection(t, h.PoolMigrate, tenant, "docs")
 
 	iamCfg, iamURL := iamRole(t, h)
-	dataMux, _, err := app.AssembleDataMux(context.Background(), splitDeps(t, dataRoleConfig(t, h, iamURL+sessionkey.WellKnownPath)))
+	dataMux, _, err := app.AssembleDataMux(context.Background(), splitDeps(t, dataRoleConfig(t, h, iamURL+sessionkey.WellKnownPath), config.RoleAPI))
 	if err != nil {
 		t.Fatalf("AssembleDataMux: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestPlaneSplit_DataVerifiesByTheIAMRolesJWKS(t *testing.T) {
 // says so at startup rather than refusing every caller.
 func TestPlaneSplit_DataRefusesToStartWithoutAKeySource(t *testing.T) {
 	h := pgharness.Setup(t)
-	_, _, err := app.AssembleDataMux(context.Background(), splitDeps(t, dataRoleConfig(t, h, "")))
+	_, _, err := app.AssembleDataMux(context.Background(), splitDeps(t, dataRoleConfig(t, h, ""), config.RoleAPI))
 	if err == nil || !strings.Contains(err.Error(), "auth.jwks_url") {
 		t.Fatalf("AssembleDataMux with no key source: %v, want an error naming auth.jwks_url", err)
 	}
@@ -156,13 +157,13 @@ func TestPlaneSplit_EachRoleMountsOnlyItsPlane(t *testing.T) {
 
 	iamCfg := wiringConfig(t, h.MigrateDSN)
 	iamCfg.Auth.OAuth.Enabled = true
-	iamMux, iamHealth, err := app.AssembleIAMMux(ctx, splitDeps(t, iamCfg), app.BuildMeta{Version: "test"})
+	iamMux, iamHealth, err := app.AssembleIAMMux(ctx, splitDeps(t, iamCfg, config.RoleIAM), app.BuildMeta{Version: "test"})
 	if err != nil {
 		t.Fatalf("AssembleIAMMux: %v", err)
 	}
 	dataCfg := dataRoleConfig(t, h, "http://127.0.0.1:1"+sessionkey.WellKnownPath)
 	dataCfg.Auth.OAuth.Enabled = true
-	dataMux, _, err := app.AssembleDataMux(ctx, splitDeps(t, dataCfg))
+	dataMux, _, err := app.AssembleDataMux(ctx, splitDeps(t, dataCfg, config.RoleAPI))
 	if err != nil {
 		t.Fatalf("AssembleDataMux: %v", err)
 	}

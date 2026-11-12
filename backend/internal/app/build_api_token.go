@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
@@ -9,12 +8,20 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
-// APITokenBundle bundles the issuer + verifier + store + rate limiter
-// for the hashed-bearer M2M auth path. Lives on SharedDeps when the
-// subsystem is enabled; nil otherwise. Callers (interceptor wiring,
-// admin handler, purger) pull the pieces they need.
+// APITokenBundle is the hashed-bearer M2M auth path: its store, which every
+// role building the shared dependencies holds, and Auth, which issues and
+// verifies tokens. Lives on SharedDeps when the subsystem is enabled; nil
+// otherwise. Callers (interceptor wiring, admin handler, purger) pull the
+// pieces they need.
 type APITokenBundle struct {
-	Store    api_token.Store
+	Store api_token.Store
+	// Auth issues and verifies tokens. Nil in a role that does neither
+	// (config.Builds.TokenAuth): such a role reads no pepper.
+	Auth *APITokenAuth
+}
+
+// APITokenAuth issues and verifies API tokens, hashing them with the pepper.
+type APITokenAuth struct {
 	Issuer   *api_token.Issuer
 	Verifier *api_token.Verifier
 }
@@ -22,10 +29,19 @@ type APITokenBundle struct {
 // BuildAPITokenBundle wires the api_token subsystem from cfg.APIToken
 // + the SharedDeps Postgres pool. Returns nil with no error when the
 // subsystem is disabled — callers treat absence as "no api_token auth
-// path active" and fall through to JWT / capability.
-func BuildAPITokenBundle(cfg config.APIToken, deps *SharedDeps) (*APITokenBundle, error) {
+// path active" and fall through to JWT / capability. With tokenAuth false
+// it builds the store alone and reads no pepper.
+func BuildAPITokenBundle(cfg config.APIToken, deps *SharedDeps, tokenAuth bool) (*APITokenBundle, error) {
 	if !cfg.Enabled {
 		return nil, nil
+	}
+	store, err := apitokenpg.New(deps.Pool)
+	if err != nil {
+		return nil, fmt.Errorf("app: api_token store: %w", err)
+	}
+	if !tokenAuth {
+		deps.Logger.Info("api_token: store only; this role issues and verifies no token")
+		return &APITokenBundle{Store: store}, nil
 	}
 
 	// The pepper is api_token.hmac_key alone (config validation requires
@@ -33,11 +49,6 @@ func BuildAPITokenBundle(cfg config.APIToken, deps *SharedDeps) (*APITokenBundle
 	hasher, err := api_token.NewHasher([]byte(cfg.HMACKey))
 	if err != nil {
 		return nil, fmt.Errorf("app: api_token hasher: %w", err)
-	}
-
-	store, err := apitokenpg.New(deps.Pool)
-	if err != nil {
-		return nil, fmt.Errorf("app: api_token store: %w", err)
 	}
 
 	issuer, err := api_token.NewIssuer(api_token.IssuerConfig{
@@ -59,12 +70,7 @@ func BuildAPITokenBundle(cfg config.APIToken, deps *SharedDeps) (*APITokenBundle
 	}
 
 	return &APITokenBundle{
-		Store:    store,
-		Issuer:   issuer,
-		Verifier: verifier,
+		Store: store,
+		Auth:  &APITokenAuth{Issuer: issuer, Verifier: verifier},
 	}, nil
 }
-
-// _ avoids importing errors only for this file when the package is
-// trimmed to no callers in some build mode.
-var _ = errors.New

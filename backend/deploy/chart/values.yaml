@@ -1694,7 +1694,8 @@ postgresCa:
 # ─── Capability signing key ────────────────────────────────────────────────
 #
 # Ed25519 private key (PKCS#8 PEM) that signs capability tokens, mounted into
-# EVERY role: the admin plane signs with it and the data plane verifies with it.
+# the roles that verify and issue them (api, iam, admin; files/role-secrets.json
+# tokenAuthRoles): the admin plane signs with it and the planes verify with it.
 #
 # Set `name` and point `config.capability.signing_key_path` at
 # `<mountPath>/<key>`. Leave `name` empty to run without a mounted key — the

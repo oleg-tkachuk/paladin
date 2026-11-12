@@ -64,7 +64,7 @@ func assembleAPIMuxes(t *testing.T, h *pgharness.Harness, mutate func(*config.Co
 	}
 	t.Cleanup(db.Close)
 
-	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop())
+	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop(), config.RoleAPI.Builds())
 	if err != nil {
 		t.Fatalf("BuildSharedDeps: %v", err)
 	}

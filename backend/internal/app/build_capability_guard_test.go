@@ -39,7 +39,7 @@ func depsForEnv(env string) *SharedDeps {
 func TestEphemeralKeyRefusedOutsideDisposableEnvs(t *testing.T) {
 	for _, env := range []string{"prod", "production", "staging", "do", ""} {
 		t.Run(env, func(t *testing.T) {
-			_, err := BuildCapabilityBundle(capCfg(), depsForEnv(env))
+			_, err := BuildCapabilityBundle(capCfg(), depsForEnv(env), true)
 			if err == nil {
 				t.Fatalf("env %q: ephemeral signing key was accepted — a restart would "+
 					"invalidate every live capability", env)
@@ -57,7 +57,7 @@ func TestEphemeralKeyRefusedOutsideDisposableEnvs(t *testing.T) {
 // deny-list would get wrong, and the reason the guard is written as an
 // allow-list.
 func TestUnknownEnvFailsClosed(t *testing.T) {
-	_, err := BuildCapabilityBundle(capCfg(), depsForEnv("some-env-invented-next-year"))
+	_, err := BuildCapabilityBundle(capCfg(), depsForEnv("some-env-invented-next-year"), true)
 	if err == nil {
 		t.Fatal("an unclassified environment must refuse to start, not default to ephemeral keys")
 	}
@@ -68,7 +68,7 @@ func TestUnknownEnvFailsClosed(t *testing.T) {
 func TestEphemeralKeyAllowedInDisposableEnvs(t *testing.T) {
 	for env := range ephemeralKeyEnvs {
 		t.Run(env, func(t *testing.T) {
-			_, err := BuildCapabilityBundle(capCfg(), depsForEnv(env))
+			_, err := BuildCapabilityBundle(capCfg(), depsForEnv(env), true)
 			// Wiring fails later on the nil Postgres pool; what matters is that
 			// it got PAST the key guard rather than being rejected by it.
 			if err != nil && strings.Contains(err.Error(), "signing_key_path") {
@@ -84,7 +84,7 @@ func TestConfiguredKeyPathPassesTheGuardInProd(t *testing.T) {
 	cfg := capCfg()
 	cfg.SigningKeyPath = "/etc/paladin/capability.pem"
 
-	_, err := BuildCapabilityBundle(cfg, depsForEnv("prod"))
+	_, err := BuildCapabilityBundle(cfg, depsForEnv("prod"), true)
 	if err != nil && strings.Contains(err.Error(), "signing_key_path") {
 		t.Fatalf("a configured key path must satisfy the guard in prod, got: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestDisabledCapabilityIsUnaffected(t *testing.T) {
 	cfg := capCfg()
 	cfg.Enabled = false
 
-	bundle, err := BuildCapabilityBundle(cfg, depsForEnv("prod"))
+	bundle, err := BuildCapabilityBundle(cfg, depsForEnv("prod"), true)
 	if err != nil {
 		t.Fatalf("disabled capability must not error: %v", err)
 	}

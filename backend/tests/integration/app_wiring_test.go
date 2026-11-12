@@ -110,7 +110,7 @@ func TestApp_AssembledMuxesEmitLifecycleEvents(t *testing.T) {
 	}
 	t.Cleanup(db.Close)
 
-	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop())
+	deps, err := app.BuildSharedDeps(ctx, cfg, db, zap.NewNop(), config.RoleMCPEmbedded.Builds())
 	if err != nil {
 		t.Fatalf("BuildSharedDeps: %v", err)
 	}

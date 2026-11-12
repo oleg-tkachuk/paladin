@@ -136,7 +136,11 @@ value in-memory, then clears the ref. The resolvable references are:
   `auth.oauth.seed_clients[].client_secret_ref` — OAuth client secrets
 
 Each role resolves only the references its own code reads
-(`internal/config/roles.go`), and the chart gives each role's service account
+(`internal/config/roles.go`). For the shared dependencies that is what the
+role builds (`config.Role.Builds`): the API-token pepper and the DPoP nonce
+key reach the roles that verify tokens (api, iam, admin), and the storage
+backends' credentials the roles that move objects (api, admin, worker,
+ingest). The chart gives each role's service account
 a Role naming exactly those Secrets (`files/role-secrets.json`, ADR-0047); a
 name a role reads and its Role lacks surfaces as a **403 at boot**, not a
 silent skip. The session signing key is not among them: it is a file mounted

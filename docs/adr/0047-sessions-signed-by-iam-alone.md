@@ -88,6 +88,12 @@ each is a hard cut there: the switch to ES256 ends every session once.
 
 ## Consequences
 
+- Step 8 reaches the shared dependencies: a role builds, and reads the
+  Secrets of, only the parts its code uses (`config.Role.Builds`). The
+  worker purges API tokens and capabilities over their stores without the
+  pepper, the DPoP nonce key or the capability signing key, which the chart
+  mounts into api, iam and admin alone; iam and the dispatcher hold no
+  storage credentials.
 - A compromised worker, dispatcher, MCP bridge or admin pod can no longer
   mint a session. Until `serve iam` exists, the `api` pods still hold the
   private key; that is the residual risk the role split closes.

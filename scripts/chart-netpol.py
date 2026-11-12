@@ -174,10 +174,19 @@ def ports_admitting(doc: dict, role: str) -> set[int]:
     return ports
 
 
-# The roles that call a storage backend: the planes and workers move bytes,
-# and ingest HEADs an object before believing a delete event about it.
-STORAGE_ROLES = ("api", "iam", "admin", "worker", "ingest")
+# The role table the chart grants Secrets from (files/role-secrets.json): a
+# role reading the storage backends' credentials calls them, and only such a
+# role may reach them.
+ROLE_TABLE = "backend/deploy/chart/files/role-secrets.json"
+STORAGE_SECRETS = "storage.backends."
 STORAGE_NS = "storage"
+
+
+def storage_roles(root: Path) -> set[str]:
+    table = json.loads((root / ROLE_TABLE).read_text())
+    return {role for role, paths in table["roles"].items() if STORAGE_SECRETS in paths}
+
+
 # The console's origin the session role is rendered with.
 SESSION_ORIGIN = "https://console.netpoltest"
 # The namespace networkPolicies.postgres names, and the roles that hold no
@@ -186,10 +195,15 @@ PG_NS = "database"
 NO_DATABASE_ROLES = ("session",)
 
 
+def egress_is_open(doc: dict) -> bool:
+    """Whether a policy lets its pods out anywhere (`- {}`), by design."""
+    return any(not rule for rule in doc["spec"].get("egress") or [])
+
+
 def egress_reaches_namespace(doc: dict, namespace: str) -> bool:
+    if egress_is_open(doc):
+        return True
     for rule in doc["spec"].get("egress") or []:
-        if not rule:  # `- {}` — open egress
-            return True
         for to in rule.get("to") or []:
             labels = (to.get("namespaceSelector") or {}).get("matchLabels") or {}
             if labels.get("kubernetes.io/metadata.name") == namespace:
@@ -528,14 +542,19 @@ def main() -> int:
     for role in sorted(covered - deployed):
         problems.append(f"a NetworkPolicy selects {role!r}, which this chart does not deploy")
 
+    storage = storage_roles(root)
     for p in policies:
         role = component(p)
         if role is None:
             continue
         if not egress_has_dns(p):
             problems.append(f"role {role!r} has no DNS egress — it cannot resolve any name")
-        if role in STORAGE_ROLES and not egress_reaches_namespace(p, STORAGE_NS):
+        reaches_storage = egress_reaches_namespace(p, STORAGE_NS)
+        if role in storage and not reaches_storage:
             problems.append(f"role {role!r} has no egress to the {STORAGE_NS!r} namespace — it cannot reach the storage backends")
+        # An open egress (the dispatcher's customer sinks) reaches it by design.
+        if role not in storage and reaches_storage and not egress_is_open(p):
+            problems.append(f"role {role!r} reads no storage credentials but may reach the {STORAGE_NS!r} namespace")
         if role in NO_DATABASE_ROLES and egress_reaches_namespace(p, PG_NS):
             problems.append(f"role {role!r} holds no database but may reach the {PG_NS!r} namespace")
 
