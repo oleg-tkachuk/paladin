@@ -38,7 +38,9 @@ type Config struct {
 	Admin      Admin      `yaml:"admin" json:"admin"`
 	Capability Capability `yaml:"capability" json:"capability"`
 	APIToken   APIToken   `yaml:"api_token" json:"api_token"`
-	Dispatcher Dispatcher `yaml:"dispatcher" json:"dispatcher"`
+	// RuntimeSecrets is where the Secrets data names live (ADR-0047).
+	RuntimeSecrets RuntimeSecrets `yaml:"runtime_secrets" json:"runtime_secrets"`
+	Dispatcher     Dispatcher     `yaml:"dispatcher" json:"dispatcher"`
 
 	PodName string `yaml:"-"`
 	Env     string `yaml:"-"`
@@ -1623,4 +1625,13 @@ type IngestSQS struct {
 	// SourceFormat tells the worker which adapter to use — almost always
 	// "s3". Empty defaults to "s3".
 	SourceFormat string `yaml:"source_format" json:"source_format"`
+}
+
+// RuntimeSecrets confines the Secrets a running process reads by a name
+// taken from data — a registered storage backend's credentials, an event
+// sink's — to one namespace (ADR-0047).
+type RuntimeSecrets struct {
+	// Namespace those Secrets live in; a ref naming another is refused. Empty
+	// keeps a ref where it names, else in the pod's namespace.
+	Namespace string `yaml:"namespace" json:"namespace"`
 }

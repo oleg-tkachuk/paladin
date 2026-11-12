@@ -220,47 +220,85 @@ digest pepper, a secret of its own rather than derived from the session key
 {{- end -}}
 
 {{/*
-chart.secretReaderNames — every Secret the in-process resolver GETs: the
-static rbac.secretReader.secretNames, plus each one this chart wires itself
-and each OAuth seed client's client_secret_ref and the MCP server's,
-so an operator who replaces the static list cannot drop a Secret the chart
-depends on. Returns a JSON list.
+chart.refName — the Secret name a SecretRef gives: a bare string is the name,
+a map its `name`; anything else none.
 */}}
-{{- define "chart.secretReaderNames" -}}
-{{- $names := .Values.rbac.secretReader.secretNames | default (list) -}}
-{{- range $backend, $sec := fromJson (include "chart.s3CredentialSecrets" .) -}}
-{{- if $sec.active -}}{{- $names = append $names $sec.name -}}{{- end -}}
+{{- define "chart.refName" -}}
+{{- if kindIs "string" . -}}{{ . }}{{- else if kindIs "map" . -}}{{ .name | default "" }}{{- end -}}
 {{- end -}}
-{{- $boot := (.Values.config.bootstrap | default dict).admin | default dict -}}
-{{- if and $boot.enabled $boot.password_secret $boot.password_secret.name -}}
-{{- $names = append $names $boot.password_secret.name -}}
-{{- end -}}
-{{- $pepper := fromJson (include "chart.apiTokenHMACKey" .) -}}
-{{- if $pepper.active -}}{{- $names = append $names $pepper.name -}}{{- end -}}
-{{- with ((.Values.config.api_token | default dict).hmac_key_secret) -}}
-{{- if .name -}}{{- $names = append $names .name -}}{{- end -}}
-{{- end -}}
-{{- $oauth := ((.Values.config.auth | default dict).oauth | default dict) -}}
-{{- range $client := $oauth.seed_clients | default (list) -}}
-{{- with $client.client_secret_ref -}}
-{{- if kindIs "string" . -}}
-{{- $names = append $names . -}}
-{{- else -}}
-{{- $names = append $names .name -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
-{{- $mcpOAuth := ((.Values.config.mcp | default dict).oauth | default dict) -}}
-{{- with ($mcpOAuth.exchange | default dict).client_secret_ref -}}
-{{- if kindIs "string" . -}}
-{{- $names = append $names . -}}
-{{- else -}}
-{{- $names = append $names .name -}}
-{{- end -}}
-{{- end -}}
+
+{{/*
+chart.secretFamilies — the Secret names each of the resolver's binding paths
+gives in this release (ADR-0047), keyed as backend/internal/config/roles.go
+names them and files/role-secrets.json lists them per role. Built from the
+same helpers the ConfigMap injects refs from, so the Role a role gets names
+exactly the Secrets its config makes it read. Returns JSON {path: [names]}.
+*/}}
+{{- define "chart.secretFamilies" -}}
+{{- $cfg := .Values.config -}}
 {{- $pg := fromJson (include "chart.postgres" .) -}}
-{{- if $pg.active -}}{{- $names = concat $names (list $pg.app.name $pg.migrate.name) -}}{{- end -}}
-{{- $names | uniq | toJson -}}
+{{- $pgCfg := dig "datastores" "postgres" dict $cfg -}}
+{{- $out := dict -}}
+{{- $app := include "chart.refName" (dig "password_secret" "" $pgCfg) -}}
+{{- $migrate := include "chart.refName" (dig "migrate_password_secret" "" $pgCfg) -}}
+{{- if $pg.active -}}{{- $app = $pg.app.name -}}{{- $migrate = $pg.migrate.name -}}{{- end -}}
+{{- $_ := set $out "postgres.password_secret" (list $app) -}}
+{{- $_ := set $out "postgres.migrate_password_secret" (list $migrate) -}}
+{{- $_ := set $out "postgres.reaper_password_secret" (list (include "chart.refName" (dig "reaper_password_secret" "" $pgCfg))) -}}
+{{- $replica := list -}}
+{{- if dig "replica" "enabled" false $pgCfg -}}{{- $replica = list (include "chart.refName" (dig "replica" "password_secret" "" $pgCfg)) -}}{{- end -}}
+{{- $_ := set $out "postgres.replica.password_secret" $replica -}}
+{{- $valkey := list -}}
+{{- if eq (dig "middleware" "rate_limit" "backend" "" $cfg) "valkey" -}}{{- $valkey = list (include "chart.refName" (dig "datastores" "valkey" "password_secret" "" $cfg)) -}}{{- end -}}
+{{- $_ := set $out "valkey.password_secret" $valkey -}}
+{{- $boot := list -}}
+{{- if dig "bootstrap" "admin" "enabled" false $cfg -}}{{- $boot = list (include "chart.refName" (dig "bootstrap" "admin" "password_secret" "" $cfg)) -}}{{- end -}}
+{{- $_ := set $out "bootstrap.admin.password_secret" $boot -}}
+{{- $pepper := fromJson (include "chart.apiTokenHMACKey" .) -}}
+{{- $pepperName := include "chart.refName" (dig "api_token" "hmac_key_secret" "" $cfg) -}}
+{{- if $pepper.active -}}{{- $pepperName = $pepper.name -}}{{- end -}}
+{{- $_ := set $out "api_token.hmac_key_secret" (list $pepperName) -}}
+{{- $_ := set $out "capability.dpop_nonce.key_secret" (list (include "chart.refName" (dig "capability" "dpop_nonce" "key_secret" "" $cfg))) -}}
+{{- $_ := set $out "mcp.dpop_key_secret" (list (include "chart.refName" (dig "mcp" "dpop_key_secret" "" $cfg))) -}}
+{{- $_ := set $out "runtime.health_snapshot_token_secret" (list (include "chart.refName" (dig "runtime" "health_snapshot_token_secret" "" $cfg))) -}}
+{{- $_ := set $out "ingest.webhook.shared_secret_ref" (list (include "chart.refName" (dig "ingest" "webhook" "shared_secret_ref" "" $cfg))) -}}
+{{- $_ := set $out "ingest.nats.token_ref" (list (include "chart.refName" (dig "ingest" "nats" "token_ref" "" $cfg))) -}}
+{{- $_ := set $out "ingest.rabbitmq.url_ref" (list (include "chart.refName" (dig "ingest" "rabbitmq" "url_ref" "" $cfg))) -}}
+{{- $_ := set $out "mcp.oauth.exchange.client_secret_ref" (list (include "chart.refName" (dig "mcp" "oauth" "exchange" "client_secret_ref" "" $cfg))) -}}
+{{- $seeds := list -}}
+{{- range $client := (dig "auth" "oauth" "seed_clients" list $cfg) -}}
+{{- $seeds = append $seeds (include "chart.refName" (dig "client_secret_ref" "" $client)) -}}
+{{- end -}}
+{{- $_ := set $out "auth.oauth.seed_clients[" $seeds -}}
+{{- $backends := list -}}
+{{- range $backend, $sec := fromJson (include "chart.s3CredentialSecrets" .) -}}
+{{- if $sec.active -}}{{- $backends = append $backends $sec.name -}}{{- end -}}
+{{- end -}}
+{{- range $name, $b := (dig "storage" "backends" dict $cfg) -}}
+{{- range $field := list "access_key_secret" "secret_key_secret" "session_token_secret" -}}
+{{- $backends = append $backends (include "chart.refName" (dig "auth" $field "" $b)) -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set $out "storage.backends." $backends -}}
+{{- $out | toJson -}}
+{{- end -}}
+
+{{/*
+chart.roleSecretNames — the Secrets role reads (ADR-0047): the names its
+families in files/role-secrets.json give, plus rbac.secretReader.secretNames,
+which every role keeps for a ref the chart cannot see. Returns a JSON list,
+empty when the role reads none. Takes (dict "ctx" $ "role" <role>).
+*/}}
+{{- define "chart.roleSecretNames" -}}
+{{- $table := .ctx.Files.Get "files/role-secrets.json" | fromJson -}}
+{{- $families := fromJson (include "chart.secretFamilies" .ctx) -}}
+{{- $names := .ctx.Values.rbac.secretReader.secretNames | default list -}}
+{{- range $path := (index $table.roles .role | default list) -}}
+{{- range $name := (index $families $path | default list) -}}
+{{- if $name -}}{{- $names = append $names $name -}}{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- $names | uniq | sortAlpha | toJson -}}
 {{- end -}}
 
 {{/*

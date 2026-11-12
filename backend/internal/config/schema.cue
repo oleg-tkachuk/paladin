@@ -723,6 +723,12 @@ capability: {
   charge_per_request_amount: number & >=0 | *0
 }
 
+// Where the Secrets data names live — a registered backend's credentials, an
+// event sink's (ADR-0047). Empty: where the ref names, else the pod's namespace.
+runtime_secrets: {
+  namespace: string | *""
+}
+
 api_token: {
   enabled:          bool | *false
   max_ttl:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"8760h"   // 1 year

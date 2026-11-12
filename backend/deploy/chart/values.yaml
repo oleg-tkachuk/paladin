@@ -1172,6 +1172,14 @@ config:
   # Hatchet pattern. Distinct from capability (agent JWT, short-lived)
   # and auth (user OIDC). Off by default — enable per-deploy once an
   # issuance path (CLI or admin UI) is rolled out.
+  # Where the Secrets data names live — a registered backend's credentials, an
+  # event sink's (ADR-0047). The chart lets the admin plane, the dispatcher and
+  # bootstrap read any Secret in this namespace, and the server refuses a ref
+  # naming another. Create the namespace yourself. Empty: no runtime Secret is
+  # readable, and the server keeps a ref where it names.
+  runtime_secrets:
+    namespace: ""
+
   api_token:
     enabled: false
     max_ttl: 8760h                      # cap on Issue lifetime; 1y default
@@ -1589,32 +1597,21 @@ capabilitySigningKeySecret:
 
 # ─── RBAC for K8sSecretResolver ────────────────────────────────────────────
 #
-# The resolver issues exactly one verb (GET) per referenced secret name.
-# `secretNames` lists every secret referenced from `config.*.password_secret`
-# / `config.*.access_key_secret` / `config.*.secret_key_secret`. New secret
-# references must extend this list or the resolver 403s at startup.
-#
-# The single ClusterRole is bound to every role's ServiceAccount — keeps
-# RBAC minimal. To split (e.g. mcp gets a wider key set), copy the
-# ClusterRole and bind only mcp's SA.
+# One Role per role (ADR-0047): its service account may GET exactly the
+# Secrets its config makes it read — the binding paths files/role-secrets.json
+# lists for it, generated from backend/internal/config/roles.go, resolved to
+# names from the rendered config. A role reading none gets no Role.
 rbac:
   secretReader:
     enabled: true
-    # A Role in the release namespace. Set true when a referenced Secret lives
+    # Roles in the release namespace. Set true when a referenced Secret lives
     # in another namespace (a Postgres operator's, say): a namespaced Role
     # cannot grant that.
     clusterWide: false
-    # Secrets the chart does not wire itself. The ones it does — the Postgres
-    # passwords, the S3 credentials, the bootstrap admin, the generated
-    # signing key and each OAuth seed client's client_secret_ref — are
-    # appended at render time (chart.secretReaderNames).
-    #
-    # Add the names behind any other SecretRef: config.auth.signing_key_secret,
-    # config.ingest.webhook.shared_secret_ref, the reaper password, and the
-    # "k8s:<name>/<key>" refs inside event-sink configs (HTTP
-    # signing_secret_ref, Kafka sasl_password / mTLS PEM, NATS credentials_ref,
-    # the AMQP URL). The resolver GETs through this allowlist, so a missing
-    # name surfaces as a 403 at boot or at delivery time.
+    # Names granted to EVERY role on top of its own, for a ref the chart cannot
+    # see. Every config ref is derived already, so this should stay empty; an
+    # entry here reaches roles that never read it. The Secrets event sinks and
+    # registered backends name live in config.runtime_secrets.namespace instead.
     secretNames: []
 
 # ─── NetworkPolicies (per role) ───────────────────────────────────────────────

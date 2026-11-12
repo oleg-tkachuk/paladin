@@ -130,6 +130,43 @@ check "existingSecret: only api mounts it" "$(mounters session-existing my-sessi
 render session-off --set auth.sessionKey.generate=false
 check "no session key: nothing mounts one" "$(mounters session-off "$SESSION_SECRET")" ""
 
+# ─── RBAC per role ───────────────────────────────────────────────────────────
+# ADR-0047: each role's service account reads only the Secrets its config makes
+# it read (files/role-secrets.json), and a role reading none gets no Role at
+# all — an empty resourceNames would grant every Secret.
+
+# role_names <name> <role> — the Secrets that role's Role names, comma-joined.
+role_names() {
+    yq -r 'select((.kind == "Role" or .kind == "ClusterRole") and .metadata.name == "'"$RELEASE-secret-reader-$2"'") | .rules[0].resourceNames | join(",")' \
+        "$scratch/$1.yaml"
+}
+
+render rbac-roles --set config.datastores.valkey.password_secret.name=valkey-pw \
+    --set config.middleware.rate_limit.backend=valkey --set config.api_token.enabled=true \
+    --set config.mcp.dpop_key_secret.name=bridge-dpop --set rbac.secretReader.secretNames=null
+check "the bridge reads its DPoP key alone" "$(role_names rbac-roles mcp)" "bridge-dpop"
+check "migrate reads the two Postgres passwords" "$(role_names rbac-roles migrate)" "paladin-postgres-app,paladin-postgres-migrate"
+cases=$((cases + 1))
+role_names rbac-roles worker | tr ',' '\n' | grep -qx valkey-pw && bad "worker reads Valkey's password, which it never opens"
+cases=$((cases + 1))
+role_names rbac-roles api | tr ',' '\n' | grep -qx valkey-pw || bad "api cannot read Valkey's password, which its rate limits need"
+cases=$((cases + 1))
+[[ -z "$(yq -r 'select(.kind == "Role" or .kind == "ClusterRole") | select((.rules[0].resourceNames // []) | length == 0) | select(.metadata.name != "'"$RELEASE-runtime-secret-reader"'") | .metadata.name' "$scratch/rbac-roles.yaml")" ]] ||
+    bad "a Role names no Secret, which grants every Secret"
+cases=$((cases + 1))
+rbac_names rbac-roles | grep -qx "$SESSION_SECRET" && bad "a Role names the session key"
+
+render runtime-secrets --set config.runtime_secrets.namespace=paladin-credentials
+check "runtime secrets: one Role, in their namespace" \
+    "$(yq -r 'select(.kind == "Role" and .metadata.name == "'"$RELEASE-runtime-secret-reader"'") | .metadata.namespace' "$scratch/runtime-secrets.yaml" | grep -v -e '^---$' -e '^$')" \
+    "paladin-credentials"
+check "runtime secrets: read by admin, bootstrap and the dispatcher" \
+    "$(yq -r 'select(.kind == "RoleBinding" and .metadata.name == "'"$RELEASE-runtime-secret-reader"'") | [.subjects[].name] | join(",")' "$scratch/runtime-secrets.yaml" | grep -v -e '^---$' -e '^$')" \
+    "$RELEASE-admin,$RELEASE-bootstrap,$RELEASE-dispatcher"
+cases=$((cases + 1))
+[[ -z "$(yq -r 'select(.metadata.name == "'"$RELEASE-runtime-secret-reader"'") | .metadata.name' "$scratch/defaults.yaml")" ]] ||
+    bad "defaults: a runtime-secret Role with no namespace to confine it"
+
 # ─── API-token digest pepper ─────────────────────────────────────────────────
 # A secret of its own, never the session key (ADR-0047): generated when API
 # tokens are on and nothing names one, absent while they are off, and left
@@ -203,8 +240,8 @@ for secret in paladin-postgres-app paladin-postgres-migrate; do
     cases=$((cases + 1))
     rbac_names defaults | grep -x "$secret" >/dev/null || bad "postgres: RBAC cannot read $secret"
 done
-check "postgres: a namespaced Role by default" \
-    "$(yq -r 'select(.kind == "Role" or .kind == "ClusterRole") | .kind' "$scratch/defaults.yaml")" "Role"
+check "postgres: namespaced Roles by default" \
+    "$(yq -r 'select(.kind == "Role" or .kind == "ClusterRole") | .kind' "$scratch/defaults.yaml" | grep -v '^---$' | sort -u)" "Role"
 
 render other-ns --set postgres.app.namespace=database
 check "postgres: namespace override lands on the ref" \

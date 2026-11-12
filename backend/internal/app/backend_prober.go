@@ -38,7 +38,7 @@ type s3BackendProber struct {
 // plus a runtime K8s secret resolver for dynamic ones. Returns an error only if
 // a configured backend is structurally invalid (bad endpoint / auth mode);
 // connectivity is checked per probe.
-func BuildBackendProber(ctx context.Context, storage config.Storage, l *zap.Logger) (*s3BackendProber, error) {
+func BuildBackendProber(ctx context.Context, storage config.Storage, runtimeNamespace string, l *zap.Logger) (*s3BackendProber, error) {
 	clients := make(map[string]*s3adapter.Client, len(storage.Backends))
 	for id, b := range storage.Backends {
 		c, err := s3adapter.New(ctx, b)
@@ -50,7 +50,7 @@ func BuildBackendProber(ctx context.Context, storage config.Storage, l *zap.Logg
 	}
 	return &s3BackendProber{
 		clients:  clients,
-		resolver: config.NewK8sSecretResolver(l.Named("backend-secret-resolver")),
+		resolver: config.NewRuntimeSecretResolver(l.Named("backend-secret-resolver"), runtimeNamespace),
 	}, nil
 }
 

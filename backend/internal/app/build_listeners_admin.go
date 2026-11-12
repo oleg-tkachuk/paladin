@@ -53,7 +53,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	policyH := wire.ProvidePolicyHandler(repos, polEngine, deps.PolStore)
 	backendH := wire.ProvideBackendV2Handler(repos, polEngine, cfg)
 	// TestBackend connectivity probe over the runtime-configured S3 clients.
-	backendProber, err := BuildBackendProber(ctx, cfg.Storage, l)
+	backendProber, err := BuildBackendProber(ctx, cfg.Storage, cfg.RuntimeSecrets.Namespace, l)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build backend prober: %w", err)
 	}
@@ -82,7 +82,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		RabbitMQ:    worker.NewRabbitMQConnPool(l.Named("rabbitmq-pool")),
 		Kafka:       worker.NewKafkaWriterPool(l.Named("kafka-pool")),
 		Sinks:       cfg.Dispatcher.Sinks,
-		Secrets:     NewSinkSecretResolver(l.Named("sink-secrets")),
+		Secrets:     NewSinkSecretResolver(l.Named("sink-secrets"), cfg.RuntimeSecrets.Namespace),
 		Logger:      l.Named("event-dispatcher"),
 		MaxAttempts: 3,
 	}
