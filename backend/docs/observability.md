@@ -130,7 +130,7 @@ Every role serves, on its own listener:
 | `/livez` | the process is alive |
 | `/readyz` | ready checks pass (database ping, S3 reachability, where the role uses them); 503 while shutting down |
 | `/startupz` | startup checks pass |
-| `/system/health.json` | a snapshot of every check, gated by `runtime.health_snapshot_token`; the console's health page reads it |
+| `/system/health.json` | a snapshot of every check, gated by `runtime.health_snapshot_token`; the admin role reads it for the console's health page (`GetPlatformHealth`) |
 
 Probe paths per role are in `deployments.<role>` in the chart's `values.yaml`.
 `runtime.log_probes: false` keeps probe hits out of the logs.

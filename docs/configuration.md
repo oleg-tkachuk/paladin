@@ -154,8 +154,9 @@ Nothing is specific to one ingress; any proxy that appends to the header works.
 
 `trusted_proxies: []` ignores the header, and the peer is the client. The chart
 defaults to the private ranges, which trusts every in-cluster hop — the
-ingress controller and the console's BFF, which forwards the header unchanged
-on every call it makes to a plane.
+ingress controller and the console's session role, which forwards the header
+unchanged on every call it makes to a plane, or sets it to its peer's address
+when the call carries none.
 Narrow it to the ingress and pod networks where clients can sit inside the
 private ranges, or such a client can name its own address.
 
@@ -230,19 +231,17 @@ the plane does. Leaving `public_endpoint` empty reuses `endpoint`.
 
 ## Frontend configuration
 
-The console's BFF takes its upstreams from environment variables the chart
-sets: `PALADIN_DATA_URL`, `PALADIN_IAM_URL` and `PALADIN_ADMIN_URL` for the
-three planes; `PALADIN_WORKER_URL`, `PALADIN_DISPATCHER_URL`,
-`PALADIN_INGEST_URL`, `PALADIN_MCP_URL` and `PALADIN_HEALTH_ROLES` for the
-health aggregator; and the health snapshot token (the backend's
-`runtime.health_snapshot_token`). `PALADIN_BFF_MAX_CONNECTIONS` caps the
-BFF's upstream connections (default 16, `frontend/src/lib/server/upstream.ts`);
-the chart does not set it, so it comes through `extraEnv`.
+The console's server calls one upstream: `PALADIN_IAM_URL`, where the OAuth
+consent form is relayed (`app/oauth/authorize`). The browser's calls go to the
+session role, configured in the backend's `session` block, not to the console.
+`PALADIN_BFF_MAX_CONNECTIONS` caps that relay's connections (default 16,
+`frontend/src/lib/server/upstream.ts`); the chart does not set it, so it comes
+through `extraEnv`. `PALADIN_STORAGE_ORIGINS` (the chart's `storageOrigins`)
+feeds the Content-Security-Policy, and the banner's variables are below.
 
-The chart mounts the health snapshot token from
-`healthSnapshotTokenSecret` as a file and names it in
-`PALADIN_HEALTH_SNAPSHOT_TOKEN_FILE`, so it is not in the pod's environment;
-`PALADIN_HEALTH_SNAPSHOT_TOKEN` carries it inline for local development.
+The health snapshot token gates each role's `/system/health.json`; the admin
+role reads those snapshots with it for `SystemService.GetPlatformHealth`, the
+console's health page.
 
 In production both charts read the token from one Secret: the backend through
 `runtime.health_snapshot_token_secret`, resolved at boot like every other
@@ -271,10 +270,11 @@ banner:
   url: https://status.example.com
 ```
 
-The BFF reads the variables on every `/api/shell` poll
-(`frontend/src/lib/banner.ts`), so a new banner is a rollout, not a rebuild,
-and it stays up while the planes it announces are down. It shows once the
-reader is signed in. A banner that is not permanent is dismissed per user:
+The console's server reads the variables on every `/api/banner` request, which
+the console makes on each poll of its chrome (`frontend/src/lib/banner.ts`),
+so a new banner is a rollout, not a rebuild, and it stays up while the planes
+it announces are down. It shows once the reader is signed in. A banner that
+is not permanent is dismissed per user:
 the dismissal is kept in their settings (`console.dismissedNotices`) under a
 hash of the banner's text, link and severity, so it follows them to another
 browser and shows again when any of those changes. An unknown severity reads

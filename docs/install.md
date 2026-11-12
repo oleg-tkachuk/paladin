@@ -4,8 +4,8 @@ Two Helm charts, published to GHCR with every release:
 
 | Chart | What it runs |
 | --- | --- |
-| `oci://ghcr.io/oleg-tkachuk/charts/paladin-core` | the backend: api, admin, worker, mcp and dispatcher Deployments, an ingest Deployment when `deployments.ingest.enabled` is set, plus the migrate and bootstrap Jobs |
-| `oci://ghcr.io/oleg-tkachuk/charts/paladin-console` | the web console and its BFF |
+| `oci://ghcr.io/oleg-tkachuk/charts/paladin-core` | the backend: api, iam, session, admin, worker, mcp and dispatcher Deployments, an ingest Deployment when `deployments.ingest.enabled` is set, plus the migrate and bootstrap Jobs |
+| `oci://ghcr.io/oleg-tkachuk/charts/paladin-console` | the web console, and the ingress that routes its `/session/` paths to the session role |
 
 The charts do not run PostgreSQL or the object store. Bring both.
 
@@ -131,9 +131,10 @@ helm install paladin-console oci://ghcr.io/oleg-tkachuk/charts/paladin-console \
   --version <version> -n paladin -f paladin-console.yaml
 ```
 
-The console requests `100m` CPU with a `2000m` limit — every browser RPC passes
-through its BFF, and a lower ceiling throttles it under load — and its probes
-allow 3s (readiness) and 5s (liveness) per answer.
+The console requests `100m` CPU with a `2000m` limit — it renders every page,
+and a lower ceiling throttles it under load — and its probes allow 3s
+(readiness) and 5s (liveness) per answer. The browser's RPCs go to the session
+role instead.
 
 The browser uploads to and previews from the stores directly, so the console's
 Content-Security-Policy has to allow each backend's `public_endpoint`. Name
@@ -149,7 +150,8 @@ storageOrigins:
 The migrate and bootstrap Jobs run before any Deployment starts. The console
 finds the backend from its release name and namespace; if you named the backend
 release something other than `paladin-core`, set `backend.release`, and
-`backend.namespace` if it lives elsewhere.
+`backend.namespace` if it lives elsewhere, and name its session Service in
+`session.service.name` (default `paladin-core-session`).
 
 The admin password:
 
@@ -157,11 +159,10 @@ The admin password:
 kubectl -n paladin get secret paladin-bootstrap-admin -o jsonpath='{.data.password}' | base64 -d
 ```
 
-Sign in as `admin`:
-
-```bash
-kubectl -n paladin port-forward svc/paladin-console 3000:3000
-```
+Sign in as `admin` through the console's host ([Ingress](#ingress)). The
+browser calls `/session/` on that host, which the console chart's ingress
+routes to the session role, so a port-forward to the console alone serves the
+pages but cannot sign in.
 
 ## Ingress
 

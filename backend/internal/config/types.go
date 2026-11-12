@@ -140,9 +140,9 @@ type Runtime struct {
 	LogProbes       bool          `yaml:"log_probes" json:"log_probes"`
 	// HealthSnapshotToken gates the `/system/health.json` snapshot endpoint
 	// (component tree + subsystem + Postgres reachability). Empty (default)
-	// leaves it open — fine for dev. In prod, set a shared secret here and
-	// on the frontend BFF aggregator (PALADIN_HEALTH_SNAPSHOT_TOKEN) so the
-	// detail is only reachable with the token. The kubelet probe endpoints
+	// leaves it open — fine for dev. In prod, set a shared secret here: the
+	// admin role reads every role's snapshot with it (GetPlatformHealth), so
+	// the detail is only reachable with the token. The kubelet probe endpoints
 	// (/livez /readyz /startupz) are NEVER gated.
 	HealthSnapshotToken string `yaml:"health_snapshot_token" json:"health_snapshot_token"`
 	// HealthSnapshotTokenSecret resolves HealthSnapshotToken from a Secret at
