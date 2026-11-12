@@ -89,6 +89,126 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — platform health is read by the admin role
+
+- The console's health page calls the admin plane's
+  `SystemService.GetPlatformHealth`. The admin role reads every role's
+  `/system/health.json` with `runtime.health_snapshot_token`, which it already
+  holds, and lists a role it cannot read as unhealthy with the reason.
+- New config: `admin.health.roles` (name and URL per role), `admin.health.timeout`
+  (default `5s`) and `admin.health.ca_path`. The chart fills the roles from the
+  enabled deployments, at `https` with the internal CA when `internalTLS` is on;
+  set them yourself only outside the chart.
+- The chart's NetworkPolicies let the admin role reach every role's health
+  listener, its own included.
+- The console's `/api/health/all` route is gone, and the console no longer reads
+  the health token. Its chart value `healthSnapshotTokenSecret` is still
+  accepted and still mounted, unused; it is removed in a later release.
+
+## Unreleased — the IAM plane runs as its own role
+
+- `paladin serve iam` serves the IAM listener (`:8085`): login and the token
+  RPCs, users, the OAuth authorization server and the session JWKS. It is the
+  one role that loads `auth.session_key_path` (ADR-0047). `serve api` now
+  serves the data plane alone and verifies sessions by `auth.jwks_url`, so it
+  needs that URL and no longer opens `:8085`.
+- The chart adds `deployments.iam` with its own Service, NetworkPolicy and
+  Role; `auth.sessionKey.roles` defaults to `[iam]`, and `config.auth.jwks_url`
+  and `config.mcp.upstreams.iam_url` point at `<release>-iam:8085`. The
+  IngressRoute and Ingress send the IAM procedures, `/oauth/`, the AS metadata
+  and `/.well-known/jwks.json` to it. Anything dialling `<release>-api:8085`
+  must dial `<release>-iam:8085` instead; the console chart does so itself.
+- With `internalTLS` on, the certificate's SANs must also name
+  `<release>-iam`, or every role's JWKS fetch fails its TLS check.
+- Overrides set under `deployments.api` for probes, resources or replicas are
+  not inherited: set them under `deployments.iam` as well.
+- The OAuth AS metadata's `jwks_uri` is derived from its issuer;
+  `mcp.oauth.authorization_server.jwks_uri` is removed from the config, and a
+  config still setting it is refused at load.
+- `auth.signingKey`, accepted unused since sessions became ES256, is removed
+  from the chart, and an overlay still setting it fails schema validation.
+- Compose runs a `paladin-iam` container; the console's health page lists
+  `iam` beside `api` (add `iam` to `backend.healthRoles` if you set it).
+
+## Unreleased — each role's service account reads only its own Secrets
+
+- The chart renders one Role per role, `<release>-secret-reader-<role>`,
+  naming the Secrets that role's config makes it read (ADR-0047), in place of
+  the shared `<release>-secret-reader`. A role that reads none gets no Role.
+- `rbac.secretReader.secretNames` is now granted to every role on top of its
+  own; every config ref is derived, so drop entries that only repeated one.
+- Secrets named by data — a registered storage backend's
+  `credentials_secret_ref`, an event sink's `k8s:` refs — must live in
+  `config.runtime_secrets.namespace`, which you create; the admin plane, the
+  dispatcher and bootstrap may read any Secret there, and a ref naming another
+  namespace is refused. Left empty, no such Secret is readable.
+- The shared `<release>-secret-reader` Role and RoleBinding are Helm hooks,
+  which neither Helm nor Argo CD removes when they leave the chart: delete
+  both by hand, or every role keeps reading every Secret through them. Under
+  Argo CD the per-role Roles, hooks too, change only on a sync operation, not
+  on a refresh — run one after changing what a role reads.
+
+## Unreleased — each role reads only the Secrets it consumes
+
+- In a cluster, a process now resolves only the `*_secret` references its own
+  role uses: `serve mcp` (the bridge) reads its DPoP key and token-exchange
+  client and nothing else, `migrate` the two Postgres passwords it opens,
+  and so on (`backend/internal/config/roles.go`). A reference another role
+  uses keeps no value in this one, and a boot line names the ones left.
+- Nothing changes in what a deployment must provide, nor in RBAC: the chart
+  still lets every role read every Secret it names, until the release that
+  narrows it per role.
+
+## Unreleased — sessions are signed ES256 by a key only the minting role holds
+
+- Access and refresh tokens, and the OAuth AS's, are signed ES256 by the key
+  at `auth.session_key_path` (ECDSA P-256, PEM PKCS#8 or SEC1) and carry its
+  RFC 7638 thumbprint as `kid` (ADR-0047). HS256 is refused everywhere, so
+  every session issued before the upgrade ends once and users sign in again.
+- `auth.signing_key` and `auth.signing_key_secret` are removed; a config that
+  sets either is refused at load. The chart no longer generates
+  `<fullname>-auth-signing-key` and ignores `auth.signingKey`, which goes in a
+  later release.
+- `serve api` serves the session JWKS at `/.well-known/jwks.json` on the IAM
+  listener. Every other role verifies by it: set `auth.jwks_url` to that
+  endpoint, and `auth.jwks_ca_path` when it is served under a private CA. The
+  chart sets both, and `session_key_path` to the key `auth.sessionKey` mounts.
+- To rotate, put the new key at `auth.session_key_path` and the old public key
+  in `auth.previous_session_public_key_paths` until the refresh-token
+  lifetime has passed.
+- `task backend:auth:mint-token` signs a dev session with
+  `JWT_ALG=ES256 JWT_SECRET="$(cat <key.pem>)" STEP_FLAGS="--kid <kid>"`,
+  the kid from the JWKS.
+
+## Unreleased — the chart mounts a session signing key into the minting role
+
+- The chart now provides the ECDSA P-256 key sessions will be signed with
+  (ADR-0047) and mounts it as a file into `auth.sessionKey.roles` (`api`)
+  only, at `auth.sessionKey.mountPath`. No Role grants reading it.
+- Under ArgoCD or any client-side render, provide the Secret yourself and set
+  `auth.sessionKey.existingSecret`: the chart's generated key would change on
+  every sync. The key may be PEM PKCS#8 (`openssl genpkey -algorithm EC
+  -pkeyopt ec_paramgen_curve:P-256`) or SEC1.
+- This release mounts the key and nothing reads it yet; the release that
+  switches sessions to ES256 reads it from there.
+
+## Unreleased — the API-token pepper is a secret of its own
+
+- With `api_token.enabled`, either `api_token.hmac_key` or
+  `api_token.hmac_key_secret` is now required, and the config is refused at
+  load without one. The pepper is no longer derived from `auth.signing_key`
+  (ADR-0047).
+- To keep the API tokens already issued, set the pepper to the value the
+  server derived: HMAC-SHA256 keyed by `auth.signing_key`, over the bytes
+  `paladin-api-token-hmac-v1`, stored raw. Any other value makes every issued
+  API token stop verifying.
+- The chart generates `<release>-api-token-hmac` when API tokens are on and
+  the config names no pepper, as it does the signing key; under ArgoCD set
+  `apiToken.hmacKey.existingSecret` or `config.api_token.hmac_key_secret`.
+- Only the roles that mint or verify sessions need `auth.signing_key` now: a
+  role started without it fails when it builds a session verifier, not in
+  every role at startup.
+
 ## sdk/python/v0.145.6, sdk/go/v0.145.6 — the Python SDK's fake holds a lease against the chain's ceilings
 
 - Under `strict_auth=True`, the requests a lease holds are reserved against
