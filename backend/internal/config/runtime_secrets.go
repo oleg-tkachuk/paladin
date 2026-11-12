@@ -34,8 +34,10 @@ func (r *RuntimeSecretResolver) ResolveSecret(ctx context.Context, ref *SecretRe
 			resolved.Namespace = r.namespace
 		case r.namespace:
 		default:
+			// The ref's own namespace and name stay out of the line: a ref is
+			// read from a credential field, and its caller logs the error
+			// below, which names them.
 			r.k8s.log.Warn("refused a runtime secret outside the runtime namespace",
-				zap.String("namespace", resolved.Namespace), zap.String("secret", resolved.Name),
 				zap.String("runtime_namespace", r.namespace))
 			return "", fmt.Errorf("secret %s/%s: runtime secrets are read from namespace %q only (runtime_secrets.namespace)",
 				resolved.Namespace, resolved.Name, r.namespace)
