@@ -768,7 +768,9 @@ jobs:
   bootstrap:
     enabled: true
     backoffLimit: 1
-    activeDeadlineSeconds: 120
+    # Both commands wait up to 2 minutes for the database before they start
+    # (postgres.OneShotWait); a deadline must leave the work room after that.
+    activeDeadlineSeconds: 180
     resources:
       requests:
         cpu: 100m
