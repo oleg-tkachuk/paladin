@@ -1,7 +1,7 @@
 "use client";
 
 import { IconChip, IconTone } from "@/components/ui/IconChip";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -20,6 +20,8 @@ import { LiveToggle } from "@/components/ui/LiveToggle";
 import { liveState } from "@/lib/live";
 
 import { cn } from "@/lib/utils";
+import { FOCUS_RING, STICKY_BELOW_TOPBAR_FROM_LG } from "@/lib/ui/states";
+import { textParam, useUrlState } from "@/hooks/useUrlState";
 import { STATUS_TONE, StatusTone } from "@/lib/ui/status";
 import { StatusDot, StatusLabel } from "@/components/ui/StatusIcon";
 import { StatusBar, type StatusSegment } from "@/components/ui/StatusBar";
@@ -29,6 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { FactTable } from "@/components/ui/FactTable";
 import { formatTime } from "@/lib/format/locale";
 import {
   countByStatus,
@@ -40,6 +43,9 @@ import {
   type Control,
   type Detail,
   detailLines,
+  detailMatrix,
+  roleMatrix,
+  selectedCard,
   type RoleStatus,
   type Snapshot,
 } from "@/lib/health";
@@ -61,6 +67,7 @@ const ROLE_ORDER = [
   "dispatcher",
   "ingest",
   "mcp",
+  "session",
 ] as const;
 
 // ─── Status meta ────────────────────────────────────────────────────────────
@@ -266,17 +273,24 @@ function ComponentRow({ c }: { c: Component }) {
   );
 }
 
-// DetailList shows a component's details on their own line, apart from the
+// DetailList shows a component's details on their own lines, apart from the
 // message: they are not an error, and folding them into the preview would
-// offer to expand them. Details about several roles — each role's pool — are
-// a table, a role to a column, so the same fact lines up across roles.
+// offer to expand them. Groups that report the same facts — the worker's
+// jobs — and details about several roles — each role's pool — are a table, so
+// each fact lines up down a column; other details are a line per group.
 function DetailList({ details }: { details: Detail[] }) {
-  if (details.some((d) => d.role)) return <DetailTable details={details} />;
+  if (details.some((d) => d.role)) {
+    return (
+      <FactTable matrix={roleMatrix(details)} columnsMono className="mt-2" />
+    );
+  }
+  const matrix = detailMatrix(details);
+  if (matrix) return <FactTable matrix={matrix} className="mt-2" />;
   return (
-    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       {detailLines(details).map((line) => (
         <div key={line.label} className="contents">
-          <dt className="text-muted-foreground first-letter:uppercase">
+          <dt className="whitespace-nowrap text-muted-foreground first-letter:uppercase">
             {line.label}
           </dt>
           <dd className="flex flex-wrap gap-x-1.5">
@@ -300,58 +314,6 @@ function DetailList({ details }: { details: Detail[] }) {
   );
 }
 
-function DetailTable({ details }: { details: Detail[] }) {
-  const roles = unique(details.map((d) => d.role ?? ""));
-  const names = unique(details.map((d) => d.name));
-  const value = (name: string, role: string) =>
-    details.find((d) => d.name === name && (d.role ?? "") === role)?.value ??
-    "—";
-  return (
-    <div className="mt-2 overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-muted-foreground">
-            <th className="pb-1 text-left font-normal" />
-            {roles.map((r) => (
-              <th
-                key={r}
-                scope="col"
-                className="pb-1 pl-3 text-right font-mono font-normal"
-              >
-                {r}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {names.map((n) => (
-            <tr key={n} className="border-t border-border/40">
-              <th
-                scope="row"
-                className="py-1 text-left font-normal text-muted-foreground"
-              >
-                {n}
-              </th>
-              {roles.map((r) => (
-                <td
-                  key={r}
-                  className="py-1 pl-3 text-right font-mono tabular-nums"
-                >
-                  {value(n, r)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function unique(xs: string[]): string[] {
-  return Array.from(new Set(xs));
-}
-
 // useCutOff is whether the one-line preview hides part of message: it runs
 // past the line, or has more than one. Re-measured as the card resizes.
 function useCutOff(
@@ -373,15 +335,20 @@ function useCutOff(
   return cutOff;
 }
 
-// The role cards' grid: as many columns as fit cards no narrower than their
-// widest row, so no component name is cut off; one column when even one card
-// does not fit. 23rem holds the widest row there is, `iam_listener` with its
-// `required` badge, `Unhealthy` and a four-digit latency (321px), plus the
-// card's padding. min(100%, …) keeps a phone-width page to one card that fits.
-const ROLE_GRID =
-  "grid gap-3 grid-cols-[repeat(auto-fit,minmax(min(100%,23rem),1fr))]";
+// The page below the summary: the roles' rail beside the chosen role's
+// panel, which takes the rest of the width, so a role's rows and its details
+// read across the page instead of down a narrow card. Below lg the rail is a
+// row of its own above the panel, which keeps the page's whole width for the
+// widest details (the worker's jobs). 15rem holds the widest rail entry, a
+// role name with its dot and count. minmax(0, …) lets a column shrink below
+// its content, so the rail's row scrolls rather than widening the page.
+const ROLES_LAYOUT =
+  "grid gap-3 grid-cols-[minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start";
 
-// ─── Role card — one per backend role ───────────────────────────────────────
+/** Which role's panel is open, in the address so it can be shared. */
+const ROLE_PARAM = textParam("role");
+
+// ─── Role rail and panel ────────────────────────────────────────────────────
 
 // tally counts the healthy components among those probed: a disabled one is
 // neither, so it is left out of both.
@@ -391,6 +358,63 @@ function tally(components: Component[]): { ok: number; total: number } {
     ok: probed.filter((c) => c.status === "healthy").length,
     total: probed.length,
   };
+}
+
+/**
+ * Every role at a glance — its state and how many of its checks pass — and
+ * the way to open one. A list down the side on a wide page, a row that
+ * scrolls across below lg.
+ */
+function RoleRail({
+  cards,
+  selected,
+  onSelect,
+}: {
+  cards: Snapshot[];
+  selected: string;
+  onSelect: (role: string) => void;
+}) {
+  // Below lg the rail scrolls across: bring the open role's entry into view,
+  // as one the address opens may start past the edge.
+  const current = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    current.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [selected]);
+  return (
+    <nav aria-label="Roles" className={STICKY_BELOW_TOPBAR_FROM_LG}>
+      <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+        {cards.map((s) => {
+          const m = META[s.status];
+          const { ok, total } = tally(s.components);
+          const isCurrent = s.role === selected;
+          return (
+            <li key={s.role} className="shrink-0">
+              <button
+                ref={isCurrent ? current : undefined}
+                type="button"
+                onClick={() => onSelect(s.role)}
+                aria-current={isCurrent ? "page" : undefined}
+                aria-label={`${s.role}: ${m.label}, ${ok} of ${total} checks healthy`}
+                className={cn(
+                  "flex w-full items-center gap-2 whitespace-nowrap rounded-md border px-3 py-2 text-left",
+                  FOCUS_RING,
+                  isCurrent
+                    ? "border-border bg-muted"
+                    : "border-transparent hover:bg-muted/50",
+                )}
+              >
+                <StatusDot tone={m.status} />
+                <span className="font-mono text-sm">{s.role}</span>
+                <span className="ml-auto pl-3 font-mono text-xs tabular-nums text-muted-foreground">
+                  {ok}/{total}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
 }
 
 function RoleCard({ snap }: { snap: Snapshot }) {
@@ -462,7 +486,13 @@ function RoleCard({ snap }: { snap: Snapshot }) {
  * The components that are down or slow, across every card, the worst first:
  * a fault is read here rather than found by scrolling through the cards.
  */
-function AttentionCard({ findings }: { findings: Finding[] }) {
+function AttentionCard({
+  findings,
+  onSelect,
+}: {
+  findings: Finding[];
+  onSelect: (role: string) => void;
+}) {
   return (
     <Card className="gap-0 border-warning/40 py-0">
       <CardHeader className="flex flex-row items-center gap-2 px-4 py-3">
@@ -491,10 +521,17 @@ function AttentionCard({ findings }: { findings: Finding[] }) {
                 <StatusDot tone={m.status} className="mt-1.5" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className="font-mono text-sm">
+                    <button
+                      type="button"
+                      onClick={() => onSelect(role)}
+                      className={cn(
+                        "rounded-sm font-mono text-sm hover:underline",
+                        FOCUS_RING,
+                      )}
+                    >
                       <span className="text-muted-foreground">{role} ·</span>{" "}
                       {c.name}
-                    </span>
+                    </button>
                     {c.critical ? (
                       <Badge
                         variant="outline"
@@ -576,6 +613,9 @@ export default function HealthPage() {
   const counts = countByStatus(cards.flatMap((s) => s.components));
   const probed = counts.healthy + counts.degraded + counts.unhealthy;
   const findings = useMemo(() => needsAttention(cards), [cards]);
+  const [requested, setRequested] = useUrlState(ROLE_PARAM, "");
+  const selected = selectedCard(cards, requested, findings);
+  const panel = cards.find((s) => s.role === selected);
 
   const backendVersion = stats?.version?.version || "—";
   const backendCommit = stats?.version?.commit
@@ -693,26 +733,27 @@ export default function HealthPage() {
         </CardContent>
       </Card>
 
-      {findings.length > 0 ? <AttentionCard findings={findings} /> : null}
+      {findings.length > 0 ? (
+        <AttentionCard findings={findings} onSelect={setRequested} />
+      ) : null}
 
-      {/* ─── Per-role cards, as many to a row as fit whole (ROLE_GRID). */}
+      {/* ─── The roles' rail beside the chosen role's panel (ROLES_LAYOUT). */}
       {!data && loading ? (
-        <div className={ROLE_GRID}>
-          {ROLE_ORDER.map((r) => (
-            <Skeleton key={r} className="h-45 rounded-xl" />
-          ))}
+        <div className={ROLES_LAYOUT}>
+          <Skeleton className="h-60 rounded-xl" />
+          <Skeleton className="h-60 rounded-xl" />
         </div>
       ) : orderedRoles.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No roles reported. Check PALADIN_*_URL env vars on the BFF.
+            No roles reported. The admin role reads the roles named in
+            admin.health.roles.
           </CardContent>
         </Card>
       ) : (
-        <div className={ROLE_GRID}>
-          {cards.map((s) => (
-            <RoleCard key={s.role} snap={s} />
-          ))}
+        <div className={ROLES_LAYOUT}>
+          <RoleRail cards={cards} selected={selected} onSelect={setRequested} />
+          {panel ? <RoleCard key={panel.role} snap={panel} /> : null}
         </div>
       )}
     </div>

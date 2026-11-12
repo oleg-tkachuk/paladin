@@ -43,7 +43,10 @@ function watchRPC(page: Page) {
  */
 const PAGES = [
   { path: "/audit", heading: /Audit Logs/i, content: /Action/ },
-  { path: "/health", heading: /Health & Diagnostics/i, content: /postgres/i },
+  // The roles rail lists every role once the snapshot has answered; the panel
+  // beside it opens on the role with a finding, so a component name such as
+  // postgres shows only when that role is the database.
+  { path: "/health", heading: /Health & Diagnostics/i, content: /^database$/ },
   { path: "/mcp", heading: /MCP server/i, content: /Sessions/ },
   { path: "/mcp/tools", heading: /^Tools$/, content: /paladin_list_backends/ },
   { path: "/mcp/access", heading: /^Access$/, content: /How agents authorize/ },

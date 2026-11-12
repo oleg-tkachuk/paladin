@@ -5,7 +5,11 @@ import { describe, expect, it } from "vitest";
 
 import { PALETTES } from "@/lib/theme";
 
-import { FOCUS_RING, STICKY_BELOW_TOPBAR } from "./states";
+import {
+  FOCUS_RING,
+  STICKY_BELOW_TOPBAR,
+  STICKY_BELOW_TOPBAR_FROM_LG,
+} from "./states";
 
 // One focus indicator, one press, three levels of elevation: a component
 // that styles its own drifts from the rest, and the contrast tests measure
@@ -121,6 +125,7 @@ describe("sticky bars", () => {
     const height = topBar.match(/\bh-(\d+)\b/)?.[1];
     expect(height).toBeDefined();
     expect(STICKY_BELOW_TOPBAR).toContain(`top-${height}`);
+    expect(STICKY_BELOW_TOPBAR_FROM_LG).toContain(`lg:top-${height}`);
   });
 
   it("are placed only through STICKY_BELOW_TOPBAR, besides the shell's own", () => {
