@@ -11,8 +11,8 @@ a kind, a tenant and a role set.
 
 | Credential | Format | Issued by | Notes |
 |---|---|---|---|
-| User access token | JWT, HS256, one per audience (`paladin-data`, `paladin-admin`, `paladin-iam`) | `AuthService.Login`, `RefreshToken`, `ExchangeAudience`, `SwitchTenant` | signed with `auth.signing_key` (`internal/auth/issuer`); with `auth.jwks_url` set the planes verify against that JWKS instead |
-| Refresh token | JWT, HS256, audience `paladin-iam` | `Login`, rotation in `RefreshToken` | stored by jti in `refresh_tokens`; rotation and reuse detection below |
+| User access token | JWT, ES256, one per audience (`paladin-data`, `paladin-admin`, `paladin-iam`) | `AuthService.Login`, `RefreshToken`, `ExchangeAudience`, `SwitchTenant` | signed by the `iam` role with the key at `auth.session_key_path`, the one role that holds it (ADR-0047); every other role verifies by the JWKS at `auth.jwks_url` |
+| Refresh token | JWT, ES256, audience `paladin-iam` | `Login`, rotation in `RefreshToken` | stored by jti in `refresh_tokens`; rotation and reuse detection below |
 | API token | opaque, `TokenPrefix` + random body (`internal/auth/api_token/format.go`) | `APITokenService.Create` | stored as a keyed SHA-256 digest; per-token rate limit counted where `middleware.rate_limit.backend` says (ADR-0046) |
 | Capability token | JWT, `alg: Ed25519` (RFC 9864), `typ: at+jwt` (RFC 9068) under a `limes:` kid ([limes](https://github.com/oleg-tkachuk/limes)), or its Biscuit form; in `X-Paladin-Capability`, `Authorization: Capability <token>` or, for a key-bound one, `Authorization: DPoP <token>` | `CapabilityService.Issue` | budgeted, delegable only by narrowing, revocable (a Biscuit copy can be revoked alone); a key-bound capability (`cnf.jkt`) also needs a DPoP proof; [limes](https://github.com/oleg-tkachuk/limes) |
 
@@ -127,7 +127,6 @@ value in-memory, then clears the ref. The resolvable references are:
   DML role) and `replica.password_secret` (when the replica is enabled)
 - `bootstrap.admin.password_secret` (when the step is enabled)
 - `storage.backends.<name>.auth.{access_key,secret_key,session_token}_secret`
-- `auth.signing_key_secret` — the HMAC key that signs + verifies every JWT
 - `api_token.hmac_key_secret` — the server-side key of the API-token digest
 - `runtime.health_snapshot_token_secret` — the `/system/health.json` token
 - `ingest.webhook.shared_secret_ref` — the storage-event webhook HMAC key
@@ -136,15 +135,16 @@ value in-memory, then clears the ref. The resolvable references are:
 - `mcp.oauth.exchange.client_secret_ref` and
   `auth.oauth.seed_clients[].client_secret_ref` — OAuth client secrets
 
-Every referenced Secret name must appear in
-`rbac.secretReader.secretNames` (the chart appends the ones it wires itself:
-the Postgres passwords, the S3 credentials, the bootstrap admin, the
-generated signing key and the OAuth `client_secret_ref`s); a missing name
-surfaces as a **403 at boot**, not a
-silent skip. Out-of-cluster (no SA token) the resolver no-ops and inline
-values are used instead. An inline value and its `*_secret` reference (`signing_key` /
-`signing_key_secret`, `password` / `password_secret`, and the webhook's inline
-vs ref) are mutually exclusive — setting both is a startup error.
+Each role resolves only the references its own code reads
+(`internal/config/roles.go`), and the chart gives each role's service account
+a Role naming exactly those Secrets (`files/role-secrets.json`, ADR-0047); a
+name a role reads and its Role lacks surfaces as a **403 at boot**, not a
+silent skip. The session signing key is not among them: it is a file mounted
+into the `iam` role alone (`auth.sessionKey`), which no Role names.
+Out-of-cluster (no SA token) the resolver no-ops and inline values are used
+instead. An inline value and its `*_secret` reference (`password` /
+`password_secret`, and the webhook's inline vs ref) are mutually exclusive —
+setting both is a startup error.
 
 ### SealedSecrets (kubeseal) runbook
 
@@ -157,11 +157,12 @@ Seal a value with `kubeseal --raw` (scoped to the target namespace + Secret
 name, so it can't be reused elsewhere):
 
 ```bash
-# 1. Auth signing key → Secret paladin-auth-signing-key, key `signing_key`
-openssl rand -hex 32 | kubeseal --raw \
-  --namespace paladin --name paladin-auth-signing-key \
+# 1. Session signing key (ES256, ADR-0047) → Secret paladin-session-key,
+#    key `session-key.pem`
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | kubeseal --raw \
+  --namespace paladin --name paladin-session-key \
   --scope strict --from-file=/dev/stdin
-# → paste the ciphertext into the SealedSecret's spec.encryptedData.signing_key
+# → paste the ciphertext into the SealedSecret's spec.encryptedData["session-key.pem"]
 
 # 2. Ingest webhook HMAC → Secret paladin-ingest-hmac, key `secret`
 printf '%s' "$WEBHOOK_HMAC" | kubeseal --raw \
@@ -169,22 +170,22 @@ printf '%s' "$WEBHOOK_HMAC" | kubeseal --raw \
   --scope strict --from-file=/dev/stdin
 ```
 
-Then in the prod overlay point the config at the unsealed Secret and
-allowlist its name (see `values-prod.yaml`):
+Then in the prod overlay mount the session key and reference the other by
+`*_ref` (see `values-prod.yaml`); the chart's per-role Roles name what each
+role reads:
 
 ```yaml
+auth:
+  sessionKey:
+    existingSecret: paladin-session-key
 config:
-  auth:
-    signing_key: ""                 # empty — resolved from the ref below
-    signing_key_secret: { name: paladin-auth-signing-key, key: signing_key }
-rbac:
-  secretReader:
-    secretNames: [ paladin-auth-signing-key, paladin-ingest-hmac ]   # + the base list
+  ingest:
+    webhook:
+      shared_secret_ref: { name: paladin-ingest-hmac, key: secret }
 ```
 
 The same pattern applies to the Postgres, bootstrap-admin, and storage
-credential Secrets — seal each, reference it by `*_secret`, allowlist the
-name. The SealedSecrets controller and the sealed YAML live outside this
+credential Secrets — seal each and reference it by `*_secret`. The SealedSecrets controller and the sealed YAML live outside this
 repository.
 
 ## 6. Bootstrap admin (ArgoCD-style)

@@ -134,7 +134,8 @@ role; there is no all-in-one mode:
 
 | Command | Role |
 |---------|------|
-| `serve api` | Data plane (`paladin.data.v1`) + IAM (`paladin.iam.v1`) |
+| `serve api` | Data plane (`paladin.data.v1`) |
+| `serve iam` | IAM (`paladin.iam.v1`), the OAuth AS and the session JWKS (ADR-0047) |
 | `serve admin` | Admin plane (`paladin.admin.v1`) |
 | `serve worker` | Background jobs under leases: reapers, purgers, lifecycle, reconcilers, operations; also serves the `/stats` census ([ops-housekeeping.md](ops-housekeeping.md)) |
 | `serve dispatcher` | Outbox drain → sinks |
