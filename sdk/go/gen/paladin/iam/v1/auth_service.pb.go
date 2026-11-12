@@ -153,8 +153,9 @@ type RefreshTokenRequest struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	RefreshToken string                 `protobuf:"bytes,1,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	// Audience the caller wants on the new access token. Empty defaults to
-	// `paladin-data` server-side; SPAs that pin a refresh chain to a particular
-	// plane (e.g. the iam-cookie BFF flow) MUST set this explicitly.
+	// `paladin-data` server-side; a client that pins a refresh chain to a
+	// particular plane (the console's session role pins it to paladin-iam)
+	// MUST set this explicitly.
 	RequestedAudience string `protobuf:"bytes,2,opt,name=requested_audience,json=requestedAudience,proto3" json:"requested_audience,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache

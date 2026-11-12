@@ -28,16 +28,14 @@ spec:
     - host: {{ $host | quote }}
       http:
         paths:
-          {{- with $.Values.session.service.name }}
           # The console's session role (ADR-0048), on the console's own origin.
           - path: {{ trimSuffix "/" $.Values.session.pathPrefix }}
             pathType: Prefix
             backend:
               service:
-                name: {{ . }}
+                name: {{ include "chart.sessionService" $ }}
                 port:
                   number: {{ $.Values.session.service.port }}
-          {{- end }}
           - path: /
             pathType: Prefix
             backend:

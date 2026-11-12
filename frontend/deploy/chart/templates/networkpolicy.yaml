@@ -11,6 +11,8 @@
 */}}
 {{- if .Values.networkPolicies.enabled }}
 {{- $np := .Values.networkPolicies }}
+{{- /* The iam plane's port, from the URL the relay dials (backend.urls.iam or the release's). */}}
+{{- $iamPort := splitList ":" (include "chart.backendURL" (dict "ctx" . "plane" "iam")) | last | int }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -43,6 +45,8 @@ spec:
           port: {{ $np.dnsPort }}
         - protocol: TCP
           port: {{ $np.dnsPort }}
+    # The iam plane alone, for the OAuth consent form's relay: the browser
+    # reaches every plane through the session role, not through this pod.
     - to:
         - namespaceSelector:
             matchLabels:
@@ -50,6 +54,10 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/instance: {{ .Values.backend.release }}
+              app.kubernetes.io/component: iam
+      ports:
+        - protocol: TCP
+          port: {{ $iamPort }}
     {{- with $np.extraEgress }}
     {{- toYaml . | nindent 4 }}
     {{- end }}

@@ -273,19 +273,6 @@ the same commit. Treat this file like a runtime invariant.
   regenerated from them no longer name what each role does not use.
 - **Blockers:** none.
 
-### Console session terminated in Go (ADR-0048): removals
-
-- **Status:** Deferred. The console calls every plane through the session
-  role, which the chart deploys by default; what is left is removing what
-  nothing uses now.
-- **Reason:** the removals change chart values an overlay may still set, so
-  they ship as their own breaking release.
-- **Definition of Done:** the console chart drops `healthSnapshotTokenSecret`,
-  `backend.healthRoles` and the role URLs only the BFF read, and its
-  NetworkPolicy egress to the planes but iam (the OAuth consent relay); the
-  backend chart's planes stop admitting the console's pods except iam.
-- **Blockers:** none.
-
 ### Sign-in with an upstream code sends an empty subject
 
 - **Status:** Deferred (found 2026-11-12 moving the console onto the session

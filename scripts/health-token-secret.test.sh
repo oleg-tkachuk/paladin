@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # health-token-secret.test.sh — in production the health snapshot token comes
-# from one Secret, and both charts read the same one.
+# from one Secret, which the backend reads and the console does not.
 #
-# The backend gates /system/health.json with runtime.health_snapshot_token; the
-# console's BFF forwards the token it is given. Three things must hold in the
-# rendered production manifests, and none of them fails loudly when it breaks:
+# The backend gates /system/health.json with runtime.health_snapshot_token, and
+# its admin role reads every role's snapshot with it for the console's health
+# page (GetPlatformHealth). Three things must hold in the rendered production
+# manifests, and none of them fails loudly when it breaks:
 #
 #   - the backend's config names the Secret and carries no inline token, so the
 #     token is not in the ConfigMap;
 #   - the backend may GET that Secret — otherwise boot fails with a 403;
-#   - the console mounts the same Secret and key as a file and is told where —
-#     otherwise its health page gets 401s from every backend.
+#   - the console holds no part of it: it mounts no Secret and is told of no
+#     token file (ADR-0048).
 #
 # Runs from `task -t Taskfile.dev.yaml verify-all` — helm and yq, no cluster.
 
@@ -53,22 +54,14 @@ readable=$(printf '%s\n' "$backend_docs" |
 grep -qxF -- "$name" <<<"$readable" ||
     fail "the backend may not GET Secret '$name' (rbac.secretReader.secretNames)"
 
-# The console mounts "<secret>:<key>" at some path and names "<path>/<key>".
+# The console holds no backend secret: no Secret volume, no token file.
 spec=$(render "$frontend" | yq -o=json "select(.kind == \"Deployment\") | .spec.template.spec")
-# shellcheck disable=SC2016 # $v is a yq variable, not a shell one
-mounted=$(printf '%s\n' "$spec" | yq -r '
-    .volumes[] | select(.secret) | .name as $v | .secret.secretName + ":" + (.secret.items[].key) + " " + $v')
+secrets=$(printf '%s\n' "$spec" | yq -r '[.volumes[]? | select(.secret) | .secret.secretName] | join(",")')
 file_env=$(printf '%s\n' "$spec" | yq -r ".containers[].env[] | select(.name == \"$TOKEN_FILE_ENV\") | .value")
-volume=$(grep -F -- "$name:$key " <<<"$mounted" | cut -d' ' -f2 || true)
-if [ -z "$volume" ]; then
-    fail "the console mounts no '$key' from Secret '$name'"
-else
-    mount_path=$(printf '%s\n' "$spec" | yq -r ".containers[].volumeMounts[] | select(.name == \"$volume\") | .mountPath")
-    [ "$file_env" = "$mount_path/$key" ] ||
-        fail "the console reads the token from '$file_env', the Secret is mounted at '$mount_path/$key'"
-fi
+[ -z "$secrets" ] || fail "the console mounts Secrets '$secrets'; it holds none"
+[ -z "$file_env" ] || fail "the console is told of a health token file '$file_env'; it reads none"
 
 if [ "$failed" -ne 0 ]; then
     exit 1
 fi
-printf '%s\n' "health token: both charts read Secret $name/$key in production; none inline"
+printf '%s\n' "health token: the backend reads Secret $name/$key in production, none inline; the console holds none"

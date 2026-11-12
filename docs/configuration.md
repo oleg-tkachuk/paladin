@@ -243,11 +243,10 @@ The health snapshot token gates each role's `/system/health.json`; the admin
 role reads those snapshots with it for `SystemService.GetPlatformHealth`, the
 console's health page.
 
-In production both charts read the token from one Secret: the backend through
+In production the backend reads the token from a Secret, through
 `runtime.health_snapshot_token_secret`, resolved at boot like every other
-`*_secret` reference, and the console through `healthSnapshotTokenSecret`.
-`scripts/health-token-secret.test.sh` checks the rendered production manifests
-agree.
+`*_secret` reference. The console holds none of it (ADR-0048).
+`scripts/health-token-secret.test.sh` checks the rendered production manifests.
 
 ### Platform banner
 

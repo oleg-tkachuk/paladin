@@ -111,8 +111,9 @@ export type RefreshTokenRequest =
 
     /**
      * Audience the caller wants on the new access token. Empty defaults to
-     * `paladin-data` server-side; SPAs that pin a refresh chain to a particular
-     * plane (e.g. the iam-cookie BFF flow) MUST set this explicitly.
+     * `paladin-data` server-side; a client that pins a refresh chain to a
+     * particular plane (the console's session role pins it to paladin-iam)
+     * MUST set this explicitly.
      *
      * @generated from field: string requested_audience = 2;
      */

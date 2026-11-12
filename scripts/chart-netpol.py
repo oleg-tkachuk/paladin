@@ -240,9 +240,10 @@ IN_RELEASE_CALLS = [
 ]
 
 
-# Roles the console dials directly: /api/health/all reads each one's health
-# snapshot. Refused, the console's health page shows the role as down.
-UI_HEALTH_CALLS = ["api", "iam", "admin", "worker", "dispatcher", "mcp", "ingest"]
+# The one role the console's own pods dial: iam, for the OAuth consent form's
+# relay. The browser reaches every plane through the session role (ADR-0048),
+# so no other role admits the console.
+UI_CALLS = ["iam"]
 UI_LABELS = {"app.kubernetes.io/name": "paladin-console"}
 
 
@@ -268,9 +269,11 @@ def in_release_problems(policies: dict[str, dict]) -> list[str]:
             problems.append(f"role {callee!r} does not admit {caller!r} ({why})")
         elif not egress_reaches_role(policies[caller], callee, ports_admitting(policies[callee], caller)):
             problems.append(f"role {caller!r} has no egress to {callee!r} ({why})")
-    for role in UI_HEALTH_CALLS:
-        if role in policies and not admits_ui(policies[role]):
-            problems.append(f"role {role!r} does not admit the console (/api/health/all)")
+    for role, policy in policies.items():
+        if role in UI_CALLS and not admits_ui(policy):
+            problems.append(f"role {role!r} does not admit the console (the OAuth consent relay)")
+        if role not in UI_CALLS and admits_ui(policy):
+            problems.append(f"role {role!r} admits the console, which reaches it through the session role")
     return problems
 
 
@@ -451,11 +454,14 @@ def console_problems(root: Path) -> list[str]:
     backend_release = subprocess.run(
         ["yq", ".backend.release", str(root / CONSOLE_CHART / "values.yaml")],
         capture_output=True, text=True, check=True).stdout.strip()
-    reaches_backend = any(
-        ((to.get("podSelector") or {}).get("matchLabels") or {}).get("app.kubernetes.io/instance") == backend_release
-        for rule in policy["spec"].get("egress") or [] for to in rule.get("to") or [])
-    if not reaches_backend:
-        problems.append(f"console: no egress to the backend release {backend_release!r}")
+    backend_peers = [
+        (to.get("podSelector") or {}).get("matchLabels") or {}
+        for rule in policy["spec"].get("egress") or [] for to in rule.get("to") or []
+        if ((to.get("podSelector") or {}).get("matchLabels") or {}).get("app.kubernetes.io/instance") == backend_release]
+    components = {peer.get("app.kubernetes.io/component") for peer in backend_peers}
+    if components != set(UI_CALLS):
+        problems.append(f"console: egress to the backend release {backend_release!r} reaches {sorted(map(str, components))}, "
+                        f"want {UI_CALLS} alone")
     port = deployments[0]["spec"]["template"]["spec"]["containers"][0]["ports"][0]["containerPort"]
     if not any(port in {p.get("port") for p in rule.get("ports") or []}
                for rule in policy["spec"].get("ingress") or []):

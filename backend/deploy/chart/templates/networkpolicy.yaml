@@ -4,22 +4,23 @@
   networkPolicies.enabled (on by default; inert without an enforcing CNI). See the values block for the flow matrix
   rationale; the short version:
 
-    api        ← ingress-controller / UI / mcp     → common + storage
+    api        ← ingress-controller / mcp / session → common + storage
                                                      + iam (session JWKS)
-    iam        ← ingress-controller / UI / mcp     → common + storage
+    iam        ← ingress-controller / mcp / session → common + storage
                ← admin / api (session JWKS, 8085)
-    admin      ← ingress-controller / UI / mcp     → common + storage + NATS
+               ← UI (the OAuth consent relay)
+    admin      ← ingress-controller / mcp / session → common + storage + NATS
                                                      + iam (session JWKS)
                                                      + adminBrokerPorts (Test)
                                                      + dispatcher/worker ops
-    worker     ← monitoring / admin / UI (ops)     → common + storage
-    dispatcher ← monitoring / admin / UI (ops)     → OPEN egress (customer
+    worker     ← monitoring / admin (ops)          → common + storage
+    dispatcher ← monitoring / admin (ops)          → OPEN egress (customer
                                                      sinks live anywhere)
     ingest     ← storage ns (webhook) / monitoring → common + storage + NATS
-                 / UI (health)                       (a delete event is checked
+                 / admin (health)                    (a delete event is checked
                                                      with a HEAD)
     mcp        ← ingress-controller / monitoring   → common + api/iam/admin pods
-                 / admin (sessions) / UI (health)
+                 / admin (sessions, health)
     session    ← ingress-controller / admin        → DNS, 443, OTLP (no database)
                  (health)                          + api/iam/admin pods
 
@@ -133,7 +134,6 @@ spec:
   ingress:
     - from:
         - {{ $fromController | toJson }}
-        - {{ $fromUI | toJson }}
         - {{ $fromMCP | toJson }}
         # SystemService.GetPlatformHealth reads its health snapshot.
         - {{ $fromAdmin | toJson }}
@@ -169,6 +169,7 @@ spec:
   ingress:
     - from:
         - {{ $fromController | toJson }}
+        # The console relays its OAuth consent form here (app/oauth/authorize).
         - {{ $fromUI | toJson }}
         - {{ $fromMCP | toJson }}
         # The planes that verify sessions by the JWKS it serves (ADR-0047).
@@ -206,7 +207,6 @@ spec:
   ingress:
     - from:
         - {{ $fromController | toJson }}
-        - {{ $fromUI | toJson }}
         - {{ $fromMCP | toJson }}
         # GetPlatformHealth reads this role's own snapshot through its Service.
         - {{ $fromAdmin | toJson }}
@@ -296,8 +296,6 @@ spec:
     # Service port, which never selects anything on the pod.
     - from:
         - {{ $fromMonitoring | toJson }}
-        # The console's /api/health/all reads every role's health snapshot.
-        - {{ $fromUI | toJson }}
         # Admin proxies /system/rls-census.json for the console's /stats
         # page — the worker's pool is the BYPASSRLS one, so the
         # cross-tenant census of the RLS'd tables is computed there.
@@ -332,8 +330,6 @@ spec:
   ingress:
     - from:
         - {{ $fromMonitoring | toJson }}
-        # The console's /api/health/all reads every role's health snapshot.
-        - {{ $fromUI | toJson }}
         # Admin proxies /system/dispatcher-stats.json for the console.
         - podSelector:
             matchLabels:
@@ -371,8 +367,6 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: {{ $np.storage.namespace }}
         - {{ $fromMonitoring | toJson }}
-        # The console's /api/health/all reads every role's health snapshot.
-        - {{ $fromUI | toJson }}
         # So does the admin role's SystemService.GetPlatformHealth.
         - {{ $fromAdmin | toJson }}
       ports:
@@ -404,8 +398,6 @@ spec:
     - from:
         - {{ $fromController | toJson }}
         - {{ $fromMonitoring | toJson }}
-        # The console's /api/health/all reads every role's health snapshot.
-        - {{ $fromUI | toJson }}
         # MCPInspectService.ListSessions: the admin pod proxies the console's
         # sessions view to mcp.http.sessions_url, which the chart points here.
         - podSelector:
