@@ -81,9 +81,8 @@ describe("health aggregator ↔ console chart", () => {
       (m) => m[1],
     );
     expect(declared.length).toBeGreaterThanOrEqual(6);
-    // data is the Connect data plane; the aggregator polls iam on the same
-    // pod, so it is the one URL with no envKey of its own here.
-    const expected = declared.filter((r) => r !== "data").sort();
+    // Every plane and ops port is a role the aggregator polls.
+    const expected = [...declared].sort();
     const fromEnv = readByAggregator
       .map((k) => k.replace(/^PALADIN_|_URL$/g, "").toLowerCase())
       .sort();

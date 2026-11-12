@@ -41,7 +41,7 @@ backend:
   caSecret: {name: "", key: ca.crt}
   # Roles the health page polls. ingest is off in the backend chart by
   # default; add it when the backend runs it.
-  healthRoles: [api, admin, worker, mcp, dispatcher]
+  healthRoles: [api, iam, admin, worker, mcp, dispatcher]
   # Explicit per-plane URLs. Empty: built from the fields above.
   urls:
     data: ""

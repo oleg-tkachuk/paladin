@@ -78,7 +78,7 @@ Services map :8099 onto container ports of their own.
 {{- else -}}
 {{- $services := dict
       "data" (list "api" 8080 true)
-      "iam" (list "api" 8085 true)
+      "iam" (list "iam" 8085 true)
       "admin" (list "admin" 8090 true)
       "worker" (list "worker" 8099 false)
       "mcp" (list "mcp" 8095 false)
