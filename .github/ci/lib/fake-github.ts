@@ -1,7 +1,7 @@
 // A GitHub that answers from fixed data and records what it was asked, for
 // tests.
 
-import type { GitHub, NewRelease, OpenPullRequest } from "./github.ts";
+import type { GitHub, NewRelease, OpenPullRequest, PullRequestState } from "./github.ts";
 
 // FakeData is what a fake GitHub answers with, and its log.
 export interface FakeData {
@@ -11,6 +11,11 @@ export interface FakeData {
   updateFails: Set<number>;
   dispatched: { eventType: string; payload: Record<string, string> }[];
   autoMerged: number[];
+  // autoMergeFails names the pull requests GitHub refuses to queue; pulls is
+  // the state each is read in, and merged the merges asked for.
+  autoMergeFails: Set<number>;
+  pulls: Map<number, PullRequestState>;
+  merged: { number: number; head: string }[];
   updated: number[];
   // conclusions are the push runs' conclusions by sha; queries logs each
   // query as workflow branch sha.
@@ -31,6 +36,9 @@ export function fakeData(): FakeData {
     updateFails: new Set(),
     dispatched: [],
     autoMerged: [],
+    autoMergeFails: new Set(),
+    pulls: new Map(),
+    merged: [],
     updated: [],
     conclusions: {},
     queries: [],
@@ -47,7 +55,20 @@ export function fakeGitHub(data: FakeData): GitHub {
       data.dispatched.push({ eventType, payload });
     },
     async enableAutoMerge(number) {
+      if (data.autoMergeFails.has(number)) {
+        throw new Error(`#${number} cannot be queued`);
+      }
       data.autoMerged.push(number);
+    },
+    async pullRequestState(number) {
+      const state = data.pulls.get(number);
+      if (state === undefined) {
+        throw new Error(`#${number} is not in the fake`);
+      }
+      return state;
+    },
+    async merge(number, head) {
+      data.merged.push({ number, head });
     },
     async openPullRequestsInto() {
       return data.open;

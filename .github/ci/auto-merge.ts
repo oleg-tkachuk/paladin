@@ -43,6 +43,37 @@ export async function updateBehind(github: GitHub): Promise<number[]> {
   return updated;
 }
 
+// Outcome is what queue did with a pull request.
+export const Outcome = { Queued: "queued", Merged: "merged" } as const;
+export type Outcome = (typeof Outcome)[keyof typeof Outcome];
+
+// MERGEABLE_NOW are the states in which GitHub merges without waiting, and so
+// refuses to queue a merge ("Pull request is in clean status").
+const MERGEABLE_NOW: ReadonlySet<string> = new Set([MergeState.Clean, MergeState.Unstable, MergeState.HasHooks]);
+
+export function mergeableNow(mergeState: string): boolean {
+  return MERGEABLE_NOW.has(mergeState);
+}
+
+// queue queues a pull request to merge once it is green. One already green —
+// a draft marked ready after its checks passed — GitHub will not queue, so it
+// is merged now, pinned to the head whose state was read. Any other refusal
+// is the caller's to see.
+export async function queue(github: GitHub, number: number): Promise<Outcome> {
+  try {
+    await github.enableAutoMerge(number);
+    return Outcome.Queued;
+  } catch (err) {
+    const state = await github.pullRequestState(number);
+    if (!mergeableNow(state.mergeState)) {
+      throw err;
+    }
+    info(`#${number} is ${state.mergeState} and cannot be queued; merging ${state.head} now`);
+    await github.merge(number, state.head);
+    return Outcome.Merged;
+  }
+}
+
 // pullNumber reads a pull request number, refusing anything else.
 export function pullNumber(text: string): number {
   if (!/^[1-9][0-9]*$/.test(text)) {
@@ -75,8 +106,11 @@ async function main(): Promise<void> {
   const github = gitHubFor(token, requireEnv("GITHUB_REPOSITORY"));
   if (command === Command.Enable) {
     const number = pullNumber(requireEnv("PR"));
-    await github.enableAutoMerge(number);
-    info(`#${number} merges once it is green`);
+    if ((await queue(github, number)) === Outcome.Queued) {
+      info(`#${number} merges once it is green`);
+    } else {
+      info(`#${number} merged`);
+    }
   } else {
     summarize(updatedSummary(await updateBehind(github), requireEnv("GITHUB_REPOSITORY")));
   }
