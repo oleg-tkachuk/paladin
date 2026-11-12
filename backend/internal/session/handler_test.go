@@ -456,7 +456,6 @@ func TestNewRefusesOptionsItCannotServe(t *testing.T) {
 	iam := paladiniamv1connect.NewAuthServiceClient(connect.NewClient(connecthttp.NewTransport(http.DefaultClient, "http://iam")))
 	base := Options{IAM: iam, Planes: planes, Refresh: fakeVerifier{}, Origins: []string{testOrigin}, RotateAfter: time.Minute}
 	for name, mutate := range map[string]func(*Options){
-		"no origin":   func(o *Options) { o.Origins = nil },
 		"no rotation": func(o *Options) { o.RotateAfter = 0 },
 		"no plane":    func(o *Options) { o.Planes = map[Plane]*url.URL{PlaneData: u} },
 		"no verifier": func(o *Options) { o.Refresh = nil },
@@ -510,5 +509,39 @@ func TestForwardIsLogged(t *testing.T) {
 	f := entries[0].ContextMap()
 	if f["path"] != "/paladin.data.v1.ObjectService/ListObjects" || f["status"] != int64(http.StatusOK) {
 		t.Errorf("logged %v, want the procedure and 200", f)
+	}
+}
+
+// With no origin configured, a call that changes state passes only when its
+// Origin names the host it was made to: the console's own, as the ingress
+// forwards it.
+func TestOriginMayNameTheHostTheCallArrivedOn(t *testing.T) {
+	r := newRig(t, fakeVerifier{})
+	r.h.origins = map[string]bool{}
+	for name, tc := range map[string]struct {
+		origin, forwardedHost string
+		allowed               bool
+	}{
+		"same host":              {"http://example.com", "", true},
+		"forwarded host":         {"https://console.test", "console.test", true},
+		"forwarded host, case":   {"https://Console.Test", "console.test", true},
+		"another host":           {"https://evil.example", "", false},
+		"a suffix of the host":   {"https://example.com.evil", "", false},
+		"host not the forwarded": {"http://example.com", "console.test", false},
+		"no origin":              {"", "", false},
+		"not a url":              {"::", "", false},
+	} {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, PathLogin, strings.NewReader(`{"subject":"ada","password":"right"}`))
+		if tc.origin != "" {
+			req.Header.Set(headerOrigin, tc.origin)
+		}
+		if tc.forwardedHost != "" {
+			req.Header.Set(headerForwardedHost, tc.forwardedHost)
+		}
+		rec := httptest.NewRecorder()
+		r.h.ServeHTTP(rec, req)
+		if allowed := rec.Code != http.StatusForbidden; allowed != tc.allowed {
+			t.Errorf("%s: %d, want allowed=%v", name, rec.Code, tc.allowed)
+		}
 	}
 }

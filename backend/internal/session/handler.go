@@ -40,6 +40,7 @@ const (
 // The headers the role reads or writes.
 const (
 	headerOrigin        = "Origin"
+	headerForwardedHost = "X-Forwarded-Host"
 	headerAuthorization = "Authorization"
 	headerCookie        = "Cookie"
 	headerForwardedFor  = "X-Forwarded-For"
@@ -74,7 +75,9 @@ type Options struct {
 	Transport http.RoundTripper
 	// Refresh reads a refresh token's verified age (audience paladin-iam).
 	Refresh RefreshAges
-	// Origins are the console's origins; a state-changing call must carry one.
+	// Origins are the console's origins, when it is served from more than the
+	// host a call arrives on. A state-changing call must carry one of them, or
+	// an Origin naming the host the call was made to.
 	Origins []string
 	// RotateAfter is how old a refresh token gets before it is rotated.
 	RotateAfter time.Duration
@@ -103,9 +106,6 @@ type Handler struct {
 // New builds the Handler. It refuses options it could not serve with: no
 // console origin would refuse every call that changes state.
 func New(o Options) (*Handler, error) {
-	if len(o.Origins) == 0 {
-		return nil, errors.New("session: no console origin configured (session.console_origins)")
-	}
 	if o.RotateAfter <= 0 {
 		return nil, errors.New("session: rotate_after must be positive")
 	}
@@ -158,7 +158,7 @@ func New(o Options) (*Handler, error) {
 // ServeHTTP refuses a state-changing call from anywhere but the console,
 // then routes.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if changesState(r.Method) && !h.origins[r.Header.Get(headerOrigin)] {
+	if changesState(r.Method) && !h.originAllowed(r) {
 		h.log.Warn("session: refused a call from a foreign origin",
 			zap.String("method", r.Method), zap.String("path", r.URL.Path),
 			zap.String("origin", r.Header.Get(headerOrigin)))
@@ -166,6 +166,29 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.mux.ServeHTTP(w, r)
+}
+
+// originAllowed is the CSRF check for a call that changes state: its Origin
+// is a configured console origin, or names the host the call was made to —
+// the console's own, as the ingress forwards it. A browser sets Origin itself,
+// so a page elsewhere cannot claim the console's.
+func (h *Handler) originAllowed(r *http.Request) bool {
+	origin := r.Header.Get(headerOrigin)
+	if origin == "" {
+		return false
+	}
+	if h.origins[origin] {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	host := r.Header.Get(headerForwardedHost)
+	if host == "" {
+		host = r.Host
+	}
+	return strings.EqualFold(u.Host, host)
 }
 
 func changesState(method string) bool {

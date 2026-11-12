@@ -35,7 +35,6 @@ func TestBuildSessionHandlerRefusesWhatCannotRun(t *testing.T) {
 		names  string
 	}{
 		"no jwks":         {func(c *config.Config) { c.Auth.JWKSURL = "" }, "auth.jwks_url"},
-		"no origin":       {func(c *config.Config) { c.Session.ConsoleOrigins = nil }, "console_origins"},
 		"unparseable url": {func(c *config.Config) { c.Session.Upstreams.DataURL = "api:8080" }, "data plane"},
 		"missing ca":      {func(c *config.Config) { c.Session.Upstreams.TLS.CaPath = "/nonexistent/ca.crt" }, "session.upstreams.tls"},
 	} {

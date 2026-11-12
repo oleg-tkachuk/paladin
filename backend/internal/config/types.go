@@ -579,9 +579,9 @@ type AdminHealthRole struct {
 // console's calls to the planes.
 type Session struct {
 	Server HTTPServer `yaml:"server" json:"server"`
-	// ConsoleOrigins are the origins the console is served from. A call that
-	// changes state must carry one of them in Origin; none configured refuses
-	// every such call.
+	// ConsoleOrigins are further origins the console is served from. A call
+	// that changes state must carry an Origin naming the host it was made to,
+	// or one of these; empty allows the host alone.
 	ConsoleOrigins []string `yaml:"console_origins" json:"console_origins"`
 	// Upstreams are the planes it forwards to; it mints every token at the
 	// iam plane.
