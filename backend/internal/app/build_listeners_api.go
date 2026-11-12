@@ -114,6 +114,9 @@ func AssembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*htt
 // newPlaneShared builds the interceptors both planes mount and the health
 // handler they answer readiness with.
 func newPlaneShared(deps *SharedDeps, role config.Role) (planeShared, error) {
+	if err := requireTokenAuth(deps); err != nil {
+		return planeShared{}, err
+	}
 	cfg := deps.Cfg
 	l := deps.Logger
 	repos := deps.Repos
@@ -299,7 +302,7 @@ func assembleDataMux(ctx context.Context, deps *SharedDeps, shared planeShared) 
 			capOpts = append(capOpts, auth.WithTaintLookup(taintH.Tainted))
 		}
 		capData = auth.CapabilityEstablishingInterceptor(
-			deps.Capability.Verifier,
+			deps.Capability.Auth.Verifier,
 			auth.TokenPlaneData,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
@@ -315,7 +318,7 @@ func assembleDataMux(ctx context.Context, deps *SharedDeps, shared planeShared) 
 	// auth.InterceptorSkipAPITokens below). Per-token rate caps apply.
 	apiTokData := auth.APITokenInterceptor(nil, "")
 	if deps.APIToken != nil {
-		apiTokData = auth.APITokenAuthInterceptor(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneData)
+		apiTokData = auth.APITokenAuthInterceptor(deps.APIToken.Auth.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneData)
 	}
 
 	// The plane's interceptors; the codec, size limits and compression it
@@ -452,7 +455,7 @@ func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, share
 		WithCollectionRoutes(wire.ProvideCollectionRouteLister(repos, polEngine, cfg))
 	userH := wire.ProvideUserHandler(repos, polEngine)
 	if deps.Capability != nil {
-		userH.WithSessionRevoker(deps.Capability.BulkRevocation).
+		userH.WithSessionRevoker(deps.Capability.Auth.BulkRevocation).
 			WithCapabilities(deps.Capability.Records)
 	}
 	userSettingsH := usersettingsh.NewHandler(
@@ -477,7 +480,7 @@ func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, share
 	if deps.Capability != nil {
 		iamGate.SkipCapabilities = true
 		capIAM = auth.CapabilityInterceptor(
-			deps.Capability.Verifier,
+			deps.Capability.Auth.Verifier,
 			auth.TokenPlaneIAM,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
@@ -488,7 +491,7 @@ func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, share
 	// API tokens are additive on this plane, audience-pinned, rate-capped.
 	apiTokIAM := auth.APITokenInterceptor(nil, "")
 	if deps.APIToken != nil {
-		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneIAM)
+		apiTokIAM = auth.APITokenInterceptorWithLimiter(deps.APIToken.Auth.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneIAM)
 	}
 
 	// The readers the audit log takes each change's before and after with,

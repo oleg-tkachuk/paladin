@@ -139,7 +139,7 @@ func (h *Handler) IsShuttingDown() bool {
 // shutting-down state is shared across planes.
 func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+LivePath, h.serveLive)
-	mux.HandleFunc("GET /readyz", h.serveReady)
+	mux.HandleFunc("GET "+ReadyPath, h.serveReady)
 	mux.HandleFunc("GET /startupz", h.serveStartup)
 	mux.HandleFunc("GET "+SnapshotPath, h.serveSnapshot)
 }
@@ -375,7 +375,9 @@ type Component struct {
 // SnapshotTokenHeader the header that carries the snapshot token to it.
 const (
 	// LivePath answers 200 while the process runs, touching nothing.
-	LivePath            = "/livez"
+	LivePath = "/livez"
+	// ReadyPath answers 200 while every critical dependency answers.
+	ReadyPath           = "/readyz"
 	SnapshotPath        = "/system/health.json"
 	SnapshotTokenHeader = "X-Health-Token"
 )

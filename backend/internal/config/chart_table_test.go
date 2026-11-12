@@ -12,10 +12,13 @@ import (
 const chartTablePath = "../../deploy/chart/files/role-secrets.json"
 
 // chartTable is roleSecrets as the chart reads it: the roles it deploys, each
-// with the binding paths it reads, and the roles that read runtime Secrets.
+// with the binding paths it reads, the roles that read runtime Secrets, and
+// the roles that verify and issue tokens, which alone mount the capability
+// signing key.
 type chartTable struct {
 	Roles          map[Role][]string `json:"roles"`
 	RuntimeReaders []Role            `json:"runtimeReaders"`
+	TokenAuthRoles []Role            `json:"tokenAuthRoles"`
 }
 
 func currentChartTable() chartTable {
@@ -33,6 +36,12 @@ func currentChartTable() chartTable {
 		}
 	}
 	slices.Sort(t.RuntimeReaders)
+	for r, b := range roleBuilds {
+		if b.TokenAuth && r != RoleMCPEmbedded {
+			t.TokenAuthRoles = append(t.TokenAuthRoles, r)
+		}
+	}
+	slices.Sort(t.TokenAuthRoles)
 	return t
 }
 

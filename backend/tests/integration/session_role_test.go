@@ -21,6 +21,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/session"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 	pbdata "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
@@ -60,7 +61,7 @@ func sessionReplicas(t *testing.T, rotateAfter time.Duration, replicas int) ([]s
 
 	iamCfg, iamURL := iamRole(t, h)
 	jwks := iamURL + sessionkey.WellKnownPath
-	dataMux, _, err := app.AssembleDataMux(context.Background(), splitDeps(t, dataRoleConfig(t, h, jwks)))
+	dataMux, _, err := app.AssembleDataMux(context.Background(), splitDeps(t, dataRoleConfig(t, h, jwks), config.RoleAPI))
 	if err != nil {
 		t.Fatalf("AssembleDataMux: %v", err)
 	}

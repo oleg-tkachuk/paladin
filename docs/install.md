@@ -308,7 +308,8 @@ config:
     signing_key_path: /etc/paladin-capability/key.pem
 ```
 
-The chart mounts the Secret at `/etc/paladin-capability`, so
+The chart mounts the Secret at `/etc/paladin-capability` in the roles that
+verify and issue capabilities — `api`, `iam` and `admin` — so
 `signing_key_path` is that directory plus the Secret's key. Without a key
 path Paladin generates a key at boot, and refuses to start that way outside
 `local`, `dev`, `test` and `ci`: every restart would invalidate every token.

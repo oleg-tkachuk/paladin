@@ -6,7 +6,8 @@
 
     api        ← ingress-controller / mcp / session → common + storage
                                                      + iam (session JWKS)
-    iam        ← ingress-controller / mcp / session → common + storage
+    iam        ← ingress-controller / mcp / session → common (no storage: it
+                                                     serves no object)
                ← admin / api (session JWKS, 8085)
                ← UI (the OAuth consent relay)
     admin      ← ingress-controller / mcp / session → common + storage + NATS
@@ -188,8 +189,6 @@ spec:
     {{- range $r := concat $common $rateLimitEgress }}
     - {{ $r | toJson }}
     {{- end }}
-    # The shared dependencies warm every storage backend's client.
-    - {{ $storageEgress | toJson }}
 {{- end }}
 {{- if .Values.deployments.admin.enabled }}
 ---

@@ -41,6 +41,9 @@ import (
 // `serve admin` (TCP listener) and `serve mcp --embedded` (inline
 // transport) consume this.
 func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*http.ServeMux, *health.Handler, error) {
+	if err := requireTokenAuth(deps); err != nil {
+		return nil, nil, err
+	}
 	cfg := deps.Cfg
 	l := deps.Logger
 	repos := deps.Repos
@@ -130,7 +133,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			chargeEm = NewChargeEmitter(events, l.Named("charge-events"))
 		}
 		capAdmin = auth.CapabilityInterceptorWithEvents(
-			deps.Capability.Verifier,
+			deps.Capability.Auth.Verifier,
 			auth.TokenPlaneAdmin,
 			deps.Capability.Usage,
 			cfg.Capability.ChargePerRequestAmount,
@@ -151,7 +154,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// the tenants it serves without a human session. A roleless service
 		// token still falls through to JWT, as before — it would gain nothing
 		// here and would newly reach any RPC gated on tenant alone.
-		apiTokAdmin = auth.APITokenRoleAuthInterceptor(deps.APIToken.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneAdmin)
+		apiTokAdmin = auth.APITokenRoleAuthInterceptor(deps.APIToken.Auth.Verifier, deps.RateLimits().Tokens, auth.TokenPlaneAdmin)
 	} else {
 		apiTokAdmin = auth.APITokenInterceptor(nil, "")
 	}
@@ -352,7 +355,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// filter.
 	oauthClientH := oauthclienth.NewHandler(oauthClients, cfg.Auth.OAuth, polEngine)
 	if deps.Capability != nil {
-		oauthClientH.WithCapabilityRevocation(deps.Capability.BulkRevocation)
+		oauthClientH.WithCapabilityRevocation(deps.Capability.Auth.BulkRevocation)
 	}
 	paladinadminv1connect.RegisterOAuthClientServiceHandler(adminServer, oauthClientH)
 
@@ -388,19 +391,19 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// empty {"keys": []} that leaks "we have a JWKS endpoint but no
 	// keys yet" to scanners.
 	if deps.Capability != nil {
-		mux.Handle("/.well-known/jwks.json", JWKSHandler(deps.Capability.PublicKeys))
+		mux.Handle("/.well-known/jwks.json", JWKSHandler(deps.Capability.Auth.PublicKeys))
 
 		// CapabilityService — Issue / Delegate / Revoke / List. The
 		// admin interceptor stack already enforces audience + JWT
 		// authentication; the handler does its own Cedar gate per RPC.
-		capH := capabilityh.NewHandler(deps.Capability.Issuer, deps.Capability.Verifier, deps.Capability.Store,
+		capH := capabilityh.NewHandler(deps.Capability.Auth.Issuer, deps.Capability.Auth.Verifier, deps.Capability.Store,
 			deps.Capability.Usage, polEngine).
-			WithRevoker(deps.Capability.Revoker).
-			WithBiscuitCopies(deps.Capability.Verifier, deps.Capability.Revoker).
+			WithRevoker(deps.Capability.Auth.Revoker).
+			WithBiscuitCopies(deps.Capability.Auth.Verifier, deps.Capability.Auth.Revoker).
 			WithCopyUsage(deps.Capability.CopyUsage).
 			WithRecords(deps.Capability.Records).
-			WithHoldRelease(deps.Capability.BulkRevocation).
-			WithRunRevocation(deps.Capability.BulkRevocation).
+			WithHoldRelease(deps.Capability.Auth.BulkRevocation).
+			WithRunRevocation(deps.Capability.Auth.BulkRevocation).
 			WithLeases(deps.Capability.Leases).
 			WithLineage(deps.Capability.Lineage).
 			WithCurrency(deps.Cfg.Capability.Currency)
@@ -424,7 +427,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// when the api_token subsystem is off we mount the Unimplemented
 	// stub so methods return 501 (see CapabilityService rationale).
 	if deps.APIToken != nil {
-		apiTokH := apitokenh.NewHandler(deps.APIToken.Issuer, deps.APIToken.Store, deps.RateLimits().Tokens, polEngine)
+		apiTokH := apitokenh.NewHandler(deps.APIToken.Auth.Issuer, deps.APIToken.Store, deps.RateLimits().Tokens, polEngine)
 		paladinadminv1connect.RegisterAPITokenServiceHandler(adminServer, apiTokH)
 	} else {
 		// See disabledCapabilityServiceHandler rationale.

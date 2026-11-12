@@ -193,16 +193,16 @@ func capabilityComponent(deps *SharedDeps) health.Check {
 // elsewhere still verifies here until the short TTL runs out. Not critical:
 // requests are still authorised, only a revocation is slower to take.
 func capabilityRevocationsComponent(deps *SharedDeps) health.Check {
-	on := deps.Capability != nil && deps.Capability.Revocations != nil
+	on := deps.Capability != nil && deps.Capability.Auth != nil && deps.Capability.Auth.Revocations != nil
 	return health.Check{
 		Name:     "capability-revocations",
 		Category: health.CategorySubsystem,
 		Switch:   health.Fixed(health.ByConfig(on, config.KeyCapabilityEnabled)),
 		Func: func(context.Context) error {
-			return revocationSignalErr(deps.Capability.Revocations.Stats())
+			return revocationSignalErr(deps.Capability.Auth.Revocations.Stats())
 		},
 		Describe: func(context.Context) []health.Detail {
-			return revocationSignalDetails(deps.Capability.Revocations.Stats())
+			return revocationSignalDetails(deps.Capability.Auth.Revocations.Stats())
 		},
 	}
 }

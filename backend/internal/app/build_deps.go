@@ -135,11 +135,13 @@ func (d *SharedDeps) StopWatchers() {
 	}
 }
 
-// BuildSharedDeps materialises SharedDeps. Returns ErrNoSigningKey or a
-// wrapped configuration error early so the caller can fail-fast before
-// any listener binds. The cedar engine's first refresh is awaited inside
-// Start(), so this call may take ~hundreds of ms on a cold cache.
-func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap.Logger) (*SharedDeps, error) {
+// BuildSharedDeps materialises SharedDeps, with the parts builds names
+// (config.Role.Builds): a role builds, and reads the Secrets of, only what
+// its code uses. Returns ErrNoSigningKey or a wrapped configuration error
+// early so the caller can fail-fast before any listener binds. The cedar
+// engine's first refresh is awaited inside Start(), so this call may take
+// ~hundreds of ms on a cold cache.
+func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l *zap.Logger, builds config.Builds) (*SharedDeps, error) {
 	pool, ok := db.Pool.(*pgxpool.Pool)
 	if !ok {
 		return nil, errors.New("app: DB.Pool is not *pgxpool.Pool")
@@ -150,9 +152,9 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	// fails loudly. Each storage interface below is a router that resolves the
 	// target client from the registry per call, keyed on the object's backend
 	// id — there is no default backend, so every write path names one explicitly.
-	registry := s3adapter.NewBackendRegistry(cfg.Storage)
-	if err := registry.Warmup(ctx); err != nil {
-		return nil, fmt.Errorf("app: s3 backend registry: %w", err)
+	registry, err := storageRegistry(ctx, cfg.Storage, builds.Storage, l)
+	if err != nil {
+		return nil, err
 	}
 
 	// Listing, counting and searching objects read through db.Reads: the
@@ -230,7 +232,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 
 	// Capability subsystem — additive; absence is fine. Built after the
 	// rest so the bundle can take a *SharedDeps for logging convenience.
-	cap, err := BuildCapabilityBundle(cfg.Capability, deps)
+	cap, err := BuildCapabilityBundle(cfg.Capability, deps, builds.TokenAuth)
 	if err != nil {
 		deps.StopWatchers() // don't leak the LISTEN goroutine on a failed boot
 		return nil, fmt.Errorf("app: capability bundle: %w", err)
@@ -238,7 +240,7 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	deps.Capability = cap
 
 	// API-token subsystem — additive; same disabled-by-default rule.
-	apiTok, err := BuildAPITokenBundle(cfg.APIToken, deps)
+	apiTok, err := BuildAPITokenBundle(cfg.APIToken, deps, builds.TokenAuth)
 	if err != nil {
 		deps.StopWatchers() // same reason as the capability branch above
 		return nil, fmt.Errorf("app: api_token bundle: %w", err)
@@ -251,4 +253,33 @@ func BuildSharedDeps(ctx context.Context, cfg config.Config, db *postgres.DB, l 
 	// no background flusher, no loss window on an abrupt process kill.
 
 	return deps, nil
+}
+
+// storageRegistry is a client per configured storage backend, warmed so a
+// boot misconfiguration fails loudly; or, in a role that builds no storage,
+// a registry over no backend, which resolves none and reads no credentials.
+func storageRegistry(ctx context.Context, cfg config.Storage, build bool, l *zap.Logger) (*s3adapter.BackendRegistry, error) {
+	if !build {
+		l.Info("storage: no backend client; this role reads and writes no object")
+		return s3adapter.NewBackendRegistry(config.Storage{}), nil
+	}
+	registry := s3adapter.NewBackendRegistry(cfg)
+	if err := registry.Warmup(ctx); err != nil {
+		return nil, fmt.Errorf("app: s3 backend registry: %w", err)
+	}
+	return registry, nil
+}
+
+// errPlaneWithoutTokenAuth is a plane assembled over shared dependencies a
+// role built without TokenAuth: it would verify no token and issue none.
+var errPlaneWithoutTokenAuth = errors.New("app: a plane needs shared dependencies built with token auth (config.Builds.TokenAuth)")
+
+// requireTokenAuth refuses shared dependencies that hold an enabled token
+// subsystem's stores without what verifies and issues its tokens, which only
+// a role that serves no plane builds.
+func requireTokenAuth(deps *SharedDeps) error {
+	if deps.Capability != nil && deps.Capability.Auth == nil || deps.APIToken != nil && deps.APIToken.Auth == nil {
+		return errPlaneWithoutTokenAuth
+	}
+	return nil
 }

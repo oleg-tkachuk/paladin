@@ -25,15 +25,13 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
 )
 
-// CapabilityBundle bundles the ready-to-use issuer / verifier / store
-// plus the JWKS document the admin plane serves. Lives on SharedDeps
-// when capability is enabled; nil otherwise. Callers (interceptor,
-// admin handler) pull the pieces they need.
+// CapabilityBundle is the capability subsystem: its stores, which every role
+// building the shared dependencies holds, and Auth, which verifies and issues
+// capabilities. Lives on SharedDeps when capability is enabled; nil
+// otherwise. Callers (interceptor, admin handler, purger) pull the pieces
+// they need.
 type CapabilityBundle struct {
 	Store limes.Store
-	// Revoker revokes a capability, the capabilities a selector matches or
-	// a Biscuit copy, logging each and clearing this process's cache of it.
-	Revoker *limes.Revoker
 
 	// CopyUsage reads the counters of Biscuit copies with limits of their own.
 	CopyUsage meter.CopyUsageReader
@@ -48,6 +46,34 @@ type CapabilityBundle struct {
 	// Ledger reads the charges ledger for billing, and removes its old
 	// charges for the capability purger when asked to.
 	Ledger *pgstore.Ledger
+
+	// Records reads capability records with their dispositions: a tenant's
+	// for List, and one for Get.
+	Records limes.RecordReporter
+
+	// Exchanges records the capability each paladin-mcp token was exchanged
+	// for, under the tenant the exchange names, so that a token yields one
+	// capability across every replica (ADR-0041).
+	Exchanges limes.ExchangeStore
+
+	// Replay records the DPoP proof ids every replica has accepted, so a
+	// proof replayed against any of them is refused. The capability
+	// purger drops the ids that have expired.
+	Replay *pgstore.ReplayCache
+
+	// Auth verifies, issues and revokes capabilities. Nil in a role that
+	// does none of it (config.Builds.TokenAuth): such a role loads no
+	// signing key and reads no DPoP nonce key.
+	Auth *CapabilityAuth
+}
+
+// CapabilityAuth is what verifies, issues and revokes capabilities, built
+// from the signing key and the DPoP nonce key by the roles that do.
+type CapabilityAuth struct {
+	// Revoker revokes a capability, the capabilities a selector matches or
+	// a Biscuit copy, logging each and clearing this process's cache of it.
+	Revoker *limes.Revoker
+
 	Issuer *limes.Issuer
 	// Delegation issues the capabilities the MCP server exchanges callers'
 	// tokens for, which act for their user (ADR-0041).
@@ -60,24 +86,10 @@ type CapabilityBundle struct {
 	// replica at once (the health page's capability-revocations).
 	Revocations *limes.RevocationCache
 
-	// Records reads capability records with their dispositions: a tenant's
-	// for List, and one for Get.
-	Records limes.RecordReporter
-
-	// Exchanges records the capability each paladin-mcp token was exchanged
-	// for, under the tenant the exchange names, so that a token yields one
-	// capability across every replica (ADR-0041).
-	Exchanges limes.ExchangeStore
-
 	// BulkRevocation revokes capabilities together — an OAuth grant's
 	// session when it ends, a client when it is deleted — and releases
 	// their holds.
 	BulkRevocation *auth.BulkRevocation
-
-	// Replay records the DPoP proof ids every replica has accepted, so a
-	// proof replayed against any of them is refused. The capability
-	// purger drops the ids that have expired.
-	Replay *pgstore.ReplayCache
 
 	// PublicKeys is the kid → public key map exposed via the JWKS
 	// endpoint. Refreshed in place when rotation lands; today it
@@ -109,8 +121,9 @@ var ephemeralKeyEnvs = map[string]bool{
 // BuildCapabilityBundle wires the capability subsystem from cfg.Capability
 // + the SharedDeps Postgres pool. Returns nil with a nil error when the
 // subsystem is disabled — callers should treat absence as "no capability
-// auth path active" and fall through to JWT.
-func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*CapabilityBundle, error) {
+// auth path active" and fall through to JWT. With tokenAuth false it builds
+// the stores alone: no signing key, no DPoP nonces, no revocation watcher.
+func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps, tokenAuth bool) (*CapabilityBundle, error) {
 	if !cfg.Enabled {
 		return nil, nil
 	}
@@ -118,9 +131,43 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, errors.New("app: capability.issuer_name required when enabled")
 	}
 
+	// The key is checked before anything opens on the pool, so a missing
+	// one refuses to start however the rest is configured.
+	var key signingKey
+	if tokenAuth {
+		var err error
+		if key, err = guardedCapabilityKey(cfg, deps); err != nil {
+			return nil, err
+		}
+	}
+
+	bundle, own, err := buildCapabilityStores(cfg, deps)
+	if err != nil {
+		return nil, err
+	}
+	if !tokenAuth {
+		deps.Logger.Info("capability: stores only; this role verifies and issues no capability")
+		return bundle, nil
+	}
+	if bundle.Auth, err = buildCapabilityAuth(cfg, deps, own, key); err != nil {
+		return nil, err
+	}
+	return bundle, nil
+}
+
+// signingKey is the capability issuer's key and whether this process
+// generated it.
+type signingKey struct {
+	limes.SigningKey
+	generated bool
+}
+
+// guardedCapabilityKey is the issuer's signing key, refusing a generated one
+// outside the environments where losing every token on restart costs nothing.
+func guardedCapabilityKey(cfg config.Capability, deps *SharedDeps) (signingKey, error) {
 	key, generated, err := capabilityKey(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("app: capability key: %w", err)
+		return signingKey{}, fmt.Errorf("app: capability key: %w", err)
 	}
 	if generated {
 		// An ephemeral key means every pod restart silently invalidates every
@@ -132,7 +179,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		// name defaults to REFUSING to start, not to shipping ephemeral keys.
 		// The failure mode of guessing wrong here is asymmetric.
 		if !ephemeralKeyEnvs[deps.Cfg.App.Env] {
-			return nil, fmt.Errorf(
+			return signingKey{}, fmt.Errorf(
 				"app: capability.enabled=true with no signing_key_path in env %q — "+
 					"an ephemeral key invalidates every issued token on restart; "+
 					"mount a persistent key or add %q to ephemeralKeyEnvs if this "+
@@ -145,23 +192,99 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 			zap.String("env", deps.Cfg.App.Env),
 		)
 	}
+	return signingKey{SigningKey: key, generated: generated}, nil
+}
 
+// capabilityStores is what Auth is built over: the Postgres store itself,
+// which the issuers and the revocation cache take, the usage store's hold
+// releaser, which a bulk revocation needs, and the DPoP replay cache.
+type capabilityStores struct {
+	store  *pgstore.Store
+	holds  meter.MatchingReleaser
+	replay *pgstore.ReplayCache
+}
+
+// buildCapabilityStores builds what reads and writes the capability tables:
+// every role building the shared dependencies holds them.
+func buildCapabilityStores(cfg config.Capability, deps *SharedDeps) (*CapabilityBundle, capabilityStores, error) {
 	store, err := capabilitypg.New(deps.Pool)
 	if err != nil {
-		return nil, fmt.Errorf("app: capability store: %w", err)
+		return nil, capabilityStores{}, fmt.Errorf("app: capability store: %w", err)
 	}
 	lineage, err := limes.As[limes.RevocationLineageLookup](store)
 	if err != nil {
-		return nil, fmt.Errorf("app: capability store: %w", err)
+		return nil, capabilityStores{}, fmt.Errorf("app: capability store: %w", err)
 	}
 	records, err := capabilitypg.NewCensus(deps.Pool)
 	if err != nil {
-		return nil, fmt.Errorf("app: capability records: %w", err)
+		return nil, capabilityStores{}, fmt.Errorf("app: capability records: %w", err)
 	}
+	replay, err := pgstore.NewReplayCache(pgstore.ReplayConfig{
+		DB: deps.Pool, Logger: logger.Slog(deps.Logger, "dpop-replay"),
+		EntriesPerHolder: cfg.DPoPReplay.EntriesPerHolder,
+	})
+	if err != nil {
+		return nil, capabilityStores{}, fmt.Errorf("app: DPoP replay cache: %w", err)
+	}
+
+	// Metering decorator: Bump / Charge / Refund emit OTel
+	// metrics for the runtime counters. Pure pass-through on cold
+	// MeterProvider so test paths and sidecar tools don't pay for
+	// instrument lookups.
+	// Labelled by tenant, as every Paladin meter of tenant activity is.
+	storeEvents, err := usageStoreEvents()
+	if err != nil {
+		return nil, capabilityStores{}, fmt.Errorf("app: capability usage store events: %w", err)
+	}
+	usageStore, err := capabilitypg.NewUsageStore(deps.Pool,
+		capabilitypg.WithDefaultUnit(cfg.Currency),
+		capabilitypg.WithLeases(cfg.BudgetLeases),
+		// A call that waited long for its tenant's aggregate is logged at WARN.
+		capabilitypg.WithLogger(logger.Slog(deps.Logger, "capability-usage")),
+		capabilitypg.WithEvents(storeEvents))
+	if err != nil {
+		return nil, capabilityStores{}, fmt.Errorf("app: capability usage store: %w", err)
+	}
+	deps.Logger.Info("capability: usage store built",
+		zap.Bool("budget_leases", cfg.BudgetLeases))
+	usage, err := meteredUsage(usageStore)
+	if err != nil {
+		return nil, capabilityStores{}, fmt.Errorf("app: capability metering: %w", err)
+	}
+	parts, err := usagePartsOf(usage)
+	if err != nil {
+		return nil, capabilityStores{}, err
+	}
+	if parts.leases == nil {
+		deps.Logger.Info("capability: budget leases are off; a lease call is answered leasing_disabled")
+	}
+	ledger, err := capabilitypg.NewLedger(deps.Pool)
+	if err != nil {
+		return nil, capabilityStores{}, fmt.Errorf("app: charges ledger: %w", err)
+	}
+
+	return &CapabilityBundle{
+		Store:     store,
+		CopyUsage: parts.copies,
+		Records:   records,
+		Exchanges: pgstore.ScopedExchanges(store),
+		Usage:     usage,
+		Leases:    parts.leases,
+		Budgets:   parts.budgets,
+		Lineage:   lineage,
+		Ledger:    ledger,
+		Replay:    replay,
+	}, capabilityStores{store: store, holds: parts.holds, replay: replay}, nil
+}
+
+// buildCapabilityAuth builds what verifies, issues and revokes capabilities
+// over the stores, from the signing key and the DPoP nonce key.
+func buildCapabilityAuth(cfg config.Capability, deps *SharedDeps, own capabilityStores, key signingKey) (*CapabilityAuth, error) {
+	store := own.store
 
 	// The capability issuer, and the delegation issuer the MCP server
 	// exchanges callers' tokens through (ADR-0041).
-	issuers, err := newCapabilityIssuers(key, store, pgstore.ScopedIssuance(store), cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL, deps.Logger)
+	issuers, err := newCapabilityIssuers(key.SigningKey, store, pgstore.ScopedIssuance(store), cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL, deps.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -211,14 +334,6 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	}, cache)
 	go func() { _ = watcher.Run(watchCtx) }()
 	deps.RegisterWatcherStop(stopWatch)
-	replay, err := pgstore.NewReplayCache(pgstore.ReplayConfig{
-		DB: deps.Pool, Logger: logger.Slog(deps.Logger, "dpop-replay"),
-		EntriesPerHolder: cfg.DPoPReplay.EntriesPerHolder,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("app: DPoP replay cache: %w", err)
-	}
-
 	nonces, err := dpopNonces(cfg.DPoPNonce, deps.Cfg.App.Env, deps.Logger)
 	if err != nil {
 		return nil, err
@@ -227,7 +342,7 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 	// A key-bound capability must arrive with an RFC 9449 proof from its
 	// key. The planes compare the procedure path only: behind a proxy they
 	// cannot know the scheme and host clients address them by.
-	proofs, err := dpop.NewVerifier(dpop.VerifierConfig{Replay: replay, MatchPathOnly: true, Nonces: nonces})
+	proofs, err := dpop.NewVerifier(dpop.VerifierConfig{Replay: own.replay, MatchPathOnly: true, Nonces: nonces})
 	if err != nil {
 		return nil, fmt.Errorf("app: DPoP verifier: %w", err)
 	}
@@ -255,42 +370,6 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability verifier: %w", err)
 	}
 
-	// Metering decorator: Bump / Charge / Refund emit OTel
-	// metrics for the runtime counters. Pure pass-through on cold
-	// MeterProvider so test paths and sidecar tools don't pay for
-	// instrument lookups.
-	// Labelled by tenant, as every Paladin meter of tenant activity is.
-	storeEvents, err := usageStoreEvents()
-	if err != nil {
-		return nil, fmt.Errorf("app: capability usage store events: %w", err)
-	}
-	usageStore, err := capabilitypg.NewUsageStore(deps.Pool,
-		capabilitypg.WithDefaultUnit(cfg.Currency),
-		capabilitypg.WithLeases(cfg.BudgetLeases),
-		// A call that waited long for its tenant's aggregate is logged at WARN.
-		capabilitypg.WithLogger(logger.Slog(deps.Logger, "capability-usage")),
-		capabilitypg.WithEvents(storeEvents))
-	if err != nil {
-		return nil, fmt.Errorf("app: capability usage store: %w", err)
-	}
-	deps.Logger.Info("capability: usage store built",
-		zap.Bool("budget_leases", cfg.BudgetLeases))
-	usage, err := meteredUsage(usageStore)
-	if err != nil {
-		return nil, fmt.Errorf("app: capability metering: %w", err)
-	}
-	parts, err := usagePartsOf(usage)
-	if err != nil {
-		return nil, err
-	}
-	if parts.leases == nil {
-		deps.Logger.Info("capability: budget leases are off; a lease call is answered leasing_disabled")
-	}
-	ledger, err := capabilitypg.NewLedger(deps.Pool)
-	if err != nil {
-		return nil, fmt.Errorf("app: charges ledger: %w", err)
-	}
-
 	// Every revocation the admin plane makes, logged and reported, and
 	// cleared from this process's cache at once; other replicas hear of it
 	// through the revocation watcher.
@@ -303,27 +382,17 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps) (*Capability
 		return nil, fmt.Errorf("app: capability revoker: %w", err)
 	}
 
-	return &CapabilityBundle{
-		Store:          store,
+	return &CapabilityAuth{
 		Revoker:        revoker,
 		Revocations:    cache,
-		CopyUsage:      parts.copies,
-		Records:        records,
-		Exchanges:      pgstore.ScopedExchanges(store),
-		BulkRevocation: &auth.BulkRevocation{Revoker: revoker, Holds: parts.holds},
-		Usage:          usage,
-		Leases:         parts.leases,
-		Budgets:        parts.budgets,
-		Lineage:        lineage,
-		Ledger:         ledger,
+		BulkRevocation: &auth.BulkRevocation{Revoker: revoker, Holds: own.holds},
 		Issuer:         issuers.issuer,
 		Delegation:     issuers.delegation,
 		Verifier:       verifier,
 		Keys:           issuers.keys,
-		Replay:         replay,
 		PublicKeys:     map[string]ed25519.PublicKey{key.KeyID: key.Public()},
 		IssuerName:     cfg.IssuerName,
-		EphemeralKey:   generated,
+		EphemeralKey:   key.generated,
 	}, nil
 }
 

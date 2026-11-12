@@ -40,15 +40,18 @@ func TestEverySecretFieldHasAReader(t *testing.T) {
 var wantRoleSecrets = map[Role][]string{
 	RoleAPI: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
 		"pg-app", "pg-replica", "valkey"},
-	RoleIAM: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
+	// No storage: the IAM plane serves no object.
+	RoleIAM: {"api-token-hmac", "dpop-nonce", "health-token",
 		"oauth-client", "pg-app", "pg-replica", "valkey"},
 	RoleAdmin: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
 		"pg-app", "pg-replica", "valkey"},
-	RoleWorker: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
+	// Neither the pepper nor the nonce key: the worker purges tokens and
+	// capabilities, and verifies neither.
+	RoleWorker: {"backend-access", "backend-secret", "health-token",
 		"pg-app", "pg-migrate", "pg-reaper", "pg-replica"},
-	RoleDispatcher: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
-		"pg-app", "pg-migrate", "pg-reaper", "pg-replica"},
-	RoleIngest: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
+	// Neither tokens nor storage: the dispatcher delivers events.
+	RoleDispatcher: {"health-token", "pg-app", "pg-migrate", "pg-reaper", "pg-replica"},
+	RoleIngest: {"backend-access", "backend-secret", "health-token",
 		"ingest-nats", "ingest-rabbitmq", "ingest-webhook", "pg-app", "pg-migrate", "pg-reaper", "pg-replica"},
 	RoleMCP:     {"mcp-dpop", "mcp-exchange"},
 	RoleSession: {"health-token"},
@@ -56,6 +59,34 @@ var wantRoleSecrets = map[Role][]string{
 		"mcp-dpop", "mcp-exchange", "oauth-client", "pg-app", "pg-replica", "valkey"},
 	RoleMigrate:   {"pg-app", "pg-migrate"},
 	RoleBootstrap: {"backend-access", "backend-secret", "bootstrap-admin", "pg-app"},
+}
+
+// What each role's shared dependencies build, written out rather than
+// derived: the build and the Secrets it reads follow from this one table.
+func TestARoleBuildsOnlyWhatItUses(t *testing.T) {
+	want := map[Role]Builds{
+		RoleAPI:         {Storage: true, TokenAuth: true},
+		RoleIAM:         {TokenAuth: true},
+		RoleAdmin:       {Storage: true, TokenAuth: true},
+		RoleWorker:      {Storage: true},
+		RoleDispatcher:  {},
+		RoleIngest:      {Storage: true},
+		RoleMCPEmbedded: {Storage: true, TokenAuth: true},
+		RoleMCP:         {},
+		RoleSession:     {},
+		RoleMigrate:     {},
+		RoleBootstrap:   {},
+	}
+	for _, r := range slices.Sorted(maps.Keys(roleSecrets)) {
+		w, ok := want[r]
+		if !ok {
+			t.Errorf("no expectation for role %s", r)
+			continue
+		}
+		if got := r.Builds(); got != w {
+			t.Errorf("%s.Builds() = %+v, want %+v", r, got, w)
+		}
+	}
 }
 
 // everySecretConfig names a distinct Secret in every field a Secret fills.

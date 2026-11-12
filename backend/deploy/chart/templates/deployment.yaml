@@ -17,6 +17,9 @@
 {{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec) }}
 {{- $sessionKey := fromJson (include "chart.sessionKey" $) }}
 {{- $mintsSessions := and $sessionKey.active (has $role $sessionKey.roles) }}
+{{- /* The roles that verify and issue capabilities (files/role-secrets.json,
+       from backend/internal/config/roles.go): only they load the key. */}}
+{{- $signsCapabilities := and $.Values.capabilitySigningKeySecret.name (has $role ($.Files.Get "files/role-secrets.json" | fromJson).tokenAuthRoles) }}
 
 ---
 apiVersion: apps/v1
@@ -137,12 +140,12 @@ spec:
               mountPath: {{ $.Values.postgresCa.mountPath }}
               readOnly: true
             {{- end }}
-            {{- if $.Values.capabilitySigningKeySecret.name }}
+            {{- if $signsCapabilities }}
             # Mounted here rather than through defaults.volumeMounts because
-            # every role needs it and per-role lists OVERRIDE the defaults —
-            # api and admin define their own for mTLS, so a key added to the
-            # defaults would silently miss exactly the roles that mint and
-            # verify capabilities.
+            # per-role lists OVERRIDE the defaults — api and admin define
+            # their own for mTLS, so a key added to the defaults would
+            # silently miss exactly the roles that mint and verify
+            # capabilities.
             - name: capability-signing-key
               mountPath: {{ $.Values.capabilitySigningKeySecret.mountPath }}
               readOnly: true
@@ -171,7 +174,7 @@ spec:
           secret:
             secretName: {{ $.Values.postgresCa.secretName }}
         {{- end }}
-        {{- if $.Values.capabilitySigningKeySecret.name }}
+        {{- if $signsCapabilities }}
         - name: capability-signing-key
           secret:
             secretName: {{ $.Values.capabilitySigningKeySecret.name }}

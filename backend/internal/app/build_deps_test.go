@@ -82,7 +82,7 @@ func TestBuildSharedDeps_RefusesBeforeTouchingTheDatabase(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			deps, err := BuildSharedDeps(context.Background(), tc.cfg, tc.db, zap.NewNop())
+			deps, err := BuildSharedDeps(context.Background(), tc.cfg, tc.db, zap.NewNop(), config.RoleAPI.Builds())
 			if err == nil {
 				t.Fatalf("BuildSharedDeps returned no error; deps != nil: %v", deps != nil)
 			}

@@ -115,7 +115,7 @@ func delegatingUsers(users userByID) auth.DelegatingUserLookup {
 // delegationOption makes a plane's capability interceptor accept the
 // delegation issuer's capabilities as their users.
 func delegationOption(bundle *CapabilityBundle, users userByID) auth.CapabilityOption {
-	return auth.WithDelegation(auth.DelegationIssuerName(bundle.IssuerName), delegatingUsers(users))
+	return auth.WithDelegation(auth.DelegationIssuerName(bundle.Auth.IssuerName), delegatingUsers(users))
 }
 
 // errExchangeNeedsCapability is a token exchange configured with the
@@ -135,10 +135,10 @@ func withDelegationExchange(ctx context.Context, as *oauth.Handler, deps *Shared
 	if err != nil {
 		return nil, fmt.Errorf("oauth token exchange verifier: %w", err)
 	}
-	ex, err := delegation.NewExchanger(deps.Capability.Delegation, delegation.NewSubjectVerifier(tokens, cfg.Issuer),
+	ex, err := delegation.NewExchanger(deps.Capability.Auth.Delegation, delegation.NewSubjectVerifier(tokens, cfg.Issuer),
 		deps.Capability.Exchanges, users, deps.Cfg.Capability.Currency, logger.Slog(deps.Logger, "delegation"))
 	if err != nil {
 		return nil, err
 	}
-	return as.WithTokenExchange(ex, exchangers, deps.Capability.BulkRevocation)
+	return as.WithTokenExchange(ex, exchangers, deps.Capability.Auth.BulkRevocation)
 }

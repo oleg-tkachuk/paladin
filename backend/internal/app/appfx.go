@@ -107,9 +107,9 @@ func ProvideDB(cfg config.Config, l *zap.Logger) (*postgres.DB, error) {
 }
 
 // ProvideSharedDeps builds the heavy shared dependency product every plane and
-// worker needs.
-func ProvideSharedDeps(cfg config.Config, db *postgres.DB, l *zap.Logger, m observability.MetricsHandler) (*SharedDeps, error) {
-	deps, err := BuildSharedDeps(context.Background(), cfg, db, l)
+// worker needs, with the parts the role it is loaded for builds.
+func ProvideSharedDeps(src ConfigSource, cfg config.Config, db *postgres.DB, l *zap.Logger, m observability.MetricsHandler) (*SharedDeps, error) {
+	deps, err := BuildSharedDeps(context.Background(), cfg, db, l, src.Role.Builds())
 	if err != nil {
 		return nil, err
 	}

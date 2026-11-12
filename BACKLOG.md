@@ -259,20 +259,6 @@ the same commit. Treat this file like a runtime invariant.
   enough (rule of thumb: ~1M rows) that the on-the-fly aggregation is
   slower than the SLA.
 
-### Roles build bundles they never use (ADR-0047 leftover)
-
-- **Status:** Deferred.
-- **Reason:** worker, dispatcher and ingest still read the API-token pepper
-  and the DPoP nonce key, and iam every storage backend's credentials (with
-  egress to storage), only because `BuildSharedDeps` builds those bundles in
-  every role; their Roles therefore name Secrets their code never uses.
-- **Definition of Done:** the bundles are built by the roles that verify API
-  tokens or DPoP proofs alone, `sharedDepsSecrets` in
-  `backend/internal/config/roles.go` loses both paths, the storage
-  backends leave iam's set, and the per-role Roles and NetworkPolicies
-  regenerated from them no longer name what each role does not use.
-- **Blockers:** none.
-
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
 - **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays

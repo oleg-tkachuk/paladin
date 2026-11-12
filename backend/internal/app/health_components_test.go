@@ -122,7 +122,7 @@ func TestCapabilityRevocationsFollowTheWatcher(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := capabilityRevocationsComponent(&SharedDeps{Capability: &CapabilityBundle{Revocations: cache}})
+	c := capabilityRevocationsComponent(&SharedDeps{Capability: &CapabilityBundle{Auth: &CapabilityAuth{Revocations: cache}}})
 	if c.Critical {
 		t.Fatal("capability-revocations is critical; a revocation slower to take is no outage")
 	}
