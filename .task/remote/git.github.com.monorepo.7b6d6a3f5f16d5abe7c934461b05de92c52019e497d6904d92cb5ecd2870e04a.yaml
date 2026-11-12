@@ -43,6 +43,12 @@ vars:
   # a monochrome log; the colour sits on top and drops out under NO_COLOR.
   _MONO_OK: '{{if .NO_COLOR}}✔{{else}}{{"\x1b[32m✔\x1b[0m"}}{{end}}'
   _MONO_WARN: '{{if .NO_COLOR}}▲{{else}}{{"\x1b[33m▲\x1b[0m"}}{{end}}'
+  # The names Task looks for in a directory, in the order it takes them: the
+  # first one present is the file a directory include reads.
+  _MONO_TASKFILES:
+    ref: >-
+      list "Taskfile.yml" "taskfile.yml" "Taskfile.yaml" "taskfile.yaml"
+      "Taskfile.dist.yml" "taskfile.dist.yml" "Taskfile.dist.yaml" "taskfile.dist.yaml"
 
 tasks:
 
@@ -83,7 +89,7 @@ tasks:
         sh: |-
           {{range $c := ._MONO_COMPONENTS}}
           if [ ! -d {{$c | q}} ]; then printf ' %s(no such directory)' {{$c | q}}
-          elif ! ls {{$c | q}}/[Tt]askfile.y*ml >/dev/null 2>&1; then printf ' %s(no Taskfile)' {{$c | q}}
+          elif {{range $t := $._MONO_TASKFILES}}[ ! -f {{print $c "/" $t | q}} ] && {{end}}true; then printf ' %s(no Taskfile)' {{$c | q}}
           fi
           {{end}}
     cmds:
@@ -159,7 +165,11 @@ tasks:
             case "$path" in ""|*"{{"{{"}}"*|*://*|*"?ref="*|git@*) continue ;; esac
             case "$path" in /*) file=$path ;; *) file=$rootdir/$path ;; esac
             if [ -d "$file" ]; then
-              file=$(ls "$file"/[Tt]askfile.yml "$file"/[Tt]askfile.yaml "$file"/[Tt]askfile.dist.yml "$file"/[Tt]askfile.dist.yaml 2>/dev/null | awk 'NR == 1' || true)
+              dir=$file
+              file=""
+              for candidate in {{range $t := ._MONO_TASKFILES}}{{$t | q}} {{end}}; do
+                if [ -f "$dir/$candidate" ]; then file=$dir/$candidate; break; fi
+              done
             fi
             [ -n "$file" ] && [ -f "$file" ] || continue
             declared=$(yq -r '.vars // {} | keys | .[]' "$file")
