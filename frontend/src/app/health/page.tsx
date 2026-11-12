@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { FactTable } from "@/components/ui/FactTable";
 import { formatTime } from "@/lib/format/locale";
 import {
   countByStatus,
@@ -40,6 +41,8 @@ import {
   type Control,
   type Detail,
   detailLines,
+  detailMatrix,
+  roleMatrix,
   type RoleStatus,
   type Snapshot,
 } from "@/lib/health";
@@ -266,17 +269,24 @@ function ComponentRow({ c }: { c: Component }) {
   );
 }
 
-// DetailList shows a component's details on their own line, apart from the
+// DetailList shows a component's details on their own lines, apart from the
 // message: they are not an error, and folding them into the preview would
-// offer to expand them. Details about several roles — each role's pool — are
-// a table, a role to a column, so the same fact lines up across roles.
+// offer to expand them. Groups that report the same facts — the worker's
+// jobs — and details about several roles — each role's pool — are a table, so
+// each fact lines up down a column; other details are a line per group.
 function DetailList({ details }: { details: Detail[] }) {
-  if (details.some((d) => d.role)) return <DetailTable details={details} />;
+  if (details.some((d) => d.role)) {
+    return (
+      <FactTable matrix={roleMatrix(details)} columnsMono className="mt-2" />
+    );
+  }
+  const matrix = detailMatrix(details);
+  if (matrix) return <FactTable matrix={matrix} className="mt-2" />;
   return (
-    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       {detailLines(details).map((line) => (
         <div key={line.label} className="contents">
-          <dt className="text-muted-foreground first-letter:uppercase">
+          <dt className="whitespace-nowrap text-muted-foreground first-letter:uppercase">
             {line.label}
           </dt>
           <dd className="flex flex-wrap gap-x-1.5">
@@ -298,58 +308,6 @@ function DetailList({ details }: { details: Detail[] }) {
       ))}
     </dl>
   );
-}
-
-function DetailTable({ details }: { details: Detail[] }) {
-  const roles = unique(details.map((d) => d.role ?? ""));
-  const names = unique(details.map((d) => d.name));
-  const value = (name: string, role: string) =>
-    details.find((d) => d.name === name && (d.role ?? "") === role)?.value ??
-    "—";
-  return (
-    <div className="mt-2 overflow-x-auto">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="text-muted-foreground">
-            <th className="pb-1 text-left font-normal" />
-            {roles.map((r) => (
-              <th
-                key={r}
-                scope="col"
-                className="pb-1 pl-3 text-right font-mono font-normal"
-              >
-                {r}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {names.map((n) => (
-            <tr key={n} className="border-t border-border/40">
-              <th
-                scope="row"
-                className="py-1 text-left font-normal text-muted-foreground"
-              >
-                {n}
-              </th>
-              {roles.map((r) => (
-                <td
-                  key={r}
-                  className="py-1 pl-3 text-right font-mono tabular-nums"
-                >
-                  {value(n, r)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function unique(xs: string[]): string[] {
-  return Array.from(new Set(xs));
 }
 
 // useCutOff is whether the one-line preview hides part of message: it runs

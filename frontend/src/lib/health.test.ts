@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   detailLines,
+  detailMatrix,
+  roleMatrix,
+  selectedCard,
+  type Detail,
   countByStatus,
   needsAttention,
   splitDatabase,
@@ -256,5 +260,129 @@ describe("detailLines", () => {
       },
       { label: "idle", facts: [{ name: "", value: "2" }] },
     ]);
+  });
+});
+
+// The details as the backend's producers write them (worker/ticklog.go,
+// mcp/health.go, app/build_listeners_common.go, worker/dispatcher_health.go).
+const job = (name: string, ran: boolean): Detail[] =>
+  ran
+    ? [
+        { group: name, name: "every", value: "1h0m0s" },
+        { group: name, name: "last run", value: "30m24s ago" },
+        { group: name, name: "took", value: "139ms" },
+        { group: name, name: "outcome", value: "ok" },
+      ]
+    : [
+        { group: name, name: "every", value: "1h0m0s" },
+        { group: name, name: "last run", value: "not yet" },
+      ];
+
+describe("detailMatrix", () => {
+  it("sets out groups that share their facts as a row each, a fact to a column", () => {
+    const m = detailMatrix([
+      ...job("api_token_purger", true),
+      ...job("lifecycle", false),
+    ]);
+    expect(m).toEqual({
+      columns: ["every", "last run", "took", "outcome"],
+      rows: [
+        {
+          label: "api_token_purger",
+          cells: ["1h0m0s", "30m24s ago", "139ms", "ok"],
+        },
+        {
+          label: "lifecycle",
+          cells: ["1h0m0s", "not yet", undefined, undefined],
+        },
+      ],
+    });
+  });
+
+  it("takes its columns from the group that reports most, wherever it stands", () => {
+    const m = detailMatrix([...job("a", false), ...job("b", true)]);
+    expect(m?.columns).toEqual(["every", "last run", "took", "outcome"]);
+  });
+
+  it("keeps a fact with no name as a column of its own", () => {
+    const upstream = (name: string): Detail[] => [
+      { group: name, name: "", value: "up" },
+      { group: name, name: "in", value: "4ms" },
+    ];
+    expect(detailMatrix([...upstream("api"), ...upstream("admin")])).toEqual({
+      columns: ["", "in"],
+      rows: [
+        { label: "api", cells: ["up", "4ms"] },
+        { label: "admin", cells: ["up", "4ms"] },
+      ],
+    });
+  });
+
+  it("is none for groups that report different facts", () => {
+    expect(
+      detailMatrix([
+        { group: "watcher", name: "connected", value: "3" },
+        { group: "watcher", name: "lost", value: "0" },
+        { group: "notifications", name: "received", value: "9" },
+        { group: "clears", name: "narrow", value: "on" },
+      ]),
+    ).toBeNull();
+  });
+
+  it("is none for one group, or for facts with no group", () => {
+    expect(
+      detailMatrix([
+        { group: "queue", name: "pending", value: "0" },
+        { group: "queue", name: "failed", value: "0" },
+      ]),
+    ).toBeNull();
+    expect(
+      detailMatrix([
+        ...job("a", true),
+        ...job("b", true),
+        { name: "version", value: "56" },
+      ]),
+    ).toBeNull();
+    expect(detailMatrix([])).toBeNull();
+  });
+});
+
+describe("roleMatrix", () => {
+  it("sets out each role's facts as a row each, a role to a column", () => {
+    expect(
+      roleMatrix([
+        { role: "api", name: "in use", value: "2" },
+        { role: "worker", name: "in use", value: "5" },
+        { role: "api", name: "idle", value: "8" },
+      ]),
+    ).toEqual({
+      columns: ["api", "worker"],
+      rows: [
+        { label: "in use", cells: ["2", "5"] },
+        { label: "idle", cells: ["8", undefined] },
+      ],
+    });
+  });
+});
+
+describe("selectedCard", () => {
+  const cards = [role("database", []), role("api", []), role("worker", [])];
+  const finding = { role: "worker", component: comp("jobs") };
+
+  it("keeps the card the address names", () => {
+    expect(selectedCard(cards, "api", [finding])).toBe("api");
+  });
+
+  it("opens on the first card with a finding when the address names none, or one gone", () => {
+    expect(selectedCard(cards, "", [finding])).toBe("worker");
+    expect(selectedCard(cards, "scheduler", [finding])).toBe("worker");
+  });
+
+  it("opens on the first card when nothing needs attention", () => {
+    expect(selectedCard(cards, "", [])).toBe("database");
+  });
+
+  it("is empty with no card", () => {
+    expect(selectedCard([], "api", [])).toBe("");
   });
 });

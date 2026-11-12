@@ -49,6 +49,72 @@ export function detailLines(details: readonly Detail[]): DetailLine[] {
   return lines;
 }
 
+/**
+ * Facts set out as a table: a row to a thing, a column to a fact about it.
+ * A cell is undefined where a row reports no such fact.
+ */
+export type FactMatrix = {
+  columns: string[];
+  rows: { label: string; cells: (string | undefined)[] }[];
+};
+
+/** The fewest groups worth a table rather than a line each. */
+const MIN_MATRIX_ROWS = 2;
+
+/**
+ * A component's details as a table, a group to a row and a fact to a column,
+ * when there are several groups and each reports some of the same facts —
+ * the worker's jobs, the bridge's upstreams. The columns are those of the
+ * group that reports most, in its order. Null when the details are loose
+ * facts, one group, or groups about different things: a table of those would
+ * be mostly empty cells.
+ */
+export function detailMatrix(details: readonly Detail[]): FactMatrix | null {
+  if (details.length === 0 || details.some((d) => !d.group)) return null;
+  const lines = detailLines(details);
+  if (lines.length < MIN_MATRIX_ROWS) return null;
+  const widest = lines.reduce((w, l) =>
+    l.facts.length > w.facts.length ? l : w,
+  );
+  const columns = widest.facts.map((f) => f.name);
+  const fits = lines.every((l) =>
+    l.facts.every((f) => columns.includes(f.name)),
+  );
+  if (!fits) return null;
+  return {
+    columns,
+    rows: lines.map((l) => ({
+      label: l.label,
+      cells: columns.map((c) => l.facts.find((f) => f.name === c)?.value),
+    })),
+  };
+}
+
+/**
+ * Details a merged component carries for several roles — each role's pool —
+ * as a table: a fact to a row and a role to a column, so the same fact lines
+ * up across roles.
+ */
+export function roleMatrix(details: readonly Detail[]): FactMatrix {
+  const columns = unique(details.map((d) => d.role ?? ""));
+  const names = unique(details.map((d) => d.name));
+  return {
+    columns,
+    rows: names.map((name) => ({
+      label: name,
+      cells: columns.map(
+        (role) =>
+          details.find((d) => d.name === name && (d.role ?? "") === role)
+            ?.value,
+      ),
+    })),
+  };
+}
+
+function unique(xs: string[]): string[] {
+  return Array.from(new Set(xs));
+}
+
 export type Component = {
   name: string;
   status: ComponentStatus;
@@ -254,4 +320,19 @@ export function countByStatus(
   };
   for (const c of components) out[c.status]++;
   return out;
+}
+
+/**
+ * The card the page shows: the one the address names when it exists, else
+ * the first one with a finding, else the first. Empty when there is none.
+ * Read again on every poll, so a choice the address names never moves, and
+ * the default follows a fault as it appears.
+ */
+export function selectedCard(
+  cards: readonly Snapshot[],
+  requested: string,
+  findings: readonly Finding[],
+): string {
+  if (cards.some((c) => c.role === requested)) return requested;
+  return findings[0]?.role ?? cards[0]?.role ?? "";
 }
