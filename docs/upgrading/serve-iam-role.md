@@ -11,6 +11,8 @@
   IngressRoute and Ingress send the IAM procedures, `/oauth/`, the AS metadata
   and `/.well-known/jwks.json` to it. Anything dialling `<release>-api:8085`
   must dial `<release>-iam:8085` instead; the console chart does so itself.
+- With `internalTLS` on, the certificate's SANs must also name
+  `<release>-iam`, or every role's JWKS fetch fails its TLS check.
 - Overrides set under `deployments.api` for probes, resources or replicas are
   not inherited: set them under `deployments.iam` as well.
 - The OAuth AS metadata's `jwks_uri` is derived from its issuer;

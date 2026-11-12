@@ -263,13 +263,14 @@ the same commit. Treat this file like a runtime invariant.
 
 - **Status:** Deferred.
 - **Reason:** worker, dispatcher and ingest still read the API-token pepper
-  and the DPoP nonce key, only because `BuildSharedDeps` builds those bundles
-  in every role; their Roles therefore name Secrets their code never uses.
+  and the DPoP nonce key, and iam every storage backend's credentials (with
+  egress to storage), only because `BuildSharedDeps` builds those bundles in
+  every role; their Roles therefore name Secrets their code never uses.
 - **Definition of Done:** the bundles are built by the roles that verify API
   tokens or DPoP proofs alone, `sharedDepsSecrets` in
-  `backend/internal/config/roles.go` loses both paths, and the per-role
-  Roles regenerated from it no longer name them for worker, dispatcher or
-  ingest.
+  `backend/internal/config/roles.go` loses both paths, the storage
+  backends leave iam's set, and the per-role Roles and NetworkPolicies
+  regenerated from them no longer name what each role does not use.
 - **Blockers:** none.
 
 ### Console session terminated in Go (ADR-0048)
