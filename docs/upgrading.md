@@ -89,6 +89,33 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — the charts can run the console's session role
+
+- The backend chart adds `deployments.session` (`serve session`, ADR-0048),
+  off by default. Enabling it requires `config.session.console_origins`, the
+  console's origin; the chart refuses to render without one. Its NetworkPolicy
+  reaches the api, iam and admin roles and no database, and those roles admit
+  it.
+- The console chart adds `session.service.name` and `session.service.port`:
+  once the name is set, its IngressRoute and Ingress send `session.pathPrefix`
+  (`/session/`) to that Service on the console's own hosts. Point it at
+  `<backend release>-session`.
+- Nothing calls the role yet: the console still signs in through its own
+  server.
+
+## Unreleased — the console's session role
+
+- `paladin serve session` is a new role (ADR-0048): it will hold the console's
+  session cookie and the tokens behind it, and forward the console's calls to
+  the planes. It has no database and no key; it mints each plane's token at the
+  iam plane and verifies refresh tokens by `auth.jwks_url`. Nothing routes to
+  it yet: the console still signs in through its own server.
+- New config block `session`: `server` (`:8086`), `console_origins`,
+  `upstreams` (the planes, as `mcp.upstreams` names them) and `rotate_after`
+  (default `5m`). The chart's values carry it; it takes effect once a release
+  deploys the role.
+- Compose runs a `paladin-session` container on `:8086`.
+
 ## Unreleased — platform health is read by the admin role
 
 - The console's health page calls the admin plane's
