@@ -22,8 +22,9 @@ func minimalValidConfig() Config {
 		Datastores: Datastores{
 			Postgres: Postgres{DSN: "postgres://x@y/z"},
 		},
-		Limits: validLimits(),
-		Admin:  Admin{Tenants: AdminTenants{TrashRetention: 720 * time.Hour}, Health: AdminHealth{Timeout: 5 * time.Second}},
+		Limits:  validLimits(),
+		Admin:   Admin{Tenants: AdminTenants{TrashRetention: 720 * time.Hour}, Health: AdminHealth{Timeout: 5 * time.Second}},
+		Session: Session{RotateAfter: 5 * time.Minute},
 		// What schema.cue fills in, which Validate requires positive.
 		Capability: Capability{
 			Currency:           limes.AbstractUnitCode,

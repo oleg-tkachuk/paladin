@@ -29,8 +29,11 @@ const (
 	// (`serve mcp --embedded`), and reads what all three do (iam's set
 	// includes api's).
 	RoleMCPEmbedded Role = "mcp-embedded"
-	RoleMigrate     Role = "migrate"
-	RoleBootstrap   Role = "bootstrap"
+	// RoleSession holds the console's session (ADR-0048): no database, no
+	// key; it mints its tokens at the iam plane.
+	RoleSession   Role = "session"
+	RoleMigrate   Role = "migrate"
+	RoleBootstrap Role = "bootstrap"
 )
 
 // The resolver's binding paths: one per Secret-filled field, or the prefix of
@@ -84,6 +87,8 @@ var roleSecrets = map[Role][]string{
 		secretIngestWebhook, secretIngestNATSToken, secretIngestRabbitMQURL),
 	// No database: the bridge's DPoP key and its token-exchange client.
 	RoleMCP: {secretMCPDPoPKey, secretMCPExchangeClient},
+	// Only the token the admin role reads its health snapshot with.
+	RoleSession: {secretHealthSnapshotToken},
 	// The runtime pool (boot) and the migration role's own.
 	RoleMigrate: {secretPostgresPassword, secretPostgresMigratePassword},
 	// The runtime pool, the admin it creates, and the backends it probes.

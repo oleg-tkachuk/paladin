@@ -637,23 +637,7 @@ ingest: {
 }
 
 mcp: {
-  upstreams: {
-    admin_url: string | *"http://localhost:8090"
-    data_url:  string | *"http://localhost:\(#LocalDataPort)"
-    iam_url:   string | *"http://localhost:8085"
-    // Trust material for whichever URLs above are https://. There is no
-    // "enabled" switch on purpose — the URL scheme decides whether a dial is
-    // encrypted, so the two cannot disagree. A cluster deployment uses
-    // https:// URLs plus ca_path pointing at the mounted internal-mTLS CA
-    // bundle; config.MCPUpstreams.Validate rejects https:// without it.
-    tls: {
-      cert_path:            string | *""
-      key_path:             string | *""
-      ca_path:              string | *""
-      server_name:          string | *""
-      insecure_skip_verify: bool   | *false
-    }
-  }
+  upstreams: #Upstreams
   stdio: {
     enabled: bool | *true
   }
@@ -753,3 +737,33 @@ api_token: {
   key:       string | *"password"
   namespace: string | *""
 }
+
+// The planes a role forwards to, and the trust material for the https ones:
+// the MCP bridge's and the session role's.
+#Upstreams: {
+  admin_url: string | *"http://localhost:8090"
+  data_url:  string | *"http://localhost:\(#LocalDataPort)"
+  iam_url:   string | *"http://localhost:8085"
+  // Trust material for whichever URLs above are https://. There is no
+  // "enabled" switch on purpose — the URL scheme decides whether a dial is
+  // encrypted, so the two cannot disagree. A cluster deployment uses
+  // https:// URLs plus ca_path pointing at the mounted internal-mTLS CA
+  // bundle; config.MCPUpstreams.Validate rejects https:// without it.
+  tls: {
+    cert_path:            string | *""
+    key_path:             string | *""
+    ca_path:              string | *""
+    server_name:          string | *""
+    insecure_skip_verify: bool   | *false
+  }
+}
+
+// The console's session role — `serve session` (ADR-0048).
+#SessionPort: 8086
+session: {
+  server: #HTTPServer & {addr: string | *"0.0.0.0:\(#SessionPort)"}
+  console_origins: [...=~"^https?://[^/]+$"] | *[]
+  upstreams: #Upstreams
+  rotate_after: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
+}
+

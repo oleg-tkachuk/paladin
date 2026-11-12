@@ -851,6 +851,27 @@ config:
       roles: []
       timeout: 5s
 
+  # The console's session role (ADR-0048): it holds the console's session
+  # cookie and forwards the console's calls to the planes. No deployment
+  # runs it yet.
+  session:
+    server:
+      <<: *http_defaults
+      addr: "0.0.0.0:8086"
+    # The origins the console is served from: a call that changes state
+    # must carry one of them in Origin.
+    console_origins: []
+    upstreams:
+      admin_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-admin:8090'
+      data_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-api:8080'
+      iam_url: '{{ include "chart.internalScheme" . }}://{{ include "chart.fullname" . }}-iam:8085'
+      tls:
+        ca_path: ""
+        cert_path: ""
+        key_path: ""
+    # A refresh token younger than this is exchanged, never rotated.
+    rotate_after: 5m
+
   datastores:
     postgres:
       # The connection is normally built from the top-level `postgres` block.

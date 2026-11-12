@@ -375,16 +375,20 @@ var unsetKnobAllowlist = map[string]string{
 	// TLS knobs whose empty value IS the configuration: the certificate's
 	// SANs already cover the Service names, and skipping verification is
 	// something you turn on, never something you leave on.
-	"admin.server.tls.server_name":             "cert SANs cover the Service name",
-	"admin.server.tls.insecure_skip_verify":    "off is the only safe default",
-	"api.server.data.tls.server_name":          "cert SANs cover the Service name",
-	"api.server.data.tls.insecure_skip_verify": "off is the only safe default",
-	"api.server.iam.tls.server_name":           "cert SANs cover the Service name",
-	"api.server.iam.tls.insecure_skip_verify":  "off is the only safe default",
-	"mcp.upstreams.tls.server_name":            "cert SANs cover the Service name",
-	"mcp.upstreams.tls.insecure_skip_verify":   "off is the only safe default",
-	"worker.ops.tls.server_name":               "cert SANs cover the Service name",
-	"worker.ops.tls.insecure_skip_verify":      "off is the only safe default",
+	"admin.server.tls.server_name":               "cert SANs cover the Service name",
+	"admin.server.tls.insecure_skip_verify":      "off is the only safe default",
+	"api.server.data.tls.server_name":            "cert SANs cover the Service name",
+	"api.server.data.tls.insecure_skip_verify":   "off is the only safe default",
+	"api.server.iam.tls.server_name":             "cert SANs cover the Service name",
+	"api.server.iam.tls.insecure_skip_verify":    "off is the only safe default",
+	"mcp.upstreams.tls.server_name":              "cert SANs cover the Service name",
+	"mcp.upstreams.tls.insecure_skip_verify":     "off is the only safe default",
+	"session.server.tls.server_name":             "cert SANs cover the Service name",
+	"session.server.tls.insecure_skip_verify":    "off is the only safe default",
+	"session.upstreams.tls.server_name":          "cert SANs cover the Service name",
+	"session.upstreams.tls.insecure_skip_verify": "off is the only safe default",
+	"worker.ops.tls.server_name":                 "cert SANs cover the Service name",
+	"worker.ops.tls.insecure_skip_verify":        "off is the only safe default",
 
 	// Removing billing history is something an operator turns on: a charge
 	// purged is gone from every sum.
