@@ -63,43 +63,17 @@ spec:
               value: {{ .Values.metadata.commit | quote }}
             - name: BUILD_TIME
               value: {{ .Values.metadata.buildTime | quote }}
-            # Per-plane backend URLs — read by the BFF (route handlers under
-            # /api/rpc and /api/auth). The browser never sees these.
-            - name: PALADIN_DATA_URL
-              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "data") | quote }}
+            # The iam plane, for the OAuth consent form's relay
+            # (app/oauth/authorize). Every other call the console makes goes
+            # from the browser through the session role (ADR-0048).
             - name: PALADIN_IAM_URL
               value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "iam") | quote }}
-            - name: PALADIN_ADMIN_URL
-              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "admin") | quote }}
-            # Worker + MCP have no Connect surface; they expose
-            # /system/health.json on their ops ports for the BFF
-            # /api/health/all aggregator. The browser never hits them
-            # directly — Service DNS isn't browser-resolvable.
-            - name: PALADIN_WORKER_URL
-              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "worker") | quote }}
-            - name: PALADIN_MCP_URL
-              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "mcp") | quote }}
-            - name: PALADIN_DISPATCHER_URL
-              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "dispatcher") | quote }}
-            - name: PALADIN_INGEST_URL
-              value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "ingest") | quote }}
-            {{- /*
-              PALADIN_HEALTH_SNAPSHOT_TOKEN_FILE — where the shared secret the
-              BFF /api/health/all aggregator forwards (as X-Health-Token) to
-              each backend's /system/health.json is mounted. Must match the
-              backends' runtime.health_snapshot_token. A file rather than an
-              env var, so the token is not in the pod's environment. Omitted
-              when unset (dev): the backends leave the snapshot open and the
-              header is absent.
-            */}}
-            - name: PALADIN_HEALTH_ROLES
-              value: {{ join "," .Values.backend.healthRoles | quote }}
             # Read by src/proxy.ts into the CSP (src/lib/security/storageOrigins.ts).
             - name: PALADIN_STORAGE_ORIGINS
               value: {{ join "," .Values.storageOrigins | quote }}
             {{- with .Values.banner }}
             {{- if .content }}
-            # The platform banner, read by /api/shell (src/lib/banner.ts).
+            # The platform banner, served by /api/banner (src/lib/banner.ts).
             - name: PALADIN_BANNER_CONTENT
               value: {{ .content | quote }}
             - name: PALADIN_BANNER_SEVERITY
@@ -116,15 +90,11 @@ spec:
             - name: NODE_EXTRA_CA_CERTS
               value: {{ printf "%s/%s" (include "chart.backendCAPath" .) .Values.backend.caSecret.key | quote }}
             {{- end }}
-            {{- with .Values.healthSnapshotTokenSecret }}
-            - name: PALADIN_HEALTH_SNAPSHOT_TOKEN_FILE
-              value: {{ printf "%s/%s" (include "chart.healthTokenPath" $) .key | quote }}
-            {{- end }}
             {{- /*
               extraEnv — operator extension point for env vars the chart
               doesn't model first-class. Common dev-cluster use: injecting
-              NODE_TLS_REJECT_UNAUTHORIZED=0 so the BFF's outbound fetch
-              to internal-mTLS-protected planes doesn't fail at the
+              NODE_TLS_REJECT_UNAUTHORIZED=0 so the OAuth relay's fetch
+              to an internal-mTLS-protected iam plane doesn't fail at the
               system-trust-store check. Production overlays mount the
               issuing CA + set NODE_EXTRA_CA_CERTS instead.
             */}}
@@ -149,10 +119,6 @@ spec:
           {{- $ca := required "backend.caSecret.name is required when backend.tls: the Secret holding the backend's CA" .Values.backend.caSecret.name }}
           {{- $mounts = append $mounts (dict "name" "backend-ca" "mountPath" (include "chart.backendCAPath" .) "readOnly" true) }}
           {{- $volumes = append $volumes (dict "name" "backend-ca" "secret" (dict "secretName" $ca)) }}
-          {{- end }}
-          {{- with .Values.healthSnapshotTokenSecret }}
-          {{- $mounts = append $mounts (dict "name" "health-token" "mountPath" (include "chart.healthTokenPath" $) "readOnly" true) }}
-          {{- $volumes = append $volumes (dict "name" "health-token" "secret" (dict "secretName" .name "items" (list (dict "key" .key "path" .key)))) }}
           {{- end }}
           {{- with $mounts }}
           volumeMounts:

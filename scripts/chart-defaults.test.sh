@@ -336,11 +336,13 @@ console() {
 }
 
 console defaults
-check "console: data URL from the default release" "$(console_env defaults PALADIN_DATA_URL)" \
-    "http://paladin-core-api.$NAMESPACE.svc.cluster.local:8080"
 check "console: iam URL is the iam role's" "$(console_env defaults PALADIN_IAM_URL)" \
     "http://paladin-core-iam.$NAMESPACE.svc.cluster.local:8085"
-check "console: health roles" "$(console_env defaults PALADIN_HEALTH_ROLES)" "api,iam,admin,worker,mcp,dispatcher"
+# The console's server reaches iam alone (the OAuth consent relay); nothing
+# else names a plane or carries the health token (ADR-0048).
+check "console: names no plane but iam" \
+    "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.template.spec.containers[0].env[].name | select(test("^PALADIN_.*_URL$|HEALTH"))' "$scratch/console-defaults.yaml" | tr '\n' ' ')" \
+    "PALADIN_IAM_URL "
 
 # /session/ goes to the session role's Service on the console's own hosts
 # (ADR-0048): the default release's, unless named otherwise.
@@ -403,18 +405,20 @@ check "console: liveness timeout" "$(console_container defaults .livenessProbe.t
 # At 500m a full e2e run throttled the console in half of its CFS periods.
 check "console: CPU limit" "$(console_container defaults .resources.limits.cpu)" "$CONSOLE_CPU_LIMIT"
 
-console other-release --set backend.release=pic --set backend.namespace=platform
-check "console: release without the chart name is suffixed" "$(console_env other-release PALADIN_ADMIN_URL)" \
-    "http://pic-paladin-core-admin.platform.svc.cluster.local:8090"
+console other-release --set backend.release=pic --set backend.namespace=platform \
+    --set ingress.enabled=true --set "ingress.hosts[0]=console.example"
+check "console: release without the chart name is suffixed" "$(console_env other-release PALADIN_IAM_URL)" \
+    "http://pic-paladin-core-iam.platform.svc.cluster.local:8085"
+check "console: the session route follows the backend release" \
+    "$(yq ea -r '[select(.kind == "Ingress")] | .[0] | .spec.rules[0].http.paths[0].backend.service.name' "$scratch/console-other-release.yaml")" \
+    "pic-paladin-core-session"
 
 console explicit --set backend.urls.iam=https://iam.example
 check "console: an explicit URL wins" "$(console_env explicit PALADIN_IAM_URL)" "https://iam.example"
 
 console tls --set backend.tls=true --set backend.caSecret.name=planes-ca
-check "console: tls dials data over https" "$(console_env tls PALADIN_DATA_URL)" \
-    "https://paladin-core-api.$NAMESPACE.svc.cluster.local:8080"
-check "console: tls leaves the ops ports plain" "$(console_env tls PALADIN_WORKER_URL)" \
-    "http://paladin-core-worker.$NAMESPACE.svc.cluster.local:8099"
+check "console: tls dials iam over https" "$(console_env tls PALADIN_IAM_URL)" \
+    "https://paladin-core-iam.$NAMESPACE.svc.cluster.local:8085"
 check "console: tls trusts the mounted CA" "$(console_env tls NODE_EXTRA_CA_CERTS)" "/etc/paladin-backend-ca/ca.crt"
 check "console: tls mounts the CA Secret" \
     "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.template.spec.volumes[] | select(.name == "backend-ca") | .secret.secretName' "$scratch/console-tls.yaml")" \

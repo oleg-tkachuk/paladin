@@ -6,12 +6,9 @@ metadata:
     {{- include "chart.labels" . | nindent 4 }}
   {{- if .Values.service.stickySessions }}
   annotations:
-    # Pin each browser session to one BFF replica. The token-rotation
-    # single-flight in lib/auth/bff.ts dedups in-process; across
-    # replicas, parallel requests would each call IAM RefreshToken and
-    # all but one get "token already consumed" → spurious 401s. Sticky
-    # sessions make the in-process dedup sufficient until a shared
-    # (Redis) cache lands (BACKLOG). Required whenever replicaCount > 1.
+    # Pin each browser to one console replica. Nothing needs it since the
+    # session moved to the session role (ADR-0048); kept for an operator
+    # who wants it.
     traefik.ingress.kubernetes.io/service.sticky.cookie: "true"
     traefik.ingress.kubernetes.io/service.sticky.cookie.name: "paladin_ui_affinity"
     traefik.ingress.kubernetes.io/service.sticky.cookie.httponly: "true"

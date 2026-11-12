@@ -836,12 +836,9 @@ config:
         addr: "0.0.0.0:8080"
         # Also the TLS handshake deadline: Go derives it from
         # ReadHeaderTimeout when that is set. 5s was too tight for a burst of
-        # mTLS handshakes from one client — the console BFF fans a page out to
-        # eight RPCs, and on a cold connection pool two of those handshakes
-        # missed the deadline ("TLS handshake error ... read tcp: i/o
-        # timeout"), which cascaded into 401s for the whole page because the
-        # token exchange rides the same connection budget. The BFF now caps
-        # its pool; this gives the handshake room on the other side too.
+        # mTLS handshakes from one client — a console page fans out to eight
+        # RPCs, and on a cold connection pool two of those handshakes missed
+        # the deadline ("TLS handshake error ... read tcp: i/o timeout").
         # Still short enough to be a slowloris guard, which is its other job.
         read_header_timeout: 15s
         read_timeout: 30s
@@ -854,7 +851,7 @@ config:
         # only when the TCP peer is in trusted_proxies, walking the chain from
         # the right past every trusted hop. Any ingress or proxy that appends
         # to the header works the same way. The private ranges trust any
-        # in-cluster hop (ingress controller, the console's BFF); narrow them
+        # in-cluster hop (ingress controller, the console's session role); narrow them
         # to the ingress and pod networks to stop a client inside them from
         # naming its own address. [] ignores the header: the peer is the
         # client.
@@ -1756,7 +1753,8 @@ networkPolicies:
   # the worker-class ops ports.
   monitoring:
     namespace: monitoring
-  # The UI (BFF) pods — same namespace, separate chart.
+  # The console's pods — same namespace, separate chart. Only iam admits them,
+  # for the OAuth consent relay.
   ui:
     podLabels:
       app.kubernetes.io/name: paladin-console

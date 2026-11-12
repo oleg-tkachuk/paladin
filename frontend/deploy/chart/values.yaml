@@ -20,14 +20,14 @@ metadata:
 # left out makes every upload through the console fail in the browser.
 storageOrigins: []
 
-# Where the backend chart's planes are. The BFF (src/app/api/rpc and
-# src/lib/auth/bff.ts) reaches them through the PALADIN_<PLANE>_URL env vars;
-# the browser never sees them.
+# Where the backend chart's release is. The browser reaches its session role
+# at /session/ (session below); the console's own server reaches only the iam
+# plane, to relay the OAuth consent form, through PALADIN_IAM_URL (ADR-0048).
 #
 # By default the URLs are built from the backend chart's release name and
 # namespace: its Services are named <fullname>-<role>, where fullname is the
 # release name, suffixed with the chart name unless the release name already
-# contains it. Set a url below to override one plane.
+# contains it.
 backend:
   # The backend chart's release name, and the chart's own name.
   release: paladin-core
@@ -39,18 +39,9 @@ backend:
   # trusted through NODE_EXTRA_CA_CERTS.
   tls: false
   caSecret: {name: "", key: ca.crt}
-  # Roles the health page polls. ingest is off in the backend chart by
-  # default; add it when the backend runs it.
-  healthRoles: [api, iam, admin, worker, mcp, dispatcher]
-  # Explicit per-plane URLs. Empty: built from the fields above.
+  # The iam plane's URL, when not the one built from the fields above.
   urls:
-    data: ""
     iam: ""
-    admin: ""
-    worker: ""
-    mcp: ""
-    dispatcher: ""
-    ingest: ""
 
 # A message across every page of the console — a maintenance window, a
 # migration — after Argo CD's ui.bannercontent. Empty content shows nothing.
@@ -70,8 +61,8 @@ banner:
 
 # Extra environment variables appended to the UI container's env block.
 # Use for knobs the chart doesn't model first-class. Common cases:
-#   - NODE_TLS_REJECT_UNAUTHORIZED=0 on dev clusters where the BFF dials
-#     internal mTLS-protected backends whose CA isn't in Node's system
+#   - NODE_TLS_REJECT_UNAUTHORIZED=0 on dev clusters where the OAuth relay
+#     dials an internal mTLS-protected iam plane whose CA isn't in Node's system
 #     trust store. Production should mount the CA + use NODE_EXTRA_CA_CERTS
 #     instead — disabling verification globally is a development shortcut.
 #   - NODE_OPTIONS=--max-old-space-size=… for memory tuning.
@@ -79,17 +70,6 @@ banner:
 extraEnv: []
 # - name: NODE_TLS_REJECT_UNAUTHORIZED
 #   value: "0"
-
-# healthSnapshotTokenSecret — shared secret the BFF /api/health/all
-# aggregator forwards to each backend's /system/health.json (must match the
-# backends' runtime.health_snapshot_token). Mounted as a read-only file, not
-# passed in the environment. Unset (default) → the backends leave the
-# snapshot open and no header is sent (dev). In prod, point this at the same
-# Secret the backend chart's runtime.health_snapshot_token_secret names.
-# healthSnapshotTokenSecret:
-#   name: paladin-health-token
-#   key: token
-healthSnapshotTokenSecret: {}
 
 image:
   # The published multi-arch image, so `helm install` works without building
@@ -160,10 +140,10 @@ service:
 # The console's session role (ADR-0048), deployed by the backend chart under
 # deployments.session: the console's ingress sends pathPrefix to its Service,
 # on the console's own hosts, so the session cookie is the console's origin.
-# The console calls nothing else: name the backend release's session Service.
+# Empty name: the backend release's, <fullname>-session.
 session:
   service:
-    name: paladin-core-session
+    name: ""
     port: 8086
   pathPrefix: /session/
 
@@ -246,8 +226,8 @@ resources:
 # Liveness: a backend outage must not restart-storm the UI. Readiness: the
 # console is ready when it can serve, and it can serve during a backend
 # outage — that is when an operator needs it to say what is down. Readiness
-# once pointed at /api/health/all, which feeds the /health page and answers
-# 200 whatever the roles report, so it never reflected the upstreams; it only
+# once pointed at the health page's role fan-out, which answered 200 whatever
+# the roles reported, so it never reflected the upstreams; it only
 # timed six fetches against the kubelet's 1s default, and under load the one
 # replica dropped out of the Service and the ingress answered 503 for every
 # page.
@@ -316,8 +296,8 @@ podDisruptionBudget:
 # Empty, and the ConfigMap it renders now carries nothing the console reads.
 # It used to hold `paladin`, `oidc` and `auth` subtrees; none of them was ever
 # read by any code. The console authenticates through the backend's IAM plane
-# (there is no OIDC client library in the bundle), the BFF reaches its upstreams
-# through the PALADIN_*_URL env vars the deployment sets, and the build metadata
+# (there is no OIDC client library in the bundle) through the session role, the
+# OAuth relay reaches iam through PALADIN_IAM_URL, and the build metadata
 # the UI does show is threaded in as Docker build args.
 #
 # The key stays, and so does the ConfigMap, because overlays outside this repo

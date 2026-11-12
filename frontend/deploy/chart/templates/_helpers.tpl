@@ -63,12 +63,31 @@ Create the name of the service account to use
 
 
 {{/*
+chart.backendFullname — the backend release's fullname, which its Services
+are named after: the release name, suffixed with the chart name unless the
+release name already contains it.
+*/}}
+{{- define "chart.backendFullname" -}}
+{{- $b := .Values.backend -}}
+{{- if contains $b.chart $b.release -}}
+{{- $b.release -}}
+{{- else -}}
+{{- printf "%s-%s" $b.release $b.chart -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+chart.sessionService — the Service the console's /session/ paths go to: the
+backend release's session role, unless session.service.name names another.
+*/}}
+{{- define "chart.sessionService" -}}
+{{- .Values.session.service.name | default (printf "%s-session" (include "chart.backendFullname" .)) -}}
+{{- end -}}
+
+{{/*
 chart.backendURL — one backend plane's URL: backend.urls.<plane>
 when set, otherwise built from the backend release. Called with
-(dict "ctx" $ "plane" "<plane>").
-
-The ports are the backend chart's Service ports; its worker and dispatcher
-Services map :8099 onto container ports of their own.
+(dict "ctx" $ "plane" "<plane>"). The console's server reaches only iam.
 */}}
 {{- define "chart.backendURL" -}}
 {{- $b := .ctx.Values.backend -}}
@@ -76,19 +95,9 @@ Services map :8099 onto container ports of their own.
 {{- if $explicit -}}
 {{- $explicit -}}
 {{- else -}}
-{{- $services := dict
-      "data" (list "api" 8080 true)
-      "iam" (list "iam" 8085 true)
-      "admin" (list "admin" 8090 true)
-      "worker" (list "worker" 8099 false)
-      "mcp" (list "mcp" 8095 false)
-      "dispatcher" (list "dispatcher" 8099 false)
-      "ingest" (list "ingest" 8100 false) -}}
+{{- $services := dict "iam" (list "iam" 8085 true) -}}
 {{- $svc := index $services .plane -}}
-{{- $fullname := $b.release -}}
-{{- if not (contains $b.chart $b.release) -}}
-{{- $fullname = printf "%s-%s" $b.release $b.chart -}}
-{{- end -}}
+{{- $fullname := include "chart.backendFullname" .ctx -}}
 {{- $scheme := "http" -}}
 {{- if and $b.tls (index $svc 2) -}}{{- $scheme = "https" -}}{{- end -}}
 {{- $ns := $b.namespace | default .ctx.Release.Namespace -}}
@@ -104,10 +113,3 @@ is on. Fails without a caSecret: Node rejects the internal CA otherwise.
 /etc/paladin-backend-ca
 {{- end -}}
 
-{{/*
-chart.healthTokenPath — where the health snapshot token Secret is mounted,
-when healthSnapshotTokenSecret is set. The file inside is named by its key.
-*/}}
-{{- define "chart.healthTokenPath" -}}
-/etc/paladin-health-token
-{{- end -}}

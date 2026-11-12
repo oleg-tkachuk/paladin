@@ -46,20 +46,6 @@
           "type": "string",
           "minLength": 1
         },
-        "healthRoles": {
-          "type": "array",
-          "items": {
-            "enum": [
-              "api",
-              "iam",
-              "admin",
-              "worker",
-              "mcp",
-              "dispatcher",
-              "ingest"
-            ]
-          }
-        },
         "namespace": {
           "type": "string"
         },
@@ -73,25 +59,7 @@
         "urls": {
           "additionalProperties": false,
           "properties": {
-            "admin": {
-              "type": "string"
-            },
-            "data": {
-              "type": "string"
-            },
-            "dispatcher": {
-              "type": "string"
-            },
             "iam": {
-              "type": "string"
-            },
-            "ingest": {
-              "type": "string"
-            },
-            "mcp": {
-              "type": "string"
-            },
-            "worker": {
               "type": "string"
             }
           },
@@ -198,9 +166,6 @@
     },
     "fullnameOverride": {
       "type": "string"
-    },
-    "healthSnapshotTokenSecret": {
-      "type": "object"
     },
     "image": {
       "additionalProperties": false,
