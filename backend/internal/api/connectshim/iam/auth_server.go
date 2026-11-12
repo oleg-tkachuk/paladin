@@ -36,7 +36,7 @@ func (s *AuthServer) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 	out, err := s.H.Login(ctx, authh.LoginInput{
 		Subject:           m.GetSubject(),
 		Password:          m.GetPassword(),
-		UpstreamCode:      m.GetUpstreamCode(),
+		UpstreamCode:      m.GetUpstreamCode(), //nolint:staticcheck // SA1019: read only to refuse it (authh.Login)
 		RequestedAudience: m.GetRequestedAudience(),
 		TenantHint:        tenant,
 	})

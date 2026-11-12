@@ -59,12 +59,12 @@ service AuthService {
 }
 
 message LoginRequest {
-  // For local IdP: subject is username/email. For federated IdP this RPC
-  // accepts an upstream authorization code instead (see auth_method).
+  // The user's username or email; Paladin signs in with its own IAM alone.
   string subject = 1 [(buf.validate.field).string.min_len = 1];
   string password = 2 [debug_redact = true];
-  // Optional upstream IdP code (OIDC authorization-code flow).
-  string upstream_code = 3 [debug_redact = true];
+  // An upstream IdP's authorization code. No upstream IdP signs anyone in:
+  // a non-empty value is refused with INVALID_ARGUMENT.
+  string upstream_code = 3 [debug_redact = true, deprecated = true];
   // Audience the caller wants the access token for. Server-side ACL still
   // applies — caller cannot escalate beyond their roles.
   string requested_audience = 4; // default: "paladin-data"
