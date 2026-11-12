@@ -103,7 +103,7 @@ auth:
   # Generated at stack start into a volume only the api container mounts; the
   # other roles verify by its JWKS (ADR-0047).
   session_key_path: /app/session/session-key.pem
-  jwks_url: http://paladin-api:8085/.well-known/jwks.json
+  jwks_url: http://paladin-iam:8085/.well-known/jwks.json
   leeway: 30s
   access_token_ttl: 15m
   refresh_token_ttl: 168h
@@ -234,7 +234,7 @@ mcp:
   upstreams:
     admin_url: "http://paladin-admin:8090"
     data_url:  "http://paladin-api:8080"
-    iam_url:   "http://paladin-api:8085"
+    iam_url:   "http://paladin-iam:8085"
   stdio:
     enabled: false
     profile: read_only

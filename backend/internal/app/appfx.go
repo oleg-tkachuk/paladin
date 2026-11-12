@@ -202,25 +202,38 @@ var SharedModule = fx.Options(
 
 // ─── Role modules ────────────────────────────────────────────────────────────
 
-// ProvideAPIListenerSet builds the data + iam Connect listeners.
-func ProvideAPIListenerSet(deps *SharedDeps, meta BuildMeta) (ListenerSet, error) {
-	listeners, healthH, err := BuildAPIListeners(context.Background(), deps, meta)
-	if err != nil {
-		return ListenerSet{}, err
+// planeListenerBuilder builds one role's Connect listeners and its health.
+type planeListenerBuilder func(context.Context, *SharedDeps, BuildMeta) ([]HTTPListener, *health.Handler, error)
+
+// providePlaneListenerSet adds the metrics listener to a plane's own. The
+// scrape endpoint rides alongside the planes rather than on one of them: those
+// serve TLS from an internal CA, and pointing the collector at them would mean
+// disabling verification for every target in the cluster.
+func providePlaneListenerSet(build planeListenerBuilder) func(*SharedDeps, BuildMeta) (ListenerSet, error) {
+	return func(deps *SharedDeps, meta BuildMeta) (ListenerSet, error) {
+		listeners, healthH, err := build(context.Background(), deps, meta)
+		if err != nil {
+			return ListenerSet{}, err
+		}
+		if m := BuildMetricsListener(deps); m != nil {
+			listeners = append(listeners, *m)
+		}
+		return ListenerSet{Listeners: listeners, Health: healthH, Jobs: deps.BackgroundJobs}, nil
 	}
-	// The scrape endpoint rides alongside the planes rather than on one of
-	// them: those serve TLS from an internal CA, and pointing the collector at
-	// them would mean disabling verification for every target in the cluster.
-	if m := BuildMetricsListener(deps); m != nil {
-		listeners = append(listeners, *m)
-	}
-	return ListenerSet{Listeners: listeners, Health: healthH, Jobs: deps.BackgroundJobs}, nil
 }
 
-// APIModule is the fx graph for `paladin serve api`.
+// APIModule is the fx graph for `paladin serve api`: the data plane.
 var APIModule = fx.Options(
 	SharedModule,
-	fx.Provide(ProvideAPIListenerSet),
+	fx.Provide(providePlaneListenerSet(BuildAPIListeners)),
+	fx.Invoke(RunApp),
+)
+
+// IAMModule is the fx graph for `paladin serve iam`: the IAM plane, the OAuth
+// authorization server and the session JWKS (ADR-0047).
+var IAMModule = fx.Options(
+	SharedModule,
+	fx.Provide(providePlaneListenerSet(BuildIAMListeners)),
 	fx.Invoke(RunApp),
 )
 

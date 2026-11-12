@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
@@ -54,6 +55,16 @@ func revocationEndpoint(tokenEndpoint string) string {
 	return base + RevokePath
 }
 
+// jwksURI is the session JWKS the IAM plane serves at the issuer's origin
+// (ADR-0047), or "" without an issuer: derived, so the metadata cannot name a
+// key set nobody serves.
+func jwksURI(issuer string) string {
+	if issuer == "" {
+		return ""
+	}
+	return strings.TrimSuffix(issuer, "/") + sessionkey.WellKnownPath
+}
+
 // MetadataHandler serves the RFC 8414 metadata of this Authorization Server,
 // at its own origin and, for a same-origin deployment, at the MCP server's.
 // tokenExchange adds the RFC 8693 grant, which only a seed client marked
@@ -74,7 +85,7 @@ func MetadataHandler(as config.MCPOAuthAS, tokenExchange bool) http.Handler {
 		TokenEndpoint:                          as.TokenEndpoint,
 		RegistrationEndpoint:                   as.RegistrationEndpoint,
 		RevocationEndpoint:                     revoke,
-		JWKSURI:                                as.JWKSURI,
+		JWKSURI:                                jwksURI(as.Issuer),
 		ResponseTypesSupported:                 responseTypesSupported,
 		GrantTypesSupported:                    grants,
 		CodeChallengeMethodsSupported:          codeChallengeMethodsSupported,

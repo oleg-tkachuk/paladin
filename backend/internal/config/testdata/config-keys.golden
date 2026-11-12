@@ -328,7 +328,6 @@ mcp.oauth
 mcp.oauth.authorization_server
 mcp.oauth.authorization_server.authorization_endpoint
 mcp.oauth.authorization_server.issuer
-mcp.oauth.authorization_server.jwks_uri
 mcp.oauth.authorization_server.registration_endpoint
 mcp.oauth.authorization_server.token_endpoint
 mcp.oauth.authorization_servers

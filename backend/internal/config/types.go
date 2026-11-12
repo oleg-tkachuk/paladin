@@ -1189,7 +1189,7 @@ type MCPOAuthAS struct {
 	AuthorizationEndpoint string `yaml:"authorization_endpoint" json:"authorization_endpoint"`
 	TokenEndpoint         string `yaml:"token_endpoint" json:"token_endpoint"`
 	RegistrationEndpoint  string `yaml:"registration_endpoint" json:"registration_endpoint"`
-	JWKSURI               string `yaml:"jwks_uri" json:"jwks_uri"`
+	// jwks_uri is not configured: it is the issuer's session JWKS.
 }
 
 // MCPProfile is a named tool allow-list. Tool-name patterns support a

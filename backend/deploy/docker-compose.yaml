@@ -105,7 +105,7 @@ services:
     entrypoint: ["sh", "-c", "test -s /keys/capability.pem || (openssl genpkey -algorithm ed25519 -out /keys/capability.pem && chmod 0444 /keys/capability.pem); test -s /session/session-key.pem || (openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out /session/session-key.pem && chmod 0444 /session/session-key.pem)"]
     volumes:
       - capability-key:/keys
-      # The session key (ADR-0047), mounted by the api container alone.
+      # The session key (ADR-0047), mounted by the iam container alone.
       - session-key:/session
 
   paladin-migrate:
@@ -169,19 +169,31 @@ services:
     init: true
     restart: on-failure
     command: ["serve", "api", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8083:8080"   # data — host 8083, not 8080: another local service owns 8080
+    depends_on:
+      paladin-bootstrap:
+        condition: service_completed_successfully
+      seaweedfs:
+        condition: service_started
+
+  # The IAM plane, the OAuth AS and the session JWKS (ADR-0047).
+  paladin-iam:
+    <<: *paladin-base
+    container_name: paladin-iam
+    init: true
+    restart: on-failure
+    command: ["serve", "iam", "--config", "/app/configs/compose.yaml"]
     # The base's volumes, and the session key only this role reads.
     volumes:
       - ../configs:/app/configs:ro
       - capability-key:/app/keys:ro
       - session-key:/app/session:ro
     ports:
-      - "8083:8080"   # data — host 8083, not 8080: another local service owns 8080
-      - "8085:8085"   # iam
+      - "8085:8085"
     depends_on:
       paladin-bootstrap:
         condition: service_completed_successfully
-      seaweedfs:
-        condition: service_started
 
   paladin-admin:
     <<: *paladin-base
@@ -277,10 +289,12 @@ services:
       # /route.ts and src/lib/auth/bff.ts). Browser never sees these —
       # it only ever hits /api/rpc on this container.
       PALADIN_DATA_URL: http://paladin-api:8080
-      PALADIN_IAM_URL: http://paladin-api:8085
+      PALADIN_IAM_URL: http://paladin-iam:8085
       PALADIN_ADMIN_URL: http://paladin-admin:8090
     depends_on:
       paladin-api:
+        condition: service_started
+      paladin-iam:
         condition: service_started
       paladin-admin:
         condition: service_started

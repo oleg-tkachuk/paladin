@@ -39,6 +39,8 @@ func TestEverySecretFieldHasAReader(t *testing.T) {
 // that consumes each field: a change to the table is a change to this list.
 var wantRoleSecrets = map[Role][]string{
 	RoleAPI: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
+		"pg-app", "pg-replica", "valkey"},
+	RoleIAM: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
 		"oauth-client", "pg-app", "pg-replica", "valkey"},
 	RoleAdmin: {"api-token-hmac", "backend-access", "backend-secret", "dpop-nonce", "health-token",
 		"pg-app", "pg-replica", "valkey"},
