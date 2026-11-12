@@ -31,6 +31,13 @@ pre-commit:
   jobs:
     # ─── Repo-wide ──────────────────────────────────────────────────
 
+    # go-test-changed.sh is tested against throwaway repositories with a stub
+    # go; a change to it runs them.
+    - name: go-test-changed-test
+      tags: [hooks]
+      glob: "scripts/go-test-changed*"
+      run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX bash scripts/go-test-changed.test.sh
+
     # Compiled artefacts do not belong in the history: they bloat every clone
     # forever and no review can read them.
     - name: forbid-binaries
@@ -139,13 +146,16 @@ pre-commit:
 pre-push:
   parallel: false
   jobs:
-    - name: backend-test
-      root: backend/
+    # Tests the Go modules the push changes, plus every module built on them
+    # (scripts/go-test-changed.sh says why each one runs). Any file of a
+    # module counts, go.mod bumps included.
+    - name: go-test-changed
       tags: [go, test]
+      glob: "{backend/**,sdk/go/**,tools/**,go.work,go.work.sum}"
       env:
         GOMAXPROCS: "1"
         GOFLAGS: "-p=1"
-      run: go test -p 1 -parallel 1 ./... -count=1
+      run: scripts/go-test-changed.sh {push_files}
 
     # Curated golangci set (see backend/.golangci.yaml). Skipped if the
     # binary isn't installed locally so a fresh clone can still push; CI
