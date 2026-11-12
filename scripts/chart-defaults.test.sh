@@ -342,6 +342,22 @@ check "console: iam URL is the iam role's" "$(console_env defaults PALADIN_IAM_U
     "http://paladin-core-iam.$NAMESPACE.svc.cluster.local:8085"
 check "console: health roles" "$(console_env defaults PALADIN_HEALTH_ROLES)" "api,iam,admin,worker,mcp,dispatcher"
 
+# /session/ goes to the session role's Service on the console's own hosts once
+# it is named (ADR-0048), and nowhere before.
+readonly CONSOLE_HOST=console.example
+readonly SESSION_SERVICE=paladin-core-session
+console session-off --set "traefik.hosts[0]=$CONSOLE_HOST" --set ingress.enabled=true --set "ingress.hosts[0]=$CONSOLE_HOST"
+check "console: no session route by default" \
+    "$(yq ea -r '[select(.kind == "IngressRoute")] | .[0].spec.routes | length' "$scratch/console-session-off.yaml")" "1"
+console session-on --set "traefik.hosts[0]=$CONSOLE_HOST" --set ingress.enabled=true --set "ingress.hosts[0]=$CONSOLE_HOST" \
+    --set session.service.name=$SESSION_SERVICE
+check "console: IngressRoute sends /session/ to the session role" \
+    "$(yq ea -r '[select(.kind == "IngressRoute")] | .[0].spec.routes[0] | .match + " " + .services[0].name' "$scratch/console-session-on.yaml")" \
+    "Host(\`$CONSOLE_HOST\`) && PathPrefix(\`/session/\`) $SESSION_SERVICE"
+check "console: Ingress sends /session to the session role" \
+    "$(yq ea -r '[select(.kind == "Ingress")] | .[0].spec.rules[0].http.paths[0] | .path + " " + .backend.service.name' "$scratch/console-session-on.yaml")" \
+    "/session $SESSION_SERVICE"
+
 # The CSP allows the storage origins this names and no other; none by default.
 readonly STORAGE_A=https://s3.example.com
 readonly STORAGE_B=http://localhost:9000
@@ -507,6 +523,19 @@ check "history: a role's 0 is kept" "$(deployment history-zero worker .spec.revi
 check "history: other roles keep the default" "$(deployment history-zero api .spec.revisionHistoryLimit)" "$HISTORY_DEFAULT"
 check "history: console keeps the default" \
     "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.revisionHistoryLimit' "$scratch/console-defaults.yaml")" "$HISTORY_DEFAULT"
+
+# The console's session role (ADR-0048): off by default, and refused without
+# the console's origin, which it needs to accept any call that changes state.
+readonly SESSION_ORIGIN=https://console.example
+check "session: off by default" "$(deployment defaults session .metadata.name)" "null"
+refuse session-no-origin "needs config.session.console_origins" \
+    -f "$CHART/$REQUIRED_VALUES" --set deployments.session.enabled=true
+render session-on --set deployments.session.enabled=true --set "config.session.console_origins[0]=$SESSION_ORIGIN"
+check "session: deployed" "$(deployment session-on session .metadata.name)" "$RELEASE-session"
+check "session: the console's origin reaches its config" "$(config session-on '.session.console_origins[0]')" "$SESSION_ORIGIN"
+check "session: admin reads its health" \
+    "$(config session-on '.admin.health.roles[] | select(.name == "session") | .url')" "http://$RELEASE-session:8086"
+check "session: no database Secret in its Role" "$(role_names session-on session)" ""
 
 [[ "$fail" == 0 ]] || exit 1
 echo "chart defaults: $cases assertions hold"

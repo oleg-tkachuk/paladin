@@ -32,7 +32,7 @@ REQUIRED_VALUES = "ci/required-values.yaml"
 
 # The gate enables them itself, together with every role, since a role that is
 # off renders no policy and would otherwise leave a hole in what this checks.
-ROLES = ["api", "iam", "admin", "worker", "dispatcher", "mcp", "ingest"]
+ROLES = ["api", "iam", "admin", "worker", "dispatcher", "mcp", "ingest", "session"]
 
 # Observability as a cluster that pulls metrics runs it. The two values the
 # policies derive ports from are set to something other than the chart's
@@ -56,7 +56,7 @@ KUBE_API_PORT = 26443
 KUBE_API = {"networkPolicies.kubeAPIPorts": f"{{{KUBE_API_PORT}}}"}
 # The roles that serve /metrics, each on the metrics port alone (ADR-0023);
 # mcp serves none.
-SCRAPE_LISTENER_ROLES = ("api", "iam", "admin", "worker", "dispatcher", "ingest")
+SCRAPE_LISTENER_ROLES = ("api", "iam", "admin", "worker", "dispatcher", "ingest", "session")
 
 
 def render(chart: Path, extra: dict[str, str] | None = None) -> list[dict]:
@@ -76,6 +76,8 @@ def render(chart: Path, extra: dict[str, str] | None = None) -> list[dict]:
         cmd += ["-f", str(required)]
     for role in ROLES:
         cmd += ["--set", f"deployments.{role}.enabled=true"]
+    # The session role refuses to render without the console's origin.
+    cmd += ["--set", f"config.session.console_origins[0]={SESSION_ORIGIN}"]
     for key, value in (extra or {}).items():
         cmd += ["--set-string" if key.endswith(("addr", "endpoint")) else "--set", f"{key}={value}"]
     out = subprocess.run(cmd, capture_output=True, text=True)
@@ -176,6 +178,12 @@ def ports_admitting(doc: dict, role: str) -> set[int]:
 # and ingest HEADs an object before believing a delete event about it.
 STORAGE_ROLES = ("api", "iam", "admin", "worker", "ingest")
 STORAGE_NS = "storage"
+# The console's origin the session role is rendered with.
+SESSION_ORIGIN = "https://console.netpoltest"
+# The namespace networkPolicies.postgres names, and the roles that hold no
+# database: their policy must not reach it.
+PG_NS = "database"
+NO_DATABASE_ROLES = ("session",)
 
 
 def egress_reaches_namespace(doc: dict, namespace: str) -> bool:
@@ -224,6 +232,11 @@ IN_RELEASE_CALLS = [
     # SystemService.GetPlatformHealth reads every role's health snapshot,
     # its own through its Service (ADR-0048).
     *(("admin", role, "SystemService.GetPlatformHealth") for role in ROLES),
+    # The console's session role forwards to the planes and mints at iam
+    # (ADR-0048).
+    ("session", "api", "the console's data-plane calls"),
+    ("session", "iam", "the console's sign-in, its tokens and the JWKS"),
+    ("session", "admin", "the console's admin-plane calls"),
 ]
 
 
@@ -517,6 +530,8 @@ def main() -> int:
             problems.append(f"role {role!r} has no DNS egress — it cannot resolve any name")
         if role in STORAGE_ROLES and not egress_reaches_namespace(p, STORAGE_NS):
             problems.append(f"role {role!r} has no egress to the {STORAGE_NS!r} namespace — it cannot reach the storage backends")
+        if role in NO_DATABASE_ROLES and egress_reaches_namespace(p, PG_NS):
+            problems.append(f"role {role!r} holds no database but may reach the {PG_NS!r} namespace")
 
     problems += observability_problems(root / "backend/deploy/chart")
     problems += kube_api_problems(root / "backend/deploy/chart")

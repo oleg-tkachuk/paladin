@@ -457,6 +457,21 @@
       },
       "type": "object"
     },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        },
+        "pathPrefix": { "type": "string", "pattern": "^/.*/$" }
+      }
+    },
     "service": {
       "additionalProperties": false,
       "properties": {

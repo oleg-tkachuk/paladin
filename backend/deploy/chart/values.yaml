@@ -257,6 +257,57 @@ deployments:
     volumeMounts:
       - name: tmp
         mountPath: /tmp
+  # The console's session role (ADR-0048): the console's session cookie, the
+  # tokens behind it, and the calls it forwards to the planes. No database,
+  # no key. Off until config.session.console_origins names the console's
+  # origin: the role refuses to start without one. The console chart routes
+  # its /session/ paths here (session.service in that chart).
+  session:
+    enabled: false
+    replicas: 2
+    args:
+      - "serve"
+      - "session"
+    ports:
+      - name: session
+        containerPort: 8086
+    livenessProbe:
+      httpGet:
+        path: /livez
+        port: session
+      initialDelaySeconds: 5
+      periodSeconds: 20
+      timeoutSeconds: 1
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: session
+      initialDelaySeconds: 3
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+      successThreshold: 1
+    startupProbe:
+      httpGet:
+        path: /startupz
+        port: session
+      initialDelaySeconds: 2
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 24
+    service:
+      type: ClusterIP
+      ports:
+        - name: session
+          port: 8086
+          targetPort: session
+    volumes:
+      - name: tmp
+        emptyDir: {}
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
   admin:
     enabled: true
     # Admin pod sits behind a stricter ingress; single replica is fine.

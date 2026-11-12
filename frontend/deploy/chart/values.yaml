@@ -157,6 +157,16 @@ service:
 # ─── Traefik IngressRoute ──────────────────────────────────────────────────
 # Paladin UI fronted by Traefik. The chart previously shipped both generic Ingress AND
 # Gateway API HTTPRoute gated off; both removed — one routing model.
+# The console's session role (ADR-0048), deployed by the backend chart under
+# deployments.session: the console's ingress sends pathPrefix to its Service,
+# on the console's own hosts, so the session cookie is the console's origin.
+# An empty service.name sends nothing there.
+session:
+  service:
+    name: ""
+    port: 8086
+  pathPrefix: /session/
+
 traefik:
   enabled: true
   entryPoints:
