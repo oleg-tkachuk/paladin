@@ -508,5 +508,18 @@ check "history: other roles keep the default" "$(deployment history-zero api .sp
 check "history: console keeps the default" \
     "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.revisionHistoryLimit' "$scratch/console-defaults.yaml")" "$HISTORY_DEFAULT"
 
+# The console's session role (ADR-0048): off by default, and refused without
+# the console's origin, which it needs to accept any call that changes state.
+readonly SESSION_ORIGIN=https://console.example
+check "session: off by default" "$(deployment defaults session .metadata.name)" "null"
+refuse session-no-origin "needs config.session.console_origins" \
+    -f "$CHART/$REQUIRED_VALUES" --set deployments.session.enabled=true
+render session-on --set deployments.session.enabled=true --set "config.session.console_origins[0]=$SESSION_ORIGIN"
+check "session: deployed" "$(deployment session-on session .metadata.name)" "$RELEASE-session"
+check "session: the console's origin reaches its config" "$(config session-on '.session.console_origins[0]')" "$SESSION_ORIGIN"
+check "session: admin reads its health" \
+    "$(config session-on '.admin.health.roles[] | select(.name == "session") | .url')" "http://$RELEASE-session:8086"
+check "session: no database Secret in its Role" "$(role_names session-on session)" ""
+
 [[ "$fail" == 0 ]] || exit 1
 echo "chart defaults: $cases assertions hold"

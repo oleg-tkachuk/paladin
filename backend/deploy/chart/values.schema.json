@@ -1782,6 +1782,235 @@
             }
           },
           "type": "object"
+        },
+        "session": {
+          "additionalProperties": false,
+          "properties": {
+            "affinity": {
+              "additionalProperties": false,
+              "properties": {
+                "podAntiAffinity": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "preferredDuringSchedulingIgnoredDuringExecution": {
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "args": {
+              "type": "array"
+            },
+            "autoscaling": {
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "maxReplicas": {
+                  "type": "integer"
+                },
+                "minReplicas": {
+                  "type": "integer"
+                },
+                "targetCPUUtilizationPercentage": {
+                  "type": "integer"
+                },
+                "targetMemoryUtilizationPercentage": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "extraEnv": {
+              "type": "array"
+            },
+            "extraEnvFrom": {
+              "type": "array"
+            },
+            "livenessProbe": {
+              "additionalProperties": false,
+              "properties": {
+                "failureThreshold": {
+                  "type": "integer"
+                },
+                "httpGet": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "string"
+                    },
+                    "scheme": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "initialDelaySeconds": {
+                  "type": "integer"
+                },
+                "periodSeconds": {
+                  "type": "integer"
+                },
+                "timeoutSeconds": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "nodeSelector": {
+              "type": "object"
+            },
+            "podAnnotations": {
+              "type": "object"
+            },
+            "podLabels": {
+              "type": "object"
+            },
+            "ports": {
+              "type": "array"
+            },
+            "readinessProbe": {
+              "additionalProperties": false,
+              "properties": {
+                "failureThreshold": {
+                  "type": "integer"
+                },
+                "httpGet": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "string"
+                    },
+                    "scheme": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "initialDelaySeconds": {
+                  "type": "integer"
+                },
+                "periodSeconds": {
+                  "type": "integer"
+                },
+                "successThreshold": {
+                  "type": "integer"
+                },
+                "timeoutSeconds": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "replicas": {
+              "type": "integer"
+            },
+            "resources": {
+              "additionalProperties": false,
+              "properties": {
+                "limits": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "requests": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": {
+                      "type": "string"
+                    },
+                    "memory": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            "service": {
+              "additionalProperties": false,
+              "properties": {
+                "ports": {
+                  "type": "array"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "startupProbe": {
+              "additionalProperties": false,
+              "properties": {
+                "failureThreshold": {
+                  "type": "integer"
+                },
+                "httpGet": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "string"
+                    },
+                    "scheme": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "initialDelaySeconds": {
+                  "type": "integer"
+                },
+                "periodSeconds": {
+                  "type": "integer"
+                },
+                "timeoutSeconds": {
+                  "type": "integer"
+                }
+              },
+              "type": "object"
+            },
+            "tolerations": {
+              "type": "array"
+            },
+            "topologySpreadConstraints": {
+              "type": "array"
+            },
+            "volumeMounts": {
+              "type": "array"
+            },
+            "volumes": {
+              "type": "array"
+            },
+            "revisionHistoryLimit": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"

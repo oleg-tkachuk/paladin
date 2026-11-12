@@ -85,6 +85,9 @@ data:
     {{- if $pepper.active }}
     {{- $_ := set $cfg.api_token "hmac_key_secret" (dict "name" $pepper.name "key" $pepper.key) }}
     {{- end }}
+    {{- if and .Values.deployments.session.enabled (not $cfg.session.console_origins) }}
+    {{- fail "deployments.session.enabled needs config.session.console_origins: the console's origin, which every call that changes state must carry" }}
+    {{- end }}
     {{- if not $cfg.admin.health.roles }}
     {{- $_ := set $cfg.admin.health "roles" (fromJsonArray (include "chart.healthRoles" .)) }}
     {{- end }}

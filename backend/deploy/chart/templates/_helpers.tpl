@@ -406,7 +406,7 @@ The roles that serve /metrics, as JSON. mcp is not one: it holds no
 instruments of its own (serve_mcp.go).
 */}}
 {{- define "chart.metricsRoles" -}}
-{{- list "api" "iam" "admin" "worker" "dispatcher" "ingest" | toJson -}}
+{{- list "api" "iam" "admin" "worker" "dispatcher" "ingest" "session" | toJson -}}
 {{- end -}}
 
 {{/*
@@ -449,7 +449,7 @@ https for a role behind internalTLS.
 {{- define "chart.healthRoles" -}}
 {{- $out := list -}}
 {{- $tls := .Values.internalTLS -}}
-{{- range $role := list "api" "iam" "admin" "worker" "mcp" "dispatcher" "ingest" -}}
+{{- range $role := list "api" "iam" "admin" "worker" "mcp" "dispatcher" "ingest" "session" -}}
 {{- $d := index $.Values.deployments $role -}}
 {{- if $d.enabled -}}
 {{- $scheme := "http" -}}
