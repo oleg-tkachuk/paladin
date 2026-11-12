@@ -106,9 +106,11 @@ func boot(ctx context.Context, role config.Role) (config.Config, *zap.Logger, *p
 	if err != nil {
 		l.Fatal("failed to connect to database", zap.Error(err))
 	}
-	if err := db.Ping(ctx); err != nil {
+	// One ping used to decide it: a database restarting for a minute failed
+	// the migrate hook, and with it the release, on its first refusal.
+	if err := postgres.WaitReady(ctx, db.Ping, postgres.OneShotWait, l.Named("postgres")); err != nil {
 		db.Close()
-		l.Fatal("failed to ping database", zap.Error(err))
+		l.Fatal("failed to reach database", zap.Error(err))
 	}
 	return cfg, l, db, otelShutdown
 }
