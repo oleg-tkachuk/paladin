@@ -14,7 +14,7 @@ import (
 // config-free). Used by every pod that runs sink deliveries: the dispatcher
 // pod's drain loop and the admin pod's synchronous TestSubscription.
 type sinkSecretResolver struct {
-	r *config.K8sSecretResolver
+	r *config.RuntimeSecretResolver
 }
 
 func (s sinkSecretResolver) ResolveSinkSecret(ctx context.Context, namespace, name, key string) (string, error) {
@@ -25,6 +25,7 @@ func (s sinkSecretResolver) ResolveSinkSecret(ctx context.Context, namespace, na
 // sink-credential fields (see worker/sink_secrets.go). Out-of-cluster the
 // underlying resolver errors on use — which is correct: a k8s: ref simply
 // cannot be honoured there, and the delivery fails with a clear reason.
-func NewSinkSecretResolver(l *zap.Logger) worker.SinkSecretResolver {
-	return sinkSecretResolver{r: config.NewK8sSecretResolver(l)}
+// Refs are confined to runtimeNamespace when it is set (ADR-0047).
+func NewSinkSecretResolver(l *zap.Logger, runtimeNamespace string) worker.SinkSecretResolver {
+	return sinkSecretResolver{r: config.NewRuntimeSecretResolver(l, runtimeNamespace)}
 }

@@ -266,13 +266,6 @@ the same commit. Treat this file like a runtime invariant.
   can mint an operator session; the IAM endpoints share the `api` pods with
   the data plane.
 - **Definition of Done**, one pull request per step, each deployable alone:
-  3. Every role's service account reads only its own Secrets (decision 8).
-     The binary already resolves only its role's (`config/roles.go`); left:
-     the chart renders a Role per role from that table. Two catches: the
-     admin plane resolves a dynamically registered backend's credentials at
-     runtime (`ResolveSecret`), under names no render knows, and worker,
-     dispatcher and ingest read the API-token pepper and the DPoP nonce key
-     only because `BuildSharedDeps` builds those bundles in every role.
   4. `serve iam` runs the IAM plane, the OAuth AS and the JWKS as its own
      Deployment; `serve api` serves the data plane alone (decision 7).
      The OAuth AS metadata's `jwks_uri` then names that role's JWKS rather
@@ -284,8 +277,11 @@ the same commit. Treat this file like a runtime invariant.
   no Role (scripts/chart-defaults.test.sh); on the cluster,
   `kubectl auth can-i get secret/<name> --as=system:serviceaccount:paladin:<role>`
   answers `no` for every Secret a role does not use.
-- **Blockers:** steps 3–4 change chart values and Deployments, and local-iac
+- **Blockers:** step 4 changes chart values and Deployments, and local-iac
   takes every chart release, so local-iac is prepared before each merges.
+- **Left over from step 3:** worker, dispatcher and ingest still read the
+  API-token pepper and the DPoP nonce key, only because `BuildSharedDeps`
+  builds those bundles in every role.
 
 ### Console session terminated in Go (ADR-0048)
 

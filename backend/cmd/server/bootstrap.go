@@ -56,7 +56,7 @@ var bootstrapCmd = &cobra.Command{
 		// cannot build a client for is a config error serve admin reports;
 		// here it only means no probe, never a failed bootstrap.
 		var prober backendh.BackendProber
-		if p, err := app.BuildBackendProber(ctx, cfg.Storage, l); err != nil {
+		if p, err := app.BuildBackendProber(ctx, cfg.Storage, cfg.RuntimeSecrets.Namespace, l); err != nil {
 			l.Warn("backend prober unavailable, skipping the feature probe", zap.Error(err))
 		} else {
 			prober = p

@@ -1,23 +1,50 @@
 {{- /*
-  RBAC for the in-process K8sSecretResolver. The resolver issues exactly
-  one verb (GET) per referenced secret name — list/watch are NOT used.
+  RBAC for the in-process K8sSecretResolver, one Role per role (ADR-0047). The
+  resolver issues exactly one verb (GET) per referenced Secret name — list and
+  watch are not used — and each role reads only the Secrets its code consumes:
+  the binding paths files/role-secrets.json lists for it (generated from
+  backend/internal/config/roles.go), resolved to names by chart.secretFamilies.
+  A role that reads none gets no Role: an empty resourceNames would grant
+  every Secret, not none.
 
-  ClusterRole vs Role: Postgres / S3 credentials commonly live in a
-  separate namespace from the Paladin deployment (e.g. `database/` for the
-  PG operator's secrets). clusterWide=true binds at cluster scope so the
-  resolver can reach them; clusterWide=false keeps everything in the
-  release namespace.
+  ClusterRole vs Role: Postgres / S3 credentials commonly live in a separate
+  namespace from the Paladin deployment (e.g. `database/` for the PG
+  operator's secrets). clusterWide=true binds at cluster scope so the resolver
+  can reach them; clusterWide=false keeps everything in the release namespace.
 
-  Bindings: one (Cluster)RoleBinding subjects all per-role SAs the chart
-  generated. If a role pins its own SA name and that SA isn't created by
-  this chart, the operator owns the binding too — we don't bind external
-  identities.
+  Runtime secrets — a registered backend's credentials, an event sink's — are
+  named by data, so no render knows them: config.runtime_secrets.namespace
+  confines them to one namespace, where the roles that read them may get any
+  Secret, and nowhere else.
+
+  A role whose SA this chart does not create is bound all the same: the SA name
+  is the chart's to give (chart.roleServiceAccountName).
 */}}
 {{- if and .Values.rbac .Values.rbac.secretReader.enabled -}}
-{{- $name := printf "%s-secret-reader" (include "chart.fullname" .) -}}
 {{- $clusterWide := .Values.rbac.secretReader.clusterWide -}}
 {{- $kind := ternary "ClusterRole" "Role" $clusterWide -}}
 {{- $bindingKind := ternary "ClusterRoleBinding" "RoleBinding" $clusterWide -}}
+{{- $table := .Files.Get "files/role-secrets.json" | fromJson -}}
+{{- /* Every role this release runs, with its service account. */ -}}
+{{- $accounts := dict -}}
+{{- range $role, $spec := .Values.deployments -}}
+{{- if $spec.enabled -}}
+{{- $_ := set $accounts $role (include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec)) -}}
+{{- end -}}
+{{- end -}}
+{{- range $job, $spec := .Values.jobs -}}
+{{- if $spec.enabled -}}
+{{- $_ := set $accounts $job (include "chart.roleServiceAccountName" (dict "ctx" $ "role" $job "spec" (default dict $spec))) -}}
+{{- end -}}
+{{- end -}}
+{{- range $role := keys $accounts | sortAlpha }}
+{{- if not (hasKey $table.roles $role) }}
+{{- fail (printf "files/role-secrets.json names no role %q: regenerate it from backend/internal/config/roles.go" $role) }}
+{{- end }}
+{{- $names := fromJsonArray (include "chart.roleSecretNames" (dict "ctx" $ "role" $role)) }}
+{{- if $names }}
+{{- $name := printf "%s-secret-reader-%s" (include "chart.fullname" $) $role }}
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: {{ $kind }}
 metadata:
@@ -33,12 +60,11 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
     "argocd.argoproj.io/sync-wave": "-5"
   labels:
-    {{- include "chart.labels" . | nindent 4 }}
-{{- $secretNames := fromJsonArray (include "chart.secretReaderNames" .) }}
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
-    resourceNames: {{ $secretNames | toJson }}
+    resourceNames: {{ $names | toJson }}
     verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -51,41 +77,53 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation
     "argocd.argoproj.io/sync-wave": "-5"
   labels:
-    {{- include "chart.labels" . | nindent 4 }}
+    {{- include "chart.roleLabels" (dict "ctx" $ "role" $role) | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: {{ $kind }}
   name: {{ $name }}
 subjects:
-  {{- /*
-    Bind every distinct SA the chart created — deployments AND jobs.
-    Job SAs MUST be in the subject list or the migrate / bootstrap
-    Pods can't read the Postgres / S3 secrets they need.
-
-    Same de-dup logic as serviceaccount.yaml so we never list the
-    same subject twice.
-  */}}
-  {{- $seen := dict -}}
-  {{- range $role, $spec := .Values.deployments }}
-    {{- if $spec.enabled -}}
-      {{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $role "spec" $spec) -}}
-      {{- if not (hasKey $seen $sa) -}}
-        {{- $_ := set $seen $sa true }}
   - kind: ServiceAccount
-    name: {{ $sa }}
+    name: {{ index $accounts $role }}
     namespace: {{ $.Release.Namespace }}
-      {{- end -}}
-    {{- end -}}
-  {{- end }}
-  {{- range $jobName, $jobSpec := .Values.jobs }}
-    {{- if $jobSpec.enabled -}}
-      {{- $sa := include "chart.roleServiceAccountName" (dict "ctx" $ "role" $jobName "spec" (default dict $jobSpec)) -}}
-      {{- if not (hasKey $seen $sa) -}}
-        {{- $_ := set $seen $sa true }}
+{{- end }}
+{{- end }}
+{{- with (dig "runtime_secrets" "namespace" "" .Values.config) }}
+{{- $runtimeNS := . }}
+{{- $name := printf "%s-runtime-secret-reader" (include "chart.fullname" $) }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  # In the runtime-secrets namespace, which the operator creates; the roles
+  # below read any Secret there and only there.
+  namespace: {{ $runtimeNS }}
+  labels:
+    {{- include "chart.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  namespace: {{ $runtimeNS }}
+  labels:
+    {{- include "chart.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  {{- range $role := $table.runtimeReaders }}
+  {{- if hasKey $accounts $role }}
   - kind: ServiceAccount
-    name: {{ $sa }}
+    name: {{ index $accounts $role }}
     namespace: {{ $.Release.Namespace }}
-      {{- end -}}
-    {{- end -}}
   {{- end }}
+  {{- end }}
+{{- end }}
 {{- end -}}

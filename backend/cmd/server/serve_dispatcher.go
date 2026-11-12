@@ -152,7 +152,7 @@ func runDispatcher(
 		// credential fields (HTTP HMAC, Kafka SASL/mTLS, NATS creds,
 		// AMQP URL). Referenced Secret names must be in the pod's RBAC
 		// secret allowlist.
-		Secrets: app.NewSinkSecretResolver(l.Named("sink-secrets")),
+		Secrets: app.NewSinkSecretResolver(l.Named("sink-secrets"), cfg.RuntimeSecrets.Namespace),
 		Logger:  l.Named("event-dispatcher"),
 	}
 

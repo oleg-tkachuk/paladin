@@ -367,8 +367,9 @@ var unsetKnobAllowlist = map[string]string{
 	"datastores.postgres.migrate_password_secret": "rendered from chart values postgres.migrate",
 	// The session key's file and the JWKS CA (ADR-0047), pointed at what the
 	// chart mounts: auth.sessionKey and internalTLS.
-	"auth.session_key_path": "rendered from chart values auth.sessionKey",
-	"auth.jwks_ca_path":     "rendered from chart values internalTLS; empty trusts the system roots",
+	"auth.session_key_path":     "rendered from chart values auth.sessionKey",
+	"auth.jwks_ca_path":         "rendered from chart values internalTLS; empty trusts the system roots",
+	"runtime_secrets.namespace": "empty keeps a runtime ref where it names, else in the pod's namespace",
 
 	// TLS knobs whose empty value IS the configuration: the certificate's
 	// SANs already cover the Service names, and skipping verification is

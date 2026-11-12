@@ -401,6 +401,8 @@ runtime.health_snapshot_token_secret.namespace
 runtime.log_probes
 runtime.mode
 runtime.shutdown_timeout
+runtime_secrets
+runtime_secrets.namespace
 security
 security.log_sensitive
 storage

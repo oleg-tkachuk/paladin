@@ -84,6 +84,12 @@ var roleSecrets = map[Role][]string{
 	RoleBootstrap: {secretPostgresPassword, secretBootstrapAdminPassword, secretStorageBackends},
 }
 
+// runtimeSecretReaders read Secrets a name in data gives — a registered
+// backend's credentials, an event sink's — from runtime_secrets.namespace:
+// admin probes backends and tests sinks, the dispatcher delivers to sinks,
+// bootstrap probes the backends it seeds.
+var runtimeSecretReaders = []Role{RoleAdmin, RoleBootstrap, RoleDispatcher, RoleMCPEmbedded}
+
 func init() {
 	roleSecrets[RoleMCPEmbedded] = concat(roleSecrets[RoleAPI],
 		append(slices.Clone(roleSecrets[RoleAdmin]), roleSecrets[RoleMCP]...)...)
