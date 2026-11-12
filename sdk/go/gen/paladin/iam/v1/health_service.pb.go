@@ -408,9 +408,12 @@ func (x *ComponentHealth) GetDetails() []*ComponentDetail {
 
 // One fact a component reports, shown as "name: value".
 type ComponentDetail struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Value string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	// The facts sharing a group are one line of the component, labelled by
+	// the group; empty for a fact of its own.
+	Group         string `protobuf:"bytes,3,opt,name=group,proto3" json:"group,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -455,6 +458,13 @@ func (x *ComponentDetail) GetName() string {
 func (x *ComponentDetail) GetValue() string {
 	if x != nil {
 		return x.Value
+	}
+	return ""
+}
+
+func (x *ComponentDetail) GetGroup() string {
+	if x != nil {
+		return x.Group
 	}
 	return ""
 }
@@ -548,10 +558,11 @@ const file_paladin_iam_v1_health_service_proto_rawDesc = "" +
 	"\bcategory\x18\x05 \x01(\tR\bcategory\x12\x1a\n" +
 	"\bcritical\x18\x06 \x01(\bR\bcritical\x12:\n" +
 	"\acontrol\x18\a \x01(\x0e2 .paladin.iam.v1.ComponentControlR\acontrol\x129\n" +
-	"\adetails\x18\b \x03(\v2\x1f.paladin.iam.v1.ComponentDetailR\adetails\";\n" +
+	"\adetails\x18\b \x03(\v2\x1f.paladin.iam.v1.ComponentDetailR\adetails\"Q\n" +
 	"\x0fComponentDetail\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value\"\x9a\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12\x14\n" +
+	"\x05group\x18\x03 \x01(\tR\x05group\"\x9a\x01\n" +
 	"\n" +
 	"HealthInfo\x127\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1f.paladin.iam.v1.ComponentStatusR\x06status\x12?\n" +

@@ -41,7 +41,7 @@ func detailsToProto(ds []health.Detail) []*pb.ComponentDetail {
 	}
 	out := make([]*pb.ComponentDetail, 0, len(ds))
 	for _, d := range ds {
-		out = append(out, &pb.ComponentDetail{Name: d.Name, Value: d.Value})
+		out = append(out, &pb.ComponentDetail{Name: d.Name, Value: d.Value, Group: d.Group})
 	}
 	return out
 }

@@ -50,7 +50,7 @@ func TestFromSnapshot(t *testing.T) {
 			{Name: "s3", Status: health.StatusUnhealthy, Message: "timeout", Category: "storage"},
 			{Name: "nats", Status: health.StatusDisabled, Message: "not in use", Control: health.ControlDatabase},
 			{Name: "postgres-schema", Status: health.StatusHealthy, Details: []health.Detail{
-				{Name: "schema applied", Value: "56"}, {Name: "schema this build needs", Value: "56"},
+				{Name: "schema applied", Value: "56", Group: "postgres"}, {Name: "schema this build needs", Value: "56"},
 			}},
 		},
 	}
@@ -68,6 +68,9 @@ func TestFromSnapshot(t *testing.T) {
 	}
 	if d := got.Components[3].Details; len(d) != 2 || d[0].Name != "schema applied" || d[1].Value != "56" {
 		t.Errorf("component[3] details = %v, want both, in order", d)
+	}
+	if d := got.Components[3].Details; d[0].Group != "postgres" || d[1].Group != "" {
+		t.Errorf("component[3] detail groups = %q, %q; want each fact's own", d[0].Group, d[1].Group)
 	}
 	if got.Components[0].Details != nil {
 		t.Errorf("component[0] details = %v, want none", got.Components[0].Details)
