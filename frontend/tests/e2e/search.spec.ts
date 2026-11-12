@@ -23,9 +23,9 @@ import { test, expect } from "./fixtures/resources";
 import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 
-// The console talks to the planes through its own BFF at /api/rpc/<proc>.
+// The console reaches the planes through the session role at /session/rpc/<proc>.
 const rpc = (proc: string) => (r: { url(): string }) =>
-  r.url().includes("/api/rpc/") && r.url().includes(proc);
+  r.url().includes("/session/rpc/") && r.url().includes(proc);
 
 // filteredRpc matches a call to proc that carries a filter. The page also
 // refetches its list unfiltered — on mount, on a focus change — and the first

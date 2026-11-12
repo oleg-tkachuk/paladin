@@ -1,92 +1,63 @@
 /**
  * The console shell's own state: version, health, background operations.
  *
- * /api/shell fans out to two planes and reports each section separately, so
- * one failing badge greys instead of failing the page. That is the right
- * design and it is also the most convincing way to hide a permanent break: a
- * section that has NEVER worked renders exactly like a service that is
- * briefly down. Nothing asserted these came back `ok`, which is the same gap
- * that let the audit stream go years without delivering an event and let
- * logout go its whole life without revoking anything.
+ * The shell reports each section separately, so one failing badge greys
+ * instead of failing the page. That is the right design and it is also the
+ * most convincing way to hide a permanent break: a section that has NEVER
+ * worked renders exactly like a service that is briefly down. So this asserts
+ * each call came back ok.
  *
- * A unit test cannot close it. It can prove the route fans out and degrades
- * correctly, but it mocks the RPCs — so a method that was renamed, an
- * audience the plane no longer accepts, or a response the registry cannot
- * re-encode all stay invisible. Only a real cluster answers those.
+ * A unit test cannot close it. It mocks the RPCs — so a method that was
+ * renamed, a plane the session role does not route, or an answer the registry
+ * cannot decode all stay invisible. Only a real stack answers those.
  */
 import { test, expect } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
 
-type Section = { status: string; reason?: string; data?: unknown };
+// The calls the shell makes: three RPCs through the session role (ADR-0048)
+// and the console's own banner.
+const SHELL_CALLS = [
+  "/session/rpc/paladin.iam.v1.HealthService/GetVersion",
+  "/session/rpc/paladin.iam.v1.HealthService/GetHealth",
+  "/session/rpc/paladin.admin.v1.PlatformOperationService/ListOperations",
+  "/api/banner",
+];
+const HTTP_OK = 200;
+const HTTP_UNAUTHORIZED = 401;
 
 test.describe("Console shell", () => {
-  test("never answers without a credential", async ({ page }) => {
+  test("never answers a call without the session", async ({ page }) => {
     await loginAsAdmin(page);
 
-    // Fetched from inside the page so it carries exactly what the console
-    // sends — both plane tokens, from the same token store the shell uses.
-    // Reconstructing the headers in the test would be testing the test: the
-    // first probe of this route written by hand omitted the iam header and
-    // reported two sections broken that were perfectly healthy.
-    const body = await page.evaluate(async () => {
-      const res = await fetch("/api/shell", {
-        credentials: "same-origin",
-        headers: {},
+    // From inside the page, without the cookie: the session role is what
+    // stands between the browser and the planes.
+    const status = await page.evaluate(async (path) => {
+      const res = await fetch(path, {
+        method: "POST",
+        credentials: "omit",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
       });
-      return { status: res.status, text: await res.text() };
-    });
-
-    // The console attaches its tokens through its own transport, so a bare
-    // fetch is unauthenticated — that is itself worth pinning: this route
-    // reaches cluster-only planes and must never answer without a credential.
-    expect(body.status).toBe(401);
+      return res.status;
+    }, SHELL_CALLS[0]);
+    expect(status).toBe(HTTP_UNAUTHORIZED);
   });
 
   test("renders version, health and background operations", async ({
     page,
   }) => {
-    // Driven through the UI, which is where the shell's data actually lands.
-    // If a section were permanently unavailable the chrome would still
-    // render — so the assertion is on the values, not on the page loading.
-    const shellCalls: Array<{ status: number; body: string }> = [];
-    page.on("response", async (r) => {
-      if (!r.url().includes("/api/shell")) return;
-      try {
-        shellCalls.push({ status: r.status(), body: await r.text() });
-      } catch {
-        // A response body can be gone by the time we ask; the assertions
-        // below fail loudly if we end up with nothing.
-      }
+    const answered = new Map<string, number>();
+    page.on("response", (r) => {
+      const path = new URL(r.url()).pathname;
+      if (SHELL_CALLS.includes(path)) answered.set(path, r.status());
     });
 
     await loginAsAdmin(page);
-    await page.waitForFunction(() => document.readyState === "complete", null, {
-      timeout: 15_000,
-    });
     await expect
-      .poll(() => shellCalls.length, { timeout: 20_000 })
-      .toBeGreaterThan(0);
-
-    const ok = shellCalls.find((c) => c.status === 200);
-    expect(ok, "the console never got a 200 from /api/shell").toBeTruthy();
-
-    const sections = JSON.parse(ok!.body) as Record<string, Section>;
-    expect(Object.keys(sections).sort()).toEqual([
-      "banner",
-      "health",
-      "operations",
-      "version",
-    ]);
-    // The banner asks no plane, and with none configured it is ok and
-    // empty; each plane must answer with data.
-    const { banner, ...planes } = sections;
-    expect(banner.status).toBe("ok");
-    for (const [name, s] of Object.entries(planes)) {
-      expect(
-        s.status,
-        `${name} is ${s.status}: ${s.reason ?? "no reason given"}`,
-      ).toBe("ok");
-      expect(s.data, `${name} reported ok with no data`).toBeTruthy();
+      .poll(() => answered.size, { timeout: 20_000 })
+      .toBe(SHELL_CALLS.length);
+    for (const path of SHELL_CALLS) {
+      expect(answered.get(path), `${path} did not answer ok`).toBe(HTTP_OK);
     }
   });
 });

@@ -14,12 +14,30 @@
  *
  * So the load-bearing assertion below is not that the browser reached /login —
  * it is that the captured cookie value is dead afterwards. Everything else is
- * a UI detail that could be true while the session lives on.
+ * a UI detail that could be true while the session lives on. The session is
+ * the session role's now (ADR-0048); the cookie is the whole credential, so
+ * replaying it is exactly what an attacker holding a copy would do.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect, type APIRequestContext } from "@playwright/test";
 import { loginAsAdmin } from "./fixtures/auth";
 
-const COOKIE = "paladin_rt_iam";
+const COOKIE = "__Host-paladin_session";
+const WHO_AM_I = "/session/rpc/paladin.iam.v1.AuthService/WhoAmI";
+const HTTP_NO_CONTENT = 204;
+const HTTP_UNAUTHORIZED = 401;
+
+// whoAmI asks the session role who the cookie value belongs to, from the
+// console's origin, as the page does.
+function whoAmI(request: APIRequestContext, baseURL: string, cookie: string) {
+  return request.post(`${baseURL}${WHO_AM_I}`, {
+    headers: {
+      Cookie: `${COOKIE}=${cookie}`,
+      Origin: baseURL,
+      "Content-Type": "application/json",
+    },
+    data: {},
+  });
+}
 
 test.describe("Logout", () => {
   test("ends the session on the server, not just in the browser", async ({
@@ -36,15 +54,7 @@ test.describe("Logout", () => {
 
     // Prove the captured value is genuinely a working session BEFORE logout,
     // or the assertion after it would pass against a token that never worked.
-    //
-    // This call also rotates the chain, which is what makes the replay below
-    // the sharper test: the value we hold afterwards is the PREDECESSOR of the
-    // head that logout revokes. A logout that killed only the token it was
-    // handed left this one alive, and the supersession window honoured it for
-    // another thirty seconds — a logged-out session that still worked.
-    const alive = await request.get(`${baseURL}/api/auth/me`, {
-      headers: { Cookie: `${COOKIE}=${before!.value}` },
-    });
+    const alive = await whoAmI(request, baseURL!, before!.value);
     expect(alive.status(), "captured cookie was not a live session").toBe(200);
 
     await page.getByRole("button", { name: "Sign out" }).click();
@@ -56,35 +66,30 @@ test.describe("Logout", () => {
     );
     expect(after?.value ?? "", "cookie still set in the browser").toBe("");
 
-    // And — the part that was broken — so did the server. This request carries
-    // the pre-logout value directly, which is exactly what an attacker holding
-    // a copied cookie would send.
-    const replayed = await request.get(`${baseURL}/api/auth/me`, {
-      headers: { Cookie: `${COOKIE}=${before!.value}` },
-    });
+    // And — the part that was broken — so did the server.
+    const replayed = await whoAmI(request, baseURL!, before!.value);
     expect(
       replayed.status(),
-      "the refresh chain outlived the logout that was supposed to revoke it",
-    ).toBe(401);
+      "the session outlived the logout that was supposed to revoke it",
+    ).toBe(HTTP_UNAUTHORIZED);
   });
 
-  test("reports whether the server-side revocation actually happened", async ({
+  test("revokes the session it is called with", async ({
     page,
     request,
     baseURL,
   }) => {
-    // ok:true alone claimed a session had ended when it had not. The response
-    // carries the outcome now, so a client can tell a local logout from a
-    // complete one.
     await loginAsAdmin(page);
     const cookie = (await page.context().cookies()).find(
       (c) => c.name === COOKIE,
     );
 
-    const res = await request.post(`${baseURL}/api/auth/logout`, {
-      headers: { Cookie: `${COOKIE}=${cookie!.value}` },
+    const res = await request.post(`${baseURL}/session/logout`, {
+      headers: { Cookie: `${COOKIE}=${cookie!.value}`, Origin: baseURL! },
     });
-    expect(res.status()).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, revoked: true });
+    expect(res.status()).toBe(HTTP_NO_CONTENT);
+    expect((await whoAmI(request, baseURL!, cookie!.value)).status()).toBe(
+      HTTP_UNAUTHORIZED,
+    );
   });
 });

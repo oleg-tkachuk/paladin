@@ -19,7 +19,7 @@ import { loginAsAdmin } from "./fixtures/auth";
 import { gotoSettled } from "./fixtures/navigate";
 
 const rpc = (proc: string) => (r: { url(): string }) =>
-  r.url().includes("/api/rpc/") && r.url().includes(proc);
+  r.url().includes("/session/rpc/") && r.url().includes(proc);
 
 // The palette's own search, not the page's list: /tenants reads ListTenants
 // with no filter too, and the first such read is otherwise the one caught.

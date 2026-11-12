@@ -232,7 +232,12 @@ services:
   capability-key:
     image: postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
     restart: "no"
-    entrypoint: ["sh", "-c", "test -s /keys/capability.pem || (openssl genpkey -algorithm ed25519 -out /keys/capability.pem && chmod 0444 /keys/capability.pem); test -s /session/session-key.pem || (openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out /session/session-key.pem && chmod 0444 /session/session-key.pem)"]
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "test -s /keys/capability.pem || (openssl genpkey -algorithm ed25519 -out /keys/capability.pem && chmod 0444 /keys/capability.pem); test -s /session/session-key.pem || (openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out /session/session-key.pem && chmod 0444 /session/session-key.pem)",
+      ]
     volumes:
       - capability-key:/keys
       # The session key (ADR-0047), mounted by the api container alone.
@@ -322,6 +327,20 @@ services:
     # service_started and the suite's own readiness waits cover the gap.
     # /readyz is verified from the host instead (see run instructions).
 
+  # The console's session role (ADR-0048): the session cookie, the tokens
+  # behind it, and every call the console makes. Reached through front.
+  session:
+    <<: *paladin-base
+    init: true
+    restart: on-failure
+    command: ["serve", "session", "--config", "/app/configs/compose.yaml"]
+    networks:
+      default:
+        aliases: [paladin-session]
+    depends_on:
+      iam:
+        condition: service_started
+
   # The IAM plane, the OAuth AS and the session JWKS (ADR-0047).
   iam:
     <<: *paladin-base
@@ -406,13 +425,9 @@ services:
     init: true
     restart: on-failure
     environment:
-      # BFF reaches the planes via container DNS. The browser
-      # only ever talks to the BFF on :3000. Var names MUST match
-      # what the BFF reads (src/lib/auth/bff.ts + api/rpc route):
-      # PALADIN_DATA_URL / PALADIN_IAM_URL / PALADIN_ADMIN_URL.
-      PALADIN_DATA_URL: http://api:8080
+      # The OAuth consent form's relay; every other call the browser makes
+      # goes through the session role, behind front (ADR-0048).
       PALADIN_IAM_URL: http://iam:8085
-      PALADIN_ADMIN_URL: http://admin:8090
       # The storage origin the browser uploads to: the primary backend's
       # public_endpoint above. The console's CSP allows only the origins
       # named here, and refused every upload PUT while it named none.
@@ -421,8 +436,6 @@ services:
       # Clarification Q3. NOT `next dev` — HMR is a documented
       # flake source for E2E suites.
       NODE_ENV: production
-    ports:
-      - "${PALADIN_E2E_PORT_UI:-3000}:3000"
     depends_on:
       # api/admin are distroless and carry no healthcheck (see above),
       # so gate on service_started; the ui's own healthcheck + the
@@ -440,6 +453,26 @@ services:
       interval: 3s
       timeout: 3s
       retries: 30
+
+  # The console's one origin, as the ingress makes it on a cluster (ADR-0048):
+  # /session/* to the session role, everything else to the console. The suite
+  # reaches the console here, on the UI port.
+  front:
+    image: caddy:2.11.9-alpine
+    restart: on-failure
+    volumes:
+      - ../../../backend/deploy/front:/etc/caddy:ro
+    environment:
+      FRONT_PORT: "3000"
+      SESSION_UPSTREAM: session:8086
+      CONSOLE_UPSTREAM: ui:3000
+    ports:
+      - "${PALADIN_E2E_PORT_UI:-3000}:3000"
+    depends_on:
+      ui:
+        condition: service_healthy
+      session:
+        condition: service_started
 
 volumes:
   capability-key:

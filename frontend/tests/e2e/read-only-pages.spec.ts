@@ -22,7 +22,7 @@ function watchRPC(page: Page) {
   const failures: string[] = [];
   const calls: string[] = [];
   page.on("response", (r) => {
-    if (!/\/api\/rpc\//.test(r.url())) return;
+    if (!/\/session\/rpc\//.test(r.url())) return;
     calls.push(r.url().split("/rpc/")[1]);
     if (r.status() >= 400) {
       failures.push(`${r.status()} ${r.url().split("/rpc/")[1]}`);

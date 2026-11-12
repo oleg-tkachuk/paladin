@@ -51,9 +51,10 @@ test.describe("Storage backend — advanced fields", () => {
     await expect(displayName).toBeVisible({ timeout: 15_000 });
     await displayName.fill("Renamed, nothing else");
 
-    // The console talks to the planes through its own BFF at /api/rpc/<proc>.
+    // The console reaches the planes through the session role at /session/rpc/<proc>.
     const request = page.waitForRequest(
-      (r) => r.url().includes("/api/rpc/") && r.url().includes("UpdateBackend"),
+      (r) =>
+        r.url().includes("/session/rpc/") && r.url().includes("UpdateBackend"),
       { timeout: 15_000 },
     );
     await page.getByRole("button", { name: /save changes/i }).click();

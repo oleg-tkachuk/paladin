@@ -1,5 +1,5 @@
 /**
- * The live audit feed, end to end: browser EventSource → BFF SSE proxy →
+ * The live audit feed, end to end: browser EventSource → session role →
  * admin plane → Postgres NOTIFY.
  *
  * This chain had no test of any kind, and it had never delivered a single
@@ -40,7 +40,7 @@ test.describe("Live audit stream", () => {
     // route's own 401 is not what a caller sees from outside. What must hold
     // regardless is that nobody without a session is handed a live feed of
     // another tenant's audit log.
-    const res = await request.get(`${baseURL}/api/audit/stream`, {
+    const res = await request.get(`${baseURL}/session/audit/stream`, {
       maxRedirects: 0,
     });
     expect(res.status(), "an anonymous caller was not turned away").not.toBe(
@@ -62,7 +62,7 @@ test.describe("Live audit stream", () => {
     await page.evaluate(() => {
       window.__auditFrames = [];
       window.__auditOpen = false;
-      const es = new EventSource("/api/audit/stream");
+      const es = new EventSource("/session/audit/stream");
       es.onopen = () => {
         window.__auditOpen = true;
       };
