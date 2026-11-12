@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -635,24 +634,14 @@ func buildAgentVerifier(ctx context.Context, a config.Auth, keys *sessionkey.Set
 // stricter than "permissive". Installing the transport is harmless for
 // plaintext upstreams — it is simply never consulted.
 func upstreamHTTPClient(up config.MCPUpstreams) (*http.Client, error) {
-	c := &http.Client{Timeout: 30 * time.Second}
-	// No trust material configured → nothing to install. Plaintext upstreams
-	// take this path; so does an https:// upstream with insecure_skip_verify
-	// left off, which config validation has already rejected.
-	if up.TLS.CaPath == "" && up.TLS.CertPath == "" && !up.TLS.InsecureSkipVerify {
-		return c, nil
-	}
-	tlsCfg, err := tlsconfig.New(
-		up.TLS.CertPath, up.TLS.KeyPath, up.TLS.CaPath,
-		up.TLS.ServerName, up.TLS.InsecureSkipVerify,
-	)
+	tr, err := tlsconfig.ClientTransport(up.TLS.CertPath, up.TLS.KeyPath, up.TLS.CaPath, up.TLS.ServerName, up.TLS.InsecureSkipVerify)
 	if err != nil {
 		return nil, fmt.Errorf("mcp upstream tls: %w", err)
 	}
-	tlsCfg.MinVersion = tls.VersionTLS12
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = tlsCfg
-	c.Transport = tr
+	c := &http.Client{Timeout: 30 * time.Second}
+	if tr != nil {
+		c.Transport = tr
+	}
 	return c, nil
 }
 
