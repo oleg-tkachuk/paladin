@@ -342,6 +342,22 @@ check "console: iam URL is the iam role's" "$(console_env defaults PALADIN_IAM_U
     "http://paladin-core-iam.$NAMESPACE.svc.cluster.local:8085"
 check "console: health roles" "$(console_env defaults PALADIN_HEALTH_ROLES)" "api,iam,admin,worker,mcp,dispatcher"
 
+# /session/ goes to the session role's Service on the console's own hosts once
+# it is named (ADR-0048), and nowhere before.
+readonly CONSOLE_HOST=console.example
+readonly SESSION_SERVICE=paladin-core-session
+console session-off --set "traefik.hosts[0]=$CONSOLE_HOST" --set ingress.enabled=true --set "ingress.hosts[0]=$CONSOLE_HOST"
+check "console: no session route by default" \
+    "$(yq ea -r '[select(.kind == "IngressRoute")] | .[0].spec.routes | length' "$scratch/console-session-off.yaml")" "1"
+console session-on --set "traefik.hosts[0]=$CONSOLE_HOST" --set ingress.enabled=true --set "ingress.hosts[0]=$CONSOLE_HOST" \
+    --set session.service.name=$SESSION_SERVICE
+check "console: IngressRoute sends /session/ to the session role" \
+    "$(yq ea -r '[select(.kind == "IngressRoute")] | .[0].spec.routes[0] | .match + " " + .services[0].name' "$scratch/console-session-on.yaml")" \
+    "Host(\`$CONSOLE_HOST\`) && PathPrefix(\`/session/\`) $SESSION_SERVICE"
+check "console: Ingress sends /session to the session role" \
+    "$(yq ea -r '[select(.kind == "Ingress")] | .[0].spec.rules[0].http.paths[0] | .path + " " + .backend.service.name' "$scratch/console-session-on.yaml")" \
+    "/session $SESSION_SERVICE"
+
 # The CSP allows the storage origins this names and no other; none by default.
 readonly STORAGE_A=https://s3.example.com
 readonly STORAGE_B=http://localhost:9000

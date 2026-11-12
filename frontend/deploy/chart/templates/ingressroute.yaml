@@ -28,6 +28,26 @@ spec:
   entryPoints:
     {{- toYaml .Values.traefik.entryPoints | nindent 4 }}
   routes:
+    {{- with $.Values.session.service.name }}
+    {{- range $.Values.traefik.hosts }}
+    # The console's session role (ADR-0048), on the console's own origin.
+    - kind: Rule
+      match: Host(`{{ . }}`) && PathPrefix(`{{ $.Values.session.pathPrefix }}`)
+      services:
+        - kind: Service
+          name: {{ $.Values.session.service.name }}
+          port: {{ $.Values.session.service.port }}
+      {{- with $.Values.traefik.middlewares }}
+      middlewares:
+        {{- range . }}
+        - name: {{ .name }}
+          {{- with .namespace }}
+          namespace: {{ . }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
     {{- range .Values.traefik.hosts }}
     - kind: Rule
       match: Host(`{{ . }}`)
