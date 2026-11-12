@@ -39,6 +39,7 @@ flowchart LR
     cp["<b>Paladin</b><br/>IAM · Cedar policy · quotas<br/>object metadata · audit · events"]
 
     pg[("<b>PostgreSQL</b>")]
+    vk[("<b>Valkey</b><br/>rate limits · optional")]
     sinks{{"<b>Event sinks</b><br/>webhooks · brokers"}}
     s3[("<b>S3 backends</b><br/>SeaweedFS · MinIO<br/>Garage · AWS")]
 
@@ -46,6 +47,7 @@ flowchart LR
     agent -- "MCP" --> cp
     app -- "Connect RPC" --> cp
     cp --> pg
+    cp -. "rate limits" .-> vk
     cp -- "events" --> sinks
     cp -- "bucket and object management" --> s3
     app -. "object bytes, presigned" .-> s3
@@ -59,6 +61,7 @@ flowchart LR
     class app,agent,op client
     class cp role
     class pg,s3 store
+    class vk optional
     class sinks external
 ```
 
@@ -75,7 +78,8 @@ Paladin is one Go binary. Each role below runs as its own Deployment
 
 | Role | What it does |
 |------|--------------|
-| `api` | the data plane (object metadata, presigned upload and download URLs) and IAM (sign-in, users, API tokens) |
+| `api` | the data plane: object metadata, presigned upload and download URLs |
+| `iam` | sign-in and tokens, users, the OAuth authorization server; the one role holding the session signing key |
 | `admin` | tenants, buckets, storage backends, quotas, policies, capabilities, audit |
 | `mcp` | the api and admin operations, as tools for AI agents |
 | `worker` | background jobs: bucket provisioning, batch operations, trash purge, lifecycle, migration between backends |
@@ -84,7 +88,8 @@ Paladin is one Go binary. Each role below runs as its own Deployment
 | `console` | the web UI, with a BFF in front of `api` and `admin`; its own chart and Deployment |
 
 It needs PostgreSQL and an S3-compatible store — SeaweedFS, MinIO, Garage or
-AWS S3.
+AWS S3. Valkey is optional: the rate limits count there when
+`middleware.rate_limit.backend` is `valkey`, and in PostgreSQL otherwise.
 
 ## Contents
 

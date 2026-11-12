@@ -22,6 +22,7 @@ flowchart LR
     cp["<b>Paladin</b><br/>IAM · Cedar policy · quotas<br/>object metadata · audit · events"]
 
     pg[("<b>PostgreSQL</b>")]
+    vk[("<b>Valkey</b><br/>rate limits · optional")]
     sinks{{"<b>Event sinks</b><br/>webhooks · brokers"}}
     s3[("<b>S3 backends</b><br/>SeaweedFS · MinIO<br/>Garage · AWS")]
 
@@ -29,6 +30,7 @@ flowchart LR
     agent -- "MCP" --> cp
     app -- "Connect RPC" --> cp
     cp --> pg
+    cp -. "rate limits" .-> vk
     cp -- "events" --> sinks
     cp -- "bucket and object management" --> s3
     app -. "object bytes, presigned" .-> s3
@@ -42,6 +44,7 @@ flowchart LR
     class app,agent,op client
     class cp role
     class pg,s3 store
+    class vk optional
     class sinks external
 ```
 
@@ -461,7 +464,8 @@ flowchart TB
         console["<b>paladin-console</b><br/>BFF · :3000"]
         subgraph core ["paladin-core"]
             direction LR
-            api["<b>api</b><br/>:8080 · :8085"]
+            api["<b>api</b><br/>:8080"]
+            iam["<b>iam</b><br/>:8085"]
             admin["<b>admin</b><br/>:8090"]
             mcp["<b>mcp</b><br/>:8095"]
             worker["<b>worker</b>"]
@@ -473,12 +477,15 @@ flowchart TB
 
     pg[("<b>PostgreSQL</b><br/>external")]
     s3[("<b>S3 backend</b><br/>external")]
+    vk[("<b>Valkey</b><br/>external · optional")]
 
-    ingress -- "/paladin.iam.v1.* · /oauth/ → :8085<br/>rest → :8080" --> api
+    ingress -- "/paladin.iam.v1.* · /oauth/ · JWKS → :8085" --> iam
+    ingress -- "rest → :8080" --> api
     ingress -- "/paladin.admin.v1.* → :8090<br/>IngressRoute only" --> admin
     ingress --> console
     ingress -- "traefik.mcp.hosts<br/>IngressRoute only" --> mcp
     console --> api
+    console --> iam
     console --> admin
     mcp -- "bridge mode" --> api & admin
     admin -. "ops :8099 · /stats census" .-> worker
@@ -490,6 +497,7 @@ flowchart TB
     api --> s3
     admin --> s3
     worker --> s3
+    api & iam & admin -. "rate limits" .-> vk
 
     classDef client fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     classDef ui fill:#EDE9FE,stroke:#7C3AED,color:#3B0764
@@ -499,15 +507,16 @@ flowchart TB
     classDef external fill:#FCE7F3,stroke:#DB2777,color:#831843
     classDef k8s fill:#E0F2FE,stroke:#0284C7,color:#0C4A6E
     class console ui
-    class api,admin,mcp,worker,dispatcher role
-    class ingest,ingress optional
+    class api,iam,admin,mcp,worker,dispatcher role
+    class ingest,ingress,vk optional
     class pg,s3 store
     class jobs k8s
     style ns fill:none,stroke:#94A3B8,stroke-dasharray:3 3
     style core fill:#F8FAFC,stroke:#16A34A
 ```
 
-The standard Ingress routes only the api role. The Traefik IngressRoute also
+The standard Ingress routes the api and iam roles: the IAM plane, OAuth and
+the session JWKS to `iam`, the rest to `api`. The Traefik IngressRoute also
 routes `/paladin.admin.v1.*` to `admin` on the shared host, or moves the admin
 plane to its own host when `traefik.planes.admin.hosts` is set; either way the
 console reaches `admin` inside the cluster. Both route the OAuth
@@ -516,7 +525,9 @@ Authorization Server's `/oauth/` endpoints and its
 `traefik.mcp.hosts` set, a further IngressRoute gives `mcp` a host of its own.
 Every role except `mcp` (in bridge mode, as the chart runs it) uses PostgreSQL;
 `api`, `admin` and `worker` call S3, and so does the bootstrap Job when it
-probes a backend's features.
+probes a backend's features. `api`, `iam` and `admin` count the rate limits in Valkey when
+`middleware.rate_limit.backend` is `valkey`; without it they count in
+PostgreSQL.
 
 `admin` proxies three views the console reads from other roles' listeners —
 the stats behind the platform-admin role, the sessions behind a Cedar check:
