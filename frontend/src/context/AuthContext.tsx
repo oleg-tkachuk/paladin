@@ -41,11 +41,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   status: AuthStatus;
   error: string | null;
-  login: (
-    subject: string,
-    password: string,
-    upstreamCode?: string,
-  ) => Promise<void>;
+  login: (subject: string, password: string) => Promise<void>;
   // switchTenant re-scopes the session to another tenant the subject is a
   // member of. Throws when the role refuses (not a member, or disabled).
   switchTenant: (tenantId: string) => Promise<void>;
@@ -121,23 +117,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const login = useCallback(
-    async (subject: string, password: string, upstreamCode?: string) => {
-      generation.current++;
-      setError(null);
-      setStatus("loading");
-      try {
-        await signIn(subject, password, upstreamCode);
-        setUser(await currentUser());
-        setStatus("authenticated");
-      } catch (e) {
-        setError(loginFailure(e));
-        setStatus("unauthenticated");
-        throw e;
-      }
-    },
-    [],
-  );
+  const login = useCallback(async (subject: string, password: string) => {
+    generation.current++;
+    setError(null);
+    setStatus("loading");
+    try {
+      await signIn(subject, password);
+      setUser(await currentUser());
+      setStatus("authenticated");
+    } catch (e) {
+      setError(loginFailure(e));
+      setStatus("unauthenticated");
+      throw e;
+    }
+  }, []);
 
   const switchTenant = useCallback(async (tenantId: string) => {
     generation.current++;

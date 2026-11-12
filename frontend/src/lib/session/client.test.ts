@@ -38,18 +38,6 @@ describe("session client", () => {
     });
   });
 
-  it("passes an upstream code when there is one", async () => {
-    const fetch = answer(200, {});
-    vi.stubGlobal("fetch", fetch);
-    await signIn("", "", "code-1");
-    const [, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toEqual({
-      subject: "",
-      password: "",
-      upstreamCode: "code-1",
-    });
-  });
-
   it("surfaces the role's refusal as a SessionError", async () => {
     vi.stubGlobal(
       "fetch",
