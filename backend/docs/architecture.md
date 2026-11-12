@@ -141,6 +141,7 @@ role; there is no all-in-one mode:
 | `serve dispatcher` | Outbox drain → sinks |
 | `serve ingest` | Storage notifications: webhook, NATS, RabbitMQ, SQS |
 | `serve mcp` | MCP bridge (`--embedded` hosts the handlers in-process) |
+| `serve session` | The console's session: its cookie, the tokens behind it, and the calls it forwards to the planes (ADR-0048) |
 | `migrate` | Apply the migrations |
 | `bootstrap` | Create the platform admin, mirror configured storage backends into the database, and probe the features of any never probed |
 

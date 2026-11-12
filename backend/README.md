@@ -15,6 +15,7 @@ the process boundaries below are also the pod boundaries.
 | `paladin serve worker` | `:8090` ops (Service port `8099`) | Background jobs, lease-coordinated: object lifecycle transitions, reapers, quota reconciliation, storage migration. |
 | `paladin serve dispatcher` | `:8099` ops | Durable event fan-out. Drains the transactional outbox to webhook and broker sinks. |
 | `paladin serve ingest` | `:8100` | Receives storage notifications (webhook, NATS, RabbitMQ or SQS) and promotes objects. Refuses to start when `ingest.enabled` is false. |
+| `paladin serve session` | `:8086` | The console's session (ADR-0048): holds the session cookie and the tokens behind it, mints each plane's token at IAM, and forwards the console's Connect calls. No database, no key. |
 | `paladin serve mcp` | `:8095` | Model Context Protocol server — stdio or streamable HTTP — exposing the RPC surface to agents. |
 | `paladin migrate` | — | Applies the embedded SQL migrations. Exits 0. |
 | `paladin bootstrap` | — | Provisions the platform admin and mirrors configured storage backends into the database. Idempotent. |

@@ -276,18 +276,19 @@ the same commit. Treat this file like a runtime invariant.
 ### Console session terminated in Go (ADR-0048)
 
 - **Status:** In progress (ADR-0048 accepted 2026-11-11). Platform health is
-  the admin role's GetPlatformHealth; the console holds no health token.
+  the admin role's GetPlatformHealth; `serve session` holds a session and
+  forwards calls, but no chart deploys it and the console does not use it.
 - **Reason:** the console's Next.js server holds the refresh token, mints
   per-plane access tokens, hands them to the browser, and re-encodes every
   RPC through a hand-registered bridge. The console chart still mounts
   `healthSnapshotTokenSecret`, which nothing reads now.
-- **Definition of Done:** a `serve session` role holds the session cookie and
-  the tokens and forwards Connect calls as bytes; the console's auth routes,
-  token store, JWT decoding and RPC bridge are deleted; the console chart
-  drops `healthSnapshotTokenSecret` and the role URLs only the health route
-  read.
+- **Definition of Done:** the chart deploys the session role and routes the
+  console's `/session/` paths to it; the console calls it; the console's auth
+  routes, token store, JWT decoding and RPC bridge are deleted; the console
+  chart drops `healthSnapshotTokenSecret` and the role URLs only the health
+  route read.
 - **Blockers:** none; ADR-0047 left the session key with the iam role alone,
-  so the edge is never the role that holds it.
+  so the session role is never the role that holds it.
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
 - **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays
