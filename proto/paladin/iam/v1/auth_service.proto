@@ -78,8 +78,9 @@ message LoginResponse {
 message RefreshTokenRequest {
   string refresh_token = 1 [(buf.validate.field).string.min_len = 1, debug_redact = true];
   // Audience the caller wants on the new access token. Empty defaults to
-  // `paladin-data` server-side; SPAs that pin a refresh chain to a particular
-  // plane (e.g. the iam-cookie BFF flow) MUST set this explicitly.
+  // `paladin-data` server-side; a client that pins a refresh chain to a
+  // particular plane (the console's session role pins it to paladin-iam)
+  // MUST set this explicitly.
   string requested_audience = 2;
 }
 
