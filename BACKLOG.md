@@ -267,6 +267,12 @@ the same commit. Treat this file like a runtime invariant.
   the data plane.
 - **Definition of Done**, one pull request per step, each deployable alone:
   3. Every role's service account reads only its own Secrets (decision 8).
+     The binary already resolves only its role's (`config/roles.go`); left:
+     the chart renders a Role per role from that table. Two catches: the
+     admin plane resolves a dynamically registered backend's credentials at
+     runtime (`ResolveSecret`), under names no render knows, and worker,
+     dispatcher and ingest read the API-token pepper and the DPoP nonce key
+     only because `BuildSharedDeps` builds those bundles in every role.
   4. `serve iam` runs the IAM plane, the OAuth AS and the JWKS as its own
      Deployment; `serve api` serves the data plane alone (decision 7).
      The OAuth AS metadata's `jwks_uri` then names that role's JWKS rather

@@ -30,7 +30,7 @@ import (
 // Subcommands that do not need a DB (none today, but future read-only
 // `paladin version` / `paladin config` flavours might) should not call boot —
 // they can build the logger directly.
-func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB, observability.ShutdownFunc) {
+func boot(ctx context.Context, role config.Role) (config.Config, *zap.Logger, *postgres.DB, observability.ShutdownFunc) {
 	bootstrap, err := logger.NewBootstrapLogger()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "build bootstrap logger: %v\n", err)
@@ -65,7 +65,7 @@ func boot(ctx context.Context) (config.Config, *zap.Logger, *postgres.DB, observ
 		}
 	}
 
-	cfg, err := config.Load(paths, bootstrap)
+	cfg, err := config.Load(paths, role, bootstrap)
 	if err != nil {
 		bootstrap.Fatal("failed to load config", zap.Error(err))
 	}

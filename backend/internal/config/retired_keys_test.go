@@ -41,7 +41,7 @@ storage:
 				t.Fatal(err)
 			}
 			core, logs := observer.New(zap.WarnLevel)
-			if _, err := Load([]string{path}, zap.New(core)); err != nil {
+			if _, err := Load([]string{path}, RoleAPI, zap.New(core)); err != nil {
 				t.Fatalf("Load: %v", err)
 			}
 			got := logs.FilterMessage(retiredLogSensitiveWarning).Len() > 0

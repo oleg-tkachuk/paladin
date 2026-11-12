@@ -22,7 +22,7 @@ func TestChargePerRequestAmountIsExact(t *testing.T) {
 		if err := os.WriteFile(overlay, []byte("capability:\n  charge_per_request_amount: "+amount+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		return Load([]string{minPath, overlay}, zap.NewNop())
+		return Load([]string{minPath, overlay}, RoleAPI, zap.NewNop())
 	}
 	cfg, err := load("0.35")
 	if err != nil {

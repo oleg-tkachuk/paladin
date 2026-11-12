@@ -232,7 +232,7 @@ func TestCueSchemaDeclaresNoUnknownKeys(t *testing.T) {
 // schema constraint that the shipped values violate — e.g. a duration
 // written without units, or a value outside a declared bound.
 func TestShippedConfigLoads(t *testing.T) {
-	cfg, err := Load([]string{repoFile(t, "configs/config.yaml")}, zap.NewNop())
+	cfg, err := Load([]string{repoFile(t, "configs/config.yaml")}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("configs/config.yaml does not load: %v", err)
 	}
@@ -435,7 +435,7 @@ func TestEveryKnobHasAValueFromSomewhere(t *testing.T) {
 	if err := os.WriteFile(minPath, []byte(minimalConfigYAML), 0o600); err != nil {
 		t.Fatalf("write minimal config: %v", err)
 	}
-	minimal, err := Load([]string{minPath}, zap.NewNop())
+	minimal, err := Load([]string{minPath}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("load minimal config: %v", err)
 	}
@@ -543,7 +543,7 @@ func zeroValuedPaths(v reflect.Value, prefix string) []string {
 // values actually arrive. A schema block with a typo'd key name would satisfy
 // the drift test above and still leave the zero values in place.
 func TestIngestDefaultsReachTheStruct(t *testing.T) {
-	cfg, err := Load([]string{"../../configs/config.yaml"}, zap.NewNop())
+	cfg, err := Load([]string{"../../configs/config.yaml"}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("load the shipped config: %v", err)
 	}

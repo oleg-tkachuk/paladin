@@ -48,7 +48,7 @@ var serveIngestCmd = &cobra.Command{
 	Short: "Run the storage-event consumer (webhook / NATS / RabbitMQ)",
 	Run: func(cmd *cobra.Command, args []string) {
 		fx.New(
-			fx.Supply(configSource()),
+			fx.Supply(configSource(config.RoleIngest)),
 			fx.Supply(buildMeta()),
 			ingestModule,
 		).Run()

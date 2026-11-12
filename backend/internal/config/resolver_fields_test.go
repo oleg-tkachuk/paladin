@@ -171,7 +171,8 @@ func TestResolveConfigFillsEveryField(t *testing.T) {
 		t.Run(f.path, func(t *testing.T) {
 			cfg := &Config{}
 			f.set(cfg, ref)
-			if err := resolverInCluster(t, true).ResolveConfig(context.Background(), cfg); err != nil {
+			role := readerOf(t, f.path)
+			if err := resolverInCluster(t, true).ResolveConfig(context.Background(), cfg, role); err != nil {
 				t.Fatalf("ResolveConfig: %v", err)
 			}
 			if got, cleared := f.got(cfg); got != want || !cleared {
@@ -180,7 +181,7 @@ func TestResolveConfigFillsEveryField(t *testing.T) {
 
 			missing := &Config{}
 			f.set(missing, ref)
-			err := resolverInCluster(t, false).ResolveConfig(context.Background(), missing)
+			err := resolverInCluster(t, false).ResolveConfig(context.Background(), missing, role)
 			if err == nil || !strings.HasPrefix(err.Error(), f.path+":") {
 				t.Errorf("Secret absent: err = %v, want one naming %s", err, f.path)
 			}
@@ -196,7 +197,7 @@ func TestResolveConfigSkipsWhatIsOff(t *testing.T) {
 	cfg.Datastores.Postgres.Replica.PasswordSecret = absent
 	cfg.Bootstrap.Admin.PasswordSecret = absent
 	cfg.Datastores.Valkey.PasswordSecret = absent // rate limits count in Postgres
-	if err := resolverInCluster(t, false).ResolveConfig(context.Background(), cfg); err != nil {
+	if err := resolverInCluster(t, false).ResolveConfig(context.Background(), cfg, RoleAPI); err != nil {
 		t.Fatalf("ResolveConfig with the replica and bootstrap off: %v", err)
 	}
 	if cfg.Datastores.Postgres.Replica.PasswordSecret == nil || cfg.Bootstrap.Admin.PasswordSecret == nil ||

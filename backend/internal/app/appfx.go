@@ -34,6 +34,9 @@ import (
 type ConfigSource struct {
 	Path     string
 	Overlays []string // additional overlay files, merged in order (later wins)
+	// Role is the process the config is loaded for; it decides which Secrets
+	// are read (config.Role).
+	Role config.Role
 }
 
 // ListenerSet is what a role contributes to the runtime: its HTTP listeners,
@@ -52,7 +55,7 @@ func ProvideConfig(src ConfigSource) (config.Config, error) {
 		return config.Config{}, err
 	}
 	paths := append([]string{src.Path}, src.Overlays...)
-	return config.Load(paths, boot)
+	return config.Load(paths, src.Role, boot)
 }
 
 // ProvideLogger builds the production logger and installs it as the global —

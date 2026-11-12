@@ -54,7 +54,7 @@ func loadWith(t *testing.T, overlay string) Config {
 	if err := os.WriteFile(overlayPath, []byte(overlay), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load([]string{minPath, overlayPath}, zap.NewNop())
+	cfg, err := Load([]string{minPath, overlayPath}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

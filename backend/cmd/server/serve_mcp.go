@@ -71,12 +71,12 @@ var serveMCPCmd = &cobra.Command{
 		// handlers, so it needs the full DB-backed BaseModule; bridge is a
 		// pure Connect-over-HTTP proxy with no DB, so it rides the lighter
 		// LiteModule (config + logger only — no pool is ever opened).
-		roleModule := mcpBridgeModule
+		roleModule, role := mcpBridgeModule, config.RoleMCP
 		if mcpEmbedded {
-			roleModule = mcpEmbeddedModule
+			roleModule, role = mcpEmbeddedModule, config.RoleMCPEmbedded
 		}
 		fx.New(
-			fx.Supply(configSource()),
+			fx.Supply(configSource(role)),
 			fx.Supply(buildMeta()),
 			roleModule,
 		).Run()

@@ -133,7 +133,13 @@ func (r *K8sSecretResolver) clientset() (kubernetes.Interface, error) {
 // When there are no SecretRef fields in the config, the walk below is a
 // no-op anyway — but we still surface the missing-token error in-cluster
 // because it almost always indicates operator drift, not a benign skip.
-func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) error {
+// ResolveConfig fills the Secret-backed fields role reads, and only those
+// (roles.go): a field another role consumes keeps its reference and no value,
+// so this role's service account needs no access to its Secret.
+func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config, role Role) error {
+	if _, ok := roleSecrets[role]; !ok {
+		return fmt.Errorf("config: unknown role %q", role)
+	}
 	if _, err := os.Stat(r.tokenPath); os.IsNotExist(err) {
 		if os.Getenv(DefaultK8sServiceHostEnvKey) == "" {
 			// Out-of-cluster: silently skip; caller is responsible for
@@ -153,12 +159,21 @@ func (r *K8sSecretResolver) ResolveConfig(ctx context.Context, cfg *Config) erro
 		)
 	}
 
+	var skipped []string
 	for _, b := range secretBindings(cfg) {
+		if !role.reads(b.path) {
+			skipped = append(skipped, b.path)
+			continue
+		}
 		value, err := r.resolveSecret(ctx, b.ref)
 		if err != nil {
 			return fmt.Errorf("%s: %w", b.path, err)
 		}
 		b.fill(value)
+	}
+	if len(skipped) > 0 {
+		r.log.Info("secrets other roles read are left unresolved",
+			zap.String("role", string(role)), zap.Strings("paths", skipped))
 	}
 	return nil
 }
@@ -194,33 +209,33 @@ func secretBindings(cfg *Config) []secretBinding {
 	}
 
 	pg := &cfg.Datastores.Postgres
-	bind("postgres.password_secret", &pg.PasswordSecret, &pg.Password)
+	bind(secretPostgresPassword, &pg.PasswordSecret, &pg.Password)
 	// The migration and reaper roles are separate credentials, each in its
 	// own, more tightly held Secret.
-	bind("postgres.migrate_password_secret", &pg.MigratePasswordSecret, &pg.MigratePassword)
-	bind("postgres.reaper_password_secret", &pg.ReaperPasswordSecret, &pg.ReaperPassword)
+	bind(secretPostgresMigratePassword, &pg.MigratePasswordSecret, &pg.MigratePassword)
+	bind(secretPostgresReaperPassword, &pg.ReaperPasswordSecret, &pg.ReaperPassword)
 	if pg.Replica.Enabled {
-		bind("postgres.replica.password_secret", &pg.Replica.PasswordSecret, &pg.Replica.Password)
+		bind(secretPostgresReplicaPassword, &pg.Replica.PasswordSecret, &pg.Replica.Password)
 	}
 	// Only a Valkey something counts in needs its password.
 	if cfg.Middleware.RateLimit.Backend == RateLimitBackendValkey {
-		bind("valkey.password_secret", &cfg.Datastores.Valkey.PasswordSecret, &cfg.Datastores.Valkey.Password)
+		bind(secretValkeyPassword, &cfg.Datastores.Valkey.PasswordSecret, &cfg.Datastores.Valkey.Password)
 	}
 	if cfg.Bootstrap.Admin.Enabled {
-		bind("bootstrap.admin.password_secret", &cfg.Bootstrap.Admin.PasswordSecret, &cfg.Bootstrap.Admin.Password)
+		bind(secretBootstrapAdminPassword, &cfg.Bootstrap.Admin.PasswordSecret, &cfg.Bootstrap.Admin.Password)
 	}
 	// Validate() refuses a key given both inline and by reference.
-	bind("api_token.hmac_key_secret", &cfg.APIToken.HMACKeySecret, &cfg.APIToken.HMACKey)
-	bind("capability.dpop_nonce.key_secret", &cfg.Capability.DPoPNonce.KeySecret, &cfg.Capability.DPoPNonce.Key)
-	bind("mcp.dpop_key_secret", &cfg.MCP.DPoPKeySecret, &cfg.MCP.DPoPKey)
-	bind("runtime.health_snapshot_token_secret", &cfg.Runtime.HealthSnapshotTokenSecret, &cfg.Runtime.HealthSnapshotToken)
-	bindValue("ingest.webhook.shared_secret_ref", &cfg.Ingest.Webhook.SharedSecretRef, &cfg.Ingest.Webhook.SharedSecret)
-	bindValue("ingest.nats.token_ref", &cfg.Ingest.NATS.TokenRef, &cfg.Ingest.NATS.Token)
-	bindValue("ingest.rabbitmq.url_ref", &cfg.Ingest.RabbitMQ.URLRef, &cfg.Ingest.RabbitMQ.URL)
-	bind("mcp.oauth.exchange.client_secret_ref", &cfg.MCP.OAuth.Exchange.ClientSecretRef, &cfg.MCP.OAuth.Exchange.ClientSecret)
+	bind(secretAPITokenHMACKey, &cfg.APIToken.HMACKeySecret, &cfg.APIToken.HMACKey)
+	bind(secretDPoPNonceKey, &cfg.Capability.DPoPNonce.KeySecret, &cfg.Capability.DPoPNonce.Key)
+	bind(secretMCPDPoPKey, &cfg.MCP.DPoPKeySecret, &cfg.MCP.DPoPKey)
+	bind(secretHealthSnapshotToken, &cfg.Runtime.HealthSnapshotTokenSecret, &cfg.Runtime.HealthSnapshotToken)
+	bindValue(secretIngestWebhook, &cfg.Ingest.Webhook.SharedSecretRef, &cfg.Ingest.Webhook.SharedSecret)
+	bindValue(secretIngestNATSToken, &cfg.Ingest.NATS.TokenRef, &cfg.Ingest.NATS.Token)
+	bindValue(secretIngestRabbitMQURL, &cfg.Ingest.RabbitMQ.URLRef, &cfg.Ingest.RabbitMQ.URL)
+	bind(secretMCPExchangeClient, &cfg.MCP.OAuth.Exchange.ClientSecretRef, &cfg.MCP.OAuth.Exchange.ClientSecret)
 	for i := range cfg.Auth.OAuth.SeedClients {
 		sc := &cfg.Auth.OAuth.SeedClients[i]
-		bind(fmt.Sprintf("auth.oauth.seed_clients[%s].client_secret_ref", sc.ClientID), &sc.ClientSecretRef, &sc.ClientSecret)
+		bind(fmt.Sprintf("%s%s].client_secret_ref", secretOAuthSeedClients, sc.ClientID), &sc.ClientSecretRef, &sc.ClientSecret)
 	}
 	for _, name := range slices.Sorted(maps.Keys(cfg.Storage.Backends)) {
 		out = append(out, backendBindings(cfg.Storage.Backends, name)...)
@@ -247,7 +262,7 @@ func backendBindings(backends map[string]StorageBackend, name string) []secretBi
 		}
 		set := f.set
 		out = append(out, secretBinding{
-			path: fmt.Sprintf("storage.backends.%s.auth.%s", name, f.field),
+			path: fmt.Sprintf("%s%s.auth.%s", secretStorageBackends, name, f.field),
 			ref:  f.ref,
 			fill: func(v string) {
 				b := backends[name]

@@ -44,7 +44,9 @@ var cueSchema string
 // Strict-key validation runs against the merged result so an overlay
 // file that intentionally omits big swaths of the schema isn't
 // rejected for missing keys it never tried to set.
-func Load(paths []string, log *zap.Logger) (Config, error) {
+//
+// role decides which Secrets are read in a cluster: those it consumes.
+func Load(paths []string, role Role, log *zap.Logger) (Config, error) {
 	if len(paths) == 0 {
 		return Config{}, fmt.Errorf("config: at least one path required")
 	}
@@ -161,7 +163,7 @@ func Load(paths []string, log *zap.Logger) (Config, error) {
 	// Resolve secrets if running in a Kubernetes environment
 	if os.Getenv(DefaultK8sServiceHostEnvKey) != "" {
 		resolver := NewK8sSecretResolver(log)
-		if err := resolver.ResolveConfig(context.Background(), &cfg); err != nil {
+		if err := resolver.ResolveConfig(context.Background(), &cfg, role); err != nil {
 			return Config{}, fmt.Errorf("secret resolution failed: %w", err)
 		}
 	}

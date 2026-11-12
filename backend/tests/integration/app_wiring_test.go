@@ -74,7 +74,7 @@ func wiringKeys(t *testing.T, cfg config.Config) *sessionkey.Set {
 
 func wiringConfig(t *testing.T, dsn string) config.Config {
 	t.Helper()
-	cfg, err := config.Load([]string{"../../configs/config.yaml"}, zap.NewNop())
+	cfg, err := config.Load([]string{"../../configs/config.yaml"}, config.RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatalf("load the shipped config: %v", err)
 	}

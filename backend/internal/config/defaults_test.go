@@ -25,7 +25,7 @@ func TestDefaultsAreWhatLoadFillsIn(t *testing.T) {
 	if err := os.WriteFile(minPath, []byte(minimalConfigYAML), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := Load([]string{minPath}, zap.NewNop())
+	loaded, err := Load([]string{minPath}, RoleAPI, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

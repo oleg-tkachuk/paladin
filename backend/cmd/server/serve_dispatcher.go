@@ -56,7 +56,7 @@ var serveDispatcherCmd = &cobra.Command{
 	Short: "Run the event-delivery outbox loop",
 	Run: func(cmd *cobra.Command, args []string) {
 		fx.New(
-			fx.Supply(configSource()),
+			fx.Supply(configSource(config.RoleDispatcher)),
 			fx.Supply(buildMeta()),
 			dispatcherModule,
 		).Run()

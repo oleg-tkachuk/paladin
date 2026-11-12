@@ -5,6 +5,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/app"
+	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 )
 
 // serveAPICmd runs the data + iam Connect listeners on Uber fx. No workers.
@@ -19,7 +20,7 @@ var serveAPICmd = &cobra.Command{
 	Short: "Run data + iam Connect listeners",
 	Run: func(cmd *cobra.Command, args []string) {
 		fx.New(
-			fx.Supply(configSource()),
+			fx.Supply(configSource(config.RoleAPI)),
 			fx.Supply(buildMeta()),
 			app.APIModule,
 		).Run()
