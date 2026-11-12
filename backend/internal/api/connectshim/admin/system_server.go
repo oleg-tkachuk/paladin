@@ -8,6 +8,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/convx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/health/healthpb"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -246,4 +247,21 @@ func statesToPB(in []platformstats.StateStat) []*pb.ObjectStateStat {
 		out[i] = &pb.ObjectStateStat{State: s.State, Count: s.Count, Bytes: s.Bytes}
 	}
 	return out
+}
+
+// GetPlatformHealth is every configured role's health, read by this pod with
+// the snapshot token the console no longer holds (ADR-0048).
+func (s *SystemServer) GetPlatformHealth(ctx context.Context, _ *pb.GetPlatformHealthRequest) (*pb.GetPlatformHealthResponse, error) {
+	if s.H == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
+	}
+	snaps := s.H.PlatformHealth(ctx)
+	out := &pb.GetPlatformHealthResponse{Roles: make([]*pb.RoleHealth, 0, len(snaps))}
+	for _, snap := range snaps {
+		out.Roles = append(out.Roles, &pb.RoleHealth{
+			Health:    healthpb.FromSnapshot(snap),
+			CheckedAt: timestamppb.New(snap.CheckedAt),
+		})
+	}
+	return out, nil
 }

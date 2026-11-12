@@ -205,6 +205,16 @@ func (c *Config) Validate() error {
 	if c.Admin.Tenants.TrashRetention <= 0 {
 		return fmt.Errorf("admin.tenants.trash_retention must be positive")
 	}
+	if c.Admin.Health.Timeout <= 0 {
+		return fmt.Errorf("admin.health.timeout must be positive")
+	}
+	seenHealthRole := make(map[string]bool, len(c.Admin.Health.Roles))
+	for _, r := range c.Admin.Health.Roles {
+		if seenHealthRole[r.Name] {
+			return fmt.Errorf("admin.health.roles names %q twice", r.Name)
+		}
+		seenHealthRole[r.Name] = true
+	}
 
 	// ── Secret mutual-exclusivity sweep ─────────────────────────────
 	// For every field with a `<field>_secret` sibling, accepting both
@@ -276,6 +286,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if err := c.Session.Upstreams.ValidateAt("session.upstreams"); err != nil {
+		return err
+	}
+	if c.Session.RotateAfter <= 0 {
+		return fmt.Errorf("session.rotate_after must be positive")
+	}
 	if err := c.MCP.Upstreams.Validate(); err != nil {
 		return err
 	}

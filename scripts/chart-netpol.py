@@ -221,6 +221,9 @@ IN_RELEASE_CALLS = [
     # role's JWKS (ADR-0047).
     ("api", "iam", "the session JWKS"),
     ("admin", "iam", "the session JWKS"),
+    # SystemService.GetPlatformHealth reads every role's health snapshot,
+    # its own through its Service (ADR-0048).
+    *(("admin", role, "SystemService.GetPlatformHealth") for role in ROLES),
 ]
 
 

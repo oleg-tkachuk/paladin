@@ -12,6 +12,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
+	"github.com/oleg-tkachuk/paladin/backend/internal/observability"
 )
 
 // BuildMetricsListener returns the Prometheus scrape endpoint, or nil when
@@ -27,16 +28,25 @@ import (
 // It serves exactly one path. A scraper that finds anything else here is
 // pointed at the wrong port, and should be told so rather than handed a 200.
 func BuildMetricsListener(deps *SharedDeps) *HTTPListener {
-	if deps == nil || deps.Metrics == nil {
+	if deps == nil {
 		return nil
 	}
-	addr := deps.Cfg.OTel.MetricsAddr
+	return metricsListener(deps.Cfg.OTel, deps.Metrics)
+}
+
+// metricsListener serves metrics at otel.metrics_addr, or nil when the
+// exporter is not a scrape one.
+func metricsListener(otel config.OTel, metrics observability.MetricsHandler) *HTTPListener {
+	if metrics == nil {
+		return nil
+	}
+	addr := otel.MetricsAddr
 	if addr == "" {
 		addr = "0.0.0.0:9095"
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle(middleware.PathMetrics, deps.Metrics)
+	mux.Handle(middleware.PathMetrics, metrics)
 
 	return &HTTPListener{
 		Plane: "metrics",

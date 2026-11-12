@@ -49,10 +49,33 @@ api:
       <<: *http_defaults
       addr: "0.0.0.0:8085"
 
+# The console's session role (ADR-0048). The console is served on
+# localhost:3002; the planes are reached by container name.
+session:
+  server:
+    <<: *http_defaults
+    addr: "0.0.0.0:8086"
+  console_origins: ["http://localhost:3002"]
+  upstreams:
+    admin_url: "http://paladin-admin:8090"
+    data_url: "http://paladin-api:8080"
+    iam_url: "http://paladin-iam:8085"
+
 admin:
   server:
     <<: *http_defaults
     addr: "0.0.0.0:8090"
+  # GetPlatformHealth reads each role at its health listener, by its
+  # container name; a role this stack does not run is listed as unreachable.
+  health:
+    roles:
+      - { name: api, url: "http://paladin-api:8080" }
+      - { name: iam, url: "http://paladin-iam:8085" }
+      - { name: admin, url: "http://paladin-admin:8090" }
+      - { name: worker, url: "http://paladin-worker:8090" }
+      - { name: mcp, url: "http://paladin-mcp:8095" }
+      - { name: dispatcher, url: "http://paladin-dispatcher:8099" }
+      - { name: ingest, url: "http://paladin-ingest:8100" }
 
 datastores:
   postgres:

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 )
@@ -86,4 +87,22 @@ func ParseClientAuth(mode string) (tls.ClientAuthType, error) {
 	default:
 		return tls.NoClientCert, fmt.Errorf("unknown client_auth mode %q (want one of: none|request|require|permissive|strict)", mode)
 	}
+}
+
+// ClientTransport is an HTTP transport that dials with the given trust
+// material: the internal CA a plane's certificate chains to, and a client
+// certificate for planes that ask for one. With none of it set it is nil:
+// the caller keeps http.DefaultTransport and its shared connection pool.
+func ClientTransport(certPath, keyPath, caPath, serverName string, insecureSkipVerify bool) (*http.Transport, error) {
+	if caPath == "" && certPath == "" && !insecureSkipVerify {
+		return nil, nil
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	cfg, err := New(certPath, keyPath, caPath, serverName, insecureSkipVerify)
+	if err != nil {
+		return nil, err
+	}
+	cfg.MinVersion = tls.VersionTLS12
+	tr.TLSClientConfig = cfg
+	return tr, nil
 }

@@ -19,6 +19,8 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse } from "../../common/v1/pagination_pb";
 import { file_paladin_common_v1_pagination } from "../../common/v1/pagination_pb";
+import type { HealthInfo } from "../../iam/v1/health_service_pb";
+import { file_paladin_iam_v1_health_service } from "../../iam/v1/health_service_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -27,11 +29,12 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_system_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2FkbWluL3YxL3N5c3RlbV9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIpIBCh9MaXN0UGxhdGZvcm1TdGF0c1RlbmFudHNSZXF1ZXN0EkEKBnNpZ25hbBgBIAEoDjIlLnBhbGFkaW4uYWRtaW4udjEuUGxhdGZvcm1TdGF0c1NpZ25hbEIKukgHggEEEAEgABIsCgRwYWdlGAIgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QiswEKIExpc3RQbGF0Zm9ybVN0YXRzVGVuYW50c1Jlc3BvbnNlEi8KB3RlbmFudHMYASADKAsyHi5wYWxhZGluLmFkbWluLnYxLlNpZ25hbFRlbmFudBItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlEhkKEXRlbmFudHNfdHJ1bmNhdGVkGAMgASgDEhQKDHVuYXR0cmlidXRlZBgEIAEoAyJUCgxTaWduYWxUZW5hbnQSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEg0KBWNvdW50GAQgASgDIhIKEEdldENvbmZpZ1JlcXVlc3QiTQoRR2V0Q29uZmlnUmVzcG9uc2USDAoEeWFtbBgBIAEoCRITCgtzb3VyY2VfcGF0aBgCIAEoCRIVCg1kZWZhdWx0c195YW1sGAMgASgJIhsKGUdldERpc3BhdGNoZXJTdGF0c1JlcXVlc3QiswEKGkdldERpc3BhdGNoZXJTdGF0c1Jlc3BvbnNlEhEKCWF2YWlsYWJsZRgBIAEoCBIPCgdwZW5kaW5nGAIgASgDEg4KBmZhaWxlZBgDIAEoAxIeChZvbGRlc3RfcGVuZGluZ19zZWNvbmRzGAQgASgDEkEKDXN1YnNjcmlwdGlvbnMYBSADKAsyKi5wYWxhZGluLmFkbWluLnYxLlN1YnNjcmlwdGlvbkRlbGl2ZXJ5U3RhdCKuAQoYU3Vic2NyaXB0aW9uRGVsaXZlcnlTdGF0EhcKD3N1YnNjcmlwdGlvbl9pZBgBIAEoCRIRCgl0ZW5hbnRfaWQYAiABKAkSDwoHcGVuZGluZxgDIAEoAxIOCgZmYWlsZWQYBCABKAMSEgoKbGFzdF9lcnJvchgFIAEoCRIYChBsYXN0X3N0YXR1c19jb2RlGAYgASgFEhcKD2xhc3RfYXR0ZW1wdF9hdBgHIAEoCSJOChdHZXRQbGF0Zm9ybVN0YXRzUmVxdWVzdBIzCgt0ZW5hbnRfcGFnZRgBIAEoCzIeLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXF1ZXN0IvoCChhHZXRQbGF0Zm9ybVN0YXRzUmVzcG9uc2USLgoHdGVuYW50cxgBIAEoCzIdLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50U3RhdHMSMAoIYmFja2VuZHMYAiABKAsyHi5wYWxhZGluLmFkbWluLnYxLkJhY2tlbmRTdGF0cxIuCgdidWNrZXRzGAMgASgLMh0ucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRTdGF0cxI2Cgtjb2xsZWN0aW9ucxgEIAEoCzIhLnBhbGFkaW4uYWRtaW4udjEuQ29sbGVjdGlvblN0YXRzEioKBXVzZXJzGAUgASgLMhsucGFsYWRpbi5hZG1pbi52MS5Vc2VyU3RhdHMSMAoMY29sbGVjdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBInCgNybHMYCCABKAsyGi5wYWxhZGluLmFkbWluLnYxLlJMU1N0YXRzSgQIBhAHUgdvYmplY3RzIqUCCghSTFNTdGF0cxIRCglhdmFpbGFibGUYASABKAgSLgoHb2JqZWN0cxgCIAEoCzIdLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0U3RhdHMSLAoGcXVvdGFzGAMgASgLMhwucGFsYWRpbi5hZG1pbi52MS5RdW90YVN0YXRzEjcKDGNhcGFiaWxpdGllcxgEIAEoCzIhLnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVN0YXRzEjMKCmFwaV90b2tlbnMYBSABKAsyHy5wYWxhZGluLmFkbWluLnYxLkFQSVRva2VuU3RhdHMSOgoNc3Vic2NyaXB0aW9ucxgGIAEoCzIjLnBhbGFkaW4uYWRtaW4udjEuU3Vic2NyaXB0aW9uU3RhdHMiuwEKClF1b3RhU3RhdHMSDQoFdG90YWwYASABKAMSFQoNdGVuYW50X3Njb3BlZBgCIAEoAxIVCg1idWNrZXRfc2NvcGVkGAMgASgDEhMKC3dpdGhfbGltaXRzGAQgASgDEhAKCGF0X2xpbWl0GAUgASgDEhIKCm5lYXJfbGltaXQYBiABKAMSGgoSdXNhZ2Vfb2JqZWN0X2NvdW50GAcgASgDEhkKEXVzYWdlX3RvdGFsX2J5dGVzGAggASgDIocCCg9DYXBhYmlsaXR5U3RhdHMSDQoFdG90YWwYASABKAMSDgoGYWN0aXZlGAIgASgDEg8KB2V4cGlyZWQYAyABKAMSDwoHcmV2b2tlZBgEIAEoAxIRCglkZWxlZ2F0ZWQYBSABKAMSFQoNZXhwaXJpbmdfc29vbhgGIAEoAxJRChFieV9wcmluY2lwYWxfa2luZBgHIAMoCzI2LnBhbGFkaW4uYWRtaW4udjEuQ2FwYWJpbGl0eVN0YXRzLkJ5UHJpbmNpcGFsS2luZEVudHJ5GjYKFEJ5UHJpbmNpcGFsS2luZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEiewoNQVBJVG9rZW5TdGF0cxINCgV0b3RhbBgBIAEoAxIOCgZhY3RpdmUYAiABKAMSDwoHZXhwaXJlZBgDIAEoAxIPCgdyZXZva2VkGAQgASgDEhUKDWV4cGlyaW5nX3Nvb24YBSABKAMSEgoKbmV2ZXJfdXNlZBgGIAEoAyLYAQoRU3Vic2NyaXB0aW9uU3RhdHMSDQoFdG90YWwYASABKAMSDwoHZW5hYmxlZBgCIAEoAxIQCghkaXNhYmxlZBgDIAEoAxITCgt3aXRoX2ZpbHRlchgEIAEoAxJJCgxieV9zaW5rX2tpbmQYBSADKAsyMy5wYWxhZGluLmFkbWluLnYxLlN1YnNjcmlwdGlvblN0YXRzLkJ5U2lua0tpbmRFbnRyeRoxCg9CeVNpbmtLaW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASKPAQoLVGVuYW50U3RhdHMSDQoFdG90YWwYASABKAMSDgoGYWN0aXZlGAIgASgDEg8KB3RyYXNoZWQYAyABKAMSFQoNc2hhcmVkX2xheW91dBgEIAEoAxIYChBkZWRpY2F0ZWRfbGF5b3V0GAUgASgDEh8KF3dpdGhvdXRfZGVmYXVsdF9iaW5kaW5nGAYgASgDItQBCgxCYWNrZW5kU3RhdHMSDQoFdG90YWwYASABKAMSDwoHZW5hYmxlZBgCIAEoAxIQCghkaXNhYmxlZBgDIAEoAxIRCglyZWFkX29ubHkYBCABKAMSEwoLbWFpbnRlbmFuY2UYBSABKAMSOwoHYnlfa2luZBgGIAMoCzIqLnBhbGFkaW4uYWRtaW4udjEuQmFja2VuZFN0YXRzLkJ5S2luZEVudHJ5Gi0KC0J5S2luZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEilgMKC0J1Y2tldFN0YXRzEg0KBXRvdGFsGAEgASgDEk8KEmJ5X3Byb3Zpc2lvbl9zdGF0ZRgCIAMoCzIzLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0U3RhdHMuQnlQcm92aXNpb25TdGF0ZUVudHJ5EkAKCmJ5X2JhY2tlbmQYAyADKAsyLC5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldFN0YXRzLkJ5QmFja2VuZEVudHJ5EhQKDHRlbmFudF9vd25lZBgEIAEoAxIOCgZzaGFyZWQYBSABKAMSGgoSdmVyc2lvbmluZ19lbmFibGVkGAYgASgDEhsKE29iamVjdF9sb2NrX2VuYWJsZWQYByABKAMSGwoTcmVwbGljYXRpb25fZW5hYmxlZBgIIAEoAxo3ChVCeVByb3Zpc2lvblN0YXRlRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ARowCg5CeUJhY2tlbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBIqkBCg9Db2xsZWN0aW9uU3RhdHMSDQoFdG90YWwYASABKAMSRAoKYnlfYmFja2VuZBgCIAMoCzIwLnBhbGFkaW4uYWRtaW4udjEuQ29sbGVjdGlvblN0YXRzLkJ5QmFja2VuZEVudHJ5Eg8KB3VuYm91bmQYAyABKAMaMAoOQnlCYWNrZW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASIsCglVc2VyU3RhdHMSDQoFdG90YWwYASABKAMSEAoIZGlzYWJsZWQYAiABKAMiPgoPT2JqZWN0U3RhdGVTdGF0Eg0KBXN0YXRlGAEgASgJEg0KBWNvdW50GAIgASgDEg0KBWJ5dGVzGAMgASgDIqcBChFUZW5hbnRPYmplY3RTdGF0cxIRCgl0ZW5hbnRfaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSMQoGc3RhdGVzGAQgAygLMiEucGFsYWRpbi5hZG1pbi52MS5PYmplY3RTdGF0ZVN0YXQSEwoLdG90YWxfY291bnQYBSABKAMSEwoLdG90YWxfYnl0ZXMYBiABKAMi7QEKC09iamVjdFN0YXRzEjEKBnN0YXRlcxgCIAMoCzIhLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0U3RhdGVTdGF0EhMKC3RvdGFsX2NvdW50GAMgASgDEhMKC3RvdGFsX2J5dGVzGAQgASgDEjQKB3RlbmFudHMYBSADKAsyIy5wYWxhZGluLmFkbWluLnYxLlRlbmFudE9iamVjdFN0YXRzEhkKEXRlbmFudHNfdHJ1bmNhdGVkGAYgASgDEh8KF3RlbmFudHNfbmV4dF9wYWdlX3Rva2VuGAcgASgJSgQIARACUglhdmFpbGFibGUq8gEKE1BsYXRmb3JtU3RhdHNTaWduYWwSJQohUExBVEZPUk1fU1RBVFNfU0lHTkFMX1VOU1BFQ0lGSUVEEAASKAokUExBVEZPUk1fU1RBVFNfU0lHTkFMX1FVT1RBX0FUX0xJTUlUEAESKgomUExBVEZPUk1fU1RBVFNfU0lHTkFMX1FVT1RBX05FQVJfTElNSVQQAhIvCitQTEFURk9STV9TVEFUU19TSUdOQUxfQ0FQQUJJTElUSUVTX0VYUElSSU5HEAMSLQopUExBVEZPUk1fU1RBVFNfU0lHTkFMX0FQSV9UT0tFTlNfRVhQSVJJTkcQBDLZAwoNU3lzdGVtU2VydmljZRJZCglHZXRDb25maWcSIi5wYWxhZGluLmFkbWluLnYxLkdldENvbmZpZ1JlcXVlc3QaIy5wYWxhZGluLmFkbWluLnYxLkdldENvbmZpZ1Jlc3BvbnNlIgOQAgESdAoSR2V0RGlzcGF0Y2hlclN0YXRzEisucGFsYWRpbi5hZG1pbi52MS5HZXREaXNwYXRjaGVyU3RhdHNSZXF1ZXN0GiwucGFsYWRpbi5hZG1pbi52MS5HZXREaXNwYXRjaGVyU3RhdHNSZXNwb25zZSIDkAIBEm4KEEdldFBsYXRmb3JtU3RhdHMSKS5wYWxhZGluLmFkbWluLnYxLkdldFBsYXRmb3JtU3RhdHNSZXF1ZXN0GioucGFsYWRpbi5hZG1pbi52MS5HZXRQbGF0Zm9ybVN0YXRzUmVzcG9uc2UiA5ACARKGAQoYTGlzdFBsYXRmb3JtU3RhdHNUZW5hbnRzEjEucGFsYWRpbi5hZG1pbi52MS5MaXN0UGxhdGZvcm1TdGF0c1RlbmFudHNSZXF1ZXN0GjIucGFsYWRpbi5hZG1pbi52MS5MaXN0UGxhdGZvcm1TdGF0c1RlbmFudHNSZXNwb25zZSIDkAIBQkxaSmdpdGh1Yi5jb20vb2xlZy10a2FjaHVrL3BhbGFkaW4vc2RrL2dvL2dlbi9wYWxhZGluL2FkbWluL3YxO3BhbGFkaW5hZG1pbnYxYgZwcm90bzM",
+    "CiVwYWxhZGluL2FkbWluL3YxL3N5c3RlbV9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxIpIBCh9MaXN0UGxhdGZvcm1TdGF0c1RlbmFudHNSZXF1ZXN0EkEKBnNpZ25hbBgBIAEoDjIlLnBhbGFkaW4uYWRtaW4udjEuUGxhdGZvcm1TdGF0c1NpZ25hbEIKukgHggEEEAEgABIsCgRwYWdlGAIgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QiswEKIExpc3RQbGF0Zm9ybVN0YXRzVGVuYW50c1Jlc3BvbnNlEi8KB3RlbmFudHMYASADKAsyHi5wYWxhZGluLmFkbWluLnYxLlNpZ25hbFRlbmFudBItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlEhkKEXRlbmFudHNfdHJ1bmNhdGVkGAMgASgDEhQKDHVuYXR0cmlidXRlZBgEIAEoAyJUCgxTaWduYWxUZW5hbnQSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEg0KBWNvdW50GAQgASgDIhIKEEdldENvbmZpZ1JlcXVlc3QiTQoRR2V0Q29uZmlnUmVzcG9uc2USDAoEeWFtbBgBIAEoCRITCgtzb3VyY2VfcGF0aBgCIAEoCRIVCg1kZWZhdWx0c195YW1sGAMgASgJIhsKGUdldERpc3BhdGNoZXJTdGF0c1JlcXVlc3QiswEKGkdldERpc3BhdGNoZXJTdGF0c1Jlc3BvbnNlEhEKCWF2YWlsYWJsZRgBIAEoCBIPCgdwZW5kaW5nGAIgASgDEg4KBmZhaWxlZBgDIAEoAxIeChZvbGRlc3RfcGVuZGluZ19zZWNvbmRzGAQgASgDEkEKDXN1YnNjcmlwdGlvbnMYBSADKAsyKi5wYWxhZGluLmFkbWluLnYxLlN1YnNjcmlwdGlvbkRlbGl2ZXJ5U3RhdCKuAQoYU3Vic2NyaXB0aW9uRGVsaXZlcnlTdGF0EhcKD3N1YnNjcmlwdGlvbl9pZBgBIAEoCRIRCgl0ZW5hbnRfaWQYAiABKAkSDwoHcGVuZGluZxgDIAEoAxIOCgZmYWlsZWQYBCABKAMSEgoKbGFzdF9lcnJvchgFIAEoCRIYChBsYXN0X3N0YXR1c19jb2RlGAYgASgFEhcKD2xhc3RfYXR0ZW1wdF9hdBgHIAEoCSIaChhHZXRQbGF0Zm9ybUhlYWx0aFJlcXVlc3QiSAoZR2V0UGxhdGZvcm1IZWFsdGhSZXNwb25zZRIrCgVyb2xlcxgBIAMoCzIcLnBhbGFkaW4uYWRtaW4udjEuUm9sZUhlYWx0aCJoCgpSb2xlSGVhbHRoEioKBmhlYWx0aBgBIAEoCzIaLnBhbGFkaW4uaWFtLnYxLkhlYWx0aEluZm8SLgoKY2hlY2tlZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiTgoXR2V0UGxhdGZvcm1TdGF0c1JlcXVlc3QSMwoLdGVuYW50X3BhZ2UYASABKAsyHi5wYWxhZGluLmNvbW1vbi52MS5QYWdlUmVxdWVzdCL6AgoYR2V0UGxhdGZvcm1TdGF0c1Jlc3BvbnNlEi4KB3RlbmFudHMYASABKAsyHS5wYWxhZGluLmFkbWluLnYxLlRlbmFudFN0YXRzEjAKCGJhY2tlbmRzGAIgASgLMh4ucGFsYWRpbi5hZG1pbi52MS5CYWNrZW5kU3RhdHMSLgoHYnVja2V0cxgDIAEoCzIdLnBhbGFkaW4uYWRtaW4udjEuQnVja2V0U3RhdHMSNgoLY29sbGVjdGlvbnMYBCABKAsyIS5wYWxhZGluLmFkbWluLnYxLkNvbGxlY3Rpb25TdGF0cxIqCgV1c2VycxgFIAEoCzIbLnBhbGFkaW4uYWRtaW4udjEuVXNlclN0YXRzEjAKDGNvbGxlY3RlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDcmxzGAggASgLMhoucGFsYWRpbi5hZG1pbi52MS5STFNTdGF0c0oECAYQB1IHb2JqZWN0cyKlAgoIUkxTU3RhdHMSEQoJYXZhaWxhYmxlGAEgASgIEi4KB29iamVjdHMYAiABKAsyHS5wYWxhZGluLmFkbWluLnYxLk9iamVjdFN0YXRzEiwKBnF1b3RhcxgDIAEoCzIcLnBhbGFkaW4uYWRtaW4udjEuUXVvdGFTdGF0cxI3CgxjYXBhYmlsaXRpZXMYBCABKAsyIS5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTdGF0cxIzCgphcGlfdG9rZW5zGAUgASgLMh8ucGFsYWRpbi5hZG1pbi52MS5BUElUb2tlblN0YXRzEjoKDXN1YnNjcmlwdGlvbnMYBiABKAsyIy5wYWxhZGluLmFkbWluLnYxLlN1YnNjcmlwdGlvblN0YXRzIrsBCgpRdW90YVN0YXRzEg0KBXRvdGFsGAEgASgDEhUKDXRlbmFudF9zY29wZWQYAiABKAMSFQoNYnVja2V0X3Njb3BlZBgDIAEoAxITCgt3aXRoX2xpbWl0cxgEIAEoAxIQCghhdF9saW1pdBgFIAEoAxISCgpuZWFyX2xpbWl0GAYgASgDEhoKEnVzYWdlX29iamVjdF9jb3VudBgHIAEoAxIZChF1c2FnZV90b3RhbF9ieXRlcxgIIAEoAyKHAgoPQ2FwYWJpbGl0eVN0YXRzEg0KBXRvdGFsGAEgASgDEg4KBmFjdGl2ZRgCIAEoAxIPCgdleHBpcmVkGAMgASgDEg8KB3Jldm9rZWQYBCABKAMSEQoJZGVsZWdhdGVkGAUgASgDEhUKDWV4cGlyaW5nX3Nvb24YBiABKAMSUQoRYnlfcHJpbmNpcGFsX2tpbmQYByADKAsyNi5wYWxhZGluLmFkbWluLnYxLkNhcGFiaWxpdHlTdGF0cy5CeVByaW5jaXBhbEtpbmRFbnRyeRo2ChRCeVByaW5jaXBhbEtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBInsKDUFQSVRva2VuU3RhdHMSDQoFdG90YWwYASABKAMSDgoGYWN0aXZlGAIgASgDEg8KB2V4cGlyZWQYAyABKAMSDwoHcmV2b2tlZBgEIAEoAxIVCg1leHBpcmluZ19zb29uGAUgASgDEhIKCm5ldmVyX3VzZWQYBiABKAMi2AEKEVN1YnNjcmlwdGlvblN0YXRzEg0KBXRvdGFsGAEgASgDEg8KB2VuYWJsZWQYAiABKAMSEAoIZGlzYWJsZWQYAyABKAMSEwoLd2l0aF9maWx0ZXIYBCABKAMSSQoMYnlfc2lua19raW5kGAUgAygLMjMucGFsYWRpbi5hZG1pbi52MS5TdWJzY3JpcHRpb25TdGF0cy5CeVNpbmtLaW5kRW50cnkaMQoPQnlTaW5rS2luZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEijwEKC1RlbmFudFN0YXRzEg0KBXRvdGFsGAEgASgDEg4KBmFjdGl2ZRgCIAEoAxIPCgd0cmFzaGVkGAMgASgDEhUKDXNoYXJlZF9sYXlvdXQYBCABKAMSGAoQZGVkaWNhdGVkX2xheW91dBgFIAEoAxIfChd3aXRob3V0X2RlZmF1bHRfYmluZGluZxgGIAEoAyLUAQoMQmFja2VuZFN0YXRzEg0KBXRvdGFsGAEgASgDEg8KB2VuYWJsZWQYAiABKAMSEAoIZGlzYWJsZWQYAyABKAMSEQoJcmVhZF9vbmx5GAQgASgDEhMKC21haW50ZW5hbmNlGAUgASgDEjsKB2J5X2tpbmQYBiADKAsyKi5wYWxhZGluLmFkbWluLnYxLkJhY2tlbmRTdGF0cy5CeUtpbmRFbnRyeRotCgtCeUtpbmRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAM6AjgBIpYDCgtCdWNrZXRTdGF0cxINCgV0b3RhbBgBIAEoAxJPChJieV9wcm92aXNpb25fc3RhdGUYAiADKAsyMy5wYWxhZGluLmFkbWluLnYxLkJ1Y2tldFN0YXRzLkJ5UHJvdmlzaW9uU3RhdGVFbnRyeRJACgpieV9iYWNrZW5kGAMgAygLMiwucGFsYWRpbi5hZG1pbi52MS5CdWNrZXRTdGF0cy5CeUJhY2tlbmRFbnRyeRIUCgx0ZW5hbnRfb3duZWQYBCABKAMSDgoGc2hhcmVkGAUgASgDEhoKEnZlcnNpb25pbmdfZW5hYmxlZBgGIAEoAxIbChNvYmplY3RfbG9ja19lbmFibGVkGAcgASgDEhsKE3JlcGxpY2F0aW9uX2VuYWJsZWQYCCABKAMaNwoVQnlQcm92aXNpb25TdGF0ZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEaMAoOQnlCYWNrZW5kRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgDOgI4ASKpAQoPQ29sbGVjdGlvblN0YXRzEg0KBXRvdGFsGAEgASgDEkQKCmJ5X2JhY2tlbmQYAiADKAsyMC5wYWxhZGluLmFkbWluLnYxLkNvbGxlY3Rpb25TdGF0cy5CeUJhY2tlbmRFbnRyeRIPCgd1bmJvdW5kGAMgASgDGjAKDkJ5QmFja2VuZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoAzoCOAEiLAoJVXNlclN0YXRzEg0KBXRvdGFsGAEgASgDEhAKCGRpc2FibGVkGAIgASgDIj4KD09iamVjdFN0YXRlU3RhdBINCgVzdGF0ZRgBIAEoCRINCgVjb3VudBgCIAEoAxINCgVieXRlcxgDIAEoAyKnAQoRVGVuYW50T2JqZWN0U3RhdHMSEQoJdGVuYW50X2lkGAEgASgJEgwKBHNsdWcYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEjEKBnN0YXRlcxgEIAMoCzIhLnBhbGFkaW4uYWRtaW4udjEuT2JqZWN0U3RhdGVTdGF0EhMKC3RvdGFsX2NvdW50GAUgASgDEhMKC3RvdGFsX2J5dGVzGAYgASgDIu0BCgtPYmplY3RTdGF0cxIxCgZzdGF0ZXMYAiADKAsyIS5wYWxhZGluLmFkbWluLnYxLk9iamVjdFN0YXRlU3RhdBITCgt0b3RhbF9jb3VudBgDIAEoAxITCgt0b3RhbF9ieXRlcxgEIAEoAxI0Cgd0ZW5hbnRzGAUgAygLMiMucGFsYWRpbi5hZG1pbi52MS5UZW5hbnRPYmplY3RTdGF0cxIZChF0ZW5hbnRzX3RydW5jYXRlZBgGIAEoAxIfChd0ZW5hbnRzX25leHRfcGFnZV90b2tlbhgHIAEoCUoECAEQAlIJYXZhaWxhYmxlKvIBChNQbGF0Zm9ybVN0YXRzU2lnbmFsEiUKIVBMQVRGT1JNX1NUQVRTX1NJR05BTF9VTlNQRUNJRklFRBAAEigKJFBMQVRGT1JNX1NUQVRTX1NJR05BTF9RVU9UQV9BVF9MSU1JVBABEioKJlBMQVRGT1JNX1NUQVRTX1NJR05BTF9RVU9UQV9ORUFSX0xJTUlUEAISLworUExBVEZPUk1fU1RBVFNfU0lHTkFMX0NBUEFCSUxJVElFU19FWFBJUklORxADEi0KKVBMQVRGT1JNX1NUQVRTX1NJR05BTF9BUElfVE9LRU5TX0VYUElSSU5HEAQyzAQKDVN5c3RlbVNlcnZpY2USWQoJR2V0Q29uZmlnEiIucGFsYWRpbi5hZG1pbi52MS5HZXRDb25maWdSZXF1ZXN0GiMucGFsYWRpbi5hZG1pbi52MS5HZXRDb25maWdSZXNwb25zZSIDkAIBEnQKEkdldERpc3BhdGNoZXJTdGF0cxIrLnBhbGFkaW4uYWRtaW4udjEuR2V0RGlzcGF0Y2hlclN0YXRzUmVxdWVzdBosLnBhbGFkaW4uYWRtaW4udjEuR2V0RGlzcGF0Y2hlclN0YXRzUmVzcG9uc2UiA5ACARJuChBHZXRQbGF0Zm9ybVN0YXRzEikucGFsYWRpbi5hZG1pbi52MS5HZXRQbGF0Zm9ybVN0YXRzUmVxdWVzdBoqLnBhbGFkaW4uYWRtaW4udjEuR2V0UGxhdGZvcm1TdGF0c1Jlc3BvbnNlIgOQAgEShgEKGExpc3RQbGF0Zm9ybVN0YXRzVGVuYW50cxIxLnBhbGFkaW4uYWRtaW4udjEuTGlzdFBsYXRmb3JtU3RhdHNUZW5hbnRzUmVxdWVzdBoyLnBhbGFkaW4uYWRtaW4udjEuTGlzdFBsYXRmb3JtU3RhdHNUZW5hbnRzUmVzcG9uc2UiA5ACARJxChFHZXRQbGF0Zm9ybUhlYWx0aBIqLnBhbGFkaW4uYWRtaW4udjEuR2V0UGxhdGZvcm1IZWFsdGhSZXF1ZXN0GisucGFsYWRpbi5hZG1pbi52MS5HZXRQbGF0Zm9ybUhlYWx0aFJlc3BvbnNlIgOQAgFCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_timestamp,
       file_paladin_common_v1_pagination,
+      file_paladin_iam_v1_health_service,
     ],
   );
 
@@ -318,6 +321,70 @@ export const SubscriptionDeliveryStatSchema: GenMessage<SubscriptionDeliveryStat
   messageDesc(file_paladin_admin_v1_system_service, 7);
 
 /**
+ * ─── Platform health ────────────────────────────────────────────────────────
+ *
+ * @generated from message paladin.admin.v1.GetPlatformHealthRequest
+ */
+export type GetPlatformHealthRequest =
+  Message<"paladin.admin.v1.GetPlatformHealthRequest"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.GetPlatformHealthRequest.
+ * Use `create(GetPlatformHealthRequestSchema)` to create a new message.
+ */
+export const GetPlatformHealthRequestSchema: GenMessage<GetPlatformHealthRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 8);
+
+/**
+ * @generated from message paladin.admin.v1.GetPlatformHealthResponse
+ */
+export type GetPlatformHealthResponse =
+  Message<"paladin.admin.v1.GetPlatformHealthResponse"> & {
+    /**
+     * One per configured role, in the configured order.
+     *
+     * @generated from field: repeated paladin.admin.v1.RoleHealth roles = 1;
+     */
+    roles: RoleHealth[];
+  };
+
+/**
+ * Describes the message paladin.admin.v1.GetPlatformHealthResponse.
+ * Use `create(GetPlatformHealthResponseSchema)` to create a new message.
+ */
+export const GetPlatformHealthResponseSchema: GenMessage<GetPlatformHealthResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 9);
+
+/**
+ * @generated from message paladin.admin.v1.RoleHealth
+ */
+export type RoleHealth = Message<"paladin.admin.v1.RoleHealth"> & {
+  /**
+   * The role's own snapshot; health.role names the role.
+   *
+   * @generated from field: paladin.iam.v1.HealthInfo health = 1;
+   */
+  health?: HealthInfo | undefined;
+
+  /**
+   * When the role finished its checks, or when this pod gave up on it.
+   *
+   * @generated from field: google.protobuf.Timestamp checked_at = 2;
+   */
+  checkedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message paladin.admin.v1.RoleHealth.
+ * Use `create(RoleHealthSchema)` to create a new message.
+ */
+export const RoleHealthSchema: GenMessage<RoleHealth> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_system_service, 10);
+
+/**
  * ─── Platform census ────────────────────────────────────────────────────────
  *
  * @generated from message paladin.admin.v1.GetPlatformStatsRequest
@@ -342,7 +409,7 @@ export type GetPlatformStatsRequest =
  */
 export const GetPlatformStatsRequestSchema: GenMessage<GetPlatformStatsRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 8);
+  messageDesc(file_paladin_admin_v1_system_service, 11);
 
 /**
  * GetPlatformStatsResponse is the /stats page's whole payload. Split by
@@ -406,7 +473,7 @@ export type GetPlatformStatsResponse =
  */
 export const GetPlatformStatsResponseSchema: GenMessage<GetPlatformStatsResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 9);
+  messageDesc(file_paladin_admin_v1_system_service, 12);
 
 /**
  * RLSStats bundles every aggregate that lives behind row-level security.
@@ -458,7 +525,7 @@ export type RLSStats = Message<"paladin.admin.v1.RLSStats"> & {
  */
 export const RLSStatsSchema: GenMessage<RLSStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 10);
+  messageDesc(file_paladin_admin_v1_system_service, 13);
 
 /**
  * QuotaStats counts quota rows and how close they sit to their caps.
@@ -532,7 +599,7 @@ export type QuotaStats = Message<"paladin.admin.v1.QuotaStats"> & {
  */
 export const QuotaStatsSchema: GenMessage<QuotaStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 11);
+  messageDesc(file_paladin_admin_v1_system_service, 14);
 
 /**
  * CapabilityStats counts issued capability tokens by disposition.
@@ -591,7 +658,7 @@ export type CapabilityStats = Message<"paladin.admin.v1.CapabilityStats"> & {
  */
 export const CapabilityStatsSchema: GenMessage<CapabilityStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 12);
+  messageDesc(file_paladin_admin_v1_system_service, 15);
 
 /**
  * APITokenStats counts hashed-bearer M2M tokens. Same exclusive
@@ -643,7 +710,7 @@ export type APITokenStats = Message<"paladin.admin.v1.APITokenStats"> & {
  */
 export const APITokenStatsSchema: GenMessage<APITokenStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 13);
+  messageDesc(file_paladin_admin_v1_system_service, 16);
 
 /**
  * SubscriptionStats is the event-subscription inventory. The dispatcher's
@@ -691,7 +758,7 @@ export type SubscriptionStats =
  */
 export const SubscriptionStatsSchema: GenMessage<SubscriptionStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 14);
+  messageDesc(file_paladin_admin_v1_system_service, 17);
 
 /**
  * @generated from message paladin.admin.v1.TenantStats
@@ -742,7 +809,7 @@ export type TenantStats = Message<"paladin.admin.v1.TenantStats"> & {
  */
 export const TenantStatsSchema: GenMessage<TenantStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 15);
+  messageDesc(file_paladin_admin_v1_system_service, 18);
 
 /**
  * @generated from message paladin.admin.v1.BackendStats
@@ -790,7 +857,7 @@ export type BackendStats = Message<"paladin.admin.v1.BackendStats"> & {
  */
 export const BackendStatsSchema: GenMessage<BackendStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 16);
+  messageDesc(file_paladin_admin_v1_system_service, 19);
 
 /**
  * @generated from message paladin.admin.v1.BucketStats
@@ -853,7 +920,7 @@ export type BucketStats = Message<"paladin.admin.v1.BucketStats"> & {
  */
 export const BucketStatsSchema: GenMessage<BucketStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 17);
+  messageDesc(file_paladin_admin_v1_system_service, 20);
 
 /**
  * @generated from message paladin.admin.v1.CollectionStats
@@ -886,7 +953,7 @@ export type CollectionStats = Message<"paladin.admin.v1.CollectionStats"> & {
  */
 export const CollectionStatsSchema: GenMessage<CollectionStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 18);
+  messageDesc(file_paladin_admin_v1_system_service, 21);
 
 /**
  * @generated from message paladin.admin.v1.UserStats
@@ -909,7 +976,7 @@ export type UserStats = Message<"paladin.admin.v1.UserStats"> & {
  */
 export const UserStatsSchema: GenMessage<UserStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 19);
+  messageDesc(file_paladin_admin_v1_system_service, 22);
 
 /**
  * ObjectStateStat is one (state, count, bytes) triple. Carried as a
@@ -944,7 +1011,7 @@ export type ObjectStateStat = Message<"paladin.admin.v1.ObjectStateStat"> & {
  */
 export const ObjectStateStatSchema: GenMessage<ObjectStateStat> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 20);
+  messageDesc(file_paladin_admin_v1_system_service, 23);
 
 /**
  * @generated from message paladin.admin.v1.TenantObjectStats
@@ -992,7 +1059,7 @@ export type TenantObjectStats =
  */
 export const TenantObjectStatsSchema: GenMessage<TenantObjectStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 21);
+  messageDesc(file_paladin_admin_v1_system_service, 24);
 
 /**
  * @generated from message paladin.admin.v1.ObjectStats
@@ -1048,7 +1115,7 @@ export type ObjectStats = Message<"paladin.admin.v1.ObjectStats"> & {
  */
 export const ObjectStatsSchema: GenMessage<ObjectStats> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_system_service, 22);
+  messageDesc(file_paladin_admin_v1_system_service, 25);
 
 /**
  * PlatformStatsSignal is a census count the console flags for attention.
@@ -1176,5 +1243,21 @@ export const SystemService: GenService<{
     methodKind: "unary";
     input: typeof ListPlatformStatsTenantsRequestSchema;
     output: typeof ListPlatformStatsTenantsResponseSchema;
+  };
+  /**
+   * GetPlatformHealth is every role's health, gathered by this pod: it reads
+   * each configured role's /system/health.json with the health-snapshot
+   * token, so the console needs no token of its own (ADR-0048). A role that
+   * does not answer is listed UNHEALTHY with a reachability component that
+   * says why, never left out. Open to any authenticated caller, as the iam
+   * plane's HealthService.GetHealth is: it carries no tenant data.
+   * Read-only, no audit row.
+   *
+   * @generated from rpc paladin.admin.v1.SystemService.GetPlatformHealth
+   */
+  getPlatformHealth: {
+    methodKind: "unary";
+    input: typeof GetPlatformHealthRequestSchema;
+    output: typeof GetPlatformHealthResponseSchema;
   };
 }> = /*@__PURE__*/ serviceDesc(file_paladin_admin_v1_system_service, 0);

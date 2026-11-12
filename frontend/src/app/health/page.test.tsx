@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { render, screen, within } from "@/test/utils";
 
@@ -18,6 +18,18 @@ vi.mock("@/hooks/useVisiblePolling", () => ({
       fn();
     }, [fn]);
   },
+}));
+
+// The page reads the admin role's GetPlatformHealth through this hook; each
+// test sets the answer in `payload`.
+vi.mock("@/hooks/usePlatformHealth", () => ({
+  usePlatformHealth: () => ({
+    data: payload,
+    loading: false,
+    error: null,
+    syncedAt: new Date(0),
+    refresh: async () => {},
+  }),
 }));
 
 import HealthPage from "./page";
@@ -39,12 +51,7 @@ const fivePayload = {
 
 beforeEach(() => {
   payload = fivePayload;
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => new Response(JSON.stringify(payload))),
-  );
 });
-afterEach(() => vi.unstubAllGlobals());
 
 // A card by its title: a role's name also labels its pool in the database card.
 const roleCard = async (role: string) =>

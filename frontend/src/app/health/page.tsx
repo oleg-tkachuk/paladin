@@ -1,7 +1,7 @@
 "use client";
 
 import { IconChip, IconTone } from "@/components/ui/IconChip";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -14,6 +14,7 @@ import {
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useStats } from "@/context/StatsContext";
+import { usePlatformHealth } from "@/hooks/usePlatformHealth";
 import { useVisiblePolling } from "@/hooks/useVisiblePolling";
 import { LiveToggle } from "@/components/ui/LiveToggle";
 import { liveState } from "@/lib/live";
@@ -39,7 +40,6 @@ import {
   type Control,
   type Detail,
   detailLines,
-  type HealthAll,
   type RoleStatus,
   type Snapshot,
 } from "@/lib/health";
@@ -534,24 +534,7 @@ function AttentionCard({ findings }: { findings: Finding[] }) {
 
 export default function HealthPage() {
   const { stats } = useStats(); // version info from api role's GetVersion
-  const [data, setData] = useState<HealthAll | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastSync, setLastSync] = useState<Date | null>(null);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/health/all", { cache: "no-store" });
-      const body = (await res.json()) as HealthAll;
-      setData(body);
-      setLastSync(new Date());
-    } catch {
-      // Leave previous data on screen so a transient BFF blip doesn't
-      // wipe the dashboard. The next interval tick retries.
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, loading, syncedAt: lastSync, refresh } = usePlatformHealth();
 
   // Auto-refresh every HEALTH_POLL_MS — short enough that a degrading dep
   // shows up quickly, long enough that the page isn't a hot loop. Paused

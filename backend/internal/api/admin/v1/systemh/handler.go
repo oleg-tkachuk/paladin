@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -38,6 +39,11 @@ type Handler struct {
 	// httpClient fetches the dispatcher / worker pods' ops endpoints for
 	// DispatcherStats and PlatformStats. Short timeout — dashboard reads.
 	httpClient *http.Client
+	// log records what PlatformHealth could not read.
+	log *zap.Logger
+	// healthClient reads the roles' snapshots: httpClient unless
+	// admin.health.ca_path asks for one trusting the internal CA.
+	healthClient *http.Client
 }
 
 // New wires the handler with the live config + the on-disk path it
@@ -48,7 +54,20 @@ func New(cfg config.Config, sourcePath string) *Handler {
 		cfg:        cfg,
 		sourcePath: sourcePath,
 		httpClient: &http.Client{Timeout: 5 * time.Second},
+		log:        zap.NewNop(),
 	}
+}
+
+// WithHealthClient sets the client PlatformHealth reads the roles with.
+func (h *Handler) WithHealthClient(c *http.Client) *Handler {
+	h.healthClient = c
+	return h
+}
+
+// WithLogger sets the logger PlatformHealth reports unreachable roles to.
+func (h *Handler) WithLogger(l *zap.Logger) *Handler {
+	h.log = l
+	return h
 }
 
 // WithPool attaches the admin pod's request pool, enabling the

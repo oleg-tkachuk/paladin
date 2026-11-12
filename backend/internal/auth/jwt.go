@@ -38,6 +38,7 @@ type jwtClaims struct {
 	Sub string          `json:"sub"`
 	Aud json.RawMessage `json:"aud"`
 	Exp int64           `json:"exp"`
+	Iat int64           `json:"iat"`
 	Nbf int64           `json:"nbf"`
 	Jti string          `json:"jti"`
 	// Sid is the session the token was issued in (auth.ClaimSessionID).
@@ -173,6 +174,9 @@ func principalFromClaims(c jwtClaims, audience string) (*Principal, error) {
 	}
 	if c.Exp > 0 {
 		p.ExpiresAt = time.Unix(c.Exp, 0)
+	}
+	if c.Iat > 0 {
+		p.IssuedAt = time.Unix(c.Iat, 0)
 	}
 	if t := c.tenantClaim(); t != "" {
 		id, err := uuid.Parse(t)

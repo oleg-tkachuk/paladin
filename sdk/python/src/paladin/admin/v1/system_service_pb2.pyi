@@ -3,6 +3,7 @@ import datetime
 from buf.validate import validate_pb2 as _validate_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 from paladin.common.v1 import pagination_pb2 as _pagination_pb2
+from paladin.iam.v1 import health_service_pb2 as _health_service_pb2
 from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
@@ -106,6 +107,24 @@ class SubscriptionDeliveryStat(_message.Message):
     last_status_code: int
     last_attempt_at: str
     def __init__(self, subscription_id: _Optional[str] = ..., tenant_id: _Optional[str] = ..., pending: _Optional[int] = ..., failed: _Optional[int] = ..., last_error: _Optional[str] = ..., last_status_code: _Optional[int] = ..., last_attempt_at: _Optional[str] = ...) -> None: ...
+
+class GetPlatformHealthRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class GetPlatformHealthResponse(_message.Message):
+    __slots__ = ("roles",)
+    ROLES_FIELD_NUMBER: _ClassVar[int]
+    roles: _containers.RepeatedCompositeFieldContainer[RoleHealth]
+    def __init__(self, roles: _Optional[_Iterable[_Union[RoleHealth, _Mapping]]] = ...) -> None: ...
+
+class RoleHealth(_message.Message):
+    __slots__ = ("health", "checked_at")
+    HEALTH_FIELD_NUMBER: _ClassVar[int]
+    CHECKED_AT_FIELD_NUMBER: _ClassVar[int]
+    health: _health_service_pb2.HealthInfo
+    checked_at: _timestamp_pb2.Timestamp
+    def __init__(self, health: _Optional[_Union[_health_service_pb2.HealthInfo, _Mapping]] = ..., checked_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class GetPlatformStatsRequest(_message.Message):
     __slots__ = ("tenant_page",)

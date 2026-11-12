@@ -21,7 +21,7 @@ from connectrpc.protocol import ProtocolType
 from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DEFAULT_READ_MAX_BYTES, Endpoint, EndpointSync
 from pyqwest import Client, SyncClient
 
-from .system_service_pb2 import GetConfigRequest, GetConfigResponse, GetDispatcherStatsRequest, GetDispatcherStatsResponse, GetPlatformStatsRequest, GetPlatformStatsResponse, ListPlatformStatsTenantsRequest, ListPlatformStatsTenantsResponse
+from .system_service_pb2 import GetConfigRequest, GetConfigResponse, GetDispatcherStatsRequest, GetDispatcherStatsResponse, GetPlatformHealthRequest, GetPlatformHealthResponse, GetPlatformStatsRequest, GetPlatformStatsResponse, ListPlatformStatsTenantsRequest, ListPlatformStatsTenantsResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -98,6 +98,18 @@ class SystemService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    async def get_platform_health(self, request: GetPlatformHealthRequest, ctx: RequestContext[GetPlatformHealthRequest, GetPlatformHealthResponse], /) -> GetPlatformHealthResponse:
+        """
+        GetPlatformHealth is every role's health, gathered by this pod: it reads
+        each configured role's /system/health.json with the health-snapshot
+        token, so the console needs no token of its own (ADR-0048). A role that
+        does not answer is listed UNHEALTHY with a reachability component that
+        says why, never left out. Open to any authenticated caller, as the iam
+        plane's HealthService.GetHealth is: it carries no tenant data.
+        Read-only, no audit row.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
 
 class SystemServiceASGIApplication(ConnectASGIApplication[SystemService]):
     def __init__(
@@ -155,6 +167,17 @@ class SystemServiceASGIApplication(ConnectASGIApplication[SystemService]):
                         stream_type=StreamType.UNARY,
                     ),
                     function=svc.list_platform_stats_tenants,
+                ),
+                "/paladin.admin.v1.SystemService/GetPlatformHealth": Endpoint.unary(
+                    method=MethodInfo(
+                        name="GetPlatformHealth",
+                        service_name="paladin.admin.v1.SystemService",
+                        input=GetPlatformHealthRequest,
+                        output=GetPlatformHealthResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.get_platform_health,
                 ),
             },
             interceptors=interceptors,
@@ -330,6 +353,37 @@ class SystemServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
             use_get=use_get,
         )
+    async def get_platform_health(
+        self,
+        request: GetPlatformHealthRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> GetPlatformHealthResponse:
+        """
+        GetPlatformHealth is every role's health, gathered by this pod: it reads
+        each configured role's /system/health.json with the health-snapshot
+        token, so the console needs no token of its own (ADR-0048). A role that
+        does not answer is listed UNHEALTHY with a reachability component that
+        says why, never left out. Open to any authenticated caller, as the iam
+        plane's HealthService.GetHealth is: it carries no tenant data.
+        Read-only, no audit row.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetPlatformHealth",
+                service_name="paladin.admin.v1.SystemService",
+                input=GetPlatformHealthRequest,
+                output=GetPlatformHealthResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
 
 class SystemServiceSync(Protocol):
     """
@@ -392,6 +446,18 @@ class SystemServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def get_platform_health(self, request: GetPlatformHealthRequest, ctx: RequestContext[GetPlatformHealthRequest, GetPlatformHealthResponse], /) -> GetPlatformHealthResponse:
+        """
+        GetPlatformHealth is every role's health, gathered by this pod: it reads
+        each configured role's /system/health.json with the health-snapshot
+        token, so the console needs no token of its own (ADR-0048). A role that
+        does not answer is listed UNHEALTHY with a reachability component that
+        says why, never left out. Open to any authenticated caller, as the iam
+        plane's HealthService.GetHealth is: it carries no tenant data.
+        Read-only, no audit row.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
 
 class SystemServiceWSGIApplication(ConnectWSGIApplication):
     def __init__(
@@ -447,6 +513,17 @@ class SystemServiceWSGIApplication(ConnectWSGIApplication):
                         stream_type=StreamType.UNARY,
                     ),
                     function=service.list_platform_stats_tenants,
+                ),
+                "/paladin.admin.v1.SystemService/GetPlatformHealth": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="GetPlatformHealth",
+                        service_name="paladin.admin.v1.SystemService",
+                        input=GetPlatformHealthRequest,
+                        output=GetPlatformHealthResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.get_platform_health,
                 ),
             },
             interceptors=interceptors,
@@ -615,6 +692,37 @@ class SystemServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.SystemService",
                 input=ListPlatformStatsTenantsRequest,
                 output=ListPlatformStatsTenantsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def get_platform_health(
+        self,
+        request: GetPlatformHealthRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> GetPlatformHealthResponse:
+        """
+        GetPlatformHealth is every role's health, gathered by this pod: it reads
+        each configured role's /system/health.json with the health-snapshot
+        token, so the console needs no token of its own (ADR-0048). A role that
+        does not answer is listed UNHEALTHY with a reachability component that
+        says why, never left out. Open to any authenticated caller, as the iam
+        plane's HealthService.GetHealth is: it carries no tenant data.
+        Read-only, no audit row.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="GetPlatformHealth",
+                service_name="paladin.admin.v1.SystemService",
+                input=GetPlatformHealthRequest,
+                output=GetPlatformHealthResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                 stream_type=StreamType.UNARY,
             ),

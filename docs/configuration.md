@@ -124,6 +124,7 @@ comment. What each top-level block owns:
 | `api` | the data listener: `:8080` in the chart and compose, `:8083` by default on the host (`#LocalDataPort` in `schema.cue`) |
 | `iam` | the iam listener (`:8085`): login, the OAuth AS and the session JWKS |
 | `admin` | the admin listener (`:8090`), and `tenants.trash_retention` — how long a trashed tenant waits before it is surfaced for purge ([deletion-semantics.md](deletion-semantics.md#tenant)) |
+| `session` | the console's session role (`:8086`, ADR-0048): `console_origins` a state-changing call must come from, the planes it forwards to, and `rotate_after`, how old a refresh token gets before it is rotated |
 | `datastores` | Postgres DSN, the separate migrate / reaper credentials, the opt-in read replica; the optional Valkey the rate limits can count in |
 | `limits` | object and multipart size ceilings, part sizes, content types, presign lifetimes |
 | `auth` | JWT signing, token TTLs, login rate limiting, the OAuth 2.1 authorization server (`auth.oauth`, ADR-0009) |

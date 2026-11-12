@@ -76,12 +76,14 @@ class ComponentHealth(_message.Message):
     def __init__(self, name: _Optional[str] = ..., status: _Optional[_Union[ComponentStatus, str]] = ..., message: _Optional[str] = ..., latency_ms: _Optional[int] = ..., category: _Optional[str] = ..., critical: _Optional[bool] = ..., control: _Optional[_Union[ComponentControl, str]] = ..., details: _Optional[_Iterable[_Union[ComponentDetail, _Mapping]]] = ...) -> None: ...
 
 class ComponentDetail(_message.Message):
-    __slots__ = ("name", "value")
+    __slots__ = ("name", "value", "group")
     NAME_FIELD_NUMBER: _ClassVar[int]
     VALUE_FIELD_NUMBER: _ClassVar[int]
+    GROUP_FIELD_NUMBER: _ClassVar[int]
     name: str
     value: str
-    def __init__(self, name: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    group: str
+    def __init__(self, name: _Optional[str] = ..., value: _Optional[str] = ..., group: _Optional[str] = ...) -> None: ...
 
 class HealthInfo(_message.Message):
     __slots__ = ("status", "components", "role")

@@ -195,6 +195,20 @@ services:
       paladin-bootstrap:
         condition: service_completed_successfully
 
+  # The console's session role (ADR-0048): its session cookie and the calls
+  # it forwards to the planes. No database, no key.
+  paladin-session:
+    <<: *paladin-base
+    container_name: paladin-session
+    init: true
+    restart: on-failure
+    command: ["serve", "session", "--config", "/app/configs/compose.yaml"]
+    ports:
+      - "8086:8086"
+    depends_on:
+      paladin-iam:
+        condition: service_started
+
   paladin-admin:
     <<: *paladin-base
     container_name: paladin-admin

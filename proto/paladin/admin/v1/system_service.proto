@@ -7,6 +7,7 @@ option go_package = "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "paladin/common/v1/pagination.proto";
+import "paladin/iam/v1/health_service.proto";
 
 // SystemService on the admin plane exposes operator-only diagnostics
 // that contain redacted-but-sensitive configuration. Distinct from
@@ -61,6 +62,17 @@ service SystemService {
   // UNAVAILABLE when the worker leg is unconfigured or unreachable, because
   // an empty list would read as "nobody". Read-only, no audit row.
   rpc ListPlatformStatsTenants(ListPlatformStatsTenantsRequest) returns (ListPlatformStatsTenantsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // GetPlatformHealth is every role's health, gathered by this pod: it reads
+  // each configured role's /system/health.json with the health-snapshot
+  // token, so the console needs no token of its own (ADR-0048). A role that
+  // does not answer is listed UNHEALTHY with a reachability component that
+  // says why, never left out. Open to any authenticated caller, as the iam
+  // plane's HealthService.GetHealth is: it carries no tenant data.
+  // Read-only, no audit row.
+  rpc GetPlatformHealth(GetPlatformHealthRequest) returns (GetPlatformHealthResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
@@ -154,6 +166,21 @@ message SubscriptionDeliveryStat {
   int32 last_status_code = 6;
   // RFC3339 UTC; empty = never attempted.
   string last_attempt_at = 7;
+}
+
+// ─── Platform health ────────────────────────────────────────────────────────
+message GetPlatformHealthRequest {}
+
+message GetPlatformHealthResponse {
+  // One per configured role, in the configured order.
+  repeated RoleHealth roles = 1;
+}
+
+message RoleHealth {
+  // The role's own snapshot; health.role names the role.
+  paladin.iam.v1.HealthInfo health = 1;
+  // When the role finished its checks, or when this pod gave up on it.
+  google.protobuf.Timestamp checked_at = 2;
 }
 
 // ─── Platform census ────────────────────────────────────────────────────────

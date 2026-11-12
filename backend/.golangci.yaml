@@ -98,6 +98,20 @@ linters:
           deny:
             - pkg: "github.com/valkey-io/valkey-go"
               desc: import the client only from internal/ratecount/valkey
+        # The console's session role holds no database and no key (ADR-0048):
+        # its package reads token ages through an interface, and links
+        # neither the token internals nor a store.
+        session-role:
+          files:
+            - "**/internal/session/**"
+            - "!$test"
+          deny:
+            - pkg: "github.com/jackc/pgx"
+              desc: the session role holds no database
+            - pkg: "github.com/oleg-tkachuk/paladin/backend/internal/auth"
+              desc: read a token's age through session.RefreshAges; internal/auth links the database
+            - pkg: "github.com/oleg-tkachuk/paladin/backend/internal/store"
+              desc: the session role holds no database
     errcheck:
       # Non-actionable errors: writes to buffers/stderr, and Close() on the
       # cleanup path (a Close error is rarely recoverable; resource *leaks* are
