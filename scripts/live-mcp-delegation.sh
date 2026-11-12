@@ -72,6 +72,8 @@ readonly IAM_SERVICE_PORT=8085
 readonly ADMIN_LOCAL_PORT="${ADMIN_LOCAL_PORT:-28390}"
 readonly DATA_LOCAL_PORT="${DATA_LOCAL_PORT:-28380}"
 readonly IAM_LOCAL_PORT="${IAM_LOCAL_PORT:-28385}"
+# JWKS_PATH is where the iam role publishes the session keys (sessionkey.WellKnownPath).
+readonly JWKS_PATH=/.well-known/jwks.json
 readonly MCP_LOCAL_PORT="${MCP_LOCAL_PORT:-28396}"
 readonly LOOPBACK=127.0.0.1
 readonly FORWARD_WAIT_SECONDS=15
@@ -251,7 +253,7 @@ secret_of() {
 }
 
 export APP_NAME AUTH_ISSUER OAUTH_ISSUER OAUTH_AUTHORIZE_URL OAUTH_TOKEN_URL OAUTH_REGISTER_URL \
-    MCP_RESOURCE_URL EXCHANGE_CLIENT_ID MCP_ADDR MCP_PROFILE ADMIN_URL DATA_URL IAM_URL UNUSED_DSN
+    MCP_RESOURCE_URL EXCHANGE_CLIENT_ID MCP_ADDR MCP_PROFILE ADMIN_URL DATA_URL IAM_URL JWKS_URL UNUSED_DSN
 APP_NAME=$(cfg .app.name)
 AUTH_ISSUER=$(cfg .auth.issuer)
 OAUTH_ISSUER=$(cfg .mcp.oauth.authorization_server.issuer)
@@ -265,6 +267,8 @@ MCP_PROFILE=$BRIDGE_PROFILE
 ADMIN_URL="http://$LOOPBACK:$ADMIN_LOCAL_PORT"
 DATA_URL="http://$LOOPBACK:$DATA_LOCAL_PORT"
 IAM_URL="http://$LOOPBACK:$IAM_LOCAL_PORT"
+# The bridge holds no session key: it verifies tokens by the iam role's JWKS.
+JWKS_URL="$IAM_URL$JWKS_PATH"
 # Never dialled: the bridge opens no database.
 UNUSED_DSN="postgres://unused@$LOOPBACK/unused"
 oauth_revoke_url="$OAUTH_ISSUER$OAUTH_REVOKE_PATH"
@@ -277,13 +281,12 @@ fi
 chmod 0755 "$work"
 chmod 0644 "$work/config.yaml"
 
-export PALADIN_AUTH_SIGNING_KEY PALADIN_MCP_OAUTH_EXCHANGE_CLIENT_SECRET
-PALADIN_AUTH_SIGNING_KEY=$(secret_of .auth.signing_key_secret || cfg .auth.signing_key)
+export PALADIN_MCP_OAUTH_EXCHANGE_CLIENT_SECRET
 PALADIN_MCP_OAUTH_EXCHANGE_CLIENT_SECRET=$(secret_of .mcp.oauth.exchange.client_secret_ref ||
     cfg .mcp.oauth.exchange.client_secret)
 password=$(secret_of .bootstrap.admin.password_secret || cfg .bootstrap.admin.password)
-if [[ -z "$PALADIN_AUTH_SIGNING_KEY" || -z "$PALADIN_MCP_OAUTH_EXCHANGE_CLIENT_SECRET" || -z "$password" ]]; then
-    echo "!!! could not read the signing key, the exchange client's secret or the admin's password" >&2
+if [[ -z "$PALADIN_MCP_OAUTH_EXCHANGE_CLIENT_SECRET" || -z "$password" ]]; then
+    echo "!!! could not read the exchange client's secret or the admin's password" >&2
     exit 1
 fi
 
@@ -330,7 +333,7 @@ fi
 image=$("${kube[@]}" get deploy "$MCP_DEPLOYMENT" -o jsonpath='{.spec.template.spec.containers[0].image}')
 if ! docker run -d --name "$container" --network host \
     -v "$work/config.yaml:/app/configs/config.yaml:ro" \
-    -e PALADIN_AUTH_SIGNING_KEY -e PALADIN_MCP_OAUTH_EXCHANGE_CLIENT_SECRET \
+    -e PALADIN_MCP_OAUTH_EXCHANGE_CLIENT_SECRET \
     "$image" serve mcp --transport=http >/dev/null; then
     bad "start the $BRIDGE_PROFILE bridge from $image" "docker run failed"
     exit 1

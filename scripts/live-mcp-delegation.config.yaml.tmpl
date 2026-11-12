@@ -2,14 +2,16 @@
 # deployed release: the deployed image, with the agent_safe profile the
 # cluster's own bridge does not serve, reaching the release's planes through
 # port-forwards. Rendered by yq's envsubst; the script reads every value but
-# the local addresses from the release's own config. The two secrets, the
-# signing key and the exchange client's secret, come in the environment.
+# the local addresses from the release's own config. The exchange client's
+# secret comes in the environment.
 app:
   name: ${APP_NAME}
   env: dev
 auth:
   # The issuer the edge verifies a paladin-mcp token against: the release's.
   issuer: ${AUTH_ISSUER}
+  # The bridge holds no session key; it verifies by the iam role's JWKS.
+  jwks_url: ${JWKS_URL}
 datastores:
   postgres:
     # The bridge holds no database; the schema requires a DSN all the same.

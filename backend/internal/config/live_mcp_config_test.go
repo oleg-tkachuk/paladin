@@ -38,6 +38,7 @@ func TestLiveMCPDelegationConfig(t *testing.T) {
 		"ADMIN_URL":           "http://127.0.0.1:28390",
 		"DATA_URL":            "http://127.0.0.1:28380",
 		"IAM_URL":             "http://127.0.0.1:28385",
+		"JWKS_URL":            "http://127.0.0.1:28385/.well-known/jwks.json",
 	}
 	cmd := exec.CommandContext(t.Context(), "bash", liveMCPScript, liveMCPRenderConfig)
 	cmd.Env = os.Environ()
@@ -56,8 +57,8 @@ func TestLiveMCPDelegationConfig(t *testing.T) {
 	if err := os.WriteFile(path, out, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// The script hands the bridge its two secrets in the environment.
-	t.Setenv(EnvPrefix+"AUTH_SIGNING_KEY", "live-mcp-test-signing-key-6c1f0a9e2b7d4c58a3e1")
+	// The script hands the bridge the exchange client's secret in the
+	// environment; it holds no session key.
 	t.Setenv(EnvPrefix+"MCP_OAUTH_EXCHANGE_CLIENT_SECRET", "live-mcp-test-exchange-secret-91d2e4f7")
 	cfg, err := Load([]string{path}, RoleAPI, zap.NewNop())
 	if err != nil {
@@ -73,6 +74,9 @@ func TestLiveMCPDelegationConfig(t *testing.T) {
 	}
 	if m.OAuth.ResourceURL != inputs["MCP_RESOURCE_URL"] || cfg.Auth.Issuer != inputs["AUTH_ISSUER"] {
 		t.Errorf("resource %q, issuer %q; want the release's", m.OAuth.ResourceURL, cfg.Auth.Issuer)
+	}
+	if cfg.Auth.JWKSURL != inputs["JWKS_URL"] {
+		t.Errorf("jwks_url %q, want the iam role's %q", cfg.Auth.JWKSURL, inputs["JWKS_URL"])
 	}
 	u := m.Upstreams
 	if u.AdminURL != inputs["ADMIN_URL"] || u.DataURL != inputs["DATA_URL"] || u.IAMURL != inputs["IAM_URL"] {
