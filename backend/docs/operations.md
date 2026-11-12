@@ -24,10 +24,12 @@ Its definition is [`deploy/docker-compose.yaml`](../deploy/docker-compose.yaml),
 with `postgres-custom.conf`, `seaweedfs-s3.json` and
 `seaweedfs-notification.toml` beside it.
 
-To run one role from a build against your own PostgreSQL and S3:
+To run a role from a build against your own PostgreSQL and S3 — `serve iam`
+first, since the other roles verify sessions by its JWKS:
 
 ```bash
 task build
+./bin/server --config configs/local.yaml serve iam
 ./bin/server --config configs/local.yaml serve api
 ```
 
