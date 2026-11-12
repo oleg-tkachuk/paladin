@@ -143,9 +143,11 @@ func (h *Handler) WithTenantSlugLookup(f TenantSlugLookup) *Handler {
 // ─── Login ──────────────────────────────────────────────────────────────────
 
 type LoginInput struct {
-	Subject           string
-	Password          string
-	UpstreamCode      string // unused for local IdP
+	Subject  string
+	Password string
+	// UpstreamCode is an upstream IdP's authorization code. Paladin signs in
+	// with its own IAM alone, so a non-empty one is refused.
+	UpstreamCode      string
 	RequestedAudience string // empty → AudienceData
 	// TenantHint optionally narrows the lookup to one tenant. Empty means
 	// "lookup across all tenants by subject" — server picks the only match
@@ -166,6 +168,10 @@ type LoginOutput struct {
 }
 
 func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error) {
+	if in.UpstreamCode != "" {
+		metrics.RecordLoginAttempt(ctx, "invalid_argument")
+		return nil, connect.NewError(connect.CodeInvalidArgument, "upstream_code is not supported: Paladin signs in with its own IAM")
+	}
 	if in.Subject == "" {
 		metrics.RecordLoginAttempt(ctx, "invalid_argument")
 		return nil, connect.NewError(connect.CodeInvalidArgument, "subject required")

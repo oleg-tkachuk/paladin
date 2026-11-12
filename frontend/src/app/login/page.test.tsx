@@ -69,6 +69,15 @@ describe("LoginPage", () => {
     expect(h.replace).not.toHaveBeenCalled();
   });
 
+  // No upstream IdP signs anyone in: a code in the URL is not a sign-in.
+  it("signs nobody in from an upstream_code in the URL", () => {
+    h.state.search = new URLSearchParams("upstream_code=code-1&next=/tenants");
+    render(<LoginPage />);
+    expect(h.login).not.toHaveBeenCalled();
+    expect(h.replace).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+  });
+
   it("bounces an already-authenticated visitor out of /login", () => {
     h.state.status = "authenticated";
     h.state.search = new URLSearchParams("next=/buckets");

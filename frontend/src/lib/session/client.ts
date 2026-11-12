@@ -42,16 +42,8 @@ async function post(path: string, body?: unknown): Promise<Response> {
 }
 
 /** Signs in; the role sets the session cookie. */
-export async function signIn(
-  subject: string,
-  password: string,
-  upstreamCode?: string,
-): Promise<void> {
-  await post(SESSION_PATHS.login, {
-    subject,
-    password,
-    ...(upstreamCode ? { upstreamCode } : {}),
-  });
+export async function signIn(subject: string, password: string): Promise<void> {
+  await post(SESSION_PATHS.login, { subject, password });
 }
 
 /**

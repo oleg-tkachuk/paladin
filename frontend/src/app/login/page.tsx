@@ -10,12 +10,9 @@ import { Card } from "@/components/ui/Card";
 import { useAuth } from "@/context/AuthContext";
 
 /**
- * Login page — minimal local-IdP form. Talks to /api/auth/login through
- * AuthContext, which seeds the in-memory tokenStore on success and the BFF
- * sets refresh-token cookies. On success, bounce to ?next=… (default /).
- *
- * Federated/upstream login (OIDC code flow) reuses the same form: the
- * upstream redirect drops the code into ?upstream_code= and we POST it.
+ * Login page — the sign-in form for Paladin's own IAM. AuthContext signs in at
+ * the session role, which sets the session cookie; on success, bounce to
+ * ?next=… (default /). There is no upstream IdP sign-in.
  */
 
 export default function LoginPage() {
@@ -29,32 +26,10 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // If we're already authenticated (rehydrated from /me), bounce out.
+  // If we're already authenticated (the session was found), bounce out.
   useEffect(() => {
     if (status === "authenticated") router.replace(next);
   }, [status, next, router]);
-
-  // Auto-submit upstream OIDC code if present in the URL.
-  useEffect(() => {
-    const code = search.get("upstream_code");
-    if (!code) return;
-    let cancelled = false;
-    (async () => {
-      setSubmitting(true);
-      try {
-        await login("", "", code);
-        if (!cancelled) router.replace(next);
-      } catch (e) {
-        if (!cancelled) setLocalError((e as Error).message);
-      } finally {
-        if (!cancelled) setSubmitting(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

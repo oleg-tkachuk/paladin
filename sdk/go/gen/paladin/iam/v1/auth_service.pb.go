@@ -26,11 +26,13 @@ const (
 
 type LoginRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// For local IdP: subject is username/email. For federated IdP this RPC
-	// accepts an upstream authorization code instead (see auth_method).
+	// The user's username or email; Paladin signs in with its own IAM alone.
 	Subject  string `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
 	Password string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
-	// Optional upstream IdP code (OIDC authorization-code flow).
+	// An upstream IdP's authorization code. No upstream IdP signs anyone in:
+	// a non-empty value is refused with INVALID_ARGUMENT.
+	//
+	// Deprecated: Marked as deprecated in paladin/iam/v1/auth_service.proto.
 	UpstreamCode string `protobuf:"bytes,3,opt,name=upstream_code,json=upstreamCode,proto3" json:"upstream_code,omitempty"`
 	// Audience the caller wants the access token for. Server-side ACL still
 	// applies — caller cannot escalate beyond their roles.
@@ -83,6 +85,7 @@ func (x *LoginRequest) GetPassword() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in paladin/iam/v1/auth_service.proto.
 func (x *LoginRequest) GetUpstreamCode() string {
 	if x != nil {
 		return x.UpstreamCode
@@ -1070,11 +1073,11 @@ var File_paladin_iam_v1_auth_service_proto protoreflect.FileDescriptor
 
 const file_paladin_iam_v1_auth_service_proto_rawDesc = "" +
 	"\n" +
-	"!paladin/iam/v1/auth_service.proto\x12\x0epaladin.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1apaladin/iam/v1/types.proto\"\xab\x01\n" +
+	"!paladin/iam/v1/auth_service.proto\x12\x0epaladin.iam.v1\x1a\x1bbuf/validate/validate.proto\x1a\"paladin/common/v1/pagination.proto\x1a\x1apaladin/iam/v1/types.proto\"\xad\x01\n" +
 	"\fLoginRequest\x12!\n" +
 	"\asubject\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\asubject\x12\x1f\n" +
-	"\bpassword\x18\x02 \x01(\tB\x03\x80\x01\x01R\bpassword\x12(\n" +
-	"\rupstream_code\x18\x03 \x01(\tB\x03\x80\x01\x01R\fupstreamCode\x12-\n" +
+	"\bpassword\x18\x02 \x01(\tB\x03\x80\x01\x01R\bpassword\x12*\n" +
+	"\rupstream_code\x18\x03 \x01(\tB\x05\x18\x01\x80\x01\x01R\fupstreamCode\x12-\n" +
 	"\x12requested_audience\x18\x04 \x01(\tR\x11requestedAudience\"l\n" +
 	"\rLoginResponse\x121\n" +
 	"\x06tokens\x18\x01 \x01(\v2\x19.paladin.iam.v1.TokenPairR\x06tokens\x12(\n" +

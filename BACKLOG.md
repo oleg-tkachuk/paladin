@@ -273,19 +273,6 @@ the same commit. Treat this file like a runtime invariant.
   regenerated from them no longer name what each role does not use.
 - **Blockers:** none.
 
-### Sign-in with an upstream code sends an empty subject
-
-- **Status:** Deferred (found 2026-11-12 moving the console onto the session
-  role, not caused by it).
-- **Reason:** the login page's `?upstream_code=` path signs in with an empty
-  subject, which `LoginRequest.subject` (`min_len = 1`) refuses, so the
-  upstream-code sign-in cannot succeed.
-- **Definition of Done:** either the proto accepts an upstream code without a
-  subject and IAM resolves the subject from it, or the console drops the path;
-  an e2e test signs in through it or proves it is gone.
-- **Blockers:** whether any upstream IdP sign-in is still wanted (ADR on
-  engineer-operated auth).
-
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
 - **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays

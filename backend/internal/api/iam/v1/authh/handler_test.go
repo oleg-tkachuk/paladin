@@ -3,6 +3,7 @@ package authh
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -186,6 +187,16 @@ func TestLogin_InputValidation(t *testing.T) {
 	}
 	if _, err := h.Login(context.Background(), LoginInput{Subject: "u1"}); code(err) != connect.CodeInvalidArgument {
 		t.Errorf("missing password: code = %v, want InvalidArgument", code(err))
+	}
+}
+
+// Paladin signs in with its own IAM alone: an upstream IdP code is refused,
+// never ignored, even beside a subject and password that would sign in.
+func TestLogin_RefusesAnUpstreamCode(t *testing.T) {
+	h := newHandler(&fakeUsers{}, &fakeRefresh{}, &stubMinter{})
+	_, err := h.Login(context.Background(), LoginInput{Subject: "u1", Password: "pw", UpstreamCode: "code-1"})
+	if code(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "upstream_code") {
+		t.Fatalf("login with an upstream code: %v, want InvalidArgument naming upstream_code", err)
 	}
 }
 
