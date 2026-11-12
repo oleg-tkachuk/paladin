@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { SESSION_PATHS } from "@/constants";
+
 /**
  * useAuditStream subscribes to the live audit feed (/api/audit/stream, an
  * SSE proxy to the admin plane) and invokes onEvent for every new audit
@@ -27,7 +29,7 @@ export function useAuditStream(enabled: boolean, onEvent: () => void) {
 
   useEffect(() => {
     if (!enabled) return;
-    const es = new EventSource("/api/audit/stream");
+    const es = new EventSource(SESSION_PATHS.auditStream);
     // Socket events are the only writers of `connected` — the disabled state
     // is derived below instead of set from the effect body (lint: no
     // synchronous setState inside effects).

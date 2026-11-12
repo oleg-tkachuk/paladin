@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 
 import { useAuth } from "@/context/AuthContext";
+import { authClient } from "@/lib/connect/client";
+import { normalizeError } from "@/lib/connect/error";
 
 /** One tenant the signed-in subject belongs to (AuthService.Membership). */
 export type Membership = {
@@ -14,8 +16,8 @@ export type Membership = {
 };
 
 /**
- * useMemberships fetches the caller's tenant memberships from the BFF
- * (/api/auth/memberships → AuthService.ListMyMemberships) for the tenant
+ * useMemberships fetches the caller's tenant memberships
+ * (AuthService.ListMyMemberships, through the session role) for the tenant
  * switcher. `load` is lazy — call it when the switcher opens rather than on
  * mount, so an operator who never switches pays nothing. The list is always
  * refreshed on the next `load` (the picker calls it on open), so it never
@@ -32,17 +34,18 @@ export function useMemberships() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/auth/memberships", {
-        credentials: "same-origin",
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}) as { error?: string });
-        throw new Error(body?.error || `memberships failed (${res.status})`);
-      }
-      const body = (await res.json()) as { memberships: Membership[] };
-      setMemberships(body.memberships ?? []);
+      const res = await authClient.listMyMemberships({});
+      setMemberships(
+        res.memberships.map((m) => ({
+          tenantId: m.tenantId,
+          tenantSlug: m.tenantSlug,
+          roles: [...m.roles],
+          disabled: m.disabled,
+          current: m.current,
+        })),
+      );
     } catch (e) {
-      setError((e as Error).message);
+      setError(normalizeError(e).message);
       setMemberships([]);
     } finally {
       setLoading(false);

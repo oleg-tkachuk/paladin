@@ -13,34 +13,27 @@ export const API_LIMIT_DEFAULT = 20;
 /** Maximum page size accepted by the backend `*.List*` validators. */
 export const API_PAGE_SIZE_MAX = 500;
 
-/** Prefix where the Next.js Connect-RPC bridge handles backend traffic. */
-export const RPC_API_PREFIX = "/api/rpc";
-
 /**
- * Per-plane sub-prefixes under RPC_API_PREFIX. The bridge dispatches to
- * data:8080 / iam:8085 / admin:8090 based on which sub-prefix the request
- * came in under. Browsers always hit `${RPC_API_PREFIX}${RPC_PLANE_PREFIXES.x}`.
+ * The console's session role (ADR-0048), on the console's own origin: the
+ * ingress routes SESSION_PREFIX to it. It holds the session cookie and the
+ * tokens behind it, and forwards SESSION_RPC_PREFIX/<package.Service>/<Method>
+ * to the plane that serves it.
  */
-export const RPC_PLANE_PREFIXES = {
-  data: "/data",
-  iam: "/iam",
-  admin: "/admin",
+export const SESSION_PREFIX = "/session";
+export const SESSION_RPC_PREFIX = `${SESSION_PREFIX}/rpc`;
+export const SESSION_PATHS = {
+  login: `${SESSION_PREFIX}/login`,
+  logout: `${SESSION_PREFIX}/logout`,
+  refresh: `${SESSION_PREFIX}/refresh`,
+  switchTenant: `${SESSION_PREFIX}/switch-tenant`,
+  auditStream: `${SESSION_PREFIX}/audit/stream`,
 } as const;
 
-export type Plane = keyof typeof RPC_PLANE_PREFIXES;
+/** Where the console serves the operator's banner, its own configuration. */
+export const BANNER_PATH = "/api/banner";
 
-/**
- * Backend JWT audiences — must match `RequireAudience` in
- * paladin/auth/audience.go. One access token per audience;
- * IAM mints them via Login + ExchangeAudience.
- */
-export const AUDIENCES = {
-  data: "paladin-data",
-  iam: "paladin-iam",
-  admin: "paladin-admin",
-} as const;
-
-export type Audience = (typeof AUDIENCES)[Plane];
+/** The session cookie the session role sets; the page itself never reads it. */
+export const SESSION_COOKIE = "__Host-paladin_session";
 
 /**
  * Bootstrap-provisioned Collection. Used as the last-resort fallback when
@@ -63,16 +56,9 @@ export const STORAGE_KEYS = {
 } as const;
 
 /**
- * The proxy chain header the planes resolve the client address from (Cedar's
- * context.ip, the login rate limiter, the audit source). The BFF forwards the
- * browser request's value unchanged on every call it makes to a plane.
+ * The product the console is named by in a plane's audit log: the session
+ * role's User-Agent (session.ConsoleUserAgentProduct in the backend).
  */
-export const FORWARDED_FOR_HEADER = "X-Forwarded-For";
-
-/** Names the calling client to a plane, which records it in the audit log. */
-export const USER_AGENT_HEADER = "User-Agent";
-
-/** The product the console's server names itself by, upstream. */
 export const CONSOLE_USER_AGENT_PRODUCT = "paladin-console";
 
 /** How long a query's data counts as fresh unless the query says otherwise. */

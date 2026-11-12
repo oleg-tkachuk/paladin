@@ -23,10 +23,7 @@ const OUTSIDE_SRC_READERS = [join(ROOT, "next.config.ts")];
 
 // "<file under src>#<export>" → why it stays without a production reader.
 // An entry that no longer names an unread export fails.
-const ALLOWED: Record<string, string> = {
-  "lib/auth/tokenStore.ts#peekAccessToken":
-    "test seam: the token cache is module-private",
-};
+const ALLOWED: Record<string, string> = {};
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

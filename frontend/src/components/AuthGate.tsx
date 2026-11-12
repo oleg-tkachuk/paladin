@@ -13,7 +13,7 @@
 //   - operator typing https://paladin.local/tenants without a session
 //     never sees the page chrome OR data
 //   - the existing AuthContext.rehydrate() path is the only way to
-//     reach an authenticated state (a real /api/auth/me round-trip)
+//     reach an authenticated state (the session role's answer, then WhoAmI)
 //   - no "loading skeleton" path leaks tenant data into the DOM
 //
 // Pages do not need their own per-route auth checks — the gate covers
@@ -59,7 +59,7 @@ export function AuthGate({ publicRoutes, children }: AuthGateProps) {
   // upstream and continues rehydrating in the background.
   if (isPublic) return <>{children}</>;
 
-  // While the rehydrate /api/auth/me round-trip is in flight, show a
+  // While the rehydrate round-trip to the session role is in flight, show a
   // minimal splash. We deliberately do NOT render the children behind
   // a blur or overlay — a flash of the dashboard before the redirect
   // would leak tenant data through the DOM, even briefly.

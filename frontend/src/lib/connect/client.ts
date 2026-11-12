@@ -30,6 +30,7 @@ import { PresignService } from "@/gen/paladin/data/v1/presign_service_pb";
 
 // iam plane
 import { AuthService } from "@/gen/paladin/iam/v1/auth_service_pb";
+import { HealthService } from "@/gen/paladin/iam/v1/health_service_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { UserSettingsService } from "@/gen/paladin/iam/v1/user_settings_service_pb";
 
@@ -80,6 +81,9 @@ export const presignClient = createClient(PresignService, dataTransport);
 // iam
 
 export const authClient = createClient(AuthService, iamTransport);
+
+/** The iam plane's version and health, for the console's chrome. */
+export const iamHealthClient = createClient(HealthService, iamTransport);
 export const userClient = createClient(UserService, iamTransport);
 export const userSettingsClient = createClient(
   UserSettingsService,

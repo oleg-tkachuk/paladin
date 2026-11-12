@@ -11,39 +11,29 @@ import {
   type ReactNode,
 } from "react";
 
-import { type Audience } from "@/constants";
-import { setAccessToken, clearAllTokens } from "@/lib/auth/tokenStore";
+import { loginFailure } from "@/lib/auth/loginFailure";
+import { authClient } from "@/lib/connect/client";
+import { onSessionEnded } from "@/lib/session/ended";
+import {
+  refreshSession,
+  signIn,
+  signOut,
+  switchSessionTenant,
+} from "@/lib/session/client";
+import { userFromWhoAmI, type AuthUser } from "@/lib/session/user";
+
+export type { AuthUser } from "@/lib/session/user";
 
 /**
  * AuthContext — single source of truth for the signed-in user on the client.
  *
- * On mount: hits /api/auth/me. If the BFF returns 200, we seed the
- * tokenStore with the iam access token and mark the session authenticated;
- * tokens for data/admin are fetched lazily by the transport on first RPC.
- *
- * login/logout drive the session lifecycle and keep the in-memory token
- * cache in sync. Refresh-tokens never enter this layer — they live in
- * httpOnly cookies the BFF owns.
+ * The session lives in the session role (ADR-0048): an httpOnly cookie the
+ * page never reads, and the tokens behind it, which the page never holds. On
+ * mount the context asks the role to keep the session alive and, when there is
+ * one, reads the user with WhoAmI through the session transport. Sign-in, the
+ * tenant switch and sign-out are the role's own endpoints; each is followed by
+ * WhoAmI, which is what names the user and their tenant's slug.
  */
-
-export type AuthUser = {
-  userId: string;
-  tenantId: string;
-  // Tenant slug from the JWT `tenant_slug` claim (via WhoAmI). Empty
-  // for legacy sessions minted before the slug claim wiring; callers
-  // fall back to tenantId for URL routing in that case.
-  tenantSlug: string;
-  subject: string;
-  displayName: string;
-  roles: string[];
-  resourceVersion: string;
-};
-
-type AccessTokenDTO = {
-  audience: Audience;
-  token: string;
-  expiresAt: number;
-};
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -57,64 +47,33 @@ type AuthContextValue = {
     upstreamCode?: string,
   ) => Promise<void>;
   // switchTenant re-scopes the session to another tenant the subject is a
-  // member of (AuthService.SwitchTenant via the BFF). On success the token
-  // cache is cleared (old-tenant data/admin tokens are stale) and reseeded
-  // with the new tenant's iam token; the user record is swapped so Scope
-  // consumers re-derive. Throws on PermissionDenied (not a member / disabled).
+  // member of. Throws when the role refuses (not a member, or disabled).
   switchTenant: (tenantId: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function seedTokens(tokens: AccessTokenDTO[]) {
-  for (const t of tokens) {
-    setAccessToken(t.audience, { token: t.token, expiresAt: t.expiresAt });
-  }
+async function currentUser(): Promise<AuthUser> {
+  return userFromWhoAmI(await authClient.whoAmI({}));
 }
 
-// Module-level dedup for the on-mount rehydrate. React StrictMode mounts
-// effects twice in dev; without this, both mounts call /api/auth/me in
-// parallel, which races on the iam refresh-token rotation — the first
-// call rotates and returns 200, the second arrives with the now-stale
-// cookie and returns 401, flipping status back to "unauthenticated".
-//
-// Why module-scope and not a ref: the dedup must span across the two
-// distinct provider instances StrictMode mounts — a ref is per-instance
-// and therefore doesn't catch the race.
-let rehydratePromise: Promise<
-  | {
-      ok: true;
-      user: AuthUser;
-      accessTokens: AccessTokenDTO[];
-    }
-  | { ok: false }
-> | null = null;
+// Module-level dedup for the on-mount rehydrate: StrictMode mounts effects
+// twice in dev, across two provider instances, and both would otherwise ask
+// the role to rotate at once.
+let rehydratePromise: Promise<AuthUser | null> | null = null;
 
-function rehydrate() {
+function rehydrate(): Promise<AuthUser | null> {
   if (rehydratePromise) return rehydratePromise;
   rehydratePromise = (async () => {
     try {
-      const res = await fetch("/api/auth/me", {
-        method: "GET",
-        credentials: "same-origin",
-      });
-      if (!res.ok) return { ok: false as const };
-      const body = (await res.json()) as {
-        user: AuthUser;
-        accessTokens: AccessTokenDTO[];
-      };
-      return {
-        ok: true as const,
-        user: body.user,
-        accessTokens: body.accessTokens,
-      };
+      if (!(await refreshSession())) return null;
+      return await currentUser();
     } catch {
-      return { ok: false as const };
+      return null;
     } finally {
-      // Clear after a tick so the StrictMode double-mount joins this
-      // promise but a real subsequent re-mount (e.g., after logout) gets
-      // a fresh fetch.
+      // Cleared after a tick so the double mount joins this promise but a
+      // later re-mount (after logout) asks again.
       setTimeout(() => {
         rehydratePromise = null;
       }, 0);
@@ -127,26 +86,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [error, setError] = useState<string | null>(null);
+
   // Bumped by every sign-in, tenant switch and sign-out. The on-mount
   // rehydrate applies its answer only if none of them happened while it was
-  // in flight: a slow "no session" arriving after a login succeeded used to
-  // sign the user straight back out to /login.
+  // in flight: a slow "no session" arriving after a login succeeded would
+  // otherwise sign the user straight back out to /login.
   const generation = useRef(0);
 
-  // On mount, try to rehydrate from BFF. The fetch is deduped at module
-  // scope (see rehydrate()) so StrictMode's double-mount doesn't race the
-  // refresh-token rotation.
   useEffect(() => {
     let cancelled = false;
     const startedAt = generation.current;
-    void rehydrate().then((result) => {
+    void rehydrate().then((found) => {
       if (cancelled || generation.current !== startedAt) return;
-      if (!result.ok) {
+      if (!found) {
         setStatus("unauthenticated");
         return;
       }
-      seedTokens(result.accessTokens);
-      setUser(result.user);
+      setUser(found);
       setStatus("authenticated");
     });
     return () => {
@@ -154,35 +110,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // A call the role answered Unauthenticated: the session ended elsewhere.
+  useEffect(
+    () =>
+      onSessionEnded(() => {
+        generation.current++;
+        setUser(null);
+        setStatus("unauthenticated");
+      }),
+    [],
+  );
+
   const login = useCallback(
     async (subject: string, password: string, upstreamCode?: string) => {
       generation.current++;
       setError(null);
       setStatus("loading");
       try {
-        const res = await fetch("/api/auth/login", {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subject, password, upstreamCode }),
-        });
-        if (!res.ok) {
-          const errBody = await res
-            .json()
-            .catch(() => ({}) as { error?: string });
-          const msg = errBody?.error || `login failed (${res.status})`;
-          setError(msg);
-          setStatus("unauthenticated");
-          throw new Error(msg);
-        }
-        const body = (await res.json()) as {
-          user: AuthUser;
-          accessTokens: AccessTokenDTO[];
-        };
-        seedTokens(body.accessTokens);
-        setUser(body.user);
+        await signIn(subject, password, upstreamCode);
+        setUser(await currentUser());
         setStatus("authenticated");
       } catch (e) {
+        setError(loginFailure(e));
         setStatus("unauthenticated");
         throw e;
       }
@@ -192,38 +141,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchTenant = useCallback(async (tenantId: string) => {
     generation.current++;
-    const res = await fetch("/api/auth/switch-tenant", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetTenantId: tenantId }),
-    });
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}) as { error?: string });
-      throw new Error(errBody?.error || `tenant switch failed (${res.status})`);
-    }
-    const body = (await res.json()) as {
-      user: AuthUser;
-      accessTokens: AccessTokenDTO[];
-    };
-    // Drop every cached token BEFORE reseeding: the old tenant's data/admin
-    // access tokens (and any in-flight fetches) are scoped to the previous
-    // tenant and must not leak into the new scope.
-    clearAllTokens();
-    seedTokens(body.accessTokens);
-    setUser(body.user);
+    await switchSessionTenant(tenantId);
+    setUser(await currentUser());
     setStatus("authenticated");
   }, []);
 
   const logout = useCallback(async () => {
     generation.current++;
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      });
+      await signOut();
     } finally {
-      clearAllTokens();
       setUser(null);
       setStatus("unauthenticated");
     }

@@ -19,11 +19,7 @@ const GENERATED = "gen";
 const ALLOWED: Record<string, string> = {
   "hooks/errorContract.ts": "errorMessage() itself",
   "lib/connect/error.ts": "normalizeError(), the query-hook counterpart",
-  "lib/connect/transport.ts":
-    "below the hooks layer; logs the auth-mint failure",
-  "lib/auth/loginFailure.ts":
-    "server side: maps the IAM error onto the login route's HTTP status",
-  "app/api/shell/route.ts": "server side: prefixes the Connect code",
+  "lib/shell/section.ts": "prefixes the Connect code for the chrome's tooltip",
   "context/ScopeContext.tsx": "a console.warn, not a message shown to anyone",
   "hooks/useCELValidation.ts":
     "falls back to the coded message when the server sent no detail",
