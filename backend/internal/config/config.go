@@ -286,6 +286,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if err := c.Session.Upstreams.ValidateAt("session.upstreams"); err != nil {
+		return err
+	}
+	if c.Session.RotateAfter <= 0 {
+		return fmt.Errorf("session.rotate_after must be positive")
+	}
 	if err := c.MCP.Upstreams.Validate(); err != nil {
 		return err
 	}

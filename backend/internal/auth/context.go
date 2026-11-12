@@ -39,6 +39,8 @@ type Principal struct {
 	Audiences []string
 	// ExpiresAt is the token's `exp`; zero when the claim is absent.
 	ExpiresAt time.Time
+	// IssuedAt is the token's `iat`; zero when the claim is absent.
+	IssuedAt time.Time
 	// TokenID is the token's `jti`, as written: what names one token
 	// among its user's, which the MCP exchange keys its capability on
 	// (ADR-0041). Empty when the claim is absent.

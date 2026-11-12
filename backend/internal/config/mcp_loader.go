@@ -22,7 +22,11 @@ import (
 // reach the planes. The failure this guards against is silent at startup and
 // only shows up as an opaque error on every tools/call, so it is worth
 // catching at load time.
-func (u MCPUpstreams) Validate() error {
+func (u MCPUpstreams) Validate() error { return u.ValidateAt("mcp.upstreams") }
+
+// ValidateAt is Validate for the upstreams configured at path, which the
+// errors name: the MCP bridge's and the session role's share the shape.
+func (u MCPUpstreams) ValidateAt(path string) error {
 	anyTLS := false
 	for _, up := range []struct{ name, url string }{
 		{"admin_url", u.AdminURL},
@@ -42,24 +46,24 @@ func (u MCPUpstreams) Validate() error {
 		// perfectly good thing to scheme-check.
 		scheme, _, ok := strings.Cut(up.url, "://")
 		if !ok {
-			return fmt.Errorf("mcp.upstreams.%s %q: missing scheme", up.name, up.url)
+			return fmt.Errorf("%s.%s %q: missing scheme", path, up.name, up.url)
 		}
 		switch scheme {
 		case "http":
 		case "https":
 			anyTLS = true
 		default:
-			return fmt.Errorf("mcp.upstreams.%s %q: scheme must be http or https", up.name, up.url)
+			return fmt.Errorf("%s.%s %q: scheme must be http or https", path, up.name, up.url)
 		}
 	}
 	if anyTLS && u.TLS.CaPath == "" && !u.TLS.InsecureSkipVerify {
 		return fmt.Errorf(
-			"mcp.upstreams: an https:// upstream requires tls.ca_path (the internal " +
-				"mTLS CA bundle the planes serve from; the system roots do not " +
-				"contain it) unless tls.insecure_skip_verify is set")
+			"%s: an https:// upstream requires tls.ca_path (the internal "+
+				"mTLS CA bundle the planes serve from; the system roots do not "+
+				"contain it) unless tls.insecure_skip_verify is set", path)
 	}
 	if (u.TLS.CertPath == "") != (u.TLS.KeyPath == "") {
-		return fmt.Errorf("mcp.upstreams.tls: cert_path and key_path must be set together")
+		return fmt.Errorf("%s.tls: cert_path and key_path must be set together", path)
 	}
 	return nil
 }

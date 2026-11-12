@@ -28,6 +28,7 @@ func TestRoleModulesValidate(t *testing.T) {
 	modules := map[string]fx.Option{
 		"api":          app.APIModule,
 		"iam":          app.IAMModule,
+		"session":      app.SessionModule,
 		"admin":        app.AdminModule,
 		"worker":       workerModule,
 		"dispatcher":   dispatcherModule,

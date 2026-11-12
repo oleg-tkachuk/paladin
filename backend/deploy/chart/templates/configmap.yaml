@@ -72,6 +72,7 @@ data:
     {{- $_ := set $listener "tls" (merge (dict "enabled" true) $files (deepCopy $listener.tls)) }}
     {{- end }}
     {{- $_ := set $cfg.mcp.upstreams "tls" (merge (deepCopy $files) (deepCopy $cfg.mcp.upstreams.tls)) }}
+    {{- $_ := set $cfg.session.upstreams "tls" (merge (deepCopy $files) (deepCopy $cfg.session.upstreams.tls)) }}
     {{- end }}
     {{- $session := fromJson (include "chart.sessionKey" .) }}
     {{- if and $session.active (not $cfg.auth.session_key_path) }}

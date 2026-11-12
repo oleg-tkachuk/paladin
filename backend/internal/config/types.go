@@ -28,6 +28,7 @@ type Config struct {
 	Storage    Storage    `yaml:"storage" json:"storage"`
 	Cedar      Cedar      `yaml:"cedar" json:"cedar"`
 	MCP        MCP        `yaml:"mcp" json:"mcp"`
+	Session    Session    `yaml:"session" json:"session"`
 	Ingest     Ingest     `yaml:"ingest" json:"ingest"`
 
 	// Per-role blocks — own role-exclusive knobs (per-listener
@@ -571,6 +572,24 @@ type AdminHealthRole struct {
 	// URL is the role's health listener, where /system/health.json is
 	// served: http://<release>-<role>:<port> in the chart.
 	URL string `yaml:"url" json:"url"`
+}
+
+// Session is the console's session role, `serve session` (ADR-0048): it holds
+// the console's session cookie and the tokens behind it, and forwards the
+// console's calls to the planes.
+type Session struct {
+	Server HTTPServer `yaml:"server" json:"server"`
+	// ConsoleOrigins are the origins the console is served from. A call that
+	// changes state must carry one of them in Origin; none configured refuses
+	// every such call.
+	ConsoleOrigins []string `yaml:"console_origins" json:"console_origins"`
+	// Upstreams are the planes it forwards to; it mints every token at the
+	// iam plane.
+	Upstreams MCPUpstreams `yaml:"upstreams" json:"upstreams"`
+	// RotateAfter is how old a session's refresh token must be before the
+	// role rotates it. Younger tokens are only exchanged, which consumes
+	// nothing. Must be positive; default 5m.
+	RotateAfter time.Duration `yaml:"rotate_after" json:"rotate_after"`
 }
 
 // AdminTenants holds the admin plane's tenant-lifecycle knobs.

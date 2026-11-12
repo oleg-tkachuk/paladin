@@ -378,3 +378,30 @@ func TestVerifyCarriesTheTokenID(t *testing.T) {
 		t.Errorf("a token without a jti names TokenID %q", plain.TokenID)
 	}
 }
+
+// IssuedAt is the token's verified iat: what decides when a session edge
+// rotates a refresh token, read from nothing it has not verified.
+func TestVerifyReadsIssuedAt(t *testing.T) {
+	key := ecKey(t)
+	now := time.Unix(1_700_000_000, 0)
+	issued := now.Add(-10 * time.Minute)
+
+	c := baseClaims(now)
+	c["iat"] = issued.Unix()
+	p, err := newVerifier(key, now).Verify(context.Background(), es256(t, key, c))
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if !p.IssuedAt.Equal(issued) {
+		t.Errorf("issued = %v, want %v", p.IssuedAt, issued)
+	}
+
+	delete(c, "iat")
+	p, err = newVerifier(key, now).Verify(context.Background(), es256(t, key, c))
+	if err != nil {
+		t.Fatalf("Verify without iat: %v", err)
+	}
+	if !p.IssuedAt.IsZero() {
+		t.Errorf("issued = %v, want none for a token without iat", p.IssuedAt)
+	}
+}
