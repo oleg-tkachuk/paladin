@@ -273,22 +273,32 @@ the same commit. Treat this file like a runtime invariant.
   regenerated from them no longer name what each role does not use.
 - **Blockers:** none.
 
-### Console session terminated in Go (ADR-0048)
+### Console session terminated in Go (ADR-0048): removals
 
-- **Status:** In progress (ADR-0048 accepted 2026-11-11). Platform health is
-  the admin role's GetPlatformHealth; `serve session` holds a session and
-  forwards calls; the chart deploys it on request and the console chart routes
-  `/session/` to it, but the console does not call it yet.
-- **Reason:** the console's Next.js server holds the refresh token, mints
-  per-plane access tokens, hands them to the browser, and re-encodes every
-  RPC through a hand-registered bridge. The console chart still mounts
-  `healthSnapshotTokenSecret`, which nothing reads now.
-- **Definition of Done:** the console calls the session role, and the chart
-  deploys it by default; the console's auth routes, token store, JWT decoding
-  and RPC bridge are deleted; the console chart drops
-  `healthSnapshotTokenSecret` and the role URLs only the health route read.
-- **Blockers:** none; ADR-0047 left the session key with the iam role alone,
-  so the session role is never the role that holds it.
+- **Status:** Deferred. The console calls every plane through the session
+  role, which the chart deploys by default; what is left is removing what
+  nothing uses now.
+- **Reason:** the removals change chart values an overlay may still set, so
+  they ship as their own breaking release.
+- **Definition of Done:** the console chart drops `healthSnapshotTokenSecret`,
+  `backend.healthRoles` and the role URLs only the BFF read, and its
+  NetworkPolicy egress to the planes but iam (the OAuth consent relay); the
+  backend chart's planes stop admitting the console's pods except iam.
+- **Blockers:** none.
+
+### Sign-in with an upstream code sends an empty subject
+
+- **Status:** Deferred (found 2026-11-12 moving the console onto the session
+  role, not caused by it).
+- **Reason:** the login page's `?upstream_code=` path signs in with an empty
+  subject, which `LoginRequest.subject` (`min_len = 1`) refuses, so the
+  upstream-code sign-in cannot succeed.
+- **Definition of Done:** either the proto accepts an upstream code without a
+  subject and IAM resolves the subject from it, or the console drops the path;
+  an e2e test signs in through it or proves it is gone.
+- **Blockers:** whether any upstream IdP sign-in is still wanted (ADR on
+  engineer-operated auth).
+
 ### Role split: `realtime` (SSE / WebSocket subscriptions)
 
 - **Status:** First consumer SHIPPED (2026-07-02) — the dedicated role stays
