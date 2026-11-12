@@ -7,7 +7,7 @@ Paladin runs as one binary in multiple Deployments — one per role:
   admin    admin Connect listener (privileged operations)
   worker   background jobs with Postgres-leased leadership
   mcp      Model Context Protocol bridge (LLM-facing)
-  session  the console's session (only with deployments.session.enabled)
+  session  the console's session: its cookie, its tokens, the calls it forwards
 
 Migrate + bootstrap ran as Helm hook Jobs before any Deployment rolled.
 
