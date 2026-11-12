@@ -49,6 +49,18 @@ api:
       <<: *http_defaults
       addr: "0.0.0.0:8085"
 
+# The console's session role (ADR-0048). The console is served on
+# localhost:3002; the planes are reached by container name.
+session:
+  server:
+    <<: *http_defaults
+    addr: "0.0.0.0:8086"
+  console_origins: ["http://localhost:3002"]
+  upstreams:
+    admin_url: "http://paladin-admin:8090"
+    data_url: "http://paladin-api:8080"
+    iam_url: "http://paladin-iam:8085"
+
 admin:
   server:
     <<: *http_defaults
