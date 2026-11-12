@@ -35,9 +35,9 @@ until the bridge learns it, and a UI process holds a backend secret.
 2. **A Go session role, `serve session`, terminates the console's
    session.** It sets and reads the session cookie (`__Host-`, httpOnly,
    Secure, SameSite=Strict), holds the refresh token behind it, rotates it,
-   exchanges it through IAM for the access token each plane needs, keeps
-   those in memory until they expire, and attaches them to the calls it
-   forwards. It holds no signing key: it is a client of IAM, verified by
+   exchanges it through IAM for the access token each plane needs on every
+   call it forwards, and attaches that token to the call. A token kept
+   between calls would outlive a sign-out at another replica. It holds no signing key: it is a client of IAM, verified by
    the planes like any other. It is not the IAM role, so console traffic —
    uploads included — never runs where the private key is.
 3. **The session role forwards Connect calls as bytes.** It routes by the
@@ -57,8 +57,8 @@ until the bridge learns it, and a UI process holds a backend secret.
 
 7. **The cookie carries the refresh token itself.** An opaque id would need
    a store shared by every replica, and buys little: the cookie is httpOnly
-   and `__Host-` already. The role keeps nothing a replica must share; its
-   cache of access tokens is only a cache. It rotates a refresh token only
+   and `__Host-` already. The role keeps nothing between calls, so nothing a
+   replica must share. It rotates a refresh token only
    once it is older than `session.rotate_after` (5 minutes), reading that age
    from claims it has verified by the iam role's JWKS, and a request that
    loses a rotation to a concurrent one keeps working, since exchange accepts

@@ -98,7 +98,6 @@ type Handler struct {
 	userAgent   string
 	log         *zap.Logger
 	now         func() time.Time
-	cache       *accessCache
 	proxy       *httputil.ReverseProxy
 	mux         *http.ServeMux
 }
@@ -132,7 +131,6 @@ func New(o Options) (*Handler, error) {
 		userAgent:   ConsoleUserAgentProduct + "/" + o.Version,
 		log:         o.Log,
 		now:         o.Now,
-		cache:       newAccessCache(o.Now),
 	}
 	for _, origin := range o.Origins {
 		h.origins[origin] = true
@@ -232,7 +230,6 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	// Revoke wants the caller's own iam access token, as any iam call does.
 	token, err := h.access(r.Context(), r, refresh, paladin.AudienceIAM)
-	h.cache.forget(refresh)
 	if err == nil {
 		ctx, info := connect.NewClientContext(r.Context())
 		h.upstreamHeaders(info.RequestHeader(), r)
@@ -429,19 +426,17 @@ func (h *Handler) upstreamHeaders(out headerSetter, in *http.Request) {
 // ─── Tokens ─────────────────────────────────────────────────────────────────
 
 // access is an access token for audience, minted from the session's refresh
-// token and kept until it nears expiry. Exchange consumes nothing, so two
-// replicas minting the same one is harmless.
+// token at IAM on every call. Nothing is kept: a session signed out at one
+// replica, or revoked at IAM, is refused at every replica on its next call,
+// which a remembered token would outlive by its whole lifetime. Exchange
+// consumes nothing, so asking per call is safe.
 func (h *Handler) access(ctx context.Context, in *http.Request, refresh, audience string) (string, error) {
-	if token, ok := h.cache.get(refresh, audience); ok {
-		return token, nil
-	}
 	ctx, info := connect.NewClientContext(ctx)
 	h.upstreamHeaders(info.RequestHeader(), in)
 	res, err := h.iam.ExchangeAudience(ctx, &pbiam.ExchangeAudienceRequest{RefreshToken: refresh, TargetAudience: audience})
 	if err != nil {
 		return "", err
 	}
-	h.cache.put(refresh, audience, res.GetAccessToken(), seconds(int64(res.GetAccessExpiresInSeconds())))
 	return res.GetAccessToken(), nil
 }
 

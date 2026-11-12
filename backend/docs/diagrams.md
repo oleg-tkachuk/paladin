@@ -267,7 +267,7 @@ Caddy in compose — sends `/session/` on the console's host to the session role
 and everything else to the console. The role keeps the refresh token in the
 httpOnly `__Host-paladin_session` cookie, rotates it once it is
 `session.rotate_after` old, and attaches a per-plane access token, minted at
-IAM and cached in the role, to each call it forwards.
+IAM for that call, to each call it forwards.
 
 ```mermaid
 sequenceDiagram
@@ -289,7 +289,7 @@ sequenceDiagram
     S-->>B: user · Set-Cookie __Host-paladin_session
     B->>S: /session/rpc/{package.Service}/{Method} · cookie, via the front
     Note over S: plane from the proto package<br/>token-handing IAM procedures refused
-    S->>I: ExchangeAudience, unless the plane's token is cached
+    S->>I: ExchangeAudience for the call's plane
     S->>D: Connect bytes · Authorization · X-Forwarded-For<br/>no Cookie or Origin
     D-->>B: response
     B->>S: POST /session/refresh, via the front

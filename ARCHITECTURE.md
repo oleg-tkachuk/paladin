@@ -272,7 +272,7 @@ session (ADR-0048). The browser holds no token: the role keeps the refresh
 token in an httpOnly `__Host-` cookie, and the browser calls
 `/session/rpc/<package.Service>/<Method>` on the console's own origin. The
 role forwards each call as bytes to the plane its proto package names,
-attaching an access token for that plane minted at IAM and cached in the role.
+attaching an access token for that plane minted at IAM for that call.
 Both halves generate their
 clients from the same `proto/` directory, which is the main
 reason they share a repository — a wire change is a two-sided change and

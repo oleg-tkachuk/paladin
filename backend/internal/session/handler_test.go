@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,7 +74,7 @@ func (f *fakeIAM) Login(ctx context.Context, req *pbiam.LoginRequest) (*pbiam.Lo
 func (f *fakeIAM) ExchangeAudience(ctx context.Context, req *pbiam.ExchangeAudienceRequest) (*pbiam.ExchangeAudienceResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.refused {
+	if f.refused || slices.Contains(f.revoked, req.GetRefreshToken()) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token revoked")
 	}
 	f.exchanges = append(f.exchanges, req.GetTargetAudience())
@@ -165,6 +166,7 @@ func plane(t *testing.T, calls *[]planeCall, mu *sync.Mutex) *url.URL {
 }
 
 type rig struct {
+	opts  Options
 	t     *testing.T
 	h     *Handler
 	iam   *fakeIAM
@@ -185,7 +187,7 @@ func newRig(t *testing.T, v fakeVerifier) *rig {
 	iamClient := paladiniamv1connect.NewAuthServiceClient(connect.NewClient(connecthttp.NewTransport(iamSrv.Client(), iamSrv.URL)))
 
 	planeURL := plane(t, &r.calls, &r.mu)
-	h, err := New(Options{
+	r.opts = Options{
 		IAM:         iamClient,
 		Planes:      map[Plane]*url.URL{PlaneData: planeURL, PlaneAdmin: planeURL, PlaneIAM: planeURL},
 		Refresh:     v,
@@ -193,7 +195,8 @@ func newRig(t *testing.T, v fakeVerifier) *rig {
 		RotateAfter: 5 * time.Minute,
 		Version:     testUserAgentVer,
 		Now:         func() time.Time { return r.now },
-	})
+	}
+	h, err := New(r.opts)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -296,20 +299,15 @@ func TestForwardAttachesThePlanesTokenAndDropsTheBrowsersCredentials(t *testing.
 	}
 }
 
-// Exchange is asked once per session and audience while the token lives,
-// and again once it nears expiry.
-func TestForwardReusesAnAccessTokenUntilItNearsExpiry(t *testing.T) {
+// Every forwarded call asks IAM for its token: nothing remembered can outlive
+// a session revoked elsewhere.
+func TestForwardAsksIAMForEveryCall(t *testing.T) {
 	r := newRig(t, fakeVerifier{})
 	path := PathRPC + "/paladin.data.v1.ObjectService/ListObjects"
 	r.call(http.MethodPost, path, testRefresh, "{}")
 	r.call(http.MethodPost, path, testRefresh, "{}")
-	if len(r.iam.exchanges) != 1 {
-		t.Fatalf("exchanges = %v, want one for two calls", r.iam.exchanges)
-	}
-	r.now = r.now.Add(testAccessTTL*time.Second - accessEarlyExpiry)
-	r.call(http.MethodPost, path, testRefresh, "{}")
 	if len(r.iam.exchanges) != 2 {
-		t.Errorf("exchanges = %v, want a fresh one near expiry", r.iam.exchanges)
+		t.Fatalf("exchanges = %v, want one per call", r.iam.exchanges)
 	}
 }
 
@@ -543,5 +541,31 @@ func TestOriginMayNameTheHostTheCallArrivedOn(t *testing.T) {
 		if allowed := rec.Code != http.StatusForbidden; allowed != tc.allowed {
 			t.Errorf("%s: %d, want allowed=%v", name, rec.Code, tc.allowed)
 		}
+	}
+}
+
+// Signed out at one replica, the session is refused at every other at once:
+// no replica answers a call from what it remembers of the session.
+func TestASignedOutSessionIsRefusedByEveryReplica(t *testing.T) {
+	r := newRig(t, fakeVerifier{})
+	other, err := New(r.opts)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	path := PathRPC + "/paladin.data.v1.ObjectService/ListObjects"
+	call := func(h *Handler) int {
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader("{}"))
+		req.Header.Set(headerOrigin, testOrigin)
+		req.AddCookie(&http.Cookie{Name: CookieName, Value: testRefresh})
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := call(other); code != http.StatusOK {
+		t.Fatalf("before logout, the other replica answered %d", code)
+	}
+	r.call(http.MethodPost, PathLogout, testRefresh, "")
+	if code := call(other); code != http.StatusUnauthorized {
+		t.Errorf("after logout at one replica, the other answered %d, want 401", code)
 	}
 }
