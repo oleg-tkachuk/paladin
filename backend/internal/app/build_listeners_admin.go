@@ -355,7 +355,15 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	paladinadminv1connect.RegisterOAuthClientServiceHandler(adminServer, oauthClientH)
 
-	paladinadminv1connect.RegisterSystemServiceHandler(adminServer, admin.NewSystemServer(systemh.New(cfg, meta.ConfigPath).WithPool(deps.Pool)))
+	systemHandler := systemh.New(cfg, meta.ConfigPath).WithPool(deps.Pool).WithLogger(l)
+	if caPath := cfg.Admin.Health.CAPath; caPath != "" {
+		client, err := caTrustingClient(caPath, cfg.Admin.Health.Timeout)
+		if err != nil {
+			return nil, nil, fmt.Errorf("admin.health.ca_path: %w", err)
+		}
+		systemHandler.WithHealthClient(client)
+	}
+	paladinadminv1connect.RegisterSystemServiceHandler(adminServer, admin.NewSystemServer(systemHandler))
 
 	// Live audit feed — raw-HTTP SSE endpoint (EventSource can't speak
 	// Connect). Auth: the same admin-audience bearer the console's RPCs

@@ -63,6 +63,7 @@ var preAuthnAllowlist = map[string]struct{}{
 	"GetMine":           {}, // self-service: caller reads their own user_settings
 	"UpdateMine":        {}, // self-service: caller writes their own user_settings
 	"ValidatePolicy":    {}, // gated; checks text against the schema, reads no tenant data
+	"PlatformHealth":    {}, // every role's health; no tenant data, open to any session as iam HealthService.GetHealth is
 }
 
 // shimMethodCallRE matches `s.H.<MethodName>(` — the only way a shim

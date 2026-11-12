@@ -547,6 +547,30 @@ type APIServer struct {
 type Admin struct {
 	Server  HTTPServer   `yaml:"server" json:"server"`
 	Tenants AdminTenants `yaml:"tenants" json:"tenants"`
+	Health  AdminHealth  `yaml:"health" json:"health"`
+}
+
+// AdminHealth is what SystemService.GetPlatformHealth gathers: each role's
+// /system/health.json, read with runtime.health_snapshot_token (ADR-0048).
+type AdminHealth struct {
+	// Roles are the roles to read, in the order the console lists them.
+	// Empty lists none.
+	Roles []AdminHealthRole `yaml:"roles" json:"roles"`
+	// Timeout bounds one role's answer; a role slower than it is reported
+	// unreachable. Must be positive; default 5s.
+	Timeout time.Duration `yaml:"timeout" json:"timeout"`
+	// CAPath is the CA bundle (PEM) trusted for an https role URL, for roles
+	// behind internal TLS. Empty trusts the system roots.
+	CAPath string `yaml:"ca_path" json:"ca_path"`
+}
+
+// AdminHealthRole is one role GetPlatformHealth reads.
+type AdminHealthRole struct {
+	// Name is the role's name, as its snapshot reports it.
+	Name string `yaml:"name" json:"name"`
+	// URL is the role's health listener, where /system/health.json is
+	// served: http://<release>-<role>:<port> in the chart.
+	URL string `yaml:"url" json:"url"`
 }
 
 // AdminTenants holds the admin plane's tenant-lifecycle knobs.

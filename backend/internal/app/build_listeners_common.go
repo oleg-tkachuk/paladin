@@ -284,6 +284,12 @@ const jwksTimeout = 10 * time.Second
 // jwksClient fetches the session JWKS trusting caPath, the internal CA the
 // minting role's IAM listener serves under.
 func jwksClient(caPath string) (*http.Client, error) {
+	return caTrustingClient(caPath, jwksTimeout)
+}
+
+// caTrustingClient is an HTTP client that trusts the CA bundle at caPath,
+// bounded by timeout.
+func caTrustingClient(caPath string, timeout time.Duration) (*http.Client, error) {
 	tlsCfg, err := tlsconfig.New("", "", caPath, "", false)
 	if err != nil {
 		return nil, err
@@ -291,5 +297,5 @@ func jwksClient(caPath string) (*http.Client, error) {
 	tlsCfg.MinVersion = tls.VersionTLS12
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = tlsCfg
-	return &http.Client{Timeout: jwksTimeout, Transport: tr}, nil
+	return &http.Client{Timeout: timeout, Transport: tr}, nil
 }

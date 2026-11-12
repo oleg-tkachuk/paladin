@@ -91,6 +91,19 @@ admin: {
     // its own. Must be positive (checked in Validate).
     trash_retention: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"720h"
   }
+  // The roles SystemService.GetPlatformHealth reads, each at its health
+  // listener. The chart lists every role it deploys.
+  health: {
+    roles: [...#AdminHealthRole] | *[]
+    timeout: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5s"
+    ca_path: string | *""
+  }
+}
+
+// One role GetPlatformHealth reads; a definition, so an unknown key is refused.
+#AdminHealthRole: {
+  name: =~"^[a-z][a-z0-9-]*$"
+  url:  =~"^https?://"
 }
 
 #HTTPServer: {

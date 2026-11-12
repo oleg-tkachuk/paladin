@@ -134,7 +134,7 @@ Every service and RPC in `proto/`, by plane.
 | `PlatformOperationService` | 4 | `GetOperation`, `ListOperations`, `CancelOperation`, `DismissOperations` |
 | `PolicyService` | 4 | `Validate`, `SimulateAuthz`, `GetEffectivePolicy`, `ListPolicyVersions` |
 | `QuotaService` | 3 | `GetQuota`, `SetQuota`, `ResetUsage` |
-| `SystemService` | 4 | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants` |
+| `SystemService` | 5 | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants`, `GetPlatformHealth` |
 | `TenantBudgetService` | 4 | `Get`, `Set`, `Summarize`, `ListReservations` |
 | `TenantService` | 15 | `CreateTenant`, `GetTenant`, `UpdateTenant`, `DeleteTenant`, `ListTenants`, `SetInheritedPolicy`, `RestoreTenant`, `PurgeTenant`, `RenameTenantSlug`, `MigrateTenantStorageLayout`, `GetTenantStorageMigration`, `ResolveRenamedSlug`, `GetTenantDefaultBinding`, `SetTenantDefaultBinding`, `ClearTenantDefaultBinding` |
 

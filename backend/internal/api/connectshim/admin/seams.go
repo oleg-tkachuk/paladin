@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/systemh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/health"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
@@ -141,6 +142,7 @@ type systemHandler interface {
 	MarshalRedacted(ctx context.Context) (yamlBlob, defaultsYAML, sourcePath string, err error)
 	PlatformStats(ctx context.Context, page platformstats.TenantPage) (*systemh.PlatformStatsResult, error)
 	PlatformStatsTenants(ctx context.Context, signal platformstats.Signal, page platformstats.TenantPage) (*systemh.SignalTenantsResult, error)
+	PlatformHealth(ctx context.Context) []health.Snapshot
 }
 
 var _ systemHandler = (*systemh.Handler)(nil)
