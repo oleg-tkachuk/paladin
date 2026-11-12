@@ -1,4 +1,8 @@
 admin
+admin.health
+admin.health.ca_path
+admin.health.roles
+admin.health.timeout
 admin.server
 admin.server.addr
 admin.server.cors_allowed_origins

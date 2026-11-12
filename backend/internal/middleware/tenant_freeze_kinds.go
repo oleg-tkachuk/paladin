@@ -177,6 +177,7 @@ var procedureKinds = map[string]Kind{
 	admin.SystemServiceGetDispatcherStatsProcedure:       Reads,
 	admin.SystemServiceGetPlatformStatsProcedure:         Reads,
 	admin.SystemServiceListPlatformStatsTenantsProcedure: Reads,
+	admin.SystemServiceGetPlatformHealthProcedure:        Reads,
 
 	admin.TenantBudgetServiceGetProcedure:              Reads,
 	admin.TenantBudgetServiceSetProcedure:              Changes,

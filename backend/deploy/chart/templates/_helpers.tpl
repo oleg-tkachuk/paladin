@@ -439,3 +439,25 @@ Caller passes { "ctx": ., "role": "api", "podAnnotations": <the role's> }.
 {{- end -}}
 {{- toJson $out -}}
 {{- end -}}
+
+{{/*
+The roles SystemService.GetPlatformHealth reads (config admin.health.roles),
+as JSON: every enabled role, in the order the console lists them, at the
+first port of its Service, which is where it serves /system/health.json.
+https for a role behind internalTLS.
+*/}}
+{{- define "chart.healthRoles" -}}
+{{- $out := list -}}
+{{- $tls := .Values.internalTLS -}}
+{{- range $role := list "api" "iam" "admin" "worker" "mcp" "dispatcher" "ingest" -}}
+{{- $d := index $.Values.deployments $role -}}
+{{- if $d.enabled -}}
+{{- $scheme := "http" -}}
+{{- if and $tls.enabled (has $role $tls.serverRoles) -}}{{- $scheme = "https" -}}{{- end -}}
+{{- $port := (first $d.service.ports).port -}}
+{{- $out = append $out (dict "name" $role "url" (printf "%s://%s-%s:%d" $scheme (include "chart.fullname" $) $role (int $port))) -}}
+{{- end -}}
+{{- end -}}
+{{- $out | toJson -}}
+{{- end -}}
+

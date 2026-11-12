@@ -369,6 +369,7 @@ var unsetKnobAllowlist = map[string]string{
 	// chart mounts: auth.sessionKey and internalTLS.
 	"auth.session_key_path":     "rendered from chart values auth.sessionKey",
 	"auth.jwks_ca_path":         "rendered from chart values internalTLS; empty trusts the system roots",
+	"admin.health.ca_path":      "rendered from chart values internalTLS; empty trusts the system roots",
 	"runtime_secrets.namespace": "empty keeps a runtime ref where it names, else in the pod's namespace",
 
 	// TLS knobs whose empty value IS the configuration: the certificate's

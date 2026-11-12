@@ -46,6 +46,12 @@ admin:
   server:
     <<: *http_defaults
     addr: "127.0.0.1:8090"
+  # The roles `serve api`, `serve iam` and `serve admin` open locally.
+  health:
+    roles:
+      - { name: api, url: "http://127.0.0.1:8083" }
+      - { name: iam, url: "http://127.0.0.1:8085" }
+      - { name: admin, url: "http://127.0.0.1:8090" }
 
 datastores:
   postgres:

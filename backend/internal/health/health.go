@@ -141,7 +141,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /livez", h.serveLive)
 	mux.HandleFunc("GET /readyz", h.serveReady)
 	mux.HandleFunc("GET /startupz", h.serveStartup)
-	mux.HandleFunc("GET /system/health.json", h.serveSnapshot)
+	mux.HandleFunc("GET "+SnapshotPath, h.serveSnapshot)
 }
 
 // ─── handler impls ──────────────────────────────────────────────────────────
@@ -371,6 +371,13 @@ type Component struct {
 	Details []Detail `json:"details,omitempty"`
 }
 
+// SnapshotPath is where every role serves its Snapshot as JSON, and
+// SnapshotTokenHeader the header that carries the snapshot token to it.
+const (
+	SnapshotPath        = "/system/health.json"
+	SnapshotTokenHeader = "X-Health-Token"
+)
+
 // Snapshot is the aggregated health view for one role.
 type Snapshot struct {
 	// Role names the role that produced the snapshot ("api", "admin",
@@ -459,7 +466,7 @@ func (h *Handler) snapshotAuthorized(r *http.Request) bool {
 	if want == "" {
 		return true
 	}
-	got := r.Header.Get("X-Health-Token")
+	got := r.Header.Get(SnapshotTokenHeader)
 	if got == "" {
 		got = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}

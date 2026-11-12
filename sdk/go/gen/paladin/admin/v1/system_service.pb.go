@@ -13,6 +13,7 @@ import (
 
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
+	v11 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -604,6 +605,142 @@ func (x *SubscriptionDeliveryStat) GetLastAttemptAt() string {
 	return ""
 }
 
+// ─── Platform health ────────────────────────────────────────────────────────
+type GetPlatformHealthRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPlatformHealthRequest) Reset() {
+	*x = GetPlatformHealthRequest{}
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPlatformHealthRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPlatformHealthRequest) ProtoMessage() {}
+
+func (x *GetPlatformHealthRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPlatformHealthRequest.ProtoReflect.Descriptor instead.
+func (*GetPlatformHealthRequest) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{8}
+}
+
+type GetPlatformHealthResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One per configured role, in the configured order.
+	Roles         []*RoleHealth `protobuf:"bytes,1,rep,name=roles,proto3" json:"roles,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPlatformHealthResponse) Reset() {
+	*x = GetPlatformHealthResponse{}
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPlatformHealthResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPlatformHealthResponse) ProtoMessage() {}
+
+func (x *GetPlatformHealthResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPlatformHealthResponse.ProtoReflect.Descriptor instead.
+func (*GetPlatformHealthResponse) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetPlatformHealthResponse) GetRoles() []*RoleHealth {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
+type RoleHealth struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The role's own snapshot; health.role names the role.
+	Health *v11.HealthInfo `protobuf:"bytes,1,opt,name=health,proto3" json:"health,omitempty"`
+	// When the role finished its checks, or when this pod gave up on it.
+	CheckedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=checked_at,json=checkedAt,proto3" json:"checked_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RoleHealth) Reset() {
+	*x = RoleHealth{}
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RoleHealth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RoleHealth) ProtoMessage() {}
+
+func (x *RoleHealth) ProtoReflect() protoreflect.Message {
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RoleHealth.ProtoReflect.Descriptor instead.
+func (*RoleHealth) Descriptor() ([]byte, []int) {
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RoleHealth) GetHealth() *v11.HealthInfo {
+	if x != nil {
+		return x.Health
+	}
+	return nil
+}
+
+func (x *RoleHealth) GetCheckedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CheckedAt
+	}
+	return nil
+}
+
 // ─── Platform census ────────────────────────────────────────────────────────
 type GetPlatformStatsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -619,7 +756,7 @@ type GetPlatformStatsRequest struct {
 
 func (x *GetPlatformStatsRequest) Reset() {
 	*x = GetPlatformStatsRequest{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[8]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +768,7 @@ func (x *GetPlatformStatsRequest) String() string {
 func (*GetPlatformStatsRequest) ProtoMessage() {}
 
 func (x *GetPlatformStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[8]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +781,7 @@ func (x *GetPlatformStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPlatformStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetPlatformStatsRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{8}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetPlatformStatsRequest) GetTenantPage() *v1.PageRequest {
@@ -681,7 +818,7 @@ type GetPlatformStatsResponse struct {
 
 func (x *GetPlatformStatsResponse) Reset() {
 	*x = GetPlatformStatsResponse{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[9]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -693,7 +830,7 @@ func (x *GetPlatformStatsResponse) String() string {
 func (*GetPlatformStatsResponse) ProtoMessage() {}
 
 func (x *GetPlatformStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[9]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -706,7 +843,7 @@ func (x *GetPlatformStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPlatformStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetPlatformStatsResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{9}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetPlatformStatsResponse) GetTenants() *TenantStats {
@@ -779,7 +916,7 @@ type RLSStats struct {
 
 func (x *RLSStats) Reset() {
 	*x = RLSStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[10]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +928,7 @@ func (x *RLSStats) String() string {
 func (*RLSStats) ProtoMessage() {}
 
 func (x *RLSStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[10]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +941,7 @@ func (x *RLSStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RLSStats.ProtoReflect.Descriptor instead.
 func (*RLSStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{10}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RLSStats) GetAvailable() bool {
@@ -881,7 +1018,7 @@ type QuotaStats struct {
 
 func (x *QuotaStats) Reset() {
 	*x = QuotaStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[11]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -893,7 +1030,7 @@ func (x *QuotaStats) String() string {
 func (*QuotaStats) ProtoMessage() {}
 
 func (x *QuotaStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[11]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -906,7 +1043,7 @@ func (x *QuotaStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuotaStats.ProtoReflect.Descriptor instead.
 func (*QuotaStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{11}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *QuotaStats) GetTotal() int64 {
@@ -987,7 +1124,7 @@ type CapabilityStats struct {
 
 func (x *CapabilityStats) Reset() {
 	*x = CapabilityStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[12]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -999,7 +1136,7 @@ func (x *CapabilityStats) String() string {
 func (*CapabilityStats) ProtoMessage() {}
 
 func (x *CapabilityStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[12]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1012,7 +1149,7 @@ func (x *CapabilityStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CapabilityStats.ProtoReflect.Descriptor instead.
 func (*CapabilityStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{12}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CapabilityStats) GetTotal() int64 {
@@ -1084,7 +1221,7 @@ type APITokenStats struct {
 
 func (x *APITokenStats) Reset() {
 	*x = APITokenStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[13]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1096,7 +1233,7 @@ func (x *APITokenStats) String() string {
 func (*APITokenStats) ProtoMessage() {}
 
 func (x *APITokenStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[13]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1109,7 +1246,7 @@ func (x *APITokenStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use APITokenStats.ProtoReflect.Descriptor instead.
 func (*APITokenStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{13}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *APITokenStats) GetTotal() int64 {
@@ -1173,7 +1310,7 @@ type SubscriptionStats struct {
 
 func (x *SubscriptionStats) Reset() {
 	*x = SubscriptionStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[14]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1185,7 +1322,7 @@ func (x *SubscriptionStats) String() string {
 func (*SubscriptionStats) ProtoMessage() {}
 
 func (x *SubscriptionStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[14]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1198,7 +1335,7 @@ func (x *SubscriptionStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscriptionStats.ProtoReflect.Descriptor instead.
 func (*SubscriptionStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{14}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SubscriptionStats) GetTotal() int64 {
@@ -1255,7 +1392,7 @@ type TenantStats struct {
 
 func (x *TenantStats) Reset() {
 	*x = TenantStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[15]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1267,7 +1404,7 @@ func (x *TenantStats) String() string {
 func (*TenantStats) ProtoMessage() {}
 
 func (x *TenantStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[15]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1280,7 +1417,7 @@ func (x *TenantStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TenantStats.ProtoReflect.Descriptor instead.
 func (*TenantStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{15}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TenantStats) GetTotal() int64 {
@@ -1342,7 +1479,7 @@ type BackendStats struct {
 
 func (x *BackendStats) Reset() {
 	*x = BackendStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[16]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1354,7 +1491,7 @@ func (x *BackendStats) String() string {
 func (*BackendStats) ProtoMessage() {}
 
 func (x *BackendStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[16]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1367,7 +1504,7 @@ func (x *BackendStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackendStats.ProtoReflect.Descriptor instead.
 func (*BackendStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{16}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *BackendStats) GetTotal() int64 {
@@ -1434,7 +1571,7 @@ type BucketStats struct {
 
 func (x *BucketStats) Reset() {
 	*x = BucketStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[17]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1446,7 +1583,7 @@ func (x *BucketStats) String() string {
 func (*BucketStats) ProtoMessage() {}
 
 func (x *BucketStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[17]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1459,7 +1596,7 @@ func (x *BucketStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketStats.ProtoReflect.Descriptor instead.
 func (*BucketStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{17}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *BucketStats) GetTotal() int64 {
@@ -1532,7 +1669,7 @@ type CollectionStats struct {
 
 func (x *CollectionStats) Reset() {
 	*x = CollectionStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[18]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1544,7 +1681,7 @@ func (x *CollectionStats) String() string {
 func (*CollectionStats) ProtoMessage() {}
 
 func (x *CollectionStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[18]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1557,7 +1694,7 @@ func (x *CollectionStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CollectionStats.ProtoReflect.Descriptor instead.
 func (*CollectionStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{18}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CollectionStats) GetTotal() int64 {
@@ -1591,7 +1728,7 @@ type UserStats struct {
 
 func (x *UserStats) Reset() {
 	*x = UserStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[19]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1603,7 +1740,7 @@ func (x *UserStats) String() string {
 func (*UserStats) ProtoMessage() {}
 
 func (x *UserStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[19]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1616,7 +1753,7 @@ func (x *UserStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserStats.ProtoReflect.Descriptor instead.
 func (*UserStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{19}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UserStats) GetTotal() int64 {
@@ -1649,7 +1786,7 @@ type ObjectStateStat struct {
 
 func (x *ObjectStateStat) Reset() {
 	*x = ObjectStateStat{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[20]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1661,7 +1798,7 @@ func (x *ObjectStateStat) String() string {
 func (*ObjectStateStat) ProtoMessage() {}
 
 func (x *ObjectStateStat) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[20]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1674,7 +1811,7 @@ func (x *ObjectStateStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStateStat.ProtoReflect.Descriptor instead.
 func (*ObjectStateStat) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{20}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ObjectStateStat) GetState() string {
@@ -1715,7 +1852,7 @@ type TenantObjectStats struct {
 
 func (x *TenantObjectStats) Reset() {
 	*x = TenantObjectStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[21]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1727,7 +1864,7 @@ func (x *TenantObjectStats) String() string {
 func (*TenantObjectStats) ProtoMessage() {}
 
 func (x *TenantObjectStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[21]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1740,7 +1877,7 @@ func (x *TenantObjectStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TenantObjectStats.ProtoReflect.Descriptor instead.
 func (*TenantObjectStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{21}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *TenantObjectStats) GetTenantId() string {
@@ -1809,7 +1946,7 @@ type ObjectStats struct {
 
 func (x *ObjectStats) Reset() {
 	*x = ObjectStats{}
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[22]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1821,7 +1958,7 @@ func (x *ObjectStats) String() string {
 func (*ObjectStats) ProtoMessage() {}
 
 func (x *ObjectStats) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[22]
+	mi := &file_paladin_admin_v1_system_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1834,7 +1971,7 @@ func (x *ObjectStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStats.ProtoReflect.Descriptor instead.
 func (*ObjectStats) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{22}
+	return file_paladin_admin_v1_system_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ObjectStats) GetStates() []*ObjectStateStat {
@@ -1883,7 +2020,7 @@ var File_paladin_admin_v1_system_service_proto protoreflect.FileDescriptor
 
 const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\n" +
-	"%paladin/admin/v1/system_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\"\xa0\x01\n" +
+	"%paladin/admin/v1/system_service.proto\x12\x10paladin.admin.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"paladin/common/v1/pagination.proto\x1a#paladin/iam/v1/health_service.proto\"\xa0\x01\n" +
 	"\x1fListPlatformStatsTenantsRequest\x12I\n" +
 	"\x06signal\x18\x01 \x01(\x0e2%.paladin.admin.v1.PlatformStatsSignalB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x06signal\x122\n" +
@@ -1919,7 +2056,15 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"\n" +
 	"last_error\x18\x05 \x01(\tR\tlastError\x12(\n" +
 	"\x10last_status_code\x18\x06 \x01(\x05R\x0elastStatusCode\x12&\n" +
-	"\x0flast_attempt_at\x18\a \x01(\tR\rlastAttemptAt\"Z\n" +
+	"\x0flast_attempt_at\x18\a \x01(\tR\rlastAttemptAt\"\x1a\n" +
+	"\x18GetPlatformHealthRequest\"O\n" +
+	"\x19GetPlatformHealthResponse\x122\n" +
+	"\x05roles\x18\x01 \x03(\v2\x1c.paladin.admin.v1.RoleHealthR\x05roles\"{\n" +
+	"\n" +
+	"RoleHealth\x122\n" +
+	"\x06health\x18\x01 \x01(\v2\x1a.paladin.iam.v1.HealthInfoR\x06health\x129\n" +
+	"\n" +
+	"checked_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcheckedAt\"Z\n" +
 	"\x17GetPlatformStatsRequest\x12?\n" +
 	"\vtenant_page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\n" +
 	"tenantPage\"\xbc\x03\n" +
@@ -2052,12 +2197,13 @@ const file_paladin_admin_v1_system_service_proto_rawDesc = "" +
 	"$PLATFORM_STATS_SIGNAL_QUOTA_AT_LIMIT\x10\x01\x12*\n" +
 	"&PLATFORM_STATS_SIGNAL_QUOTA_NEAR_LIMIT\x10\x02\x12/\n" +
 	"+PLATFORM_STATS_SIGNAL_CAPABILITIES_EXPIRING\x10\x03\x12-\n" +
-	")PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING\x10\x042\xd9\x03\n" +
+	")PLATFORM_STATS_SIGNAL_API_TOKENS_EXPIRING\x10\x042\xcc\x04\n" +
 	"\rSystemService\x12Y\n" +
 	"\tGetConfig\x12\".paladin.admin.v1.GetConfigRequest\x1a#.paladin.admin.v1.GetConfigResponse\"\x03\x90\x02\x01\x12t\n" +
 	"\x12GetDispatcherStats\x12+.paladin.admin.v1.GetDispatcherStatsRequest\x1a,.paladin.admin.v1.GetDispatcherStatsResponse\"\x03\x90\x02\x01\x12n\n" +
 	"\x10GetPlatformStats\x12).paladin.admin.v1.GetPlatformStatsRequest\x1a*.paladin.admin.v1.GetPlatformStatsResponse\"\x03\x90\x02\x01\x12\x86\x01\n" +
-	"\x18ListPlatformStatsTenants\x121.paladin.admin.v1.ListPlatformStatsTenantsRequest\x1a2.paladin.admin.v1.ListPlatformStatsTenantsResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
+	"\x18ListPlatformStatsTenants\x121.paladin.admin.v1.ListPlatformStatsTenantsRequest\x1a2.paladin.admin.v1.ListPlatformStatsTenantsResponse\"\x03\x90\x02\x01\x12q\n" +
+	"\x11GetPlatformHealth\x12*.paladin.admin.v1.GetPlatformHealthRequest\x1a+.paladin.admin.v1.GetPlatformHealthResponse\"\x03\x90\x02\x01BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
 
 var (
 	file_paladin_admin_v1_system_service_proto_rawDescOnce sync.Once
@@ -2072,7 +2218,7 @@ func file_paladin_admin_v1_system_service_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_admin_v1_system_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_admin_v1_system_service_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_paladin_admin_v1_system_service_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_paladin_admin_v1_system_service_proto_goTypes = []any{
 	(PlatformStatsSignal)(0),                 // 0: paladin.admin.v1.PlatformStatsSignal
 	(*ListPlatformStatsTenantsRequest)(nil),  // 1: paladin.admin.v1.ListPlatformStatsTenantsRequest
@@ -2083,72 +2229,81 @@ var file_paladin_admin_v1_system_service_proto_goTypes = []any{
 	(*GetDispatcherStatsRequest)(nil),        // 6: paladin.admin.v1.GetDispatcherStatsRequest
 	(*GetDispatcherStatsResponse)(nil),       // 7: paladin.admin.v1.GetDispatcherStatsResponse
 	(*SubscriptionDeliveryStat)(nil),         // 8: paladin.admin.v1.SubscriptionDeliveryStat
-	(*GetPlatformStatsRequest)(nil),          // 9: paladin.admin.v1.GetPlatformStatsRequest
-	(*GetPlatformStatsResponse)(nil),         // 10: paladin.admin.v1.GetPlatformStatsResponse
-	(*RLSStats)(nil),                         // 11: paladin.admin.v1.RLSStats
-	(*QuotaStats)(nil),                       // 12: paladin.admin.v1.QuotaStats
-	(*CapabilityStats)(nil),                  // 13: paladin.admin.v1.CapabilityStats
-	(*APITokenStats)(nil),                    // 14: paladin.admin.v1.APITokenStats
-	(*SubscriptionStats)(nil),                // 15: paladin.admin.v1.SubscriptionStats
-	(*TenantStats)(nil),                      // 16: paladin.admin.v1.TenantStats
-	(*BackendStats)(nil),                     // 17: paladin.admin.v1.BackendStats
-	(*BucketStats)(nil),                      // 18: paladin.admin.v1.BucketStats
-	(*CollectionStats)(nil),                  // 19: paladin.admin.v1.CollectionStats
-	(*UserStats)(nil),                        // 20: paladin.admin.v1.UserStats
-	(*ObjectStateStat)(nil),                  // 21: paladin.admin.v1.ObjectStateStat
-	(*TenantObjectStats)(nil),                // 22: paladin.admin.v1.TenantObjectStats
-	(*ObjectStats)(nil),                      // 23: paladin.admin.v1.ObjectStats
-	nil,                                      // 24: paladin.admin.v1.CapabilityStats.ByPrincipalKindEntry
-	nil,                                      // 25: paladin.admin.v1.SubscriptionStats.BySinkKindEntry
-	nil,                                      // 26: paladin.admin.v1.BackendStats.ByKindEntry
-	nil,                                      // 27: paladin.admin.v1.BucketStats.ByProvisionStateEntry
-	nil,                                      // 28: paladin.admin.v1.BucketStats.ByBackendEntry
-	nil,                                      // 29: paladin.admin.v1.CollectionStats.ByBackendEntry
-	(*v1.PageRequest)(nil),                   // 30: paladin.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                  // 31: paladin.common.v1.PageResponse
-	(*timestamppb.Timestamp)(nil),            // 32: google.protobuf.Timestamp
+	(*GetPlatformHealthRequest)(nil),         // 9: paladin.admin.v1.GetPlatformHealthRequest
+	(*GetPlatformHealthResponse)(nil),        // 10: paladin.admin.v1.GetPlatformHealthResponse
+	(*RoleHealth)(nil),                       // 11: paladin.admin.v1.RoleHealth
+	(*GetPlatformStatsRequest)(nil),          // 12: paladin.admin.v1.GetPlatformStatsRequest
+	(*GetPlatformStatsResponse)(nil),         // 13: paladin.admin.v1.GetPlatformStatsResponse
+	(*RLSStats)(nil),                         // 14: paladin.admin.v1.RLSStats
+	(*QuotaStats)(nil),                       // 15: paladin.admin.v1.QuotaStats
+	(*CapabilityStats)(nil),                  // 16: paladin.admin.v1.CapabilityStats
+	(*APITokenStats)(nil),                    // 17: paladin.admin.v1.APITokenStats
+	(*SubscriptionStats)(nil),                // 18: paladin.admin.v1.SubscriptionStats
+	(*TenantStats)(nil),                      // 19: paladin.admin.v1.TenantStats
+	(*BackendStats)(nil),                     // 20: paladin.admin.v1.BackendStats
+	(*BucketStats)(nil),                      // 21: paladin.admin.v1.BucketStats
+	(*CollectionStats)(nil),                  // 22: paladin.admin.v1.CollectionStats
+	(*UserStats)(nil),                        // 23: paladin.admin.v1.UserStats
+	(*ObjectStateStat)(nil),                  // 24: paladin.admin.v1.ObjectStateStat
+	(*TenantObjectStats)(nil),                // 25: paladin.admin.v1.TenantObjectStats
+	(*ObjectStats)(nil),                      // 26: paladin.admin.v1.ObjectStats
+	nil,                                      // 27: paladin.admin.v1.CapabilityStats.ByPrincipalKindEntry
+	nil,                                      // 28: paladin.admin.v1.SubscriptionStats.BySinkKindEntry
+	nil,                                      // 29: paladin.admin.v1.BackendStats.ByKindEntry
+	nil,                                      // 30: paladin.admin.v1.BucketStats.ByProvisionStateEntry
+	nil,                                      // 31: paladin.admin.v1.BucketStats.ByBackendEntry
+	nil,                                      // 32: paladin.admin.v1.CollectionStats.ByBackendEntry
+	(*v1.PageRequest)(nil),                   // 33: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                  // 34: paladin.common.v1.PageResponse
+	(*v11.HealthInfo)(nil),                   // 35: paladin.iam.v1.HealthInfo
+	(*timestamppb.Timestamp)(nil),            // 36: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_system_service_proto_depIdxs = []int32{
 	0,  // 0: paladin.admin.v1.ListPlatformStatsTenantsRequest.signal:type_name -> paladin.admin.v1.PlatformStatsSignal
-	30, // 1: paladin.admin.v1.ListPlatformStatsTenantsRequest.page:type_name -> paladin.common.v1.PageRequest
+	33, // 1: paladin.admin.v1.ListPlatformStatsTenantsRequest.page:type_name -> paladin.common.v1.PageRequest
 	3,  // 2: paladin.admin.v1.ListPlatformStatsTenantsResponse.tenants:type_name -> paladin.admin.v1.SignalTenant
-	31, // 3: paladin.admin.v1.ListPlatformStatsTenantsResponse.page:type_name -> paladin.common.v1.PageResponse
+	34, // 3: paladin.admin.v1.ListPlatformStatsTenantsResponse.page:type_name -> paladin.common.v1.PageResponse
 	8,  // 4: paladin.admin.v1.GetDispatcherStatsResponse.subscriptions:type_name -> paladin.admin.v1.SubscriptionDeliveryStat
-	30, // 5: paladin.admin.v1.GetPlatformStatsRequest.tenant_page:type_name -> paladin.common.v1.PageRequest
-	16, // 6: paladin.admin.v1.GetPlatformStatsResponse.tenants:type_name -> paladin.admin.v1.TenantStats
-	17, // 7: paladin.admin.v1.GetPlatformStatsResponse.backends:type_name -> paladin.admin.v1.BackendStats
-	18, // 8: paladin.admin.v1.GetPlatformStatsResponse.buckets:type_name -> paladin.admin.v1.BucketStats
-	19, // 9: paladin.admin.v1.GetPlatformStatsResponse.collections:type_name -> paladin.admin.v1.CollectionStats
-	20, // 10: paladin.admin.v1.GetPlatformStatsResponse.users:type_name -> paladin.admin.v1.UserStats
-	32, // 11: paladin.admin.v1.GetPlatformStatsResponse.collected_at:type_name -> google.protobuf.Timestamp
-	11, // 12: paladin.admin.v1.GetPlatformStatsResponse.rls:type_name -> paladin.admin.v1.RLSStats
-	23, // 13: paladin.admin.v1.RLSStats.objects:type_name -> paladin.admin.v1.ObjectStats
-	12, // 14: paladin.admin.v1.RLSStats.quotas:type_name -> paladin.admin.v1.QuotaStats
-	13, // 15: paladin.admin.v1.RLSStats.capabilities:type_name -> paladin.admin.v1.CapabilityStats
-	14, // 16: paladin.admin.v1.RLSStats.api_tokens:type_name -> paladin.admin.v1.APITokenStats
-	15, // 17: paladin.admin.v1.RLSStats.subscriptions:type_name -> paladin.admin.v1.SubscriptionStats
-	24, // 18: paladin.admin.v1.CapabilityStats.by_principal_kind:type_name -> paladin.admin.v1.CapabilityStats.ByPrincipalKindEntry
-	25, // 19: paladin.admin.v1.SubscriptionStats.by_sink_kind:type_name -> paladin.admin.v1.SubscriptionStats.BySinkKindEntry
-	26, // 20: paladin.admin.v1.BackendStats.by_kind:type_name -> paladin.admin.v1.BackendStats.ByKindEntry
-	27, // 21: paladin.admin.v1.BucketStats.by_provision_state:type_name -> paladin.admin.v1.BucketStats.ByProvisionStateEntry
-	28, // 22: paladin.admin.v1.BucketStats.by_backend:type_name -> paladin.admin.v1.BucketStats.ByBackendEntry
-	29, // 23: paladin.admin.v1.CollectionStats.by_backend:type_name -> paladin.admin.v1.CollectionStats.ByBackendEntry
-	21, // 24: paladin.admin.v1.TenantObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
-	21, // 25: paladin.admin.v1.ObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
-	22, // 26: paladin.admin.v1.ObjectStats.tenants:type_name -> paladin.admin.v1.TenantObjectStats
-	4,  // 27: paladin.admin.v1.SystemService.GetConfig:input_type -> paladin.admin.v1.GetConfigRequest
-	6,  // 28: paladin.admin.v1.SystemService.GetDispatcherStats:input_type -> paladin.admin.v1.GetDispatcherStatsRequest
-	9,  // 29: paladin.admin.v1.SystemService.GetPlatformStats:input_type -> paladin.admin.v1.GetPlatformStatsRequest
-	1,  // 30: paladin.admin.v1.SystemService.ListPlatformStatsTenants:input_type -> paladin.admin.v1.ListPlatformStatsTenantsRequest
-	5,  // 31: paladin.admin.v1.SystemService.GetConfig:output_type -> paladin.admin.v1.GetConfigResponse
-	7,  // 32: paladin.admin.v1.SystemService.GetDispatcherStats:output_type -> paladin.admin.v1.GetDispatcherStatsResponse
-	10, // 33: paladin.admin.v1.SystemService.GetPlatformStats:output_type -> paladin.admin.v1.GetPlatformStatsResponse
-	2,  // 34: paladin.admin.v1.SystemService.ListPlatformStatsTenants:output_type -> paladin.admin.v1.ListPlatformStatsTenantsResponse
-	31, // [31:35] is the sub-list for method output_type
-	27, // [27:31] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	11, // 5: paladin.admin.v1.GetPlatformHealthResponse.roles:type_name -> paladin.admin.v1.RoleHealth
+	35, // 6: paladin.admin.v1.RoleHealth.health:type_name -> paladin.iam.v1.HealthInfo
+	36, // 7: paladin.admin.v1.RoleHealth.checked_at:type_name -> google.protobuf.Timestamp
+	33, // 8: paladin.admin.v1.GetPlatformStatsRequest.tenant_page:type_name -> paladin.common.v1.PageRequest
+	19, // 9: paladin.admin.v1.GetPlatformStatsResponse.tenants:type_name -> paladin.admin.v1.TenantStats
+	20, // 10: paladin.admin.v1.GetPlatformStatsResponse.backends:type_name -> paladin.admin.v1.BackendStats
+	21, // 11: paladin.admin.v1.GetPlatformStatsResponse.buckets:type_name -> paladin.admin.v1.BucketStats
+	22, // 12: paladin.admin.v1.GetPlatformStatsResponse.collections:type_name -> paladin.admin.v1.CollectionStats
+	23, // 13: paladin.admin.v1.GetPlatformStatsResponse.users:type_name -> paladin.admin.v1.UserStats
+	36, // 14: paladin.admin.v1.GetPlatformStatsResponse.collected_at:type_name -> google.protobuf.Timestamp
+	14, // 15: paladin.admin.v1.GetPlatformStatsResponse.rls:type_name -> paladin.admin.v1.RLSStats
+	26, // 16: paladin.admin.v1.RLSStats.objects:type_name -> paladin.admin.v1.ObjectStats
+	15, // 17: paladin.admin.v1.RLSStats.quotas:type_name -> paladin.admin.v1.QuotaStats
+	16, // 18: paladin.admin.v1.RLSStats.capabilities:type_name -> paladin.admin.v1.CapabilityStats
+	17, // 19: paladin.admin.v1.RLSStats.api_tokens:type_name -> paladin.admin.v1.APITokenStats
+	18, // 20: paladin.admin.v1.RLSStats.subscriptions:type_name -> paladin.admin.v1.SubscriptionStats
+	27, // 21: paladin.admin.v1.CapabilityStats.by_principal_kind:type_name -> paladin.admin.v1.CapabilityStats.ByPrincipalKindEntry
+	28, // 22: paladin.admin.v1.SubscriptionStats.by_sink_kind:type_name -> paladin.admin.v1.SubscriptionStats.BySinkKindEntry
+	29, // 23: paladin.admin.v1.BackendStats.by_kind:type_name -> paladin.admin.v1.BackendStats.ByKindEntry
+	30, // 24: paladin.admin.v1.BucketStats.by_provision_state:type_name -> paladin.admin.v1.BucketStats.ByProvisionStateEntry
+	31, // 25: paladin.admin.v1.BucketStats.by_backend:type_name -> paladin.admin.v1.BucketStats.ByBackendEntry
+	32, // 26: paladin.admin.v1.CollectionStats.by_backend:type_name -> paladin.admin.v1.CollectionStats.ByBackendEntry
+	24, // 27: paladin.admin.v1.TenantObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
+	24, // 28: paladin.admin.v1.ObjectStats.states:type_name -> paladin.admin.v1.ObjectStateStat
+	25, // 29: paladin.admin.v1.ObjectStats.tenants:type_name -> paladin.admin.v1.TenantObjectStats
+	4,  // 30: paladin.admin.v1.SystemService.GetConfig:input_type -> paladin.admin.v1.GetConfigRequest
+	6,  // 31: paladin.admin.v1.SystemService.GetDispatcherStats:input_type -> paladin.admin.v1.GetDispatcherStatsRequest
+	12, // 32: paladin.admin.v1.SystemService.GetPlatformStats:input_type -> paladin.admin.v1.GetPlatformStatsRequest
+	1,  // 33: paladin.admin.v1.SystemService.ListPlatformStatsTenants:input_type -> paladin.admin.v1.ListPlatformStatsTenantsRequest
+	9,  // 34: paladin.admin.v1.SystemService.GetPlatformHealth:input_type -> paladin.admin.v1.GetPlatformHealthRequest
+	5,  // 35: paladin.admin.v1.SystemService.GetConfig:output_type -> paladin.admin.v1.GetConfigResponse
+	7,  // 36: paladin.admin.v1.SystemService.GetDispatcherStats:output_type -> paladin.admin.v1.GetDispatcherStatsResponse
+	13, // 37: paladin.admin.v1.SystemService.GetPlatformStats:output_type -> paladin.admin.v1.GetPlatformStatsResponse
+	2,  // 38: paladin.admin.v1.SystemService.ListPlatformStatsTenants:output_type -> paladin.admin.v1.ListPlatformStatsTenantsResponse
+	10, // 39: paladin.admin.v1.SystemService.GetPlatformHealth:output_type -> paladin.admin.v1.GetPlatformHealthResponse
+	35, // [35:40] is the sub-list for method output_type
+	30, // [30:35] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_system_service_proto_init() }
@@ -2162,7 +2317,7 @@ func file_paladin_admin_v1_system_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_system_service_proto_rawDesc), len(file_paladin_admin_v1_system_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   29,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

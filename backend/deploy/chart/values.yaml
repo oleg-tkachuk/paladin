@@ -844,6 +844,12 @@ config:
       # retention" (Tenant.purge_eligible_at). Surfaced only — nothing purges
       # a tenant on its own. Must be positive.
       trash_retention: 720h
+    # The roles SystemService.GetPlatformHealth reads for the console's health
+    # page. Empty lets the chart list every enabled role at its Service; with
+    # internalTLS on, ca_path is set to the mounted CA.
+    health:
+      roles: []
+      timeout: 5s
 
   datastores:
     postgres:

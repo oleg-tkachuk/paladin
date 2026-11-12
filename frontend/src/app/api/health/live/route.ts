@@ -5,7 +5,8 @@ import { NextResponse } from "next/server";
 // restart it only when the process itself is wedged. Pointing a probe at a
 // dependency-checking endpoint causes restart storms (liveness) or takes the
 // console away exactly when an operator needs it to report the outage
-// (readiness). /api/health/all is the /health page's data, not a probe.
+// (readiness). The /health page's data is the admin role's GetPlatformHealth,
+// not a probe.
 export const dynamic = "force-dynamic";
 
 export function GET() {

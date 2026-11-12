@@ -53,6 +53,17 @@ admin:
   server:
     <<: *http_defaults
     addr: "0.0.0.0:8090"
+  # GetPlatformHealth reads each role at its health listener, by its
+  # container name; a role this stack does not run is listed as unreachable.
+  health:
+    roles:
+      - { name: api, url: "http://paladin-api:8080" }
+      - { name: iam, url: "http://paladin-iam:8085" }
+      - { name: admin, url: "http://paladin-admin:8090" }
+      - { name: worker, url: "http://paladin-worker:8090" }
+      - { name: mcp, url: "http://paladin-mcp:8095" }
+      - { name: dispatcher, url: "http://paladin-dispatcher:8099" }
+      - { name: ingest, url: "http://paladin-ingest:8100" }
 
 datastores:
   postgres:

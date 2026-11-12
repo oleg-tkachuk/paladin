@@ -109,6 +109,9 @@ message ComponentHealth {
 message ComponentDetail {
   string name = 1;
   string value = 2;
+  // The facts sharing a group are one line of the component, labelled by
+  // the group; empty for a fact of its own.
+  string group = 3;
 }
 
 message HealthInfo {

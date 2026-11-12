@@ -36,6 +36,9 @@ const (
 	// SystemServiceListPlatformStatsTenantsProcedure is the procedure name of the SystemService's
 	// ListPlatformStatsTenants RPC.
 	SystemServiceListPlatformStatsTenantsProcedure = "/paladin.admin.v1.SystemService/ListPlatformStatsTenants"
+	// SystemServiceGetPlatformHealthProcedure is the procedure name of the SystemService's
+	// GetPlatformHealth RPC.
+	SystemServiceGetPlatformHealthProcedure = "/paladin.admin.v1.SystemService/GetPlatformHealth"
 )
 
 var (
@@ -68,6 +71,14 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_paladin_admin_v1_system_service_proto.Services().ByName("SystemService").Methods().ByName("ListPlatformStatsTenants"),
 			Procedure:        SystemServiceListPlatformStatsTenantsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	systemServiceGetPlatformHealthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_system_service_proto.Services().ByName("SystemService").Methods().ByName("GetPlatformHealth"),
+			Procedure:        SystemServiceGetPlatformHealthProcedure,
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
@@ -111,6 +122,14 @@ type SystemServiceClient interface {
 	// UNAVAILABLE when the worker leg is unconfigured or unreachable, because
 	// an empty list would read as "nobody". Read-only, no audit row.
 	ListPlatformStatsTenants(context.Context, *v1.ListPlatformStatsTenantsRequest) (*v1.ListPlatformStatsTenantsResponse, error)
+	// GetPlatformHealth is every role's health, gathered by this pod: it reads
+	// each configured role's /system/health.json with the health-snapshot
+	// token, so the console needs no token of its own (ADR-0048). A role that
+	// does not answer is listed UNHEALTHY with a reachability component that
+	// says why, never left out. Open to any authenticated caller, as the iam
+	// plane's HealthService.GetHealth is: it carries no tenant data.
+	// Read-only, no audit row.
+	GetPlatformHealth(context.Context, *v1.GetPlatformHealthRequest) (*v1.GetPlatformHealthResponse, error)
 }
 
 // NewSystemServiceClient constructs a client for the paladin.admin.v1.SystemService service.
@@ -157,6 +176,14 @@ type SystemServiceHandler interface {
 	// UNAVAILABLE when the worker leg is unconfigured or unreachable, because
 	// an empty list would read as "nobody". Read-only, no audit row.
 	ListPlatformStatsTenants(context.Context, *v1.ListPlatformStatsTenantsRequest) (*v1.ListPlatformStatsTenantsResponse, error)
+	// GetPlatformHealth is every role's health, gathered by this pod: it reads
+	// each configured role's /system/health.json with the health-snapshot
+	// token, so the console needs no token of its own (ADR-0048). A role that
+	// does not answer is listed UNHEALTHY with a reachability component that
+	// says why, never left out. Open to any authenticated caller, as the iam
+	// plane's HealthService.GetHealth is: it carries no tenant data.
+	// Read-only, no audit row.
+	GetPlatformHealth(context.Context, *v1.GetPlatformHealthRequest) (*v1.GetPlatformHealthResponse, error)
 }
 
 // RegisterSystemServiceHandler registers svc as the paladin.admin.v1.SystemService implementation
@@ -168,6 +195,7 @@ func RegisterSystemServiceHandler(server *connect.Server, svc SystemServiceHandl
 		connect.Method{Spec: systemServiceGetDispatcherStatsSpec(), Handler: adapter.getDispatcherStats},
 		connect.Method{Spec: systemServiceGetPlatformStatsSpec(), Handler: adapter.getPlatformStats},
 		connect.Method{Spec: systemServiceListPlatformStatsTenantsSpec(), Handler: adapter.listPlatformStatsTenants},
+		connect.Method{Spec: systemServiceGetPlatformHealthSpec(), Handler: adapter.getPlatformHealth},
 	)
 }
 
@@ -188,6 +216,10 @@ func (UnimplementedSystemServiceHandler) GetPlatformStats(context.Context, *v1.G
 
 func (UnimplementedSystemServiceHandler) ListPlatformStatsTenants(context.Context, *v1.ListPlatformStatsTenantsRequest) (*v1.ListPlatformStatsTenantsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.SystemService.ListPlatformStatsTenants is not implemented")
+}
+
+func (UnimplementedSystemServiceHandler) GetPlatformHealth(context.Context, *v1.GetPlatformHealthRequest) (*v1.GetPlatformHealthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.SystemService.GetPlatformHealth is not implemented")
 }
 
 type systemServiceClient struct {
@@ -221,6 +253,14 @@ func (c *systemServiceClient) GetPlatformStats(ctx context.Context, req *v1.GetP
 func (c *systemServiceClient) ListPlatformStatsTenants(ctx context.Context, req *v1.ListPlatformStatsTenantsRequest) (*v1.ListPlatformStatsTenantsResponse, error) {
 	var res v1.ListPlatformStatsTenantsResponse
 	if err := c.client.CallUnary(ctx, systemServiceListPlatformStatsTenantsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) GetPlatformHealth(ctx context.Context, req *v1.GetPlatformHealthRequest) (*v1.GetPlatformHealthResponse, error) {
+	var res v1.GetPlatformHealthResponse
+	if err := c.client.CallUnary(ctx, systemServiceGetPlatformHealthSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -270,6 +310,18 @@ func (h systemServiceHandler) listPlatformStatsTenants(ctx context.Context, _ co
 		return err
 	}
 	res, err := h.svc.ListPlatformStatsTenants(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) getPlatformHealth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPlatformHealthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPlatformHealth(ctx, &req)
 	if err != nil {
 		return err
 	}
