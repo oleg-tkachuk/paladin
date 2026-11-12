@@ -63,24 +63,53 @@ const roleCard = async (role: string) =>
     )
   ).closest('[data-slot="card"]')!;
 
-describe("HealthPage role cards", () => {
-  // A fixed column count squeezed five cards into four columns and cut
-  // component names short ("capabili…", "iam_list…"). Columns now come from
-  // the cards' minimum width, so a card is never narrower than its widest
-  // row, and they fold to one on a narrow page.
-  it("lays the cards out by their minimum width, not a column count", async () => {
+// A role's entry in the rail, by the role's name.
+const railEntry = async (role: string) =>
+  within(await screen.findByRole("navigation", { name: "Roles" })).getByRole(
+    "button",
+    { name: new RegExp(`^${role}:`) },
+  );
+
+// Opens a role's panel from the rail and returns it.
+const openRole = async (role: string) => {
+  await userEvent.click(await railEntry(role));
+  return roleCard(role);
+};
+
+describe("HealthPage roles", () => {
+  // Five cards in a grid squeezed each to a narrow column, and a role's
+  // details wrapped mid-row there. Every role now sits in a rail, and the one
+  // chosen gets the rest of the width.
+  it("lists every role in the rail and opens one panel, the first", async () => {
     render(<HealthPage />);
-    const grid = (await roleCard("dispatcher")).parentElement!;
-    expect(grid.className).toContain(
-      "grid-cols-[repeat(auto-fit,minmax(min(100%,23rem),1fr))]",
+    const rail = await screen.findByRole("navigation", { name: "Roles" });
+    expect(within(rail).getAllByRole("button")).toHaveLength(
+      fivePayload.roles.length,
     );
-    expect(grid.className).not.toMatch(/(^|\s)(md|lg|xl):grid-cols-/);
-    expect(grid.children).toHaveLength(fivePayload.roles.length);
+    expect(await railEntry("api")).toHaveAttribute("aria-current", "page");
+    expect(await railEntry("api")).toHaveAccessibleName(
+      "api: Healthy, 2 of 2 checks healthy",
+    );
+    expect(document.querySelectorAll('[data-slot="card-title"]')).toHaveLength(
+      1,
+    );
+    await roleCard("api");
   });
 
-  // The IAM plane is a request path of its own (ADR-0047): its card sits
-  // beside api's, not with the unknown roles at the bottom.
-  it("puts the iam card right after api", async () => {
+  it("opens the role its rail entry names", async () => {
+    render(<HealthPage />);
+    const card = await openRole("dispatcher");
+    expect(card).toHaveTextContent("iam_listener");
+    expect(await railEntry("dispatcher")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(await railEntry("api")).not.toHaveAttribute("aria-current");
+  });
+
+  // The IAM plane is a request path of its own (ADR-0047): it sits beside
+  // api, not with the unknown roles at the bottom.
+  it("puts iam right after api", async () => {
     payload = {
       roles: ["worker", "admin", "iam", "api"].map((role) => ({
         role,
@@ -89,11 +118,38 @@ describe("HealthPage role cards", () => {
       })),
     };
     render(<HealthPage />);
-    const grid = (await roleCard("iam")).parentElement!;
-    const titles = Array.from(
-      grid.querySelectorAll('[data-slot="card-title"]'),
-    ).map((el) => el.textContent);
-    expect(titles).toEqual(["api", "iam", "admin", "worker"]);
+    const rail = await screen.findByRole("navigation", { name: "Roles" });
+    const names = within(rail)
+      .getAllByRole("button")
+      .map((b) => b.textContent?.replace(/\d+\/\d+$/, ""));
+    expect(names).toEqual(["api", "iam", "admin", "worker"]);
+  });
+
+  // A fault is read first: the page opens on the role that has one.
+  it("opens on the role with a finding, which the finding also opens", async () => {
+    payload = {
+      roles: [
+        {
+          role: "api",
+          status: "healthy",
+          components: [component("postgres", true)],
+        },
+        {
+          role: "worker",
+          status: "degraded",
+          components: [
+            { ...component("jobs"), status: "unhealthy", message: "late" },
+          ],
+        },
+      ],
+    };
+    render(<HealthPage />);
+    expect(await railEntry("worker")).toHaveAttribute("aria-current", "page");
+    await openRole("api");
+    await userEvent.click(
+      screen.getByRole("button", { name: /worker · jobs/ }),
+    );
+    expect(await railEntry("worker")).toHaveAttribute("aria-current", "page");
   });
 
   // The card's default gap and padding stacked on the header's own left a
@@ -356,7 +412,7 @@ describe("HealthPage database card", () => {
 
   it("leaves a role card one database row, online or offline", async () => {
     render(<HealthPage />);
-    const card = await roleCard("api");
+    const card = await openRole("api");
     expect(card).not.toHaveTextContent("postgres-schema");
     expect(card).not.toHaveTextContent("postgres-replica");
     expect(card).not.toHaveTextContent("connections");
