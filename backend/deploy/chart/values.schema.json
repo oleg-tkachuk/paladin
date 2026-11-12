@@ -5,26 +5,6 @@
     "auth": {
       "additionalProperties": false,
       "properties": {
-        "signingKey": {
-          "additionalProperties": false,
-          "properties": {
-            "generate": {
-              "type": "boolean"
-            },
-            "existingSecret": {
-              "type": "string"
-            },
-            "key": {
-              "type": "string",
-              "minLength": 1
-            },
-            "generatedLength": {
-              "type": "integer",
-              "minimum": 32
-            }
-          },
-          "type": "object"
-        },
         "sessionKey": {
           "additionalProperties": false,
           "properties": {

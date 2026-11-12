@@ -1365,16 +1365,7 @@ postgres:
     namespace: ""
 
 # ─── Session signing key ─────────────────────────────────────────────────────
-#
-# signingKey is unused since sessions are ES256 (ADR-0047) and is accepted only
-# so an overlay that still sets it renders; it goes in a later release.
 auth:
-  signingKey:
-    generate: true
-    existingSecret: ""
-    key: signing_key
-    # Characters in a generated key.
-    generatedLength: 64
   # The session signing key (ADR-0047): ECDSA P-256, mounted as a file into
   # the roles that mint sessions and no other — no service account reads it
   # through the API, so it is not in rbac.secretReader. The chart generates a

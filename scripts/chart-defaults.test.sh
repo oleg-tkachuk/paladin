@@ -78,14 +78,10 @@ rbac_names defaults | grep -x paladin-bootstrap-admin >/dev/null || bad "default
 render issuer --set config.auth.issuer=https://issuer.example
 check "an issuer set is kept" "$(config issuer .auth.issuer)" "https://issuer.example"
 
-# The shared HS256 key is gone (ADR-0047): nothing generates or reads it, even
-# from an overlay that still names one in auth.signingKey.
-render legacy-signing --set auth.signingKey.existingSecret=my-signing-key
+# The shared HS256 key is gone (ADR-0047): nothing generates or reads it.
 cases=$((cases + 1))
-secret_exists legacy-signing "$SIGNING_SECRET" && bad "a shared signing key Secret is still generated"
-cases=$((cases + 1))
-rbac_names legacy-signing | grep -x my-signing-key >/dev/null && bad "a Role still reads the overlay's shared signing key"
-check "no shared signing key reaches the config" "$(config legacy-signing '.auth.signing_key_secret // "none"')" "none"
+secret_exists defaults "$SIGNING_SECRET" && bad "a shared signing key Secret is still generated"
+check "no shared signing key reaches the config" "$(config defaults '.auth.signing_key_secret // "none"')" "none"
 
 # ─── session signing key ─────────────────────────────────────────────────────
 # ADR-0047: mounted as a file into the roles that mint sessions and no other,
@@ -270,6 +266,9 @@ refuse() {
     fi
 }
 refuse no-database "no database configured" -f "$CHART/$REQUIRED_VALUES" --set postgres.host=
+# An overlay still naming the HS256 key is refused rather than ignored.
+refuse legacy-signing "additional properties 'signingKey' not allowed" \
+    -f "$CHART/$REQUIRED_VALUES" --set auth.signingKey.existingSecret=my-signing-key
 refuse no-app-secret "postgres.app.existingSecret is required" \
     -f "$CHART/$REQUIRED_VALUES" --set postgres.app.existingSecret=
 
