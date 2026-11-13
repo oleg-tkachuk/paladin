@@ -64,16 +64,16 @@ spec:
             - name: BUILD_TIME
               value: {{ .Values.metadata.buildTime | quote }}
             # The iam plane, for the OAuth consent form's relay
-            # (app/oauth/authorize). Every other call the console makes goes
+            # (server/internal/web). Every other call the console makes goes
             # from the browser through the session role (ADR-0048).
             - name: PALADIN_IAM_URL
               value: {{ include "chart.backendURL" (dict "ctx" $ "plane" "iam") | quote }}
-            # Read by src/proxy.ts into the CSP (src/lib/security/storageOrigins.ts).
+            # Read into the CSP by the console's server (server/internal/policy).
             - name: PALADIN_STORAGE_ORIGINS
               value: {{ join "," .Values.storageOrigins | quote }}
             {{- with .Values.banner }}
             {{- if .content }}
-            # The platform banner, served by /api/banner (src/lib/banner.ts).
+            # The platform banner, served by /api/banner (server/internal/web).
             - name: PALADIN_BANNER_CONTENT
               value: {{ .content | quote }}
             - name: PALADIN_BANNER_SEVERITY
@@ -87,16 +87,13 @@ spec:
             {{- end }}
             {{- end }}
             {{- if .Values.backend.tls }}
-            - name: NODE_EXTRA_CA_CERTS
+            # The backend's CA, trusted by the consent relay (server/cmd/paladin-console).
+            - name: PALADIN_BACKEND_CA_FILE
               value: {{ printf "%s/%s" (include "chart.backendCAPath" .) .Values.backend.caSecret.key | quote }}
             {{- end }}
             {{- /*
               extraEnv — operator extension point for env vars the chart
-              doesn't model first-class. Common dev-cluster use: injecting
-              NODE_TLS_REJECT_UNAUTHORIZED=0 so the OAuth relay's fetch
-              to an internal-mTLS-protected iam plane doesn't fail at the
-              system-trust-store check. Production overlays mount the
-              issuing CA + set NODE_EXTRA_CA_CERTS instead.
+              doesn't model first-class, such as PALADIN_LOG_LEVEL.
             */}}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}

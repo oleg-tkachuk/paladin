@@ -7,7 +7,7 @@
 import { tenantDetailQuery, userDetailQuery } from "@/lib/queries/details";
 import { CopyableId } from "@/components/ui/CopyableId";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { ArrowLeftIcon, IdentificationIcon } from "@heroicons/react/24/outline";
@@ -31,6 +31,7 @@ import { UserCapabilities } from "@/components/features/oauth/UserCapabilities";
 import { useNameCrumbs } from "@/context/CrumbNamesContext";
 import { normalizeError } from "@/lib/connect/error";
 import { USERS_INDEX_HREF, userResourceName } from "@/lib/userPath";
+import { useRouteParams } from "@/lib/navigation/routeParams";
 
 function Fact({
   label,
@@ -49,9 +50,7 @@ function Fact({
 
 export default function UserDetailPage() {
   const router = useRouter();
-  const params = useParams<{ tenant: string; user: string }>();
-  const tenant = decodeURIComponent(params?.tenant ?? "");
-  const userId = decodeURIComponent(params?.user ?? "");
+  const { tenant, user: userId } = useRouteParams("/users/[tenant]/[user]");
   const name = userResourceName(tenant, userId);
   const [resetTarget, setResetTarget] = useState<ResetTarget | null>(null);
 
@@ -62,6 +61,7 @@ export default function UserDetailPage() {
 
   // The path holds ids; the trail and the tab title name them: the tenant by
   // its slug, leading to its page (/users/<tenant> is none), the user by login.
+  // Crumbs are keyed by the segment as the path spells it, encoded.
   const tenantQuery = useQuery({
     ...tenantDetailQuery(user?.tenantId ?? ""),
     enabled: Boolean(user?.tenantId),
@@ -71,14 +71,14 @@ export default function UserDetailPage() {
     () =>
       user
         ? {
-            [params?.tenant ?? ""]: {
+            [encodeURIComponent(tenant)]: {
               label: slug || user.tenantId,
               href: `/tenants/${encodeURIComponent(slug || user.tenantId)}`,
             },
-            [params?.user ?? ""]: { label: user.subject },
+            [encodeURIComponent(userId)]: { label: user.subject },
           }
         : null,
-    [user, slug, params?.tenant, params?.user],
+    [user, slug, tenant, userId],
   );
   useNameCrumbs(crumbNames);
 

@@ -231,13 +231,14 @@ the plane does. Leaving `public_endpoint` empty reuses `endpoint`.
 
 ## Frontend configuration
 
-The console's server calls one upstream: `PALADIN_IAM_URL`, where the OAuth
-consent form is relayed (`app/oauth/authorize`). The browser's calls go to the
-session role, configured in the backend's `session` block, not to the console.
-`PALADIN_BFF_MAX_CONNECTIONS` caps that relay's connections (default 16,
-`frontend/src/lib/server/upstream.ts`); the chart does not set it, so it comes
-through `extraEnv`. `PALADIN_STORAGE_ORIGINS` (the chart's `storageOrigins`)
-feeds the Content-Security-Policy, and the banner's variables are below.
+The console's server (`frontend/server`, ADR-0049) calls one upstream:
+`PALADIN_IAM_URL`, where the OAuth consent form is relayed. The browser's calls
+go to the session role, configured in the backend's `session` block, not to
+the console. With the backend's internal TLS on, the chart mounts its CA and
+points `PALADIN_BACKEND_CA_FILE` at it, so the relay trusts the iam plane.
+`PALADIN_STORAGE_ORIGINS` (the chart's `storageOrigins`) feeds the
+Content-Security-Policy, `PALADIN_LOG_LEVEL` (default `info`; `debug` logs
+every request) the server's log, and the banner's variables are below.
 
 The health snapshot token gates each role's `/system/health.json`; the admin
 role reads those snapshots with it for `SystemService.GetPlatformHealth`, the

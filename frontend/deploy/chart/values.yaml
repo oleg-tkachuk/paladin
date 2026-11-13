@@ -36,7 +36,7 @@ backend:
   namespace: ""
   # The backend's internalTLS.enabled. On, data / iam / admin are dialled over
   # https and caSecret — a Secret holding the CA as `key` — is mounted and
-  # trusted through NODE_EXTRA_CA_CERTS.
+  # trusted by the consent relay through PALADIN_BACKEND_CA_FILE.
   tls: false
   caSecret: {name: "", key: ca.crt}
   # The iam plane's URL, when not the one built from the fields above.
@@ -59,17 +59,12 @@ banner:
   permanent: false
   position: top
 
-# Extra environment variables appended to the UI container's env block.
-# Use for knobs the chart doesn't model first-class. Common cases:
-#   - NODE_TLS_REJECT_UNAUTHORIZED=0 on dev clusters where the OAuth relay
-#     dials an internal mTLS-protected iam plane whose CA isn't in Node's system
-#     trust store. Production should mount the CA + use NODE_EXTRA_CA_CERTS
-#     instead — disabling verification globally is a development shortcut.
-#   - NODE_OPTIONS=--max-old-space-size=… for memory tuning.
-# Items are standard Kubernetes EnvVar entries.
+# Extra environment variables appended to the UI container's env block, for
+# knobs the chart doesn't model first-class. Items are standard Kubernetes
+# EnvVar entries.
 extraEnv: []
-# - name: NODE_TLS_REJECT_UNAUTHORIZED
-#   value: "0"
+# - name: PALADIN_LOG_LEVEL
+#   value: debug
 
 image:
   # The published multi-arch image, so `helm install` works without building
@@ -89,8 +84,8 @@ fullnameOverride: ""
 serviceAccount:
   create: true
   # UI pod has no K8s API needs. Disabling automount drops the projected
-  # SA token, shrinking the blast radius of any RCE in the Node runtime
-  # or a Next.js SSR dependency.
+  # SA token, shrinking the blast radius of any RCE in the console's
+  # server.
   automount: false
   annotations: {}
   name: ""
@@ -99,8 +94,8 @@ podAnnotations: {}
 podLabels: {}
 
 # ─── Security hardening ────────────────────────────────────────────────────
-# Restricted-PSS-compatible defaults. The Dockerfile creates the `nextjs`
-# user with uid/gid 10001; the chart pins both.
+# Restricted-PSS-compatible defaults. The image runs as uid/gid 10001
+# (deploy/Dockerfile); the chart pins both.
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 10001
@@ -113,17 +108,15 @@ securityContext:
   allowPrivilegeEscalation: false
   runAsNonRoot: true
   runAsUser: 10001
-  # Next.js standalone writes runtime caches under /app/.next/cache
-  # (ISR / revalidation). emptyDir mounts under volumes/volumeMounts
-  # below keep readOnlyRootFilesystem viable.
+  # The server writes nothing: the export is in the binary.
   readOnlyRootFilesystem: true
   capabilities:
     drop: ["ALL"]
   seccompProfile:
     type: RuntimeDefault
 
-# Pod-level graceful shutdown. Next.js' standalone server handles
-# SIGTERM (drains in-flight SSR); 30s is conservative.
+# Pod-level graceful shutdown. The server drains requests in flight for up to
+# 10s after SIGTERM (server/cmd/paladin-console); 30s leaves room for that.
 terminationGracePeriodSeconds: 30
 
 service:
@@ -186,13 +179,6 @@ tls:
 # backend.namespace). On by default: inert on a CNI that does not enforce
 # policies, and on one that does, the namespaces below must be this
 # cluster's — a wrong one cuts the console off.
-#
-# It also keeps clients from naming their own address. The backend trusts the
-# console as a proxy, but the console cannot append the address it was reached
-# from: Next.js keeps a client-sent X-Forwarded-For and drops the socket peer.
-# So the console must be reached only through a proxy that replaces a
-# client-sent X-Forwarded-For (Traefik, Caddy and ingress-nginx do by default),
-# never directly — which this policy enforces.
 networkPolicies:
   enabled: true
   # Ingress controller pods allowed to reach the console.
@@ -206,21 +192,18 @@ networkPolicies:
   extraEgress: []
 
 # ─── Resources ─────────────────────────────────────────────────────────────
-# Sized for Next.js standalone SSR on the dev cluster. Tune in
+# The server serves files from memory and relays one form: the export is
+# embedded in its binary, about 20 MiB resident. Tune in
 # values-{staging,prod}.yaml overlays. requests.cpu is REQUIRED for
-# HPA-on-CPU to work.
-#
-# The CPU limit is a ceiling for bursts, not the working size: every browser
-# RPC passes through this process, and at 500m a full e2e run kept it throttled
-# in half of its CFS periods. The probes then missed their timeout, the one
-# replica left the Service, and the ingress answered 502 for every page.
+# HPA-on-CPU to work. The CPU limit is a ceiling for bursts, such as a cold
+# browser cache fetching every chunk at once, not the working size.
 resources:
   requests:
-    cpu: 100m
-    memory: 256Mi
+    cpu: 50m
+    memory: 64Mi
   limits:
-    cpu: 2000m
-    memory: 512Mi
+    cpu: 1000m
+    memory: 128Mi
 
 # Both probes hit the trivial process-alive route (no backend/DB calls).
 # Liveness: a backend outage must not restart-storm the UI. Readiness: the
@@ -262,10 +245,8 @@ volumes:
   - name: config
     configMap:
       name: paladin-console-config
-  # readOnlyRootFilesystem requires writable temp + Next.js runtime cache.
+  # A writable /tmp under readOnlyRootFilesystem, for the Go runtime.
   - name: tmp
-    emptyDir: {}
-  - name: next-cache
     emptyDir: {}
 
 volumeMounts:
@@ -274,8 +255,6 @@ volumeMounts:
     readOnly: true
   - name: tmp
     mountPath: /tmp
-  - name: next-cache
-    mountPath: /app/.next/cache
 
 nodeSelector: {}
 tolerations: []

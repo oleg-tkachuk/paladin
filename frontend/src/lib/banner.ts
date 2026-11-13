@@ -1,18 +1,9 @@
 // The platform banner: one message the operator puts across the whole
 // console — a maintenance window, a migration, a policy change — after Argo
 // CD's ui.bannercontent. It is the deployment's to say, so it comes from the
-// BFF's environment and is read on every request rather than baked into the
-// image; /api/banner hands it to the console's chrome.
+// console server's environment (server/cmd/paladin-console) rather than the
+// image; /api/banner hands it to the console's chrome as written.
 import { readNotice, type Notice } from "@/lib/notice";
-
-/** The environment variables the banner is set through (the chart's `banner`). */
-export const BANNER_ENV = {
-  content: "PALADIN_BANNER_CONTENT",
-  severity: "PALADIN_BANNER_SEVERITY",
-  url: "PALADIN_BANNER_URL",
-  permanent: "PALADIN_BANNER_PERMANENT",
-  position: "PALADIN_BANNER_POSITION",
-} as const;
 
 /** Where the banner stands: above the page, below it, or both. */
 const BANNER_POSITIONS = ["top", "bottom", "both"] as const;
@@ -22,7 +13,14 @@ export interface PlatformBanner extends Notice {
   position: BannerPosition;
 }
 
-type Fields = { [K in keyof typeof BANNER_ENV]?: unknown };
+/** The banner's fields as the console's server sends them, unchecked. */
+type Fields = {
+  content?: unknown;
+  severity?: unknown;
+  url?: unknown;
+  permanent?: unknown;
+  position?: unknown;
+};
 
 const text = (v: unknown): string | undefined =>
   typeof v === "string" ? v : undefined;
@@ -47,21 +45,8 @@ function bannerOf(fields: Fields): PlatformBanner | null {
   return { ...notice, position };
 }
 
-/** The banner the environment sets, or null. */
-export function bannerFromEnv(
-  env: Readonly<Record<string, string | undefined>>,
-): PlatformBanner | null {
-  return bannerOf({
-    content: env[BANNER_ENV.content],
-    severity: env[BANNER_ENV.severity],
-    url: env[BANNER_ENV.url],
-    permanent: env[BANNER_ENV.permanent],
-    position: env[BANNER_ENV.position],
-  });
-}
-
 /**
- * The banner /api/banner sent, checked again in the browser: the answer is
+ * The banner /api/banner sent, checked here in the browser: the answer is
  * JSON, and a field the console does not expect should cost the banner, not
  * the shell.
  */

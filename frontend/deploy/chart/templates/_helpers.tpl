@@ -107,7 +107,7 @@ when set, otherwise built from the backend release. Called with
 
 {{/*
 chart.backendCAPath — the mount path of the backend CA, when backend.tls
-is on. Fails without a caSecret: Node rejects the internal CA otherwise.
+is on. Fails without a caSecret: the relay rejects the internal CA otherwise.
 */}}
 {{- define "chart.backendCAPath" -}}
 /etc/paladin-backend-ca

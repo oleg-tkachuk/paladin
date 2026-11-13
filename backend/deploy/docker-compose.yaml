@@ -275,7 +275,7 @@ services:
       paladin-bootstrap:
         condition: service_completed_successfully
 
-  # The console (Next.js): it renders the UI. The browser reaches it, and the
+  # The console: its static export, served by its Go server (ADR-0049). The browser reaches it, and the
   # session role beside it, through paladin-front on localhost:3002.
   #
   # Build context is the sibling repo. If you don't have it checked out,
@@ -305,7 +305,7 @@ services:
   # (the UI repo's standalone port, kept for muscle memory) serves the console,
   # and its /session/* paths reach the session role (deploy/front/Caddyfile).
   paladin-front:
-    image: caddy:2.11.9-alpine
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
     container_name: paladin-front
     restart: on-failure
     volumes:

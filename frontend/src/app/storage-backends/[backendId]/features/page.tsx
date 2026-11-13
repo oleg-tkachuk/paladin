@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { useParams } from "next/navigation";
 
 import { useBackends } from "@/hooks/useBackends";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -10,11 +9,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 import { BackendFeatures } from "../BackendFeatures";
 import { BackendHeader } from "../BackendHeader";
+import { useRouteParams } from "@/lib/navigation/routeParams";
 
 /** A backend's S3 feature probe, on a tab of its own. */
 export default function BackendFeaturesPage() {
-  const params = useParams<{ backendId: string }>();
-  const backendId = decodeURIComponent(params.backendId);
+  const { backendId } = useRouteParams("/storage-backends/[backendId]");
   const { backends, loading, error, refetch: refetchBackends } = useBackends();
   const backend = useMemo(
     () => backends.find((b) => b.backendId === backendId),

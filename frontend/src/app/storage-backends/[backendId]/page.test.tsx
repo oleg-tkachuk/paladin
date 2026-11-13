@@ -31,7 +31,6 @@ const h = vi.hoisted(() => ({
 
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
-  useParams: () => ({ backendId: "primary" }),
   usePathname: () => "/storage-backends/primary",
 }));
 vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: () => null }));

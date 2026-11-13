@@ -1,0 +1,18 @@
+{
+  "sessionCookie": "__Host-paladin_session",
+  "loginPath": "/login",
+  "nextParam": "next",
+  "bannerPath": "/api/banner",
+  "livePath": "/api/health/live",
+  "consentPath": "/oauth/consent",
+  "authorizePath": "/oauth/authorize",
+  "publicPrefixes": [
+    "/login",
+    "/api/health",
+    "/oauth",
+    "/_next",
+    "/favicon.ico",
+    "/robots.txt"
+  ],
+  "placeholderSegment": "_"
+}

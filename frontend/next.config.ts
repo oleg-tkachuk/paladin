@@ -11,38 +11,14 @@ import { yamlConfig } from "./src/config";
 // the NEXT_PUBLIC_* vars below cover the UI half.
 const uiMeta = yamlConfig.runtimeConfig.public.uiMetadata;
 
-// Security headers applied to every response. The CSP is not among them: it
-// names the deployment's storage origins, so src/proxy.ts sets it when the
-// server runs (src/lib/security/csp.ts builds it).
-const isDev = process.env.NODE_ENV !== "production";
-
-const securityHeaders = [
-  // HSTS only in production. On http://localhost dev a 2-year HSTS would
-  // make the browser refuse plain-HTTP to localhost for everything on
-  // that port — poisoning every developer's machine after one visit.
-  ...(isDev
-    ? []
-    : [
-        {
-          key: "Strict-Transport-Security",
-          value: "max-age=63072000; includeSubDomains; preload",
-        },
-      ]),
-  { key: "X-Frame-Options", value: "DENY" },
-  { key: "X-Content-Type-Options", value: "nosniff" },
-  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "X-DNS-Prefetch-Control", value: "off" },
-  {
-    key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=()",
-  },
-];
+// The production build is a static export, served by the console's Go server
+// (server/, ADR-0049), which also sets the security headers and the CSP.
+// `next dev` runs without it: with output "export" set, dev answers 404 for
+// any value of a dynamic segment but the placeholder the export is built for.
+const isProductionBuild = process.env.NODE_ENV === "production";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
-  async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
-  },
+  output: isProductionBuild ? "export" : undefined,
   env: {
     // PALADIN_GRPC_URL used to be set here from the config file's
     // paladin.upstreamUrl. Nothing read it — in either repo — while the BFF

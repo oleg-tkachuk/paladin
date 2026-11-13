@@ -6,7 +6,6 @@ const h = vi.hoisted(() => ({ resolve: vi.fn() }));
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   notFound: vi.fn(),
-  useParams: () => ({ id: "acme" }),
   usePathname: () => "/tenants/acme",
 }));
 vi.mock("@/lib/resources/tenant-resolve", () => ({
