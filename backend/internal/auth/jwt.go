@@ -11,9 +11,9 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jws"
-	"github.com/lestrrat-go/jwx/v3/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 )
 
 // JWTVerifier verifies a JWT signed with one public key — RS256 or ES256 —
@@ -137,13 +137,13 @@ func acceptedClaims(payload []byte, issuer, audience string, leeway time.Duratio
 // claimRefusal names why the claims were refused, as callers and logs read it.
 func claimRefusal(err error) error {
 	switch {
-	case errors.Is(err, jwt.TokenExpiredError()):
+	case errors.Is(err, jwt.TokenExpiredError{}):
 		return fmt.Errorf("jwt: token expired: %w", err)
-	case errors.Is(err, jwt.TokenNotYetValidError()):
+	case errors.Is(err, jwt.TokenNotYetValidError{}):
 		return fmt.Errorf("jwt: token not yet valid: %w", err)
-	case errors.Is(err, jwt.InvalidIssuerError()):
+	case errors.Is(err, jwt.InvalidIssuerError{}):
 		return fmt.Errorf("jwt: issuer mismatch: %w", err)
-	case errors.Is(err, jwt.InvalidAudienceError()):
+	case errors.Is(err, jwt.InvalidAudienceError{}):
 		return fmt.Errorf("jwt: audience mismatch: %w", err)
 	}
 	return fmt.Errorf("jwt: claims: %w", err)

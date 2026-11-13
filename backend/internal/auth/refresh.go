@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"uuid"
 
-	"github.com/lestrrat-go/jwx/v3/jws"
+	"github.com/lestrrat-go/jwx/v4/jws"
 )
 
 // RefreshDecoder verifies a refresh token's signature against the IAM-audience
