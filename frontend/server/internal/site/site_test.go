@@ -31,6 +31,7 @@ func export() fstest.MapFS {
 		"tenants/_/billing.txt":                  file("billing rsc"),
 		"tenants/_/billing/__next._tree.txt":     file("tree"),
 		"tenants/_/collections/_/objects/_.html": file("object"),
+		"tenants/_/collections/_/objects/_.txt":  file("object rsc"),
 		"_next/static/chunks/a1.js":              file("js"),
 	}
 }
@@ -62,6 +63,7 @@ func TestResolve(t *testing.T) {
 		{"the payload of a dynamic page", "/tenants/acme.txt", true, "tenants/_.txt"},
 		{"the payload below one", "/tenants/acme/billing.txt", true, "tenants/_/billing.txt"},
 		{"a segment file", "/tenants/acme/billing/__next._tree.txt", true, "tenants/_/billing/__next._tree.txt"},
+		{"the payload of a page whose id holds a slash", "/tenants/acme/collections/x/objects/a%2Freport.txt.txt", true, "tenants/_/collections/_/objects/_.txt"},
 		{"an encoded slash inside a segment", "/tenants/a%2Fb/collections/x%2Fy/objects/k%2Fey", false, "tenants/_/collections/_/objects/_.html"},
 		{"an id ending in .txt, as a page", "/tenants/notes.txt", false, "tenants/_.html"},
 		{"the placeholder itself", "/tenants/_", false, "tenants/_.html"},
@@ -146,4 +148,34 @@ func TestServe(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 		assert.Empty(t, rec.Body.String())
 	})
+}
+
+func TestTxtRedirect(t *testing.T) {
+	s := newSite(t)
+	for _, tc := range []struct{ name, path, want string }{
+		{"an object named report.txt", "/tenants/acme/collections/x/objects/a%2Freport.txt", "/tenants/acme/collections/x/objects/a%2Freport%2Etxt"},
+		{"a dynamic page", "/tenants/notes.txt", "/tenants/notes%2Etxt"},
+		{"with a trailing slash", "/tenants/notes.txt/", "/tenants/notes%2Etxt"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := s.TxtRedirect(tc.path)
+			require.True(t, ok)
+			assert.Equal(t, tc.want, got)
+			page, ok := s.Resolve(got, false)
+			require.True(t, ok, "the encoded address serves the same page")
+			want, _ := s.Resolve(tc.path, false)
+			assert.Equal(t, want, page)
+		})
+	}
+
+	for _, p := range []string{
+		"/tenants/acme",             // no suffix
+		"/tenants/notes%2Etxt",      // already encoded
+		"/index.txt",                // a payload the export holds
+		"/tenants/acme/billing.txt", // likewise, under a placeholder
+		"/nowhere/at/all.txt",       // no page
+	} {
+		_, ok := s.TxtRedirect(p)
+		assert.False(t, ok, p)
+	}
 }

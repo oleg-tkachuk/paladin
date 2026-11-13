@@ -240,3 +240,21 @@ func TestMethodsAndLogs(t *testing.T) {
 	require.Len(t, served, 1)
 	assert.Equal(t, int64(http.StatusOK), served[0].ContextMap()["status"])
 }
+
+// The router strips a trailing ".txt" from the address it loads on; a page
+// whose id ends so is sent where the dot is encoded.
+func TestTxtSuffixRedirect(t *testing.T) {
+	f := newFixture(t, nil, web.Banner{})
+
+	rec := f.do(f.signedIn(http.MethodGet, "/tenants/notes.txt?tab=x", nil))
+	assert.Equal(t, http.StatusPermanentRedirect, rec.Code)
+	assert.Equal(t, "/tenants/notes%2Etxt?tab=x", rec.Header().Get("Location"))
+
+	rec = f.do(f.signedIn(http.MethodGet, "/tenants/notes%2Etxt", nil))
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "tenant", rec.Body.String())
+
+	rsc := f.signedIn(http.MethodGet, "/tenants/notes.txt", nil)
+	rsc.Header.Set(site.RSCHeader, "1")
+	assert.NotEqual(t, http.StatusPermanentRedirect, f.do(rsc).Code, "the router's own payload request is not redirected")
+}

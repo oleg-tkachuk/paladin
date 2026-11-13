@@ -154,6 +154,15 @@ func (s *server) relay(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) static(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get(site.RSCHeader) == "" {
+		if target, ok := s.cfg.Site.TxtRedirect(r.URL.EscapedPath()); ok {
+			if r.URL.RawQuery != "" {
+				target += "?" + r.URL.RawQuery
+			}
+			http.Redirect(w, r, target, http.StatusPermanentRedirect)
+			return
+		}
+	}
 	s.cfg.Site.Serve(w, r)
 }
 

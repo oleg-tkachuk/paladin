@@ -9,6 +9,12 @@
 // The client router asks for a page's RSC payload at the page's path plus
 // ".txt", and marks the request with the RSC header; an id that itself ends in
 // ".txt" is a page like any other, so the header, not the suffix, decides.
+//
+// The router also strips a trailing ".txt" from the address it loads on
+// (Next 16, route-params.js urlToUrlWithoutFlightMarker), so a page whose last
+// segment ends in ".txt" — an object named report.txt — would read the wrong
+// id. Such a page is redirected to the same address with the dot encoded
+// (TxtRedirect), which the router leaves alone and the page decodes.
 package site
 
 import (
@@ -29,9 +35,11 @@ const (
 	// RSCHeader marks the client router's request for a page's payload.
 	RSCHeader = "RSC"
 
-	htmlExt  = ".html"
-	rscExt   = ".txt"
-	indexDoc = "index"
+	htmlExt = ".html"
+	rscExt  = ".txt"
+	// encodedRSCExt is rscExt with its dot percent-encoded.
+	encodedRSCExt = "%2Etxt"
+	indexDoc      = "index"
 	// notFoundDoc is the export's own 404 page.
 	notFoundDoc = "404.html"
 
@@ -99,24 +107,56 @@ func New(files fs.FS, placeholder string) (*Site, error) {
 // Files is how many files the export holds.
 func (s *Site) Files() int { return len(s.etags) }
 
-// Resolve names the file a request path is served from, or false.
-func (s *Site) Resolve(escapedPath string, rsc bool) (string, bool) {
-	var segs []string
+// segment is one path segment: the entry it may name in the export, and
+// whether its value ends in the RSC suffix.
+type segment struct {
+	// name is the decoded segment, or "" when it cannot name an entry: only
+	// the placeholder can stand for it.
+	name string
+	txt  bool
+}
+
+func segments(escapedPath string) []segment {
+	var segs []segment
 	for _, raw := range strings.Split(escapedPath, segmentSeparator) {
 		if raw == "" {
 			continue
 		}
-		seg, err := url.PathUnescape(raw)
-		if err != nil || strings.Contains(seg, segmentSeparator) || seg == "." || seg == ".." {
-			// Not a name in the export; only the placeholder can stand for it.
-			seg = ""
+		value, err := url.PathUnescape(raw)
+		if err != nil {
+			value = raw
+		}
+		seg := segment{name: value, txt: strings.HasSuffix(value, rscExt)}
+		if err != nil || strings.Contains(value, segmentSeparator) || value == "." || value == ".." {
+			seg.name = ""
 		}
 		segs = append(segs, seg)
 	}
+	return segs
+}
+
+// Resolve names the file a request path is served from, or false.
+func (s *Site) Resolve(escapedPath string, rsc bool) (string, bool) {
+	segs := segments(escapedPath)
 	if len(segs) == 0 {
 		return s.leafAtRoot(rsc)
 	}
 	return s.walk(".", segs, rsc)
+}
+
+// TxtRedirect is where a page request whose last segment ends in ".txt" goes
+// instead: the same address with that dot encoded. False when the path is no
+// page, already encoded, or a file the export holds under that name.
+func (s *Site) TxtRedirect(escapedPath string) (string, bool) {
+	trimmed := strings.TrimRight(escapedPath, segmentSeparator)
+	if !strings.HasSuffix(trimmed, rscExt) {
+		return "", false
+	}
+	file, ok := s.Resolve(escapedPath, false)
+	if !ok || !strings.HasSuffix(file, htmlExt) {
+		return "", false
+	}
+	return strings.TrimSuffix(trimmed, rscExt) + encodedRSCExt, true
 }
 
 func (s *Site) leafAtRoot(rsc bool) (string, bool) {
@@ -128,12 +168,12 @@ func (s *Site) leafAtRoot(rsc bool) (string, bool) {
 	return name, ok
 }
 
-func (s *Site) walk(dir string, segs []string, rsc bool) (string, bool) {
+func (s *Site) walk(dir string, segs []segment, rsc bool) (string, bool) {
 	seg, rest := segs[0], segs[1:]
 	if len(rest) == 0 {
 		return s.leaf(dir, seg, rsc)
 	}
-	for _, name := range s.candidates(seg) {
+	for _, name := range s.candidates(seg.name) {
 		if found, ok := s.walk(path.Join(dir, name), rest, rsc); ok {
 			return found, true
 		}
@@ -142,17 +182,17 @@ func (s *Site) walk(dir string, segs []string, rsc bool) (string, bool) {
 }
 
 // leaf is the file for the last segment: the file it names, else its page.
-func (s *Site) leaf(dir, seg string, rsc bool) (string, bool) {
+func (s *Site) leaf(dir string, seg segment, rsc bool) (string, bool) {
 	var tries []string
-	if seg != "" {
-		tries = append(tries, path.Join(dir, seg))
+	if seg.name != "" {
+		tries = append(tries, path.Join(dir, seg.name))
 	}
 	switch {
 	case !rsc:
-		for _, name := range s.candidates(seg) {
+		for _, name := range s.candidates(seg.name) {
 			tries = append(tries, path.Join(dir, name+htmlExt))
 		}
-	case strings.HasSuffix(seg, rscExt):
+	case seg.txt:
 		tries = append(tries, path.Join(dir, s.placeholder+rscExt))
 	}
 	for _, name := range tries {
