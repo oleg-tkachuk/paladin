@@ -143,8 +143,10 @@ func TestExpiredReservationsAreReleased(t *testing.T) {
 	if _, err := f.usage.Settle(ledgerCtx, meter.SettleRequest{Subject: child, ReservationID: r.ID, Amount: limes.MustParseAmount("1")}, nil); !errors.Is(err, meter.ErrReservationNotFound) {
 		t.Fatalf("settle after expiry: err = %v, want ErrReservationNotFound", err)
 	}
-	if res, err := f.usage.ReleaseExpired(ctx, meter.ReleaseExpiredRequest{}); err != nil || res.Released != 0 {
-		t.Fatalf("ReleaseExpired on a bare context = %d, %v; want 0 — the scope is not engaging", res.Released, err)
+	// A bare context admits no tenant: refused since pgstore v0.77.0, where
+	// it released nothing and reported success.
+	if _, err := f.usage.ReleaseExpired(ctx, meter.ReleaseExpiredRequest{}); !errors.Is(err, limes.ErrScopeMismatch) {
+		t.Fatalf("ReleaseExpired on a bare context: err = %v, want ErrScopeMismatch", err)
 	}
 	if _, err := f.usage.ReleaseExpired(auth.WithCrossTenantRead(ctx), meter.ReleaseExpiredRequest{}); !errors.Is(err, limes.ErrScopeMismatch) {
 		t.Fatalf("ReleaseExpired under a read-only scope: err = %v, want ErrScopeMismatch", err)

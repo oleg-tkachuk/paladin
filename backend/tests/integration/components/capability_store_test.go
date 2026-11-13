@@ -220,13 +220,15 @@ func TestCapabilityInsertCrossTenant(t *testing.T) {
 
 // TestPurgeRunsWithoutARequestPrincipal pins the failure mode that background
 // jobs on an RLS-scoped pool keep rediscovering: the purger runs on a timer,
-// so there is no principal and no tenant, so every statement matches nothing
-// and the job logs success forever while the table grows. The purger scopes
-// its context to every tenant, to read and write (pgstore.WithAllTenants); a
-// platform-wide read is refused, as it may write nothing.
+// so there is no principal and no tenant, so every statement matched nothing
+// and the job logged success forever while the table grew. Since pgstore
+// v0.77.0 a purge under a scope that admits no tenant is refused, so such a
+// job fails on its first tick instead. The purger scopes its context to every
+// tenant, to read and write (pgstore.WithAllTenants); a platform-wide read is
+// refused, as it may write nothing.
 //
-// The assertion is on every half — the record is invisible and unpurged on
-// a bare context, and the platform-wide purge removes it — because a test
+// The assertion is on every half — the record is invisible and its purge
+// refused on a bare context, and the platform-wide purge removes it — because a test
 // that only checked the last would pass just as well if RLS were off.
 func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
 	t.Parallel()
@@ -249,19 +251,16 @@ func TestPurgeRunsWithoutARequestPrincipal(t *testing.T) {
 	if _, err := purger.GetRecord(ctx, expired.ID); !errors.Is(err, limes.ErrNotFound) {
 		t.Fatalf("the record reads back with no tenant (%v) — RLS is not engaging on this pool, so this test proves nothing", err)
 	}
-	res, err := purger.Purge(ctx, limes.PurgeRequest{ExpiredFor: purgeRetention})
-	if err != nil {
-		t.Fatalf("purge on a bare context: %v", err)
-	}
-	if res.Purged != 0 {
-		t.Fatalf("purged %d records on a bare context — the scope is not engaging", res.Purged)
+	// A bare context admits no tenant: refused, not a silent empty purge.
+	if _, err := purger.Purge(ctx, limes.PurgeRequest{ExpiredFor: purgeRetention}); !errors.Is(err, limes.ErrScopeMismatch) {
+		t.Fatalf("purge on a bare context: err = %v, want ErrScopeMismatch", err)
 	}
 	// A platform-wide read writes nothing: it is refused before it begins.
 	if _, err := purger.Purge(auth.WithCrossTenantRead(ctx), limes.PurgeRequest{ExpiredFor: purgeRetention}); !errors.Is(err, limes.ErrScopeMismatch) {
 		t.Fatalf("purge under a read-only scope: err = %v, want ErrScopeMismatch", err)
 	}
 	// Housekeeping, as the purger scopes it.
-	res, err = purger.Purge(pgstore.WithAllTenants(ctx), limes.PurgeRequest{ExpiredFor: purgeRetention})
+	res, err := purger.Purge(pgstore.WithAllTenants(ctx), limes.PurgeRequest{ExpiredFor: purgeRetention})
 	if err != nil {
 		t.Fatalf("platform-wide purge: %v", err)
 	}
