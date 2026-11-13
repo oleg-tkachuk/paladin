@@ -1,4 +1,4 @@
-## release/v0.3.0 — limes v1.0.0-rc.71: refusal codes and stricter token-endpoint input
+## release/v0.3.0, sdk/python/v0.146.3, sdk/go/v0.146.3 — limes v1.0.0-rc.71: refusal codes and stricter token-endpoint input
 
 - A capability whose upstream names no revocation lineage (limes code
   `no_revocation_lineage`) is answered `INTERNAL`, where it was
