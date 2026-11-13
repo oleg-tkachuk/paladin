@@ -101,7 +101,7 @@ here.
 - The procedure is in
   [the rotation runbook](../runbooks/capability-signing-key-rotation.md).
 
-## release/v0.3.0 — limes v1.0.0-rc.73: a bumps table in the limes schema
+## release/v0.3.0, sdk/python/v0.146.3, sdk/go/v0.146.3 — limes v1.0.0-rc.73: a bumps table in the limes schema
 
 - pgstore migration 044 adds `limes.bumps`. The `migrate` hook applies it
   before the new pods serve; a pod of this release refuses to start against
@@ -111,7 +111,7 @@ here.
   another's family took the family's.
 - No configuration keys change.
 
-## release/v0.3.0 — limes v1.0.0-rc.71: refusal codes and stricter token-endpoint input
+## release/v0.3.0, sdk/python/v0.146.3, sdk/go/v0.146.3 — limes v1.0.0-rc.71: refusal codes and stricter token-endpoint input
 
 - A capability whose upstream names no revocation lineage (limes code
   `no_revocation_lineage`) is answered `INTERNAL`, where it was
