@@ -408,10 +408,12 @@ console_container() {
 # loop missed them, and the only replica left the Service mid-run.
 readonly CONSOLE_READINESS_TIMEOUT=3
 readonly CONSOLE_LIVENESS_TIMEOUT=5
-readonly CONSOLE_CPU_LIMIT=2000m
+readonly CONSOLE_CPU_LIMIT=1000m
 check "console: readiness timeout" "$(console_container defaults .readinessProbe.timeoutSeconds)" "$CONSOLE_READINESS_TIMEOUT"
 check "console: liveness timeout" "$(console_container defaults .livenessProbe.timeoutSeconds)" "$CONSOLE_LIVENESS_TIMEOUT"
-# At 500m a full e2e run throttled the console in half of its CFS periods.
+# Room for a cold cache fetching every chunk at once. (At 500m the Node console,
+# which every RPC once passed through, throttled in half its CFS periods; the
+# Go server only serves files, ADR-0049.)
 check "console: CPU limit" "$(console_container defaults .resources.limits.cpu)" "$CONSOLE_CPU_LIMIT"
 
 console other-release --set backend.release=pic --set backend.namespace=platform \
@@ -428,7 +430,7 @@ check "console: an explicit URL wins" "$(console_env explicit PALADIN_IAM_URL)" 
 console tls --set backend.tls=true --set backend.caSecret.name=planes-ca
 check "console: tls dials iam over https" "$(console_env tls PALADIN_IAM_URL)" \
     "https://paladin-core-iam.$NAMESPACE.svc.cluster.local:8085"
-check "console: tls trusts the mounted CA" "$(console_env tls NODE_EXTRA_CA_CERTS)" "/etc/paladin-backend-ca/ca.crt"
+check "console: tls trusts the mounted CA" "$(console_env tls PALADIN_BACKEND_CA_FILE)" "/etc/paladin-backend-ca/ca.crt"
 check "console: tls mounts the CA Secret" \
     "$(yq ea -r '[select(.kind == "Deployment")] | .[0] | .spec.template.spec.volumes[] | select(.name == "backend-ca") | .secret.secretName' "$scratch/console-tls.yaml")" \
     "planes-ca"
