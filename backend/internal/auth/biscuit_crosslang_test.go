@@ -307,13 +307,13 @@ func TestPythonFrozenCopyIsRefused(t *testing.T) {
 	// The smallest charge there is: a ceiling of 0 refuses even that.
 	const smallestCharge limes.Nanos = 1
 
-	if _, err := usage.Bump(ctx, meter.BumpRequest{Subject: frozen.MeterSubject()}); !errors.Is(err, limes.ErrRequestLimitExceeded) {
+	if _, err := usage.Bump(ctx, meter.BumpRequest{Subject: frozen.MeterSubject()}, nil); !errors.Is(err, limes.ErrRequestLimitExceeded) {
 		t.Errorf("first request on the frozen copy: err = %v, want ErrRequestLimitExceeded", err)
 	}
 	if _, err := usage.Charge(ctx, meter.ChargeRequest{Subject: frozen.MeterSubject(), Amount: smallestCharge}, nil); !errors.Is(err, limes.ErrBudgetExceeded) {
 		t.Errorf("first charge on the frozen copy: err = %v, want ErrBudgetExceeded", err)
 	}
-	if _, err := usage.Bump(ctx, meter.BumpRequest{Subject: seed.MeterSubject()}); err != nil {
+	if _, err := usage.Bump(ctx, meter.BumpRequest{Subject: seed.MeterSubject()}, nil); err != nil {
 		t.Errorf("a request on the seed after its copy froze: %v", err)
 	}
 	if _, err := usage.Charge(ctx, meter.ChargeRequest{Subject: seed.MeterSubject(), Amount: smallestCharge}, nil); err != nil {

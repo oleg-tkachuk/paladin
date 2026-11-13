@@ -80,7 +80,8 @@ func seedEveryLimesTable(t *testing.T, ctx context.Context, f *biscuitFixture, r
 	}); err != nil {
 		t.Fatalf("set budget: %v", err)
 	}
-	if _, err := usage.Bump(acting, meter.BumpRequest{Subject: subject}); err != nil {
+	// A bump that names itself is kept by its reference, so a resend replays it.
+	if _, err := usage.Bump(acting, meter.BumpRequest{Subject: subject, ExternalRef: uuid.New().String()}, nil); err != nil {
 		t.Fatalf("bump: %v", err)
 	}
 	charged, err := usage.Charge(acting, meter.ChargeRequest{Subject: subject, Amount: limes.NanosPerUnit}, nil)

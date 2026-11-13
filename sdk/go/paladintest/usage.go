@@ -136,7 +136,7 @@ func (u *usage) bump(id string) error {
 	if err != nil {
 		return err
 	}
-	_, err = u.store.Bump(context.Background(), meter.BumpRequest{Subject: subject})
+	_, err = u.store.Bump(context.Background(), meter.BumpRequest{Subject: subject}, nil)
 	return err
 }
 

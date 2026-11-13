@@ -17,10 +17,10 @@ type copiesUsage struct {
 	bumps           int
 }
 
-func (u *copiesUsage) Bump(ctx context.Context, req meter.BumpRequest) (meter.BumpReceipt, error) {
+func (u *copiesUsage) Bump(ctx context.Context, req meter.BumpRequest, onBumped func(context.Context, meter.Bumped) error) (meter.BumpReceipt, error) {
 	u.bumps++
 	u.bumped = req.Subject.Copies()
-	return u.usageStore.Bump(ctx, req)
+	return u.usageStore.Bump(ctx, req, onBumped)
 }
 
 func (u *copiesUsage) Charge(ctx context.Context, req meter.ChargeRequest, on func(context.Context, meter.Charged) error) (meter.ChargeReceipt, error) {
