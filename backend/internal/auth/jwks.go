@@ -35,6 +35,12 @@ type JWKSVerifier struct {
 	Leeway           time.Duration
 	Now              func() time.Time
 
+	// RetryDelay is the wait before the first retry when the set could not
+	// be fetched at Start; each retry doubles it, up to MaxRetryDelay, until
+	// a fetch succeeds. Defaults to 1s and 30s.
+	RetryDelay    time.Duration
+	MaxRetryDelay time.Duration
+
 	// MinRefreshInterval rate-limits forced refreshes on cache miss. An
 	// unauthenticated attacker can spray tokens with novel `kid` headers;
 	// without this each miss triggers a synchronous outbound fetch,
@@ -60,6 +66,8 @@ const (
 	defaultJWKSFetchTimeout   = 5 * time.Second
 	defaultRefreshInterval    = time.Hour
 	defaultMinRefreshInterval = 30 * time.Second
+	defaultRetryDelay         = time.Second
+	defaultMaxRetryDelay      = 30 * time.Second
 	// maxJWKSBytes bounds the JWK Set read from the identity provider.
 	maxJWKSBytes = 1 << 20
 )
@@ -76,17 +84,24 @@ func NewJWKSVerifier(url string) *JWKSVerifier {
 	}
 }
 
-// Start kicks off a background refresh loop. Returns immediately after
-// the initial sync; subsequent ticks happen async. ctx cancels the loop.
+// Start fetches the set and starts the background refresh loop; ctx cancels
+// it. A failed first fetch is returned, and the loop keeps retrying it, with
+// a growing delay, until it succeeds: a role that starts before the identity
+// provider does — every role at once, in a rollout — picks the keys up as
+// soon as they are served, rather than never refreshing them again.
 func (v *JWKSVerifier) Start(ctx context.Context) error {
-	if err := v.refresh(ctx); err != nil {
+	err := v.refresh(ctx)
+	go v.loop(ctx, err == nil)
+	if err != nil {
 		return fmt.Errorf("jwks: initial sync: %w", err)
 	}
-	go v.loop(ctx)
 	return nil
 }
 
-func (v *JWKSVerifier) loop(ctx context.Context) {
+func (v *JWKSVerifier) loop(ctx context.Context, synced bool) {
+	if !synced && !v.retryFirstFetch(ctx) {
+		return
+	}
 	t := time.NewTicker(refreshEvery(v.RefreshInterval))
 	defer t.Stop()
 	for {
@@ -100,6 +115,52 @@ func (v *JWKSVerifier) loop(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// retryFirstFetch fetches the set until it succeeds, waiting longer after
+// each failure; false when ctx ends first. A Verify that loaded the set in
+// the meantime ends it too.
+func (v *JWKSVerifier) retryFirstFetch(ctx context.Context) bool {
+	delay := orDefault(v.RetryDelay, defaultRetryDelay)
+	maxDelay := orDefault(v.MaxRetryDelay, defaultMaxRetryDelay)
+	for attempt := 1; ; attempt++ {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(delay):
+		}
+		if v.loaded() {
+			return true
+		}
+		err := v.refresh(ctx)
+		if err == nil {
+			if v.Logger != nil {
+				v.Logger.Info("jwks fetched; verifying by it",
+					logfield.URL("url", v.URL), zap.Int("retries", attempt))
+			}
+			return true
+		}
+		if v.Logger != nil {
+			v.Logger.Warn("jwks still unreachable; retrying",
+				logfield.URL("url", v.URL), zap.Int("retry", attempt),
+				zap.Duration("retry_in", min(delay*2, maxDelay)), zap.Error(err))
+		}
+		delay = min(delay*2, maxDelay)
+	}
+}
+
+// loaded reports a set already fetched.
+func (v *JWKSVerifier) loaded() bool {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	return v.keys != nil
+}
+
+func orDefault(d, def time.Duration) time.Duration {
+	if d <= 0 {
+		return def
+	}
+	return d
 }
 
 // refreshEvery is how often the set is fetched again: interval, or the

@@ -616,9 +616,13 @@ func buildAgentVerifier(ctx context.Context, a config.Auth, keys *sessionkey.Set
 		v := auth.NewJWKSVerifier(a.JWKSURL)
 		v.ExpectedIssuer = a.Issuer
 		v.Leeway = a.Leeway
+		v.Logger = l
+		// Kept even when the first fetch fails: it retries in the
+		// background, and a verifier dropped here stayed dropped until the
+		// pod restarted — an IAM role still starting in the same rollout
+		// was enough.
 		if err := v.Start(ctx); err != nil {
-			l.Warn("mcp token verifier: jwks failed to start", zap.Error(err))
-			return nil
+			l.Warn("mcp token verifier: jwks not fetched yet; retrying", zap.Error(err))
 		}
 		return v
 	default:
