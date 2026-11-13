@@ -1,3 +1,5 @@
+![An application calls paladin.Upload; paladin checks the request and signs a presigned URL, and the bytes go straight to the S3 bucket, never through paladin. Headline: "Guards every byte. Never touches one."](docs/assets/social-preview@2x.png)
+
 # paladin
 
 [![ci](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/oleg-tkachuk/paladin/actions/workflows/ci.yaml)
