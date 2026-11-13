@@ -13,9 +13,9 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jwk"
-	"github.com/lestrrat-go/jwx/v3/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 )
 
 // What the identity provider in these tests issues, and when.
@@ -57,7 +57,7 @@ func newIDP(t *testing.T) *idp {
 // add makes raw a signing key under kid; publish puts its public half in the set.
 func (p *idp) add(kid string, raw any, publish bool) {
 	p.t.Helper()
-	key, err := jwk.Import(raw)
+	key, err := jwk.Import[jwk.Key](raw)
 	if err != nil {
 		p.t.Fatal(err)
 	}

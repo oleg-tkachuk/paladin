@@ -7,8 +7,8 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jws"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jws"
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/exchange"
 	"github.com/oleg-tkachuk/limes/exchange/exchangetest"

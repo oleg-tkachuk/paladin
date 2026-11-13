@@ -43,8 +43,8 @@ import (
 	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jws"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jws"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/sessionkey"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"

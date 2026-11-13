@@ -23,8 +23,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
 )
 
 // WellKnownPath is where the role that mints serves the session JWKS, on the
@@ -72,7 +72,7 @@ func FromKeys(active *ecdsa.PrivateKey, previous ...*ecdsa.PublicKey) (*Set, err
 	if !isP256(&active.PublicKey) {
 		return nil, errors.New("sessionkey: the active key is not ECDSA P-256")
 	}
-	signer, err := jwk.Import(active)
+	signer, err := jwk.Import[jwk.Key](active)
 	if err != nil {
 		return nil, fmt.Errorf("sessionkey: active key: %w", err)
 	}
@@ -85,7 +85,7 @@ func FromKeys(active *ecdsa.PrivateKey, previous ...*ecdsa.PublicKey) (*Set, err
 		if !isP256(pub) {
 			return nil, errors.New("sessionkey: a previous key is not ECDSA P-256")
 		}
-		k, err := jwk.Import(pub)
+		k, err := jwk.Import[jwk.Key](pub)
 		if err != nil {
 			return nil, fmt.Errorf("sessionkey: public key: %w", err)
 		}
