@@ -154,7 +154,7 @@ func TestCopyRequestLimitsUnderRowLevelSecurity(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 	bump := func(s limes.MeterSubject) error {
-		_, err := f.usage.Bump(ledgerCtx, meter.BumpRequest{Subject: s})
+		_, err := f.usage.Bump(ledgerCtx, meter.BumpRequest{Subject: s}, nil)
 		return err
 	}
 	one := m.copyOf(t, ctx, root, limes.Attenuation{Requests: copyRequests(1)})
@@ -237,7 +237,7 @@ func TestCopyUsageIsReadBackPerTenant(t *testing.T) {
 	f.usage = rlsUsage(t, ctx, f)
 	ledgerCtx := auth.WithActingTenant(ctx, f.tenant)
 	c := m.copyOf(t, ctx, root, limes.Attenuation{Requests: copyRequests(lineageRequests.Max), Budget: copyBudget("2")})
-	if _, err := f.usage.Bump(ledgerCtx, meter.BumpRequest{Subject: c}); err != nil {
+	if _, err := f.usage.Bump(ledgerCtx, meter.BumpRequest{Subject: c}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.usage.Charge(ledgerCtx, meter.ChargeRequest{Subject: c, Amount: limes.MustParseAmount("0.5")}, nil); err != nil {

@@ -486,7 +486,7 @@ func (i *capabilityInterceptor) enforceCaveats(
 		return nil
 	}
 	if i.usage != nil && (!subject.Requests().Unlimited || cap.ParentID != uuid.Nil() || len(subject.Copies()) > 0) {
-		if _, err := i.usage.Bump(ledgerContext(ctx, &cap), meter.BumpRequest{Subject: subject}); err != nil {
+		if _, err := i.usage.Bump(ledgerContext(ctx, &cap), meter.BumpRequest{Subject: subject}, nil); err != nil {
 			// A store failure fails closed, as Unavailable: a capability
 			// with a request ceiling that can't be incremented atomically
 			// is safer to reject than to allow unbounded use.

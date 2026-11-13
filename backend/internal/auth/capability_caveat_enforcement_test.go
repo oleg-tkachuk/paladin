@@ -35,11 +35,11 @@ type erroringUsage struct {
 	err error
 }
 
-func (e erroringUsage) Bump(ctx context.Context, req meter.BumpRequest) (meter.BumpReceipt, error) {
+func (e erroringUsage) Bump(ctx context.Context, req meter.BumpRequest, onBumped func(context.Context, meter.Bumped) error) (meter.BumpReceipt, error) {
 	if e.err != nil {
 		return meter.BumpReceipt{}, e.err
 	}
-	return e.usageStore.Bump(ctx, req)
+	return e.usageStore.Bump(ctx, req, onBumped)
 }
 
 // capWithCaveats is a capability verified with caveats c; a ceiling c leaves

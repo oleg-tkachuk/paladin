@@ -31,9 +31,9 @@ func (u *tenantRecordingUsage) record(ctx context.Context, call string) {
 	u.seen[call] = tid
 }
 
-func (u *tenantRecordingUsage) Bump(ctx context.Context, req meter.BumpRequest) (meter.BumpReceipt, error) {
+func (u *tenantRecordingUsage) Bump(ctx context.Context, req meter.BumpRequest, onBumped func(context.Context, meter.Bumped) error) (meter.BumpReceipt, error) {
 	u.record(ctx, "Bump")
-	return u.usageStore.Bump(ctx, req)
+	return u.usageStore.Bump(ctx, req, onBumped)
 }
 
 func (u *tenantRecordingUsage) Charge(ctx context.Context, req meter.ChargeRequest, onCharged func(context.Context, meter.Charged) error) (meter.ChargeReceipt, error) {

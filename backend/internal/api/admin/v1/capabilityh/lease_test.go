@@ -92,7 +92,7 @@ func TestLeaseOpensReadsAndSettles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.usage.Bump(context.Background(), meter.BumpRequest{Subject: subject}); err != nil {
+	if _, err := f.usage.Bump(context.Background(), meter.BumpRequest{Subject: subject}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.usage.Charge(context.Background(), meter.ChargeRequest{Subject: subject, Amount: limes.NanosPerUnit, Op: limes.OpGet}, nil); err != nil {

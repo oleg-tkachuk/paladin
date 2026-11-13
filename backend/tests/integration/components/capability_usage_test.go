@@ -262,7 +262,7 @@ func TestTenantBudgetIsFirstWrittenInThePlatformCurrency(t *testing.T) {
 func TestRequestsOnlyUsageIsInTheCapabilitysUnit(t *testing.T) {
 	t.Parallel()
 	ctx, f := newUsageFixture(t)
-	if _, err := f.usage.Bump(ctx, meter.BumpRequest{Subject: f.subject}); err != nil {
+	if _, err := f.usage.Bump(ctx, meter.BumpRequest{Subject: f.subject}, nil); err != nil {
 		t.Fatalf("bump: %v", err)
 	}
 	u, err := f.usage.GetUsage(ctx, f.capID)
