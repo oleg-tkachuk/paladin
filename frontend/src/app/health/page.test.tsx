@@ -90,9 +90,11 @@ describe("HealthPage roles", () => {
     expect(await railEntry("api")).toHaveAccessibleName(
       "api: Healthy, 2 of 2 checks healthy",
     );
-    expect(document.querySelectorAll('[data-slot="card-title"]')).toHaveLength(
-      1,
-    );
+    // One role's panel; the rail's own frame is titled too, so it is left out.
+    const panels = [
+      ...document.querySelectorAll('[data-slot="card-title"]'),
+    ].filter((el) => !rail.contains(el));
+    expect(panels).toHaveLength(1);
     await roleCard("api");
   });
 
@@ -105,6 +107,32 @@ describe("HealthPage roles", () => {
       "page",
     );
     expect(await railEntry("api")).not.toHaveAttribute("aria-current");
+  });
+
+  // The rail is a framed panel like the one beside it, its header saying how
+  // many of the roles are healthy.
+  it("heads the rail with how many roles are healthy", async () => {
+    payload = {
+      roles: [
+        { role: "api", status: "healthy", components: [component("postgres")] },
+        {
+          role: "worker",
+          status: "degraded",
+          components: [component("postgres")],
+        },
+        {
+          role: "admin",
+          status: "healthy",
+          components: [component("postgres")],
+        },
+      ],
+    };
+    render(<HealthPage />);
+    const rail = await screen.findByRole("navigation", { name: "Roles" });
+    expect(rail.querySelector('[data-slot="card"]')).not.toBeNull();
+    expect(
+      within(rail).getByLabelText("2 of 3 roles healthy"),
+    ).toHaveTextContent("2/3");
   });
 
   // The IAM plane is a request path of its own (ADR-0047): it sits beside

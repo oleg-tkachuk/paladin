@@ -380,39 +380,55 @@ function RoleRail({
   useEffect(() => {
     current.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [selected]);
+  const healthy = cards.filter((s) => s.status === "healthy").length;
   return (
     <nav aria-label="Roles" className={STICKY_BELOW_TOPBAR_FROM_LG}>
-      <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-        {cards.map((s) => {
-          const m = META[s.status];
-          const { ok, total } = tally(s.components);
-          const isCurrent = s.role === selected;
-          return (
-            <li key={s.role} className="shrink-0">
-              <button
-                ref={isCurrent ? current : undefined}
-                type="button"
-                onClick={() => onSelect(s.role)}
-                aria-current={isCurrent ? "page" : undefined}
-                aria-label={`${s.role}: ${m.label}, ${ok} of ${total} checks healthy`}
-                className={cn(
-                  "flex w-full items-center gap-2 whitespace-nowrap rounded-md border px-3 py-2 text-left",
-                  FOCUS_RING,
-                  isCurrent
-                    ? "border-border bg-muted"
-                    : "border-transparent hover:bg-muted/50",
-                )}
-              >
-                <StatusDot tone={m.status} />
-                <span className="font-mono text-sm">{s.role}</span>
-                <span className="ml-auto pl-3 font-mono text-xs tabular-nums text-muted-foreground">
-                  {ok}/{total}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {/* Framed like the panel beside it, so the two read as one surface. */}
+      <Card className="gap-0 py-0">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3">
+          <CardTitle className="text-base">Roles</CardTitle>
+          <span
+            className="font-mono text-xs tabular-nums text-muted-foreground"
+            aria-label={`${healthy} of ${cards.length} roles healthy`}
+          >
+            {healthy}/{cards.length}
+          </span>
+        </CardHeader>
+        <Separator />
+        <CardContent className="p-2">
+          <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+            {cards.map((s) => {
+              const m = META[s.status];
+              const { ok, total } = tally(s.components);
+              const isCurrent = s.role === selected;
+              return (
+                <li key={s.role} className="shrink-0">
+                  <button
+                    ref={isCurrent ? current : undefined}
+                    type="button"
+                    onClick={() => onSelect(s.role)}
+                    aria-current={isCurrent ? "page" : undefined}
+                    aria-label={`${s.role}: ${m.label}, ${ok} of ${total} checks healthy`}
+                    className={cn(
+                      "flex w-full items-center gap-2 whitespace-nowrap rounded-md border px-3 py-2 text-left",
+                      FOCUS_RING,
+                      isCurrent
+                        ? "border-border bg-muted"
+                        : "border-transparent hover:bg-muted/50",
+                    )}
+                  >
+                    <StatusDot tone={m.status} />
+                    <span className="font-mono text-sm">{s.role}</span>
+                    <span className="ml-auto pl-3 font-mono text-xs tabular-nums text-muted-foreground">
+                      {ok}/{total}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </CardContent>
+      </Card>
     </nav>
   );
 }
