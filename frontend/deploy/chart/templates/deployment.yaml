@@ -89,6 +89,9 @@ spec:
             {{- if .Values.backend.tls }}
             - name: NODE_EXTRA_CA_CERTS
               value: {{ printf "%s/%s" (include "chart.backendCAPath" .) .Values.backend.caSecret.key | quote }}
+            # The backend's CA, trusted by the consent relay (server/cmd/paladin-console).
+            - name: PALADIN_BACKEND_CA_FILE
+              value: {{ printf "%s/%s" (include "chart.backendCAPath" .) .Values.backend.caSecret.key | quote }}
             {{- end }}
             {{- /*
               extraEnv — operator extension point for env vars the chart

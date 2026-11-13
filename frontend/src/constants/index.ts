@@ -1,3 +1,6 @@
+// The names the console's server spells alike (ADR-0049): one file for both.
+import consoleContract from "../../server/contract/contract.json";
+
 /**
  * API contract constants — single source of truth shared across hooks,
  * pages, and the RPC bridge.
@@ -30,10 +33,10 @@ export const SESSION_PATHS = {
 } as const;
 
 /** Where the console serves the operator's banner, its own configuration. */
-export const BANNER_PATH = "/api/banner";
+export const BANNER_PATH = consoleContract.bannerPath;
 
 /** The session cookie the session role sets; the page itself never reads it. */
-export const SESSION_COOKIE = "__Host-paladin_session";
+export const SESSION_COOKIE = consoleContract.sessionCookie;
 
 /**
  * Bootstrap-provisioned Collection. Used as the last-resort fallback when

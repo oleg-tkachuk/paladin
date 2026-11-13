@@ -138,6 +138,13 @@ includes:
     taskfile: '{{printf .TASKLIB "go"}}'
     dir: sdk/go/internal/oteltest
     vars: { PROJECT_NAME: go-sdk-otel }
+  # The console's server: serves the static export and the routes a static
+  # file cannot answer (ADR-0049). Its own module so the console's image links
+  # nothing of the backend's.
+  console-server:
+    taskfile: '{{printf .TASKLIB "go"}}'
+    dir: frontend/server
+    vars: { PROJECT_NAME: console-server }
   go-sdk-gen:
     taskfile: '{{printf .TASKLIB "codegen"}}'
     dir: sdk/go
@@ -262,6 +269,9 @@ tasks:
       - task: frontend:lint
       - task: verify:frontend-gen
       - task: frontend:build
+      - task: console-server:fmt:check
+      - task: console-server:lint
+      - task: console-server:test
 
   verify-sdk:
     desc: "Both SDKs: lint, tests, and stubs that match the contract"
@@ -783,6 +793,7 @@ tasks:
       # ("updates to go.mod needed") until it is tidied.
       - task: go-sdk-otel:tidy
       - task: go-sdk-otel:deps:update
+      - task: console-server:deps:update
       # Within pyproject's constraints, so the floors the SDK declares to its
       # users stay where they are; only sdk/python/uv.lock moves.
       - task: py-sdk:deps:update

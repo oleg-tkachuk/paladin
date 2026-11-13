@@ -11,6 +11,10 @@
 # next.js
 /.next/
 /out/
+# The export, copied in for go:embed by the image build; .gitkeep holds the
+# directory so the server compiles without one.
+/server/dist/out/*
+!/server/dist/out/.gitkeep
 
 # production
 /build

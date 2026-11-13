@@ -146,7 +146,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        if: matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo'
+        if: matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo' || matrix.group == 'frontend'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
@@ -161,16 +161,16 @@ jobs:
       # writes, so a pull request cannot seed what main builds from.
       - name: Restore the Go caches
         id: go-cache
-        if: matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo'
+        if: matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo' || matrix.group == 'frontend'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum', 'frontend/server/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-
+            go-${{ runner.os }}-verify-${{ matrix.group }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum', 'frontend/server/go.sum') }}-
             go-${{ runner.os }}-verify-${{ matrix.group }}-
 
       - name: Set up goimports
@@ -211,7 +211,7 @@ jobs:
           tools: task
 
       - name: Set up golangci-lint
-        if: matrix.group == 'backend' || matrix.group == 'sdk'
+        if: matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'frontend'
         uses: ./.github/actions/setup-tools
         with:
           tools: golangci-lint
@@ -275,7 +275,7 @@ jobs:
       - name: Save the Go caches
         if: >-
           success() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
-          (matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo')
+          (matrix.group == 'backend' || matrix.group == 'sdk' || matrix.group == 'repo' || matrix.group == 'frontend')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -596,9 +596,9 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
             ~/.cache/golangci-lint
-          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum', 'frontend/server/go.sum') }}-${{ github.sha }}
           restore-keys: |
-            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum') }}-
+            go-${{ runner.os }}-deep-${{ matrix.half }}-${{ hashFiles('backend/go.sum', 'sdk/go/go.sum', 'sdk/go/internal/oteltest/go.sum', 'frontend/server/go.sum') }}-
             go-${{ runner.os }}-deep-${{ matrix.half }}-
 
       - name: Set up the CI scripts
