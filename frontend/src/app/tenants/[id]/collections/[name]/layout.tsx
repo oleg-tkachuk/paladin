@@ -13,7 +13,7 @@
 import { collectionDetailQuery } from "@/lib/queries/details";
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { notFound, useParams, useRouter } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { ArrowPathIcon, KeyIcon } from "@heroicons/react/24/outline";
 
@@ -22,6 +22,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/button";
 import type { Collection } from "@/gen/paladin/admin/v1/types_pb";
 import { cn } from "@/lib/utils";
+import { useRouteParams } from "@/lib/navigation/routeParams";
 import { T } from "@/lib/ui/typography";
 
 import { useTenant } from "../../tenant-context";
@@ -35,12 +36,10 @@ export default function CollectionDetailLayout({
 }) {
   const router = useRouter();
   const tenant = useTenant();
-  // useParams() (sync) avoids the `use(promise)` re-suspension that
-  // flashes the layout's loading skeleton on every nested-route
-  // change. See TenantLayout for the full rationale.
-  const params = useParams<{ name: string }>();
-  const rawName = params?.name ?? "";
-  const collectionName = decodeURIComponent(rawName);
+  // Read synchronously from the path; see TenantLayout for why.
+  const { name: collectionName } = useRouteParams(
+    "/tenants/[id]/collections/[name]",
+  );
 
   const queryClient = useQueryClient();
   // The same query a list row warms on hover (lib/queries/details).

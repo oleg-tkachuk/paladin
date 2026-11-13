@@ -16,7 +16,7 @@
 // own content area underneath.
 
 import Link from "next/link";
-import { notFound, useParams } from "next/navigation";
+import { notFound } from "next/navigation";
 import {
   ArrowPathIcon,
   ExclamationTriangleIcon,
@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card";
 import { NoticeBanner } from "@/components/ui/Notice";
 import { useTenantResolve } from "@/lib/resources/tenant-resolve";
+import { useRouteParams } from "@/lib/navigation/routeParams";
 
 import { TenantProvider } from "./tenant-context";
 
@@ -37,16 +38,12 @@ export default function TenantLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // useParams() (sync, from the router context) instead of `use(params)`
-  // (Promise unwrap). Next.js's app router passes a NEW Promise for
-  // `params` to the layout on every sub-route change — even when the
-  // dynamic segment value is identical — and `use(newPromise)`
-  // suspends, causing the layout to flash its loading skeleton on
-  // every tab navigation. useParams reads the resolved value off the
-  // router context synchronously, so this layout stays mounted and
-  // useTenantResolve's cache survives.
-  const params = useParams<{ id: string }>();
-  const id = params?.id ?? "";
+  // The id comes from the path, synchronously: the static export's params
+  // are its placeholder (ADR-0049), and `use(params)` would suspend on the
+  // new Promise the router passes on every tab change, flashing the
+  // skeleton. Reading the path keeps this layout mounted and
+  // useTenantResolve's cache alive.
+  const { id } = useRouteParams("/tenants/[id]");
   const { tenant, loading, error, errorIsNotFound, retry } =
     useTenantResolve(id);
 

@@ -10,7 +10,6 @@
 import { CopyableId } from "@/components/ui/CopyableId";
 import React, { useMemo } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import {
   ArrowPathIcon,
   CloudIcon,
@@ -54,6 +53,7 @@ import {
 } from "@/lib/resourceStatus";
 import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
+import { useRouteParams } from "@/lib/navigation/routeParams";
 
 /** The bucket facets but the backend: every bucket here is on this one. */
 const BACKEND_BUCKET_FACETS: readonly Facet<Bucket>[] = BUCKET_FACETS.filter(
@@ -69,8 +69,7 @@ function bucketMatches(b: Bucket, q: string): boolean {
 }
 
 export default function StorageBackendDetailPage() {
-  const params = useParams<{ backendId: string }>();
-  const backendId = decodeURIComponent(params.backendId);
+  const { backendId } = useRouteParams("/storage-backends/[backendId]");
 
   const {
     backends,

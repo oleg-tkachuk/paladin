@@ -7,7 +7,7 @@
 import { type Dispatch, type SetStateAction, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { notFound, useParams } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { ArrowPathIcon, MegaphoneIcon } from "@heroicons/react/24/outline";
 
@@ -28,15 +28,16 @@ import { cn } from "@/lib/utils";
 import { BucketProvider, type BucketOwner } from "./bucket-context";
 import { SharedBucketNotice } from "./SharedBucketNotice";
 import { BucketNoticeDialog } from "./BucketNoticeDialog";
+import { useRouteParams } from "@/lib/navigation/routeParams";
 
 export default function BucketLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const params = useParams<{ backendId: string; bucketId: string }>();
-  const backendId = decodeURIComponent(params?.backendId ?? "");
-  const bucketId = decodeURIComponent(params?.bucketId ?? "");
+  const { backendId, bucketId } = useRouteParams(
+    "/storage-backends/[backendId]/buckets/[bucketId]",
+  );
 
   const queryClient = useQueryClient();
   // The query a buckets row and a bucket hover card warm, so the page opens

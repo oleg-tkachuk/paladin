@@ -4,18 +4,16 @@
 // registering it, changing it, testing it, its maintenance and credentials.
 // Its buckets each have a history of their own.
 
-import { useParams } from "next/navigation";
-
 import { HistoryTimeline } from "@/components/features/history/HistoryTimeline";
 import { useBackends } from "@/hooks/useBackends";
 import { useResourceHistory } from "@/hooks/useResourceHistory";
 import { auditFilterFor } from "@/lib/history";
 
 import { BackendHeader } from "../BackendHeader";
+import { useRouteParams } from "@/lib/navigation/routeParams";
 
 export default function BackendHistoryPage() {
-  const params = useParams<{ backendId: string }>();
-  const backendId = decodeURIComponent(params.backendId);
+  const { backendId } = useRouteParams("/storage-backends/[backendId]");
   // The header names the backend; until the list loads, or if it fails, it
   // shows the id, which the history needs no more than.
   const { backends } = useBackends();
