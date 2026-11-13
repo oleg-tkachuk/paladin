@@ -1,3 +1,5 @@
+import { PLACEHOLDER_SEGMENT } from "@/lib/navigation/staticParams";
+
 /**
  * The route as words: one label per URL segment, shared by the breadcrumb
  * trail and the document title so the two cannot describe a page differently.
@@ -74,7 +76,15 @@ export type SegmentNames = Readonly<
   Record<string, { label: string; href?: string }>
 >;
 
+/**
+ * What a segment built under the export's placeholder reads as. The exported
+ * HTML is rendered once per dynamic segment, under the placeholder (ADR-0049),
+ * so its title and trail said "_" until the page read the real id.
+ */
+export const PLACEHOLDER_LABEL = "…";
+
 function resolveLabel(segment: string, mono: boolean): string {
+  if (segment === PLACEHOLDER_SEGMENT) return PLACEHOLDER_LABEL;
   if (mono) {
     const decoded = decodeURIComponent(segment);
     // Keys can be paths ("folder/sub/file.txt") — show the leaf.
