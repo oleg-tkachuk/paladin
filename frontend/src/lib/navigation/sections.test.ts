@@ -1,3 +1,4 @@
+import consoleContract from "../../../server/contract/contract.json";
 import { describe, expect, it } from "vitest";
 
 import { SECTION, scopeFor, sectionFor } from "./sections";
@@ -55,5 +56,14 @@ describe("scopeFor", () => {
     ["/tenants/a%20b/quotas", { kind: "tenant", tenant: "a b", tab: "quotas" }],
   ])("%s is %o", (path, want) => {
     expect(scopeFor(path)).toEqual(want);
+  });
+});
+
+// The console's server sends the paths that moved to these pages
+// (server/internal/web/legacy.go), reading them from its contract.
+describe("the pages the server's redirects lead to", () => {
+  it("are the sections the sidebar links to", () => {
+    expect(SECTION.health).toBe(consoleContract.healthPath);
+    expect(SECTION.storageBackends).toBe(consoleContract.storageBackendsPath);
   });
 });

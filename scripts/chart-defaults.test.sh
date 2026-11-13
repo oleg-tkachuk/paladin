@@ -411,6 +411,12 @@ readonly CONSOLE_LIVENESS_TIMEOUT=5
 readonly CONSOLE_CPU_LIMIT=1000m
 check "console: readiness timeout" "$(console_container defaults .readinessProbe.timeoutSeconds)" "$CONSOLE_READINESS_TIMEOUT"
 check "console: liveness timeout" "$(console_container defaults .livenessProbe.timeoutSeconds)" "$CONSOLE_LIVENESS_TIMEOUT"
+# The Go server serves within about two seconds of starting; a wait sized for
+# Next.js held every rollout back by half a minute (ADR-0049).
+readonly CONSOLE_READINESS_DELAY=2
+readonly CONSOLE_LIVENESS_DELAY=10
+check "console: readiness starts asking early" "$(console_container defaults .readinessProbe.initialDelaySeconds)" "$CONSOLE_READINESS_DELAY"
+check "console: liveness waits longer than readiness" "$(console_container defaults .livenessProbe.initialDelaySeconds)" "$CONSOLE_LIVENESS_DELAY"
 # Room for a cold cache fetching every chunk at once. (At 500m the Node console,
 # which every RPC once passed through, throttled in half its CFS periods; the
 # Go server only serves files, ADR-0049.)

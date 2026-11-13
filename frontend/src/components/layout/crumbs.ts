@@ -32,6 +32,25 @@ const SEGMENT_LABELS: Record<string, string> = {
 const UUID_SEGMENT =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * A segment with no page of its own, under the parent named here: its crumb
+ * leads to that parent's page. A backend's buckets are listed on the backend's
+ * page (ADR-0033); the console's server still redirects the bare path for old
+ * links, but a crumb that goes there directly skips the round trip.
+ */
+const LISTED_ON_PARENT: ReadonlyArray<
+  readonly [parent: string, segment: string]
+> = [["storage-backends", "buckets"]];
+
+/** The parent page a segment with no page leads to, or undefined. */
+function parentPage(segments: string[], i: number): string | undefined {
+  const leads = LISTED_ON_PARENT.some(
+    ([parent, segment]) =>
+      i === 2 && segments[0] === parent && segments[i] === segment,
+  );
+  return leads ? `/${segments.slice(0, i).join("/")}` : undefined;
+}
+
 // Past this, a resource id is cut and ends in an ellipsis.
 const MAX_ID_CHARS = 32;
 
@@ -80,7 +99,13 @@ export function crumbs(pathname: string, names: SegmentNames = {}): Crumb[] {
     const mono =
       (i > 0 && ENTITY_PARENTS.has(segments[i - 1])) ||
       UUID_SEGMENT.test(segment);
-    return { segment, label: resolveLabel(segment, mono), mono };
+    const href = i < segments.length - 1 ? parentPage(segments, i) : undefined;
+    return {
+      segment,
+      label: resolveLabel(segment, mono),
+      mono,
+      ...(href ? { href } : {}),
+    };
   });
 }
 

@@ -33,6 +33,11 @@ type Names struct {
 	ConsentPath string `json:"consentPath"`
 	// AuthorizePath receives the consent form and is relayed to the IAM plane.
 	AuthorizePath string `json:"authorizePath"`
+	// HealthPath is the health page, where /ops now leads.
+	HealthPath string `json:"healthPath"`
+	// StorageBackendsPath lists the backends; a backend's page and its
+	// buckets' pages are under it.
+	StorageBackendsPath string `json:"storageBackendsPath"`
 	// PublicPrefixes are served without a session cookie.
 	PublicPrefixes []string `json:"publicPrefixes"`
 	// PlaceholderSegment is the value each dynamic segment is exported under.
@@ -46,14 +51,16 @@ func Load() (Names, error) {
 		return Names{}, fmt.Errorf("parse contract.json: %w", err)
 	}
 	for field, v := range map[string]string{
-		"sessionCookie":      n.SessionCookie,
-		"loginPath":          n.LoginPath,
-		"nextParam":          n.NextParam,
-		"bannerPath":         n.BannerPath,
-		"livePath":           n.LivePath,
-		"consentPath":        n.ConsentPath,
-		"authorizePath":      n.AuthorizePath,
-		"placeholderSegment": n.PlaceholderSegment,
+		"sessionCookie":       n.SessionCookie,
+		"loginPath":           n.LoginPath,
+		"nextParam":           n.NextParam,
+		"bannerPath":          n.BannerPath,
+		"livePath":            n.LivePath,
+		"consentPath":         n.ConsentPath,
+		"authorizePath":       n.AuthorizePath,
+		"healthPath":          n.HealthPath,
+		"storageBackendsPath": n.StorageBackendsPath,
+		"placeholderSegment":  n.PlaceholderSegment,
 	} {
 		if v == "" {
 			return Names{}, fmt.Errorf("contract.json: %s is empty", field)

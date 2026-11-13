@@ -16,7 +16,7 @@ func TestLoad(t *testing.T) {
 
 	assert.True(t, strings.HasPrefix(n.SessionCookie, "__Host-"),
 		"the session role sets a __Host- cookie; a different name gates on nothing")
-	for _, p := range []string{n.LoginPath, n.BannerPath, n.LivePath, n.ConsentPath, n.AuthorizePath} {
+	for _, p := range []string{n.LoginPath, n.BannerPath, n.LivePath, n.ConsentPath, n.AuthorizePath, n.HealthPath, n.StorageBackendsPath} {
 		assert.True(t, strings.HasPrefix(p, "/"), "%q is a path", p)
 	}
 	assert.Contains(t, n.PublicPrefixes, n.LoginPath, "the login page needs no session")

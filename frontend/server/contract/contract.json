@@ -6,6 +6,8 @@
   "livePath": "/api/health/live",
   "consentPath": "/oauth/consent",
   "authorizePath": "/oauth/authorize",
+  "healthPath": "/health",
+  "storageBackendsPath": "/storage-backends",
   "publicPrefixes": [
     "/login",
     "/api/health",
