@@ -58,6 +58,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0046](0046-rate-limits-off-the-request-path.md) | Request rate limits count in Valkey when one is configured, and in memory synced to Postgres otherwise | Accepted |
 | [0047](0047-sessions-signed-by-iam-alone.md) | Session tokens are signed with a key only the IAM role holds | Accepted |
 | [0048](0048-the-console-holds-no-token.md) | The console renders the UI, and a Go session role holds the session | Accepted |
+| [0049](0049-the-console-ships-as-a-static-export.md) | The console ships as a static export behind a small Go server | Proposed |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
