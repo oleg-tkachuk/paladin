@@ -171,20 +171,42 @@ WHERE  name = $1 AND holder_id = $2;
 // Returns when ctx is cancelled or `do` returns a non-retryable error.
 // `do` should return ctx.Err() on cancellation so the loop exits cleanly.
 func (l *Lease) Run(ctx context.Context, do func(workCtx context.Context, generation int64) error) error {
+	return l.run(ctx, do, l.claim)
+}
+
+// run is Run over claim, which tests replace with a fake.
+func (l *Lease) run(ctx context.Context, do func(workCtx context.Context, generation int64) error, claim claimFunc) error {
+	// failed counts the claims in a row the database refused, so the line
+	// that ends an outage says how long it lasted.
+	failed := 0
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		gen, exp, ok, err := l.claim(ctx)
+		gen, exp, ok, err := claim(ctx)
 		if err != nil {
 			// Transient DB errors should not crash the worker; back off
 			// and retry once the cluster recovers.
-			l.cfg.Logger.Warn("claim failed; backing off", zap.Error(err))
+			failed++
+			l.cfg.Logger.Warn("claim failed; backing off",
+				zap.String("name", l.cfg.Name),
+				zap.Int("consecutive", failed),
+				zap.Duration("retry_in", l.cfg.PollInterval),
+				zap.Error(err),
+			)
 			if !sleepCtx(ctx, l.cfg.PollInterval) {
 				return ctx.Err()
 			}
 			continue
+		}
+		if failed > 0 {
+			l.cfg.Logger.Info("claim answered again",
+				zap.String("name", l.cfg.Name),
+				zap.Int("failed_claims", failed),
+				zap.Bool("leader", ok),
+			)
+			failed = 0
 		}
 		if !ok {
 			// Someone else is leader. Sleep and try again at PollInterval.
@@ -208,7 +230,7 @@ func (l *Lease) Run(ctx context.Context, do func(workCtx context.Context, genera
 		// each claim, so the worker no longer self-terminates every TTL.
 		workCtx, cancelWork := context.WithCancel(ctx)
 		renewerDone := make(chan struct{})
-		go l.renewer(workCtx, cancelWork, exp, renewerDone, l.claim)
+		go l.renewer(workCtx, cancelWork, exp, renewerDone, claim)
 
 		err = do(workCtx, gen)
 
@@ -234,7 +256,7 @@ func (l *Lease) Run(ctx context.Context, do func(workCtx context.Context, genera
 // in-process: work is cancelled when renewals persistently fail or when
 // the last DB-confirmed expires_at passes. Each successful renewal
 // pushes the in-process deadline forward to the new expires_at.
-// claimFunc is the renewer's only dependency on the DB — extracted as a
+// claimFunc is Run's and the renewer's only dependency on the DB — extracted as a
 // parameter so the renewer's deadline/failure logic is unit-testable
 // with a fake (the pgx-backed l.claim is passed in production).
 type claimFunc func(ctx context.Context) (int64, time.Time, bool, error)
