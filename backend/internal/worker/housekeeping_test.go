@@ -52,17 +52,30 @@ func TestRefreshTokenPurgerTicks(t *testing.T) {
 		_ = p.Run(ctx)
 		close(done)
 	}()
-	// Wait for at least 2 ticks.
-	time.Sleep(15 * time.Millisecond)
+	// Wait for the ticks themselves, not a stretch of time: a fixed 15ms
+	// saw one tick on a loaded machine and failed a push.
+	purges := func() int {
+		repo.mu.Lock()
+		defer repo.mu.Unlock()
+		return len(repo.purged)
+	}
+	deadline := time.Now().Add(purgerTicksDeadline)
+	for purges() < wantPurgerTicks && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
 	cancel()
 	<-done
 
-	repo.mu.Lock()
-	defer repo.mu.Unlock()
-	if len(repo.purged) < 2 {
-		t.Errorf("expected ≥2 purges, got %d", len(repo.purged))
+	if got := purges(); got < wantPurgerTicks {
+		t.Errorf("expected ≥%d purges within %s, got %d", wantPurgerTicks, purgerTicksDeadline, got)
 	}
 }
+
+// The purger is run until it has ticked this often, or the deadline passes.
+const (
+	wantPurgerTicks     = 2
+	purgerTicksDeadline = 5 * time.Second
+)
 
 // ─── AuditLogPurger ─────────────────────────────────────────────────────────
 
