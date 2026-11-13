@@ -35,7 +35,7 @@ func delegationFixture(t *testing.T) (*capabilityIssuers, limes.SigningKey, *mem
 	if err != nil {
 		t.Fatal(err)
 	}
-	issuers, err := newCapabilityIssuers(key, store, store, testIssuerName, nil, testCapTTL, zap.NewNop())
+	issuers, err := newCapabilityIssuers(key, nil, store, store, testIssuerName, nil, testCapTTL, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

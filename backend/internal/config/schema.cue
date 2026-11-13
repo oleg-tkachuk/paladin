@@ -685,6 +685,9 @@ capability: {
   trusted_issuers:          [...string] | *[]
   signing_key_path:         string | *""
   signing_key_kid:          string | *""
+  // Keys rotated out of signing, still verified and published until the
+  // capabilities they signed expire. kid only when signing_key_kid named one.
+  previous_public_keys: [...{path: string & !="", kid: string | *""}] | *[]
   default_ttl:              =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"15m"
   // Clock skew allowed on nbf and exp; 0 holds them to the clock exactly.
   verifier_leeway:          =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"

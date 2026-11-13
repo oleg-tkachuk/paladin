@@ -59,6 +59,13 @@ rbac_names() {
     yq -r 'select(.kind == "ClusterRole" or .kind == "Role") | .rules[0].resourceNames[]' "$scratch/$1.yaml"
 }
 
+# capability_key_items <name> — the Secret keys the api Deployment mounts from
+# the capability signing key's Secret, comma-joined.
+capability_key_items() {
+    yq -r 'select(.kind == "Deployment" and .metadata.name == "'"$RELEASE"'-api") | .spec.template.spec.volumes[] | select(.name == "capability-signing-key") | .secret.items | map(.key) | join(",")' \
+        "$scratch/$1.yaml"
+}
+
 check() {
     cases=$((cases + 1))
     local what=$1 got=$2 want=$3
@@ -142,6 +149,15 @@ check "no session key: nothing mounts one" "$(mounters session-off "$SESSION_SEC
 render capability-key --set capabilitySigningKeySecret.name=capability-key
 check "capability key: only the token-auth planes mount it" \
     "$(mounters capability-key capability-key)" "$RELEASE-admin,$RELEASE-api,$RELEASE-iam"
+check "capability key: the signing key alone by default" \
+    "$(capability_key_items capability-key)" "key.pem"
+
+# A key rotated out of signing is mounted beside its successor, from the same
+# Secret, into the same roles.
+render capability-previous --set capabilitySigningKeySecret.name=capability-key \
+    --set 'capabilitySigningKeySecret.previousKeys={2026-10.pub.pem}'
+check "capability key: a previous key is mounted beside it" \
+    "$(capability_key_items capability-previous)" "key.pem,2026-10.pub.pem"
 
 # ─── RBAC per role ───────────────────────────────────────────────────────────
 # ADR-0047: each role's service account reads only the Secrets its config makes

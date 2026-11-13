@@ -181,6 +181,10 @@ spec:
             items:
               - key: {{ $.Values.capabilitySigningKeySecret.key }}
                 path: {{ $.Values.capabilitySigningKeySecret.key }}
+              {{- range $.Values.capabilitySigningKeySecret.previousKeys }}
+              - key: {{ . }}
+                path: {{ . }}
+              {{- end }}
         {{- end }}
         {{- if $mintsSessions }}
         - name: session-key

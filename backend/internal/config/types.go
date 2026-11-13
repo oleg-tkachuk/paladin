@@ -1344,6 +1344,12 @@ type Capability struct {
 	// bytes.
 	SigningKeyKID string `yaml:"signing_key_kid" json:"signing_key_kid"`
 
+	// PreviousPublicKeys are signing keys rotated out: the planes keep
+	// verifying the capabilities they signed, and the JWKS keeps publishing
+	// them, but nothing signs with them. Keep each until the last capability
+	// it signed has expired.
+	PreviousPublicKeys []CapabilityPublicKey `yaml:"previous_public_keys" json:"previous_public_keys"`
+
 	// DefaultTTL caps Issue.TTL when the request omits it. Default 15
 	// minutes — short enough that revocation propagation rarely matters.
 	DefaultTTL time.Duration `yaml:"default_ttl" json:"default_ttl"`
@@ -1411,6 +1417,15 @@ type Capability struct {
 	// on only once every replica runs a release that knows leases; off, a
 	// Lease is refused with limes code leasing_disabled. Default true.
 	BudgetLeases bool `yaml:"budget_leases" json:"budget_leases"`
+}
+
+// CapabilityPublicKey is a capability signing key kept for verifying alone:
+// the PKIX PEM public key at Path, under KID — the kid it signed under, which
+// is needed only when signing_key_kid named one, since limes derives the kid
+// from the key otherwise.
+type CapabilityPublicKey struct {
+	Path string `yaml:"path" json:"path"`
+	KID  string `yaml:"kid" json:"kid"`
 }
 
 // APIToken configures the hashed-bearer M2M token subsystem. Distinct

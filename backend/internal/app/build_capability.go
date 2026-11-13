@@ -92,8 +92,8 @@ type CapabilityAuth struct {
 	BulkRevocation *auth.BulkRevocation
 
 	// PublicKeys is the kid → public key map exposed via the JWKS
-	// endpoint. Refreshed in place when rotation lands; today it
-	// holds the single boot-time signer key.
+	// endpoint: the signing key and every previous one still verified
+	// (capability.previous_public_keys), fixed at boot.
 	PublicKeys map[string]ed25519.PublicKey
 
 	// IssuerName is what the bundle's Issuer mints into `iss`. Mirrors
@@ -155,11 +155,12 @@ func BuildCapabilityBundle(cfg config.Capability, deps *SharedDeps, tokenAuth bo
 	return bundle, nil
 }
 
-// signingKey is the capability issuer's key and whether this process
-// generated it.
+// signingKey is the capability issuer's key, whether this process generated
+// it, and the keys rotated out of signing that are still verified.
 type signingKey struct {
 	limes.SigningKey
 	generated bool
+	previous  []limes.PublicKey
 }
 
 // guardedCapabilityKey is the issuer's signing key, refusing a generated one
@@ -192,7 +193,15 @@ func guardedCapabilityKey(cfg config.Capability, deps *SharedDeps) (signingKey, 
 			zap.String("env", deps.Cfg.App.Env),
 		)
 	}
-	return signingKey{SigningKey: key, generated: generated}, nil
+	previous, err := previousCapabilityKeys(cfg.PreviousPublicKeys)
+	if err != nil {
+		return signingKey{}, err
+	}
+	for _, p := range previous {
+		deps.Logger.Info("capability: verifying, not signing, under a previous signing key",
+			zap.String("kid", p.KeyID), zap.String("signing_kid", key.KeyID))
+	}
+	return signingKey{SigningKey: key, generated: generated, previous: previous}, nil
 }
 
 // capabilityStores is what Auth is built over: the Postgres store itself,
@@ -284,7 +293,7 @@ func buildCapabilityAuth(cfg config.Capability, deps *SharedDeps, own capability
 
 	// The capability issuer, and the delegation issuer the MCP server
 	// exchanges callers' tokens through (ADR-0041).
-	issuers, err := newCapabilityIssuers(key.SigningKey, store, pgstore.ScopedIssuance(store), cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL, deps.Logger)
+	issuers, err := newCapabilityIssuers(key.SigningKey, key.previous, store, pgstore.ScopedIssuance(store), cfg.IssuerName, cfg.TrustedIssuers, cfg.DefaultTTL, deps.Logger)
 	if err != nil {
 		return nil, err
 	}
@@ -390,7 +399,7 @@ func buildCapabilityAuth(cfg config.Capability, deps *SharedDeps, own capability
 		Delegation:     issuers.delegation,
 		Verifier:       verifier,
 		Keys:           issuers.keys,
-		PublicKeys:     map[string]ed25519.PublicKey{key.KeyID: key.Public()},
+		PublicKeys:     issuers.published,
 		IssuerName:     cfg.IssuerName,
 		EphemeralKey:   key.generated,
 	}, nil
@@ -413,6 +422,28 @@ func capabilityKey(cfg config.Capability) (key limes.SigningKey, generated bool,
 		key.KeyID = cfg.SigningKeyKID
 	}
 	return key, false, nil
+}
+
+// previousCapabilityKeys loads the keys rotated out of signing, each under
+// the kid it names, or the kid limes derives from it when it names none.
+func previousCapabilityKeys(keys []config.CapabilityPublicKey) ([]limes.PublicKey, error) {
+	out := make([]limes.PublicKey, 0, len(keys))
+	for _, k := range keys {
+		pub, err := limes.LoadPublicKey(k.Path)
+		if err != nil {
+			return nil, fmt.Errorf("app: capability.previous_public_keys: %w", err)
+		}
+		if k.KID != "" {
+			// limes refuses, token by token, a kid outside its namespace;
+			// one configured here would leave the key verifying nothing.
+			if !jwks.IsKeyID(k.KID) {
+				return nil, fmt.Errorf("app: capability.previous_public_keys: kid %q of %s is not a limes kid (%q and a name)", k.KID, k.Path, jwks.KeyIDPrefix)
+			}
+			pub.KeyID = k.KID
+		}
+		out = append(out, pub)
+	}
+	return out, nil
 }
 
 // dpopNonces builds the nonces a key-bound capability's proof must carry, or
