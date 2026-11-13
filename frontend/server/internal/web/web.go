@@ -154,7 +154,7 @@ func (s *server) relay(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) static(w http.ResponseWriter, r *http.Request) {
 	rsc := r.Header.Get(site.RSCHeader) != ""
-	if target, ok := legacyTarget(r.URL.EscapedPath(), rsc); ok {
+	if target, ok := s.legacyTarget(r.URL.EscapedPath(), rsc); ok {
 		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 		return
 	}

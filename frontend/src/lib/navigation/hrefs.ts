@@ -4,13 +4,14 @@
  * entity cannot be reached at two addresses that drift apart.
  */
 
+import { SECTION } from "@/lib/navigation/sections";
 import { PAGE_TABLE, tableParam } from "@/lib/table/urlState";
 
 const enc = encodeURIComponent;
 
 /** A storage backend's page. */
 export function backendHref(backendId: string): string {
-  return `/storage-backends/${enc(backendId)}`;
+  return `${SECTION.storageBackends}/${enc(backendId)}`;
 }
 
 /** A bucket's page, or one of its tabs (`lifecycle`, `policy`, …). */
