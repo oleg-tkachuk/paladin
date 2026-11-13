@@ -1,4 +1,4 @@
-## Unreleased — the API-token pepper is a secret of its own
+## release/v0.3.0 — the API-token pepper is a secret of its own
 
 - With `api_token.enabled`, either `api_token.hmac_key` or
   `api_token.hmac_key_secret` is now required, and the config is refused at

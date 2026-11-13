@@ -1,4 +1,4 @@
-## Unreleased — platform health is read by the admin role
+## release/v0.3.0 — platform health is read by the admin role
 
 - The console's health page calls the admin plane's
   `SystemService.GetPlatformHealth`. The admin role reads every role's

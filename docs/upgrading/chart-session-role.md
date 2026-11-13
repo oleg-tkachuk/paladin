@@ -1,4 +1,4 @@
-## Unreleased — the charts can run the console's session role
+## release/v0.3.0 — the charts can run the console's session role
 
 - The backend chart adds `deployments.session` (`serve session`, ADR-0048),
   off by default. Enabling it requires `config.session.console_origins`, the

@@ -1,4 +1,4 @@
-## Unreleased — the chart mounts a session signing key into the minting role
+## release/v0.3.0 — the chart mounts a session signing key into the minting role
 
 - The chart now provides the ECDSA P-256 key sessions will be signed with
   (ADR-0047) and mounts it as a file into `auth.sessionKey.roles` (`api`)

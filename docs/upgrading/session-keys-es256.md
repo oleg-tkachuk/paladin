@@ -1,4 +1,4 @@
-## Unreleased — sessions are signed ES256 by a key only the minting role holds
+## release/v0.3.0 — sessions are signed ES256 by a key only the minting role holds
 
 - Access and refresh tokens, and the OAuth AS's, are signed ES256 by the key
   at `auth.session_key_path` (ECDSA P-256, PEM PKCS#8 or SEC1) and carry its

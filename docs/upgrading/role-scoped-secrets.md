@@ -1,4 +1,4 @@
-## Unreleased — each role reads only the Secrets it consumes
+## release/v0.3.0 — each role reads only the Secrets it consumes
 
 - In a cluster, a process now resolves only the `*_secret` references its own
   role uses: `serve mcp` (the bridge) reads its DPoP key and token-exchange

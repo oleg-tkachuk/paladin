@@ -1,4 +1,4 @@
-## Unreleased — the capability signing key can be rotated
+## release/v0.3.0 — the capability signing key can be rotated
 
 - `capability.previous_public_keys` lists keys rotated out of signing, each a
   PKIX PEM public key at `path` with an optional `kid`. The planes keep

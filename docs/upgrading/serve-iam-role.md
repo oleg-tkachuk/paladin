@@ -1,4 +1,4 @@
-## Unreleased — the IAM plane runs as its own role
+## release/v0.3.0 — the IAM plane runs as its own role
 
 - `paladin serve iam` serves the IAM listener (`:8085`): login and the token
   RPCs, users, the OAuth authorization server and the session JWKS. It is the

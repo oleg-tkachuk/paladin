@@ -89,14 +89,76 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## sdk/python/v0.146.2, sdk/go/v0.146.2 — Login refuses an upstream code
+## release/v0.3.0 — the capability signing key can be rotated
+
+- `capability.previous_public_keys` lists keys rotated out of signing, each a
+  PKIX PEM public key at `path` with an optional `kid`. The planes keep
+  verifying the capabilities they signed, and the capability JWKS keeps
+  publishing them; nothing signs with them. Empty by default, so nothing
+  changes until it is set.
+- The chart mounts the Secret keys named in
+  `capabilitySigningKeySecret.previousKeys` beside the signing key.
+- The procedure is in
+  [the rotation runbook](../runbooks/capability-signing-key-rotation.md).
+
+## release/v0.3.0 — limes v1.0.0-rc.73: a bumps table in the limes schema
+
+- pgstore migration 044 adds `limes.bumps`. The `migrate` hook applies it
+  before the new pods serve; a pod of this release refuses to start against
+  a limes schema still at version 43.
+- A refusal is answered with the problem type, status and challenge of the
+  limes code it names, where an error carrying one refusal's code inside
+  another's family took the family's.
+- No configuration keys change.
+
+## release/v0.3.0 — limes v1.0.0-rc.71: refusal codes and stricter token-endpoint input
+
+- A capability whose upstream names no revocation lineage (limes code
+  `no_revocation_lineage`) is answered `INTERNAL`, where it was
+  `UNAVAILABLE`: it is a configuration to fix, and a client that retried on
+  `UNAVAILABLE` should not retry it.
+- The MCP token endpoint (`/oauth/token`) reads `scope` as RFC 6749 §3.3
+  writes it: printable ASCII tokens separated by single spaces. A tab, a
+  line break, a quote, a backslash or a non-ASCII byte in it is refused
+  with `invalid_scope` (400), where it was split on any whitespace.
+- Introspection answers `active: false` for a token of an audience the
+  asking client does not serve, before its revocation is looked up; it
+  could answer `server_error` when the revocation store failed.
+- The key set the exchange fetches for subject tokens is capped at 1 MiB; a
+  larger document leaves the keys unavailable until a smaller one is served.
+- No migrations, and no configuration keys change.
+
+## release/v0.3.0 — the console ships as a static export behind a Go server
+
+- The console image runs no Node: a Go server serves the static export and
+  the routes it needs (ADR-0049). The chart's values keep their names; the
+  default `resources` drop to 50m/64Mi requested and 1000m/128Mi limit, and
+  the `next-cache` volume is gone.
+- With `backend.tls`, the relay trusts the backend's CA through
+  `PALADIN_BACKEND_CA_FILE`, which the chart sets; `NODE_EXTRA_CA_CERTS` is no
+  longer set. An overlay that put `NODE_TLS_REJECT_UNAUTHORIZED` or
+  `NODE_OPTIONS` in `extraEnv` can drop them: nothing reads them.
+- `PALADIN_BFF_MAX_CONNECTIONS` is gone; the relay carries one form at a time.
+- The image's healthcheck is `paladin-console probe`; a compose file that
+  checked the console with `wget` must use it, since the image has no shell.
+
+## release/v0.3.0 — migrate and bootstrap wait for the database
+
+- `paladin migrate` and `paladin bootstrap` retry an unreachable database for
+  up to 2 minutes before they fail, instead of failing on the first refused
+  connection. Each attempt that fails is logged at WARN with its cause.
+- The chart's `jobs.bootstrap.activeDeadlineSeconds` default rises from 120
+  to 180, so the Job outlasts that wait. A deadline set below about 180
+  seconds, for either Job, cuts the wait short.
+
+## release/v0.3.0, sdk/python/v0.146.2, sdk/go/v0.146.2 — Login refuses an upstream code
 
 - `AuthService.Login` answers `INVALID_ARGUMENT` when `upstream_code` is set.
   It used to be accepted and ignored: no upstream IdP signs anyone in to
   Paladin. The field is deprecated in the proto; leave it unset.
 - The console's login page no longer reads `?upstream_code=` from its URL.
 
-## Unreleased — the console chart drops what its BFF read
+## release/v0.3.0 — the console chart drops what its BFF read
 
 - The console chart no longer takes `healthSnapshotTokenSecret`,
   `backend.healthRoles`, or `backend.urls` other than `iam`; an overlay still
@@ -110,7 +172,7 @@ here.
 - `values-prod.yaml` drops `service.stickySessions`: nothing needs a browser
   pinned to one console replica since the session moved to the session role.
 
-## Unreleased — the console calls the planes through the session role
+## release/v0.3.0 — the console calls the planes through the session role
 
 - The console holds no token now (ADR-0048). The browser calls the session
   role at `/session/` on the console's own host, with the session cookie
@@ -133,7 +195,7 @@ here.
   the console and routes `/session/*` to `paladin-session`, as the ingress
   does on a cluster.
 
-## Unreleased — the charts can run the console's session role
+## release/v0.3.0 — the charts can run the console's session role
 
 - The backend chart adds `deployments.session` (`serve session`, ADR-0048),
   off by default. Enabling it requires `config.session.console_origins`, the
@@ -147,7 +209,7 @@ here.
 - Nothing calls the role yet: the console still signs in through its own
   server.
 
-## Unreleased — the console's session role
+## release/v0.3.0 — the console's session role
 
 - `paladin serve session` is a new role (ADR-0048): it will hold the console's
   session cookie and the tokens behind it, and forward the console's calls to
@@ -160,7 +222,7 @@ here.
   deploys the role.
 - Compose runs a `paladin-session` container on `:8086`.
 
-## Unreleased — platform health is read by the admin role
+## release/v0.3.0 — platform health is read by the admin role
 
 - The console's health page calls the admin plane's
   `SystemService.GetPlatformHealth`. The admin role reads every role's
@@ -176,7 +238,7 @@ here.
   the health token. Its chart value `healthSnapshotTokenSecret` is still
   accepted and still mounted, unused; it is removed in a later release.
 
-## Unreleased — the IAM plane runs as its own role
+## release/v0.3.0 — the IAM plane runs as its own role
 
 - `paladin serve iam` serves the IAM listener (`:8085`): login and the token
   RPCs, users, the OAuth authorization server and the session JWKS. It is the
@@ -201,7 +263,7 @@ here.
 - Compose runs a `paladin-iam` container; the console's health page lists
   `iam` beside `api` (add `iam` to `backend.healthRoles` if you set it).
 
-## Unreleased — each role's service account reads only its own Secrets
+## release/v0.3.0 — each role's service account reads only its own Secrets
 
 - The chart renders one Role per role, `<release>-secret-reader-<role>`,
   naming the Secrets that role's config makes it read (ADR-0047), in place of
@@ -219,7 +281,7 @@ here.
   Argo CD the per-role Roles, hooks too, change only on a sync operation, not
   on a refresh — run one after changing what a role reads.
 
-## Unreleased — each role reads only the Secrets it consumes
+## release/v0.3.0 — each role reads only the Secrets it consumes
 
 - In a cluster, a process now resolves only the `*_secret` references its own
   role uses: `serve mcp` (the bridge) reads its DPoP key and token-exchange
@@ -230,7 +292,7 @@ here.
   still lets every role read every Secret it names, until the release that
   narrows it per role.
 
-## Unreleased — sessions are signed ES256 by a key only the minting role holds
+## release/v0.3.0 — sessions are signed ES256 by a key only the minting role holds
 
 - Access and refresh tokens, and the OAuth AS's, are signed ES256 by the key
   at `auth.session_key_path` (ECDSA P-256, PEM PKCS#8 or SEC1) and carry its
@@ -251,7 +313,7 @@ here.
   `JWT_ALG=ES256 JWT_SECRET="$(cat <key.pem>)" STEP_FLAGS="--kid <kid>"`,
   the kid from the JWKS.
 
-## Unreleased — the chart mounts a session signing key into the minting role
+## release/v0.3.0 — the chart mounts a session signing key into the minting role
 
 - The chart now provides the ECDSA P-256 key sessions will be signed with
   (ADR-0047) and mounts it as a file into `auth.sessionKey.roles` (`api`)
@@ -263,7 +325,7 @@ here.
 - This release mounts the key and nothing reads it yet; the release that
   switches sessions to ES256 reads it from there.
 
-## Unreleased — the API-token pepper is a secret of its own
+## release/v0.3.0 — the API-token pepper is a secret of its own
 
 - With `api_token.enabled`, either `api_token.hmac_key` or
   `api_token.hmac_key_secret` is now required, and the config is refused at
