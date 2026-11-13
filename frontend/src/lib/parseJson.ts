@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/mini";
 
 /**
  * safeParseJson parses a JSON string and validates it against a Zod schema.
@@ -13,11 +13,11 @@ import { z } from "zod";
  * schema). Callers decide the fallback: a stored-preference reader uses
  * `?? defaultValue`; an editor surfaces a "couldn't read saved data" message.
  *
- *   const SavedSchema = z.object({ kind: z.string().optional() });
+ *   const SavedSchema = z.object({ kind: z.optional(z.string()) });
  *   const saved = safeParseJson(SavedSchema, localStorage.getItem(key)) ?? {};
  */
 export function safeParseJson<T>(
-  schema: z.ZodType<T>,
+  schema: z.ZodMiniType<T>,
   raw: string | null | undefined,
 ): T | null {
   if (raw == null || raw === "") return null;

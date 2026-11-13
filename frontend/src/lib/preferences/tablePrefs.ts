@@ -2,7 +2,7 @@
 // sort it opens with, how many rows a page holds and the view it is laid
 // out in. One entry per table id in console.tables, read through a schema so
 // a malformed one is the default, never a broken table.
-import { z } from "zod";
+import { z } from "zod/mini";
 
 import { PAGE_SIZES } from "@/lib/table/paging";
 import { VIEW_MODES } from "@/lib/table/viewMode";
@@ -13,19 +13,19 @@ export type Density = (typeof DENSITIES)[number];
 export const DEFAULT_DENSITY: Density = "comfortable";
 
 const SortSchema = z.object({
-  column: z.string().min(1),
+  column: z.string().check(z.minLength(1)),
   direction: z.enum(["asc", "desc"]),
 });
 
 const TablePrefsSchema = z.object({
-  density: z.enum(DENSITIES).optional(),
-  hidden: z.array(z.string()).optional(),
-  sort: SortSchema.optional(),
+  density: z.optional(z.enum(DENSITIES)),
+  hidden: z.optional(z.array(z.string())),
+  sort: z.optional(SortSchema),
   // Only a size the picker offers: a size another console stored, or one
   // since dropped, would leave the picker naming nothing.
-  pageSize: z.literal(PAGE_SIZES).optional(),
+  pageSize: z.optional(z.literal(PAGE_SIZES)),
   /** Table, tiles or summary (lib/table/viewMode). */
-  view: z.enum(VIEW_MODES).optional(),
+  view: z.optional(z.enum(VIEW_MODES)),
 });
 
 export type TablePrefs = z.infer<typeof TablePrefsSchema>;
