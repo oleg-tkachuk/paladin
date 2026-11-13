@@ -331,8 +331,12 @@ github.com/lestrrat-go/httprc/v3 v3.0.6 h1:4FpLQ18KK/ypPbVU3NLWJNRvH3kcYiqKqWfKG
 github.com/lestrrat-go/httprc/v3 v3.0.6/go.mod h1:mSMtkZW92Z98M5YoNNztbRGxbXHql7tSitCvaxvo9l0=
 github.com/lestrrat-go/jwx/v3 v3.4.0 h1:2YSO4sfAj+M90XUuEJZsMibRNpoh1KXP1iL+C/tFebg=
 github.com/lestrrat-go/jwx/v3 v3.4.0/go.mod h1:jrZZIM3dgHB780ZrD/3H+ARR5ou4w3X3wFjWE+JWGMU=
+github.com/lestrrat-go/jwx/v4 v4.6.0 h1:Gq/JIOqNb/Fl3Oug5Ylfu/OUNLAnXQM+A8dMOPn4OIc=
+github.com/lestrrat-go/jwx/v4 v4.6.0/go.mod h1:QOCcs9ZL83fD8Abq9mDXLrLT0ObfyINsISiW03PZPMs=
 github.com/lestrrat-go/option/v2 v2.0.0 h1:XxrcaJESE1fokHy3FpaQ/cXW8ZsIdWcdFzzLOcID3Ss=
 github.com/lestrrat-go/option/v2 v2.0.0/go.mod h1:oSySsmzMoR0iRzCDCaUfsCzxQHUEuhOViQObyy7S6Vg=
+github.com/lestrrat-go/option/v3 v3.0.0-alpha1 h1:dvdzLwm/Ba5CJUF3jQP7w/iNYSLfy7yyh9XXNa1WjxI=
+github.com/lestrrat-go/option/v3 v3.0.0-alpha1/go.mod h1:5KSg20dfsKkNJtjDmaQRLZVXuUrzuCCcz/gbDK0pfKk=
 github.com/lib/pq v1.12.3 h1:tTWxr2YLKwIvK90ZXEw8GP7UFHtcbTtty8zsI+YjrfQ=
 github.com/lib/pq v1.12.3/go.mod h1:/p+8NSbOcwzAEI7wiMXFlgydTwcgTr3OSKMsD2BitpA=
 github.com/lufia/plan9stats v0.0.0-20261101121723-be84dd9509a0 h1:bGmNmV0W+HWMJyDOXmbY2InjV33LK59X9ClO7AU/8e8=
@@ -411,10 +415,10 @@ github.com/oleg-tkachuk/limes v1.0.0-rc.73 h1:z9cVa/r+CZetb6EjTtB2IuR+AmsPrQ6w1P
 github.com/oleg-tkachuk/limes v1.0.0-rc.73/go.mod h1:bLWYba5aqQgPvqLLGd7ZS/U01/KddzkgIquH2+dm07E=
 github.com/oleg-tkachuk/limes/biscuit v0.1.33 h1:GHEfzoz54qFul+q1YnozMoa2iULft2VvwLJQAg/cJpY=
 github.com/oleg-tkachuk/limes/biscuit v0.1.33/go.mod h1:MGC0/3Yn/uxH7VJx1HNzwN5bdSDmX2WkZDOM/OinD2I=
-github.com/oleg-tkachuk/limes/exchange v0.25.3 h1:xGIHo76BM/q2SAkgyS23aJUOgALSJJmNylOHBMivePc=
-github.com/oleg-tkachuk/limes/exchange v0.25.3/go.mod h1:/CTNybLPTS1977QFFuf55G+Gu0mAJrysCZErHEmPNrk=
-github.com/oleg-tkachuk/limes/otelmetric v0.22.0 h1:Cu64AMLnbIkU29lVywS3rtAsQmz5bv5xxLn92/KJ5eo=
-github.com/oleg-tkachuk/limes/otelmetric v0.22.0/go.mod h1:C1KajlePIXaohH8wEfhnWgudDYkP2puLQNo6YOrmQbg=
+github.com/oleg-tkachuk/limes/exchange v0.25.4 h1:kw5Fi+IDqv9ahdJScELr70gpjVUxU4Pq8E6PomjMqe8=
+github.com/oleg-tkachuk/limes/exchange v0.25.4/go.mod h1:S8n5UD3Cfvywe3xo0JULfuclUiVSA7DhOK26yiM+J2k=
+github.com/oleg-tkachuk/limes/otelmetric v0.23.0 h1:XWFQmrYCgP8D1ArLxRw3H+EYrIaJdm4Oo5vTXbrhUHY=
+github.com/oleg-tkachuk/limes/otelmetric v0.23.0/go.mod h1:C1KajlePIXaohH8wEfhnWgudDYkP2puLQNo6YOrmQbg=
 github.com/oleg-tkachuk/limes/pgstore v0.82.0 h1:kPr4fTHSUdsJq70NmK19Pc2b4IUpQDMRkTJYHCs26Yg=
 github.com/oleg-tkachuk/limes/pgstore v0.82.0/go.mod h1:8/CkPe24HWtB4tcuP7iyGQx4LWGEcHj/uSjYo4WdN2g=
 github.com/onsi/ginkgo/v2 v2.33.1 h1:62XfWJbEIjPSCSDYrsCPP/SHcmH7O0M8ne8zfqQ2iz4=
