@@ -3,7 +3,15 @@ import { join, relative, sep } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { HOME_LABEL, PRODUCT_NAME, crumbs, pageTitle } from "./crumbs";
+import { PLACEHOLDER_SEGMENT } from "@/lib/navigation/staticParams";
+
+import {
+  HOME_LABEL,
+  PLACEHOLDER_LABEL,
+  PRODUCT_NAME,
+  crumbs,
+  pageTitle,
+} from "./crumbs";
 
 const APP = join(__dirname, "..", "..", "app");
 
@@ -109,5 +117,21 @@ describe("a segment listed on its parent's page", () => {
     const trail = crumbs("/storage-backends/primary/buckets/b1/lifecycle");
     expect(trail.filter((c) => c.href)).toHaveLength(1);
     expect(crumbs("/tenants/acme/buckets")[2].href).toBeUndefined();
+  });
+});
+
+// The export renders each dynamic page once, under the placeholder; its title
+// read "Lifecycle · _ · Buckets · _" until the page read the real ids.
+describe("a segment under the export's placeholder", () => {
+  it("reads as an ellipsis, not the placeholder", () => {
+    const path = `/storage-backends/${PLACEHOLDER_SEGMENT}/buckets/${PLACEHOLDER_SEGMENT}/lifecycle`;
+    expect(crumbs(path).map((c) => c.label)).toEqual([
+      "Storage backends",
+      PLACEHOLDER_LABEL,
+      "Buckets",
+      PLACEHOLDER_LABEL,
+      "Lifecycle",
+    ]);
+    expect(pageTitle(path)).not.toContain(` ${PLACEHOLDER_SEGMENT} `);
   });
 });
