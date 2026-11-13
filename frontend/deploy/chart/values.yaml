@@ -216,14 +216,19 @@ resources:
 # page.
 #
 # Both say how long an answer may take: the kubelet's default is 1s, which a
-# busy event loop misses without anything being wrong. Liveness waits longer
+# busy node misses without anything being wrong. Liveness waits longer
 # than readiness — a slow answer should take the pod out of rotation long
 # before it gets it restarted.
+#
+# The server is serving about two seconds after it starts (it indexes and
+# compresses the embedded export first), so readiness asks from then on and
+# a new pod takes traffic within seconds; the waits sized for Next.js held
+# every rollout back by half a minute.
 livenessProbe:
   httpGet:
     path: /api/health/live
     port: 3000
-  initialDelaySeconds: 30
+  initialDelaySeconds: 10
   periodSeconds: 30
   timeoutSeconds: 5
 
@@ -231,8 +236,8 @@ readinessProbe:
   httpGet:
     path: /api/health/live
     port: 3000
-  initialDelaySeconds: 15
-  periodSeconds: 15
+  initialDelaySeconds: 2
+  periodSeconds: 5
   timeoutSeconds: 3
 
 autoscaling:
