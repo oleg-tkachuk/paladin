@@ -75,6 +75,14 @@ secret_exists defaults paladin-bootstrap-admin || bad "defaults: no bootstrap ad
 cases=$((cases + 1))
 rbac_names defaults | grep -x paladin-bootstrap-admin >/dev/null || bad "defaults: RBAC cannot read the bootstrap admin Secret"
 
+# A role holds about 15–25 MiB at rest. At 256Mi each reserved ten times
+# that, and the dev cluster's one node could not schedule a rollout's surge
+# pods; every role's Deployment takes the shared default.
+readonly CORE_MEMORY_REQUEST=64Mi
+check "defaults: every role requests the default memory" \
+    "$(yq ea -r '[select(.kind == "Deployment") | .spec.template.spec.containers[0].resources.requests.memory] | unique | .[]' "$scratch/defaults.yaml")" \
+    "$CORE_MEMORY_REQUEST"
+
 render issuer --set config.auth.issuer=https://issuer.example
 check "an issuer set is kept" "$(config issuer .auth.issuer)" "https://issuer.example"
 
