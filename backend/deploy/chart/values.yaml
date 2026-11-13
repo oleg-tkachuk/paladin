@@ -97,10 +97,15 @@ defaults:
   # values-{dev,staging,prod}.yaml overlays per role via
   # `deployments.<role>.resources`. requests.cpu is REQUIRED for
   # HPA-on-CPU to work; do not drop without disabling autoscaling.
+  #
+  # A role holds about 15–25 MiB at rest; the request leaves room for that
+  # three times over, the limit for load. At 256Mi a role reserved ten times
+  # what it used, and on the dev cluster's one node a rollout's surge pods
+  # could not be scheduled ("Insufficient memory").
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 64Mi
     limits:
       cpu: 1000m
       memory: 512Mi
