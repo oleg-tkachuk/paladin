@@ -12,6 +12,7 @@ export interface Documentation {
 }
 
 export function belongs(files: readonly string[], filter?: PathFilter): boolean;
+export function changes(files: readonly string[], names?: readonly string[]): boolean;
 export function within(files: readonly string[], prefixes?: readonly string[]): boolean;
 export function isDocumentation(file: string, documentation?: Documentation): boolean;
 export function deciding(files: readonly string[], documentation: Documentation | undefined): string[];
