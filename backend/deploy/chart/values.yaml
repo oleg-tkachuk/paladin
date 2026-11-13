@@ -178,7 +178,10 @@ deployments:
         # so the internal CA needs no trust setup here.
       initialDelaySeconds: 15
       periodSeconds: 20
-      timeoutSeconds: 1
+      # /livez answers from the process alone, so a slow answer is a starved
+      # CPU, not a hung one: a 1s limit restarted pods into the load that
+      # slowed them. Three failures 20s apart still catch a hung process.
+      timeoutSeconds: 3
       failureThreshold: 3
     readinessProbe:
       httpGet:
@@ -231,7 +234,7 @@ deployments:
         port: iam
       initialDelaySeconds: 15
       periodSeconds: 20
-      timeoutSeconds: 1
+      timeoutSeconds: 3
       failureThreshold: 3
     readinessProbe:
       httpGet:
@@ -281,7 +284,7 @@ deployments:
         port: session
       initialDelaySeconds: 5
       periodSeconds: 20
-      timeoutSeconds: 1
+      timeoutSeconds: 3
       failureThreshold: 3
     readinessProbe:
       httpGet:
@@ -329,7 +332,7 @@ deployments:
         # scheme follows internalTLS, as on the api role.
       initialDelaySeconds: 15
       periodSeconds: 20
-      timeoutSeconds: 1
+      timeoutSeconds: 3
       failureThreshold: 3
     readinessProbe:
       httpGet:
@@ -383,7 +386,7 @@ deployments:
         port: ops
       initialDelaySeconds: 15
       periodSeconds: 20
-      timeoutSeconds: 1
+      timeoutSeconds: 3
       failureThreshold: 3
     readinessProbe:
       httpGet:
@@ -437,7 +440,7 @@ deployments:
         port: mcp
       initialDelaySeconds: 15
       periodSeconds: 20
-      timeoutSeconds: 1
+      timeoutSeconds: 3
       failureThreshold: 3
     readinessProbe:
       httpGet:
@@ -482,7 +485,7 @@ deployments:
         port: ops
       initialDelaySeconds: 15
       periodSeconds: 20
-      timeoutSeconds: 1
+      timeoutSeconds: 3
       failureThreshold: 3
     readinessProbe:
       httpGet:
@@ -527,7 +530,7 @@ deployments:
         port: ingest
       initialDelaySeconds: 15
       periodSeconds: 20
-      timeoutSeconds: 1
+      timeoutSeconds: 3
       failureThreshold: 3
     readinessProbe:
       httpGet:
