@@ -10,7 +10,7 @@
 // Runs from `task -t Taskfile.dev.yaml verify-repo` after `npm ci` here.
 
 import { createRequire } from "node:module";
-import { analyzeWith, belongs, deciding, within } from "./paths-analyzer.mjs";
+import { analyzeWith, belongs, changes, deciding, within } from "./paths-analyzer.mjs";
 
 const require = createRequire(import.meta.url);
 const { streams, analyzerFor } = require("./release.config.cjs");
@@ -21,6 +21,8 @@ const PYTHON_SDK = ["sdk/python/src/paladin/client.py"];
 const PROTO = ["proto/paladin/data/v1/object_service.proto"];
 const UPGRADING = ["docs/upgrading.md"];
 const SHARED_TABLE = ["sdk/testdata/planes.json"];
+// A limes bump as it lands in the Go SDK.
+const GO_SDK_BUMP = ["sdk/go/go.mod", "sdk/go/go.sum", "sdk/go/paladintest/usage.go"];
 // The Python SDK's archive version, at the root but its alone.
 const ARCHIVAL = [".git_archival.txt"];
 
@@ -75,6 +77,20 @@ const cases = [
   // The capability primitive moved to its own repository (limes): a go.mod
   // bump that takes a new limes is a backend change like any other.
   ["product", "build(deps): take a new limes", ["backend/go.mod", "backend/go.sum"], null],
+
+  // A dependency the SDKs ship moves with their users: the bump that left the
+  // Go SDK requiring an older limes than the one it was tested with.
+  ["sdk", "build(deps): bump limes v1.0.0-rc.71 → rc.73", [...GO_SDK_BUMP, "backend/go.mod", "backend/go.sum"], "patch"],
+  ["sdk", "build(deps): bump a Python SDK requirement", ["sdk/python/pyproject.toml", "sdk/python/uv.lock"], "patch"],
+  // What no user installs releases nothing: the lock, the test module.
+  ["sdk", "build(deps): refresh the Python lock", ["sdk/python/uv.lock"], null],
+  ["sdk", "build(deps): bump the test module", ["sdk/go/internal/oteltest/go.mod", "sdk/go/internal/oteltest/go.sum"], null],
+  // Only a dependency bump: a toolchain line or a dev tool is not one.
+  ["sdk", "build(go): raise the toolchain", ["sdk/go/go.mod"], null],
+  ["sdk", "chore(deps): update dependency ruff", ["sdk/python/pyproject.toml"], null],
+  // The product releases by hand, and the backend's image moves with its own
+  // go.mod: the rule is the SDKs'.
+  ["product", "build(deps): bump limes in the SDK", GO_SDK_BUMP, null],
   ["product", "fix(auth): adopt a limes fix", ["backend/go.mod", "backend/go.sum"], "patch"],
 ];
 
@@ -135,6 +151,9 @@ for (const [name, ok] of [
   ["exclude needs every file", belongs(["sdk/x", "backend/y"], { exclude: ["sdk/"] }) === true],
   ["within needs every file", within(["sdk/go/x", "backend/y"], ["sdk/go/"]) === false],
   ["a merge is within nothing", within([], ["sdk/go/"]) === false],
+  ["changes matches a whole name", changes(["sdk/go/go.mod"], ["sdk/go/go.mod"]) === true],
+  ["changes is no prefix match", changes(["sdk/go/internal/oteltest/go.mod"], ["sdk/go/go.mod"]) === false],
+  ["a merge changes nothing", changes([], ["sdk/go/go.mod"]) === false],
   ["documentation does not decide", deciding(["sdk/go/a.go", "docs/x.md", "README.md"], { prefixes: ["docs/"], suffixes: [".md"] }).join() === "sdk/go/a.go"],
   ["documentation alone keeps its files", deciding(["docs/x.md"], { prefixes: ["docs/"], suffixes: [".md"] }).join() === "docs/x.md"],
 ]) {

@@ -30,6 +30,8 @@
 // `conventionalcommits` preset: feat is a minor, fix/perf/revert are a patch,
 // a `!` or `BREAKING CHANGE:` footer is a major, and
 // docs/style/refactor/test/build/ci/chore release nothing on their own.
+// On the sdk stream a build(deps) commit that changes what an SDK's users
+// install is a patch too (DEPENDENCY_BUMP_IS_A_PATCH).
 // `security` is a patch on every stream: the preset knows no such type, so a
 // security fix released nothing. Both streams are pre-1.0, where a breaking
 // change is a minor; each says so until it reaches 1.0, which is cut by hand.
@@ -55,6 +57,15 @@ const PYTHON_SDK_OWN = ["sdk/python/", ".git_archival.txt"];
 const SDK_PATHS = ["sdk/go/", ...PYTHON_SDK_OWN, ...SHARED_SDK_PATHS];
 // The Go module the backend compiles in: its API is its own, not the product's.
 const MODULE_PATHS = ["sdk/go/"];
+// What a user of either SDK installs with it: the published Go module's
+// requirements and the Python package's. Not the lock file or the test
+// module, which no user installs.
+const SDK_MANIFESTS = ["sdk/go/go.mod", "sdk/python/pyproject.toml"];
+// A dependency bump the SDKs ship is a patch of theirs: a user who takes a
+// newer limes otherwise holds a Go SDK that requires, and was built against,
+// the older one. Renovate writes such bumps as fix(deps); one written by hand
+// as build(deps) released nothing.
+const DEPENDENCY_BUMP_IS_A_PATCH = { type: "build", scope: "deps", release: "patch" };
 // Files that do not decide which stream a commit belongs to, when it changed
 // code too: its upgrade notes and READMEs follow the code.
 const DOCUMENTATION = { prefixes: ["docs/"], suffixes: [".md"] };
@@ -87,6 +98,7 @@ const streams = {
     analyzer: {
       releaseRules: [SECURITY_IS_A_PATCH, BREAKING_IS_A_MINOR_BEFORE_1_0],
       include: SDK_PATHS,
+      manifests: { files: SDK_MANIFESTS, releaseRules: [DEPENDENCY_BUMP_IS_A_PATCH] },
       documentation: DOCUMENTATION,
     },
   },

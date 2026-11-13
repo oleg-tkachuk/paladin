@@ -13,6 +13,10 @@
 // product compiles in — the Go SDK — is that module's
 // break, not the product's, and must not cut a product major.
 //
+// `manifests` re-reads the commits that change any of `manifests.files` with
+// `manifests.releaseRules` added: a stream whose dependencies its users
+// install releases when they move, whatever the commit's type says of it.
+//
 // `atLeast` is the smallest release an operator asked for by hand — `minor`
 // or `major` — released whatever the commits say, even when they say nothing:
 // a major is cut only by a breaking commit or by this.
@@ -32,6 +36,11 @@ export function belongs(files, { include = [], exclude = [] } = {}) {
   if (include.length > 0 && !files.some(under(include))) return false;
   if (exclude.length > 0 && files.length > 0 && files.every(under(exclude))) return false;
   return true;
+}
+
+/** Whether a commit changed any of `names`, matched whole. */
+export function changes(files, names = []) {
+  return files.some((f) => names.includes(f));
 }
 
 /** Whether every file of a commit is under one of `prefixes`. */
@@ -87,19 +96,28 @@ export async function analyzeWith(pluginConfig, context, allFiles) {
 
 /** The release the commits that touch the stream call for. */
 async function analyzeCommitsOf(pluginConfig, context, allFiles) {
-  const { include, exclude, modules, documentation, ...analyzerConfig } = pluginConfig;
+  const { include, exclude, modules, manifests, documentation, ...analyzerConfig } = pluginConfig;
   const files = (hash) => deciding(allFiles(hash), documentation);
   const commits = context.commits.filter((c) => belongs(files(c.hash), { include, exclude }));
   context.logger.log(`${commits.length} of ${context.commits.length} commits touch this release stream`);
-  if (!modules) {
-    return analyze(analyzerConfig, { ...context, commits });
+  // Each commit is read with the rules its files call for: the stream's own,
+  // a module's when every file is in one, a manifest's when it changes one.
+  // Commits that call for the same rules are read together.
+  const extras = [
+    ...(modules ? [{ applies: (fs) => within(fs, modules.paths), rules: modules.releaseRules }] : []),
+    ...(manifests ? [{ applies: (fs) => changes(fs, manifests.files), rules: manifests.releaseRules }] : []),
+  ];
+  const groups = new Map();
+  for (const c of commits) {
+    const fs = files(c.hash);
+    const key = extras.map((e) => (e.applies(fs) ? "1" : "0")).join("");
+    groups.set(key, [...(groups.get(key) ?? []), c]);
   }
-  const inModules = (c) => within(files(c.hash), modules.paths);
-  const own = await analyze(analyzerConfig, { ...context, commits: commits.filter((c) => !inModules(c)) });
-  const moduleConfig = {
-    ...analyzerConfig,
-    releaseRules: [...(analyzerConfig.releaseRules ?? []), ...modules.releaseRules],
-  };
-  const fromModules = await analyze(moduleConfig, { ...context, commits: commits.filter(inModules) });
-  return larger(own, fromModules) ?? undefined;
+  let release = null;
+  for (const [key, group] of groups) {
+    const rules = extras.flatMap((e, i) => (key[i] === "1" ? e.rules : []));
+    const config = { ...analyzerConfig, releaseRules: [...(analyzerConfig.releaseRules ?? []), ...rules] };
+    release = larger(release, await analyze(config, { ...context, commits: group }));
+  }
+  return release ?? undefined;
 }
