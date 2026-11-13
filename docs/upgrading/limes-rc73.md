@@ -1,4 +1,4 @@
-## Unreleased — limes v1.0.0-rc.73: a bumps table in the limes schema
+## release/v0.3.0 — limes v1.0.0-rc.73: a bumps table in the limes schema
 
 - pgstore migration 044 adds `limes.bumps`. The `migrate` hook applies it
   before the new pods serve; a pod of this release refuses to start against

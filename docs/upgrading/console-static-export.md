@@ -1,4 +1,4 @@
-## Unreleased — the console ships as a static export behind a Go server
+## release/v0.3.0 — the console ships as a static export behind a Go server
 
 - The console image runs no Node: a Go server serves the static export and
   the routes it needs (ADR-0049). The chart's values keep their names; the

@@ -1,4 +1,4 @@
-## Unreleased — the console's session role
+## release/v0.3.0 — the console's session role
 
 - `paladin serve session` is a new role (ADR-0048): it will hold the console's
   session cookie and the tokens behind it, and forward the console's calls to

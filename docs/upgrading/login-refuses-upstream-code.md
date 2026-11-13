@@ -1,4 +1,4 @@
-## sdk/python/v0.146.2, sdk/go/v0.146.2 — Login refuses an upstream code
+## release/v0.3.0, sdk/python/v0.146.2, sdk/go/v0.146.2 — Login refuses an upstream code
 
 - `AuthService.Login` answers `INVALID_ARGUMENT` when `upstream_code` is set.
   It used to be accepted and ignored: no upstream IdP signs anyone in to

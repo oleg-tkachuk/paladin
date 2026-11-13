@@ -1,4 +1,4 @@
-## Unreleased — each role's service account reads only its own Secrets
+## release/v0.3.0 — each role's service account reads only its own Secrets
 
 - The chart renders one Role per role, `<release>-secret-reader-<role>`,
   naming the Secrets that role's config makes it read (ADR-0047), in place of

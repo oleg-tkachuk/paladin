@@ -1,4 +1,4 @@
-## Unreleased — the console calls the planes through the session role
+## release/v0.3.0 — the console calls the planes through the session role
 
 - The console holds no token now (ADR-0048). The browser calls the session
   role at `/session/` on the console's own host, with the session cookie

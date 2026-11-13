@@ -1,4 +1,4 @@
-## Unreleased — migrate and bootstrap wait for the database
+## release/v0.3.0 — migrate and bootstrap wait for the database
 
 - `paladin migrate` and `paladin bootstrap` retry an unreachable database for
   up to 2 minutes before they fail, instead of failing on the first refused

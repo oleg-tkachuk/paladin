@@ -1,4 +1,4 @@
-## Unreleased — the console chart drops what its BFF read
+## release/v0.3.0 — the console chart drops what its BFF read
 
 - The console chart no longer takes `healthSnapshotTokenSecret`,
   `backend.healthRoles`, or `backend.urls` other than `iam`; an overlay still
