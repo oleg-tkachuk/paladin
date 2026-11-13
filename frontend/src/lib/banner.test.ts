@@ -1,22 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { BANNER_ENV, bannerAt, bannerFromEnv, bannerFromJson } from "./banner";
+import { bannerAt, bannerFromJson } from "./banner";
 
-describe("bannerFromEnv", () => {
+describe("bannerFromJson", () => {
   it("is null when no content is set", () => {
-    expect(bannerFromEnv({})).toBeNull();
-    expect(
-      bannerFromEnv({
-        [BANNER_ENV.content]: "",
-        [BANNER_ENV.severity]: "critical",
-      }),
-    ).toBeNull();
+    expect(bannerFromJson({})).toBeNull();
+    expect(bannerFromJson({ content: "", severity: "critical" })).toBeNull();
   });
 
   it("defaults to an info banner at the top that can be dismissed", () => {
-    expect(
-      bannerFromEnv({ [BANNER_ENV.content]: "Maintenance on Sunday" }),
-    ).toEqual({
+    expect(bannerFromJson({ content: "Maintenance on Sunday" })).toEqual({
       content: "Maintenance on Sunday",
       severity: "info",
       permanent: false,
@@ -24,14 +17,15 @@ describe("bannerFromEnv", () => {
     });
   });
 
-  it("reads every variable", () => {
+  // The console's server passes the environment through as text.
+  it("reads every field as the server sends it", () => {
     expect(
-      bannerFromEnv({
-        PALADIN_BANNER_CONTENT: "Read-only until 18:00 UTC",
-        PALADIN_BANNER_SEVERITY: "critical",
-        PALADIN_BANNER_URL: "https://status.example.com",
-        PALADIN_BANNER_PERMANENT: "true",
-        PALADIN_BANNER_POSITION: "Bottom",
+      bannerFromJson({
+        content: "Read-only until 18:00 UTC",
+        severity: "critical",
+        url: "https://status.example.com",
+        permanent: "true",
+        position: "Bottom",
       }),
     ).toEqual({
       content: "Read-only until 18:00 UTC",
@@ -44,10 +38,7 @@ describe("bannerFromEnv", () => {
 
   it("puts a banner with an unknown position at the top", () => {
     expect(
-      bannerFromEnv({
-        [BANNER_ENV.content]: "x",
-        [BANNER_ENV.position]: "sidebar",
-      })?.position,
+      bannerFromJson({ content: "x", position: "sidebar" })?.position,
     ).toBe("top");
   });
 });
@@ -77,7 +68,7 @@ describe("bannerFromJson", () => {
 });
 
 describe("bannerAt", () => {
-  const banner = bannerFromEnv({ [BANNER_ENV.content]: "x" })!;
+  const banner = bannerFromJson({ content: "x" })!;
 
   it("stands where it is put", () => {
     expect(bannerAt(banner, "top")).toBe(true);

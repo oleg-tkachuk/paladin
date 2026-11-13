@@ -432,10 +432,8 @@ services:
       # public_endpoint above. The console's CSP allows only the origins
       # named here, and refused every upload PUT while it named none.
       PALADIN_STORAGE_ORIGINS: ${PALADIN_E2E_S3_PUBLIC_ENDPOINT:-http://localhost:${PALADIN_E2E_PORT_S3:-9000}}
-      # `next start` (production-mode bundle) per
-      # Clarification Q3. NOT `next dev` — HMR is a documented
-      # flake source for E2E suites.
-      NODE_ENV: production
+      # Every request in the server's log, for a run that needs explaining.
+      PALADIN_LOG_LEVEL: debug
     depends_on:
       # api/admin are distroless and carry no healthcheck (see above),
       # so gate on service_started; the ui's own healthcheck + the
@@ -447,9 +445,8 @@ services:
       admin:
         condition: service_started
     healthcheck:
-      # 127.0.0.1 (not localhost): the distroless wget resolves localhost to
-      # ::1 first, but Next binds 0.0.0.0 (IPv4 only) → false "unhealthy".
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      # The image is distroless: the binary asks itself (`probe`).
+      test: ["CMD", "/app/bin/paladin-console", "probe"]
       interval: 3s
       timeout: 3s
       retries: 30

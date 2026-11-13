@@ -35,9 +35,6 @@ export const SESSION_PATHS = {
 /** Where the console serves the operator's banner, its own configuration. */
 export const BANNER_PATH = consoleContract.bannerPath;
 
-/** The session cookie the session role sets; the page itself never reads it. */
-export const SESSION_COOKIE = consoleContract.sessionCookie;
-
 /**
  * Bootstrap-provisioned Collection. Used as the last-resort fallback when
  * no scope has been chosen yet (fresh tenant, first-ever page load).

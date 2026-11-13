@@ -673,20 +673,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## UI / Admin Console
 
-### The console still runs a Node server (ADR-0049)
-
-- **Status:** Aspirational.
-- **Reason:** ADR-0049 is decided; the static export, `useRouteParams` and
-  the Go server in `frontend/server` are not built yet.
-- **Definition of Done:** the console's image runs no Node; the Go server
-  serves the export and owns the CSP, security headers, cookie gate, `Origin`
-  check, `/api/banner`, `/api/health/live`, the `/oauth/authorize` relay and
-  the three legacy redirects, each with tests and logs; no page reads
-  `useParams`; the shared names are generated for both languages; the e2e
-  suite passes on the new image; an upgrading note names the overlay change
-  (the backend CA for the relay); ADR-0049 is Accepted.
-- **Blockers:** none.
-
 ### Console UX programme (2026-10-19)
 
 The entries below are one programme, agreed on 2026-10-19, to make the console

@@ -3,6 +3,13 @@
 Next.js admin console for Paladin. It renders the UI; the session is held by
 the backend's session role, `paladin serve session` (ADR-0048).
 
+The production build is a static export served by a small Go server in
+`server/` (ADR-0049): it embeds the export, maps each dynamic segment to the
+page built for it, and answers the few routes a file cannot — the security
+headers and CSP, the redirect to `/login` without a session cookie, the
+operator's banner, the liveness probe, the OAuth consent relay, and redirects
+from paths that moved. No Node runs in the image.
+
 The browser never talks to a plane directly and holds no token. Its Connect
 calls go to `/session/rpc/<package.Service>/<Method>` on the console's own
 origin (`src/lib/connect/transport.ts`), where the ingress — or Caddy in
@@ -28,9 +35,16 @@ pnpm dev            # http://localhost:3000
 
 `pnpm dev` alone renders the pages but cannot sign in: `/session/` has to be
 served on the same origin. Front it as `backend/deploy/front/Caddyfile` does,
-with `/session/*` to a session role and the rest to the dev server. The
-server's one upstream is `PALADIN_IAM_URL`, for the OAuth consent relay; it
-falls back to an in-cluster service name.
+with `/session/*` to a session role and the rest to the dev server. The dev
+server has none of the Go server's routes: no CSP, no sign-in redirect, no
+banner. To run the production build the way the image does:
+
+```bash
+pnpm build && pnpm start   # the export, served by server/
+```
+
+The Go server's one upstream is `PALADIN_IAM_URL`, for the OAuth consent
+relay; it falls back to an in-cluster service name.
 
 ## Authentication
 
@@ -58,13 +72,12 @@ spelling parses and then fails every Cedar policy check.
 frontend/
 ├── src/
 │   ├── app/              routes — one directory per console surface
-│   │   ├── api/          the console's own routes: banner, health/live
 │   │   ├── tenants/      tenants and everything scoped under one
 │   │   ├── buckets/  collections/  upload/  trash/
 │   │   ├── policies/     Cedar policy editing and simulation
 │   │   ├── mcp/          MCP upstream inspection
-│   │   ├── audit/  billing/  stats/  ops/  operations/  health/
-│   │   ├── oauth/        consent page; authorize relays the form to iam
+│   │   ├── audit/  billing/  stats/  operations/  health/
+│   │   ├── oauth/        consent page; server/ relays its form to iam
 │   │   └── storage-backends/  users/  applications/  profile/  login/  config/
 │   ├── components/       shared UI (shadcn/ui + Tailwind)
 │   ├── context/          React providers: auth, scope, shell, stats, actions,
@@ -74,10 +87,10 @@ frontend/
 │   ├── gen/              GENERATED Connect-ES stubs — do not hand-edit
 │   ├── lib/              client helpers, formatting; connect/ (the transport
 │   │                     to the session role), session/ (its endpoints)
-│   ├── proxy.ts          CSP, /login without a session cookie, Origin check
-│   │                     on unsafe /api calls
 │   └── config.ts         loads configs/config.yaml (uiMetadata only), via zod
 ├── configs/config.yaml   dev-bootstrap's JWT; the app reads only uiMetadata
+├── server/               the Go server the export ships in; contract/ holds
+│                         the names it and the pages spell alike
 ├── tests/e2e/            Playwright suite + its compose stack
 └── deploy/               Dockerfile and Helm chart
 ```

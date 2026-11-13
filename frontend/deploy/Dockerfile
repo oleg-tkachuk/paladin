@@ -1,30 +1,30 @@
 # syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 #
-# Paladin UI container image — three stages:
+# Paladin console image (ADR-0049) — four stages:
 #
 #   1. deps    — installs pnpm dependencies from a clean lockfile on
 #                BUILDPLATFORM. Cached when package.json / lockfile
 #                don't change.
-#   2. builder — runs `next build` against the standalone output target
-#                so the runner image carries only the trimmed server.
-#   3. runtime — node:alpine with the standalone bundle, dropping perms
-#                to a non-root nextjs user.
+#   2. builder — `next build` with output: "export": the console as static
+#                files, no server code.
+#   3. server  — builds the Go server with the export embedded.
+#   4. runtime — distroless static with the one binary; no Node.
 #
-# The Helm chart mounts the runtime config at /app/configs via
-# ConfigMap, never baked into the image. Build metadata (APP_VERSION /
-# GIT_COMMIT_HASH / BUILD_TIME) is threaded through as build-args from
-# Taskfile's metadata:write step.
+# Build metadata (APP_VERSION / GIT_COMMIT_HASH / BUILD_TIME) is threaded
+# through as build-args from Taskfile's metadata:write step; Next inlines it
+# into the bundle.
 #
 # Package manager: pnpm. Version pinned to the `packageManager` field
-# in package.json (Corepack reads it). Mirrors the local-dev path
-# (see specs/001-frontend-playwright-e2e research.md R-008).
+# in package.json (Corepack reads it).
 
-# NODE_VERSION is the human-readable tag; the @sha256 digest on each FROM is
-# the authoritative pin (a tag is mutable, a digest is not). Renovate keeps
-# both in lockstep — see renovate.json. Bump the tag and digest together.
+# NODE_VERSION and GO_VERSION are the human-readable tags; the @sha256 digest
+# on each FROM is the authoritative pin (a tag is mutable, a digest is not).
+# Renovate keeps both in lockstep — see renovate.json. Bump tag and digest
+# together; the Go pair matches backend/deploy/Dockerfile.
 ARG NODE_VERSION=26
 # renovate: datasource=npm depName=pnpm
 ARG PNPM_VERSION=12.19.0
+ARG GO_VERSION=1.27
 
 # -----------------------------------------------------------------------------
 # Stage 1 — deps. Pinned to BUILDPLATFORM so a multi-arch run doesn't
@@ -51,8 +51,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # -----------------------------------------------------------------------------
-# Stage 2 — builder. Runs `next build` with build-time metadata baked in
-# via NEXT_PUBLIC_-prefixed env vars (Next inlines them into the bundle).
+# Stage 2 — builder. `next build` writes the static export to out/, with
+# build-time metadata baked in via NEXT_PUBLIC_-prefixed env vars.
 # -----------------------------------------------------------------------------
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS builder
 ARG PNPM_VERSION
@@ -76,13 +76,38 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 RUN pnpm run build
 
 # -----------------------------------------------------------------------------
-# Stage 3 — runtime. Minimal layout: only what the standalone bundle
-# needs, dropped to a non-root UID above 10000.
+# Stage 3 — server. The Go server with the export embedded (server/dist),
+# cross-compiled for TARGETPLATFORM.
 # -----------------------------------------------------------------------------
-FROM node:${NODE_VERSION}-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS runtime
+FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine@sha256:eb61c3873c97416fff0116553fff65d67a3549f72e11d9758849a689cdd8b523 AS server
+ARG TARGETOS
+ARG TARGETARCH
 
-# ARGs do not cross stage boundaries — the builder's copies above are out of
-# scope here and have to be redeclared. Same block as backend/deploy/Dockerfile.
+ENV CGO_ENABLED=0 \
+    GOMODCACHE=/go/pkg/mod \
+    GOCACHE=/go/cache/go-build
+
+WORKDIR /src
+COPY server/go.mod server/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    go mod download
+
+COPY server/ ./
+# go:embed takes what is in server/dist/out when the binary compiles.
+COPY --from=builder /app/out/ ./dist/out/
+
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/go/cache/go-build,sharing=locked \
+    GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -buildvcs=false -trimpath -ldflags="-w -s" \
+        -o /out/paladin-console ./cmd/paladin-console
+
+# -----------------------------------------------------------------------------
+# Stage 4 — runtime. One static binary on distroless.
+# -----------------------------------------------------------------------------
+FROM gcr.io/distroless/static:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329 AS runtime
+
+# ARGs do not cross stage boundaries — redeclared for the labels.
 ARG APP_VERSION=undefined
 ARG GIT_COMMIT_HASH=undefined
 ARG BUILD_TIME=undefined
@@ -91,83 +116,29 @@ ARG BUILD_TIME=undefined
 # non-root UID. Must equal the chart's runAsUser / runAsGroup.
 ARG APP_UID=10001
 ARG APP_GID=10001
-# The port Next.js listens on; also what the healthcheck dials.
+# The port the server listens on (its default); also what the healthcheck dials.
 ARG APP_PORT=3000
 
-# Which commit is this image? Until now the answer was "nobody can tell": the
-# console image carried the metadata as ENV inside the build stage and no OCI
-# labels at all, so `docker image inspect` reported no revision. That is the
-# missing half of every stale-image incident in this repository — a Playwright
-# run reported against a console nobody could attribute. `task verify-e2e`
-# prints these before it starts.
-LABEL org.opencontainers.image.title="paladin-console"       org.opencontainers.image.description="Paladin — admin console"       org.opencontainers.image.version="${APP_VERSION}"       org.opencontainers.image.revision="${GIT_COMMIT_HASH}"       org.opencontainers.image.created="${BUILD_TIME}"       org.opencontainers.image.source="https://github.com/oleg-tkachuk/paladin"
+# Which commit is this image? `task verify-e2e` prints these before it starts,
+# so a Playwright run is always attributable to a console build.
+LABEL org.opencontainers.image.title="paladin-console" \
+      org.opencontainers.image.description="Paladin — admin console" \
+      org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${GIT_COMMIT_HASH}" \
+      org.opencontainers.image.created="${BUILD_TIME}" \
+      org.opencontainers.image.source="https://github.com/oleg-tkachuk/paladin"
 
-# The base image lags alpine's own repository on security patches: node:26-alpine
-# currently ships libcrypto3/libssl3 3.5.7-r0 while alpine 3.24 has published
-# 3.5.8-r0 for CVE-2026-14456 (openssl DoS, HIGH). Bumping the digest above does
-# not help — the newest node:26-alpine still carries 3.5.7-r0, checked before
-# writing this — so the patch has to come from apk.
-#
-# Two named packages, not a blanket `apk upgrade`: the digest pin above exists
-# for reproducibility, and this narrows what varies between builds to the thing
-# a scanner is failing on. Drop it once the base image catches up.
-RUN apk upgrade --no-cache libcrypto3 libssl3
-
-WORKDIR /app
-
-ENV NODE_ENV=production \
-    NEXT_TELEMETRY_DISABLED=1 \
-    PORT=${APP_PORT} \
-    HOSTNAME=0.0.0.0
-
-# Dedicated non-root user, above 10000 so it cannot collide with a host
-# account. UID/GID match the Helm chart's
-# `runAsUser` / `runAsGroup` so bind-mounted volumes share owner with
-# the in-cluster pod.
-#
-# --ingroup nodejs, so nextjs is actually a member of it. Without it busybox
-# gives the user a private `nextjs` group — verified on the shipped image:
-# `id nextjs` reported gid=65533(nogroup) and `nodejs` had no members at all.
-# Every `--chown=nextjs:nodejs` below was then granting to a group the user was
-# not in, and the files stayed reachable only through their owner bits. It
-# happened to work; it was not what any of these lines say.
-#
-# In-cluster it worked for a second accidental reason: the chart sets
-# runAsGroup, which supplies at run time the membership the image failed
-# to build in. An image that only behaves under one chart's securityContext is
-# a dependency nobody wrote down.
-#
-# Also drop the global npm/npx CLI the node base image bundles: the Next.js
-# standalone runtime runs `node server.js` and never invokes it, but npm ships
-# with its own transitive deps (brace-expansion/tar/undici) that Trivy flags as
-# HIGH/CRITICAL. Removing it keeps those CVEs out of the shipped image without
-# affecting the runtime (the build stages keep their own npm).
-RUN addgroup --system --gid ${APP_GID} nodejs && \
-    adduser  --system --uid ${APP_UID} --ingroup nodejs nextjs && \
-    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
-
-# Prerender cache — created up-front with correct ownership so the runtime
-# needs no write permission on /app itself. `.next/cache` explicitly, not just
-# `.next`: Next creates it on the first ISR write, which succeeds only because
-# the parent happens to be owned by the app user. Making it here means the
-# runtime never depends on that.
-RUN mkdir -p .next/cache && chown -R ${APP_UID}:${APP_GID} .next
-
-# Standalone output (https://nextjs.org/docs/advanced-features/output-file-tracing)
-# trims the runtime to only the modules `next build` actually traced.
-COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/.next/standalone ./
-COPY --from=builder --chown=${APP_UID}:${APP_GID} /app/.next/static ./.next/static
+COPY --from=server --chown=${APP_UID}:${APP_GID} /out/paladin-console /app/bin/paladin-console
 
 USER ${APP_UID}:${APP_GID}
 
 EXPOSE ${APP_PORT}
 
 # For `docker run` and compose; Kubernetes ignores it and uses the chart's
-# probes. The liveness route touches no backend, so a backend outage does not
-# mark the console unhealthy.
-HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \
-    CMD ["sh", "-c", "wget -q -O /dev/null http://127.0.0.1:${PORT}/api/health/live || exit 1"]
+# probes. The binary asks itself: distroless has no shell or wget. The liveness
+# route touches no backend, so a backend outage does not mark the console
+# unhealthy.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+    CMD ["/app/bin/paladin-console", "probe"]
 
-# server.js is emitted by `next build` when output: "standalone" is set
-# in next.config.ts. It's the entrypoint for the trimmed bundle.
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/bin/paladin-console"]

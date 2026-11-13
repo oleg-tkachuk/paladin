@@ -1,6 +1,6 @@
 # ADR-0049: The console ships as a static export behind a small Go server
 
-- **Status:** Proposed 2026-11-13.
+- **Status:** Accepted 2026-11-13.
 - **Related:** [ADR-0048](0048-the-console-holds-no-token.md) (what left the
   console's server), [ADR-0009](0009-oauth-authorization-server.md) (the
   consent form the console relays).
@@ -47,36 +47,43 @@ renders every value. On a deep link to
    serves every path as today.
 2. **Route params are read from the path, not from `useParams`.** One hook,
    `useRouteParams`, matches `usePathname()` against the route's pattern and
-   returns its params; the seven pages and layouts that read `useParams`
-   move to it, and a lint rule keeps `useParams` out. The pattern table is
-   generated from `src/app` at build time, so the hook and the server below
-   read the same routes.
+   returns them decoded; the pages and layouts that read `useParams` move to
+   it. A test keeps `useParams` out of the source and checks that every
+   pattern a call site spells is a directory under `src/app`.
 3. **A Go server in the console's image serves the export**, embedded with
-   `go:embed`. It maps a request path to its exported page through the same
-   route table, a dynamic segment to `_`, and answers 404 for a path no route
-   matches. It takes over everything the Node process does today:
+   `go:embed`. The export's own tree is its route table: a request path is
+   resolved segment by segment, a literal entry first and `_` otherwise, and a
+   path no route matches gets the export's 404 page. The client router's RSC
+   requests carry the `RSC` header and ask for the page's path plus `.txt`;
+   the header, not the suffix, tells them from a page whose id ends in `.txt`.
+   It takes over everything the Node process does today:
    - the security headers and the CSP, with the storage origins from
      `PALADIN_STORAGE_ORIGINS` and the consent page's `form-action`;
    - the cookie gate to `/login?next=…`, with the same public prefixes;
-   - the `Origin` check on state-changing calls;
    - `GET /api/banner`, `GET /api/health/live`;
    - the `POST /oauth/authorize` relay to `PALADIN_IAM_URL`, returning the
      AS's answer unfollowed, as today;
    - the three legacy redirects, which leave `src/app`.
+
+   The `Origin` check does not move: it guarded state-changing calls to the
+   console's `/api/` routes, and none is left. The server takes GET and HEAD
+   everywhere, POST only on `/oauth/authorize` (which the Node server did not
+   check either), and answers 405 to anything else.
 4. **The server is its own Go module, `frontend/server`.** It imports nothing
    from `backend/`, so the console's image never links the backend's
    dependencies; it uses the standard library and zap. A dependency test pins
-   its import set. It logs start, stop, each relayed consent post and each
-   refusal (CSRF, unknown path), with the backend's field names.
-5. **Names both sides must spell alike are generated, not repeated.** The
-   session cookie's name, the public prefixes, the consent path and the
-   banner variables come from one source that emits both the TypeScript
-   constants and a Go file, with a test on each side reading the generated
-   value.
+   its import set. It logs start, stop, every request (DEBUG; WARN for a
+   refused method, ERROR for a failure) and each relayed consent post, with
+   the backend's field names.
+5. **Names both sides must spell alike live in one file.**
+   `server/contract/contract.json` holds the session cookie's name, the paths
+   the server answers, the public prefixes and the placeholder. The Go
+   server embeds it; the pages import it as JSON. A backend test checks the
+   session role's cookie name against it, and a server test checks the chart
+   sets every variable the server reads.
 6. **The chart's contract stays**: port, probe path, environment variable
-   names and the backend CA mount. `NODE_EXTRA_CA_CERTS` gives way to a CA
-   file the Go server loads for the relay; that is the one value an overlay
-   has to change.
+   names and the backend CA mount. `NODE_EXTRA_CA_CERTS` gives way to
+   `PALADIN_BACKEND_CA_FILE`, which the chart sets from the same mount.
 
 ## Options considered
 

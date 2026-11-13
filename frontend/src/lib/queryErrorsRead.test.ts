@@ -28,7 +28,7 @@ const ALLOWED: Record<string, string> = {
     "draws a trend beside each budget alert; a failed read leaves the rows as they were, without one",
   "app/capabilities/page.tsx#tenants":
     "names each row's tenant; a failed lookup shows the tenant's id, which the row already carries",
-  "app/storage-backends/[backendId]/buckets/[bucketId]/layout.tsx#ownerQuery":
+  "app/storage-backends/[backendId]/buckets/[bucketId]/ClientLayout.tsx#ownerQuery":
     "names the bucket's owner, shown by its id until read; a change the frozen owner refuses is refused by the server too",
   "app/users/[tenant]/[user]/page.tsx#tenantQuery":
     "names the tenant in the trail; a failed lookup shows its id, which the page already has",
