@@ -1268,6 +1268,7 @@ config:
     trusted_issuers: []                 # accepted `iss` values; include issuer_name
     signing_key_path: ""                # PEM PKCS#8 Ed25519 private key; "" → ephemeral keypair (dev only)
     signing_key_kid: ""                 # JWT header kid, "limes:" and a name; "" → derived from public key bytes
+    previous_public_keys: []            # [{path, kid}]: PEM public keys rotated out, verified until their capabilities expire
     default_ttl: 15m                    # cap when Issue.TTL omitted
     verifier_leeway: 30s                # clock-skew window for nbf / exp
     charge_per_request_amount: 0        # amount auto-charged on billable handler calls, in the capability's own unit, exact to nine decimals; 0 = no auto-charge
@@ -1714,9 +1715,16 @@ postgresCa:
 # per-role `volumes` list OVERRIDES the defaults, and api/admin define their own
 # for mTLS — so a key added to the defaults would miss precisely the roles that
 # mint and verify.
+#
+# previousKeys are further keys of the same Secret, each the PKIX PEM public
+# half of a key rotated out of signing (`openssl pkey -in old.pem -pubout`),
+# mounted beside the signing key. List each in
+# `config.capability.previous_public_keys` as `<mountPath>/<key>` until the
+# last capability it signed has expired.
 capabilitySigningKeySecret:
   name: ""
   key: key.pem
+  previousKeys: []
   mountPath: /etc/paladin-capability
 
 # ─── RBAC for K8sSecretResolver ────────────────────────────────────────────

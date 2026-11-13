@@ -134,6 +134,7 @@ capability.dpop_replay
 capability.dpop_replay.entries_per_holder
 capability.enabled
 capability.issuer_name
+capability.previous_public_keys
 capability.revocation_cache_max_stale
 capability.revocation_cache_synced_ttl
 capability.revocation_cache_ttl

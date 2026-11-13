@@ -116,6 +116,9 @@ For when something is already on fire.
 - [no-container-metrics-on-orbstack.md](runbooks/no-container-metrics-on-orbstack.md)
   — why every `container_*` panel is empty on the dev cluster, and what to
   use instead.
+- [capability-signing-key-rotation.md](runbooks/capability-signing-key-rotation.md)
+  — replacing the capability signing key without refusing the capabilities
+  it signed.
 
 ## Elsewhere in the repository
 

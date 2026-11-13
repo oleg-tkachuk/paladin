@@ -29,11 +29,15 @@ import (
 // capability's `iss` is written by the delegation issuer and nothing else.
 type capabilityIssuers struct {
 	issuer, delegation *limes.Issuer
-	// keys resolves both kids; trusted and keyIssuers are the verifier's
-	// TrustedIssuers and KeyIssuers.
+	// keys resolves both kids of the signing key and of every previous
+	// one; trusted and keyIssuers are the verifier's TrustedIssuers and
+	// KeyIssuers.
 	keys       *jwks.Static
 	trusted    []string
 	keyIssuers map[string]string
+	// published is the kid → key set the JWKS endpoint serves: the signing
+	// key and the previous ones, each under its capability kid.
+	published map[string]ed25519.PublicKey
 }
 
 // delegationKeyID is the kid the delegation issuer signs under.
@@ -44,8 +48,11 @@ func delegationKeyID(kid string) string { return kid + auth.DelegationIssuerSuff
 // capability under its own tenant, since the token endpoint it issues
 // behind names none (pgstore.ScopedIssuance). extraTrusted are the
 // issuers the operator also trusts (capability.trusted_issuers), kept as
-// configured; with none, the capability issuer alone.
-func newCapabilityIssuers(key limes.SigningKey, store, delegated limes.IssuanceStore, issuerName string, extraTrusted []string, ttl time.Duration, log *zap.Logger) (*capabilityIssuers, error) {
+// configured; with none, the capability issuer alone. previous are keys
+// rotated out of signing (capability.previous_public_keys): verified under
+// both of their kids, as the signing key is, and published, but never
+// signed with.
+func newCapabilityIssuers(key limes.SigningKey, previous []limes.PublicKey, store, delegated limes.IssuanceStore, issuerName string, extraTrusted []string, ttl time.Duration, log *zap.Logger) (*capabilityIssuers, error) {
 	delegationName := auth.DelegationIssuerName(issuerName)
 	delegationKID := delegationKeyID(key.KeyID)
 
@@ -57,9 +64,11 @@ func newCapabilityIssuers(key limes.SigningKey, store, delegated limes.IssuanceS
 	if err != nil {
 		return nil, err
 	}
-	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: map[string]ed25519.PublicKey{
-		key.KeyID: key.Public(), delegationKID: key.Public(),
-	}})
+	set, err := newCapabilityKeySet(append([]limes.PublicKey{{KeyID: key.KeyID, Key: key.Public()}}, previous...), issuerName, delegationName)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := jwks.NewStatic(jwks.StaticConfig{Keys: set.verified})
 	if err != nil {
 		return nil, fmt.Errorf("app: capability keys: %w", err)
 	}
@@ -70,8 +79,45 @@ func newCapabilityIssuers(key limes.SigningKey, store, delegated limes.IssuanceS
 	return &capabilityIssuers{
 		issuer: issuer, delegation: delegation, keys: keys,
 		trusted:    append(trusted, delegationName),
-		keyIssuers: map[string]string{key.KeyID: issuerName, delegationKID: delegationName},
+		keyIssuers: set.keyIssuers,
+		published:  set.published,
 	}, nil
+}
+
+// capabilityKeySet is every kid a verifier resolves, the issuer each is bound
+// to, and the kids the JWKS publishes.
+type capabilityKeySet struct {
+	verified   map[string]ed25519.PublicKey
+	keyIssuers map[string]string
+	published  map[string]ed25519.PublicKey
+}
+
+// newCapabilityKeySet binds each key's capability kid to issuerName and its
+// delegation kid to delegationName. keys[0] is the signing key. It refuses a
+// kid two keys share, and a key listed twice under different kids: either
+// would leave which key a token names a matter of configuration order.
+func newCapabilityKeySet(keys []limes.PublicKey, issuerName, delegationName string) (capabilityKeySet, error) {
+	set := capabilityKeySet{
+		verified:   make(map[string]ed25519.PublicKey, 2*len(keys)),
+		keyIssuers: make(map[string]string, 2*len(keys)),
+		published:  make(map[string]ed25519.PublicKey, len(keys)),
+	}
+	for _, k := range keys {
+		for kid := range set.published {
+			if set.published[kid].Equal(k.Key) {
+				return capabilityKeySet{}, fmt.Errorf("app: capability key %q is the key already listed as %q", k.KeyID, kid)
+			}
+		}
+		for kid, name := range map[string]string{k.KeyID: issuerName, delegationKeyID(k.KeyID): delegationName} {
+			if _, taken := set.verified[kid]; taken {
+				return capabilityKeySet{}, fmt.Errorf("app: capability kid %q names two keys", kid)
+			}
+			set.verified[kid] = k.Key
+			set.keyIssuers[kid] = name
+		}
+		set.published[k.KeyID] = k.Key
+	}
+	return set, nil
 }
 
 // Each issuer logs every token it mints, refuses or fails to (limes
