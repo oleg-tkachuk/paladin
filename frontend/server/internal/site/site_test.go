@@ -1,8 +1,11 @@
 package site_test
 
 import (
+	"compress/gzip"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -33,6 +36,7 @@ func export() fstest.MapFS {
 		"tenants/_/collections/_/objects/_.html": file("object"),
 		"tenants/_/collections/_/objects/_.txt":  file("object rsc"),
 		"_next/static/chunks/a1.js":              file("js"),
+		"_next/static/chunks/big.js":             file(strings.Repeat("const a = 1;\n", 200)),
 	}
 }
 
@@ -178,4 +182,53 @@ func TestTxtRedirect(t *testing.T) {
 		_, ok := s.TxtRedirect(p)
 		assert.False(t, ok, p)
 	}
+}
+
+func TestServe_Gzip(t *testing.T) {
+	s := newSite(t)
+	const chunk = "/_next/static/chunks/big.js"
+	want := strings.Repeat("const a = 1;\n", 200)
+
+	get := func(accept string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, chunk, nil)
+		if accept != "" {
+			req.Header.Set("Accept-Encoding", accept)
+		}
+		rec := httptest.NewRecorder()
+		s.Serve(rec, req)
+		return rec
+	}
+
+	t.Run("compressed for a browser that takes it", func(t *testing.T) {
+		rec := get("gzip, deflate, br")
+		assert.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
+		assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"))
+		assert.Less(t, rec.Body.Len(), len(want))
+		zr, err := gzip.NewReader(rec.Body)
+		require.NoError(t, err)
+		got, err := io.ReadAll(zr)
+		require.NoError(t, err)
+		assert.Equal(t, want, string(got))
+	})
+
+	t.Run("plain otherwise, with its own ETag", func(t *testing.T) {
+		plain := get("")
+		assert.Empty(t, plain.Header().Get("Content-Encoding"))
+		assert.Equal(t, "Accept-Encoding", plain.Header().Get("Vary"), "caches keep the variants apart")
+		assert.Equal(t, want, plain.Body.String())
+		assert.NotEqual(t, plain.Header().Get("ETag"), get("gzip").Header().Get("ETag"))
+	})
+
+	t.Run("not when gzip is refused", func(t *testing.T) {
+		assert.Empty(t, get("gzip;q=0, br").Header().Get("Content-Encoding"))
+	})
+
+	t.Run("not for a file compression does not shrink", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/_next/static/chunks/a1.js", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+		rec := httptest.NewRecorder()
+		s.Serve(rec, req)
+		assert.Empty(t, rec.Header().Get("Content-Encoding"))
+		assert.Equal(t, "js", rec.Body.String())
+	})
 }

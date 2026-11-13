@@ -19,6 +19,7 @@ package site
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -54,7 +55,23 @@ const (
 	headerCache       = "Cache-Control"
 	headerContentType = "Content-Type"
 	headerETag        = "ETag"
+	headerEncoding    = "Content-Encoding"
+	headerAccept      = "Accept-Encoding"
+	headerVary        = "Vary"
+	encodingGzip      = "gzip"
+	// gzipETagSuffix marks the compressed variant's ETag apart from the
+	// identity one: the two are different bytes.
+	gzipETagSuffix = "-gz"
+	// qualityZero is an Accept-Encoding entry refusing the coding.
+	qualityZero = "q=0"
 )
+
+// compressible are the types worth compressing; the rest (images, fonts)
+// already are.
+var compressible = map[string]bool{
+	".html": true, ".txt": true, ".js": true, ".css": true,
+	".json": true, ".svg": true, ".map": true, ".ico": true,
+}
 
 // mediaTypes covers what the export holds that Go's built-in table may not
 // know where the image carries no mime.types.
@@ -76,13 +93,16 @@ type Site struct {
 	files       fs.FS
 	placeholder string
 	etags       map[string]string
+	// gzipped holds each compressible file compressed once, at start, where
+	// that is smaller.
+	gzipped map[string][]byte
 }
 
 // New indexes the export: every file's ETag is its content hash, computed
 // once here. It fails when the export has no index page, which means the
 // build did not reach the image.
 func New(files fs.FS, placeholder string) (*Site, error) {
-	s := &Site{files: files, placeholder: placeholder, etags: map[string]string{}}
+	s := &Site{files: files, placeholder: placeholder, etags: map[string]string{}, gzipped: map[string][]byte{}}
 	err := fs.WalkDir(files, ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -93,6 +113,15 @@ func New(files fs.FS, placeholder string) (*Site, error) {
 		}
 		sum := sha256.Sum256(body)
 		s.etags[name] = `"` + hex.EncodeToString(sum[:etagHashBytes]) + `"`
+		if compressible[path.Ext(name)] {
+			gz, err := compress(body)
+			if err != nil {
+				return fmt.Errorf("compress %s: %w", name, err)
+			}
+			if len(gz) < len(body) {
+				s.gzipped[name] = gz
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -241,9 +270,47 @@ func (s *Site) Serve(w http.ResponseWriter, r *http.Request) (name string, found
 		_, _ = w.Write(body)
 		return name, false
 	}
-	h.Set(headerETag, s.etags[name])
+	etag := s.etags[name]
+	if gz, ok := s.gzipped[name]; ok {
+		h.Add(headerVary, headerAccept)
+		if acceptsGzip(r.Header.Values(headerAccept)) {
+			h.Set(headerEncoding, encodingGzip)
+			body = gz
+			etag = strings.TrimSuffix(etag, `"`) + gzipETagSuffix + `"`
+		}
+	}
+	h.Set(headerETag, etag)
 	http.ServeContent(w, r, name, time.Time{}, bytes.NewReader(body))
 	return name, true
+}
+
+func compress(body []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := zw.Write(body); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// acceptsGzip reports an Accept-Encoding that takes gzip.
+func acceptsGzip(values []string) bool {
+	for _, v := range values {
+		for _, entry := range strings.Split(v, ",") {
+			coding, params, _ := strings.Cut(strings.TrimSpace(entry), ";")
+			if strings.EqualFold(strings.TrimSpace(coding), encodingGzip) &&
+				strings.ReplaceAll(strings.TrimSpace(params), " ", "") != qualityZero {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func mediaType(name string) string {
