@@ -9,6 +9,7 @@ import {
   ExclamationTriangleIcon,
   MinusCircleIcon,
   XCircleIcon,
+  ServerStackIcon,
   ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 
@@ -386,7 +387,14 @@ function RoleRail({
       {/* Framed like the panel beside it, so the two read as one surface. */}
       <Card className="gap-0 py-0">
         <CardHeader className="flex flex-row items-center justify-between gap-2 px-4 py-3">
-          <CardTitle className="text-base">Roles</CardTitle>
+          <div className="flex items-center gap-2">
+            <IconChip
+              icon={ServerStackIcon}
+              tone={IconTone.Neutral}
+              size="md"
+            />
+            <CardTitle className="text-base">Roles</CardTitle>
+          </div>
           <span
             className="font-mono text-xs tabular-nums text-muted-foreground"
             aria-label={`${healthy} of ${cards.length} roles healthy`}
