@@ -418,9 +418,11 @@ the same commit. Treat this file like a runtime invariant.
   minimal. Wiring an email-link self-service flow (and an email sender) would
   add surface area Paladin's audience doesn't need.
 
-### Event dispatcher: producer wiring — handler-class integration tests + adoption
+### Event dispatcher: charge and audit events — adoption check
 
-- **Status:** Deferred (parent SHIPPED — only follow-ups remain)
+- **Status:** Deferred (producer wiring and its tests SHIPPED; only adoption
+  remains — `tests/integration/{lifecycle,tenant}_events_test.go`,
+  `event_fanout_test.go` and each handler's own tests cover the producers)
 - **State as of 2026-05-10:** Producer wiring complete across
   every handler class that today's customer surface needs:
     - **Lifecycle classes** (always-on): tenant / bucket /
