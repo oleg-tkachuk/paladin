@@ -351,6 +351,15 @@ check "tls on: api probe over HTTPS" "$(deployment tls api '.spec.template.spec.
 check "tls on: iam probe over HTTPS" "$(deployment tls iam '.spec.template.spec.containers[0].readinessProbe.httpGet.scheme')" "HTTPS"
 check "tls on: mcp probe stays plain" "$(deployment tls mcp '.spec.template.spec.containers[0].livenessProbe.httpGet.scheme // "HTTP"')" "HTTP"
 
+# A core role's liveness probe gives /livez as long as its readiness probe
+# gives /readyz: at 1s a CPU-starved host restarted pods into the load that
+# slowed them.
+readonly CORE_LIVENESS_TIMEOUT=3
+for role in api iam session admin mcp worker dispatcher; do
+    check "$role: liveness timeout" \
+        "$(deployment defaults "$role" '.spec.template.spec.containers[0].livenessProbe.timeoutSeconds')" "$CORE_LIVENESS_TIMEOUT"
+done
+
 refuse tls-no-secret "internalTLS.existingSecret is required" -f "$CHART/$REQUIRED_VALUES" --set internalTLS.enabled=true
 
 # ─── console: where the backend is ────────────────────────────────────────────
