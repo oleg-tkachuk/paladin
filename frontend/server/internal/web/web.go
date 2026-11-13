@@ -38,6 +38,8 @@ const (
 	cacheNoStore    = "no-store"
 	rscExt          = ".txt"
 	pathSeparator   = "/"
+	// indexDoc is the root page's name in the export: "/" asks for /index.txt.
+	indexDoc = "index"
 )
 
 // relayedHeaders are the parts of the AS's answer the browser needs: where to
@@ -86,9 +88,6 @@ func Handler(cfg Config) http.Handler {
 	mux.HandleFunc("GET "+cfg.Names.LivePath, s.live)
 	mux.HandleFunc("GET "+cfg.Names.BannerPath, s.banner)
 	mux.HandleFunc("POST "+cfg.Names.AuthorizePath, s.relay)
-	for pattern, h := range s.legacyRedirects() {
-		mux.HandleFunc(pattern, h)
-	}
 	mux.HandleFunc("GET /", s.static)
 	return s.logged(s.headers(s.gate(mux)))
 }
@@ -154,7 +153,12 @@ func (s *server) relay(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) static(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get(site.RSCHeader) == "" {
+	rsc := r.Header.Get(site.RSCHeader) != ""
+	if target, ok := legacyTarget(r.URL.EscapedPath(), rsc); ok {
+		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+		return
+	}
+	if !rsc {
 		if target, ok := s.cfg.Site.TxtRedirect(r.URL.EscapedPath()); ok {
 			if r.URL.RawQuery != "" {
 				target += "?" + r.URL.RawQuery
@@ -164,34 +168,6 @@ func (s *server) static(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.cfg.Site.Serve(w, r)
-}
-
-// legacyRedirects are the paths that moved, each sent to its new place. They
-// were pages that only redirected; a static export has no server to do it.
-func (s *server) legacyRedirects() map[string]http.HandlerFunc {
-	to := func(w http.ResponseWriter, r *http.Request, target string) {
-		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
-	}
-	bucket := func(w http.ResponseWriter, r *http.Request) {
-		target := "/storage-backends/" + url.PathEscape(r.PathValue("backend")) +
-			"/buckets/" + url.PathEscape(r.PathValue("bucket"))
-		if tab := r.PathValue("tab"); tab != "" {
-			target += pathSeparator + tab
-		}
-		to(w, r, target)
-	}
-	return map[string]http.HandlerFunc{
-		// The nav and older links point here; operations live on /health.
-		"GET /ops": func(w http.ResponseWriter, r *http.Request) { to(w, r, "/health") },
-		// A backend's buckets are listed on the backend's page (ADR-0033).
-		"GET /storage-backends/{backend}/buckets": func(w http.ResponseWriter, r *http.Request) {
-			to(w, r, "/storage-backends/"+url.PathEscape(r.PathValue("backend")))
-		},
-		// A bucket has one page, under its backend (ADR-0033); links into the
-		// copy under its owner's workspace land on the same tab there.
-		"GET /tenants/{tenant}/buckets/{backend}/{bucket}":          bucket,
-		"GET /tenants/{tenant}/buckets/{backend}/{bucket}/{tab...}": bucket,
-	}
 }
 
 // gate sends a request without the session cookie to sign in, unless its
@@ -206,9 +182,22 @@ func (s *server) gate(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		target := s.cfg.Names.LoginPath + "?" + url.Values{s.cfg.Names.NextParam: {r.URL.RequestURI()}}.Encode()
+		target := s.cfg.Names.LoginPath + "?" + url.Values{s.cfg.Names.NextParam: {returnTo(r)}}.Encode()
 		http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 	})
+}
+
+// returnTo is the page to come back to after sign-in: for the router's
+// payload request, the page it is the payload of, not the payload.
+func returnTo(r *http.Request) string {
+	if r.Header.Get(site.RSCHeader) == "" {
+		return r.URL.RequestURI()
+	}
+	page := strings.TrimSuffix(r.URL.EscapedPath(), rscExt)
+	if strings.HasSuffix(page, pathSeparator+indexDoc) {
+		page = strings.TrimSuffix(page, indexDoc)
+	}
+	return page
 }
 
 // public reports a path open without a session: a public prefix, a path
@@ -264,7 +253,7 @@ func (s *server) logged(next http.Handler) http.Handler {
 		case rec.status == http.StatusMethodNotAllowed:
 			level, msg = zapcore.WarnLevel, "request refused: method not allowed"
 		case rec.status == http.StatusNotFound:
-			msg = "request for a path no route serves"
+			level, msg = zapcore.InfoLevel, "request for a path no route serves"
 		}
 		s.cfg.Log.Log(level, msg,
 			zap.String("method", r.Method),

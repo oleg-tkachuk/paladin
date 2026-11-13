@@ -106,6 +106,19 @@ func TestGate(t *testing.T) {
 		})
 	}
 
+	t.Run("the router's payload request returns to the page, not the payload", func(t *testing.T) {
+		for path, want := range map[string]string{
+			"/tenants/acme/billing.txt": "/tenants/acme/billing",
+			"/index.txt":                "/",
+		} {
+			r := httptest.NewRequest(http.MethodGet, path, nil)
+			r.Header.Set(site.RSCHeader, "1")
+			loc, err := url.Parse(f.do(r).Header().Get("Location"))
+			require.NoError(t, err)
+			assert.Equal(t, want, loc.Query().Get(f.names.NextParam), path)
+		}
+	})
+
 	t.Run("a prefix is a path, not a string", func(t *testing.T) {
 		rec := f.do(httptest.NewRequest(http.MethodGet, "/loginx", nil))
 		assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
@@ -213,6 +226,26 @@ func TestLegacyRedirects(t *testing.T) {
 			assert.Equal(t, tc.to, rec.Header().Get("Location"))
 		})
 	}
+
+	t.Run("the router's payload request goes to the new page's payload", func(t *testing.T) {
+		for from, to := range map[string]string{
+			"/ops.txt":                                   "/health.txt",
+			"/storage-backends/primary/buckets.txt":      "/storage-backends/primary.txt",
+			"/tenants/acme/buckets/primary/pool/tab.txt": "/storage-backends/primary/buckets/pool/tab.txt",
+		} {
+			r := f.signedIn(http.MethodGet, from, nil)
+			r.Header.Set(site.RSCHeader, "1")
+			rec := f.do(r)
+			assert.Equal(t, http.StatusTemporaryRedirect, rec.Code, from)
+			assert.Equal(t, to, rec.Header().Get("Location"), from)
+		}
+	})
+
+	t.Run("a page that did not move is left alone", func(t *testing.T) {
+		for _, p := range []string{"/tenants/acme/buckets", "/storage-backends/primary", "/opsx"} {
+			assert.NotEqual(t, http.StatusTemporaryRedirect, f.do(f.signedIn(http.MethodGet, p, nil)).Code, p)
+		}
+	})
 
 	t.Run("behind the gate, like the pages they were", func(t *testing.T) {
 		rec := f.do(httptest.NewRequest(http.MethodGet, "/ops", nil))
