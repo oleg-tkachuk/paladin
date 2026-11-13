@@ -95,3 +95,19 @@ describe("crumbs for ids", () => {
     expect(pageTitle(PATH, names)).toBe("alice · acme · Users · Paladin");
   });
 });
+
+// A backend's buckets have no page: they are listed on the backend's. The
+// crumb went to the bare path, which only redirected, and reloaded the page.
+describe("a segment listed on its parent's page", () => {
+  it("leads to the parent's page", () => {
+    const trail = crumbs("/storage-backends/primary/buckets/b1/lifecycle");
+    expect(trail[2].segment).toBe("buckets");
+    expect(trail[2].href).toBe("/storage-backends/primary");
+  });
+
+  it("leaves every other crumb to its own path", () => {
+    const trail = crumbs("/storage-backends/primary/buckets/b1/lifecycle");
+    expect(trail.filter((c) => c.href)).toHaveLength(1);
+    expect(crumbs("/tenants/acme/buckets")[2].href).toBeUndefined();
+  });
+});
