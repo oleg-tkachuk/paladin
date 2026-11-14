@@ -168,6 +168,9 @@ datastores: {
       // Default 30s bounds worst-case query time without breaking the
       // worker loops that occasionally chew through ~1s page-scans.
       statement: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
+      // How long a role waits at start for Postgres, retrying, before it
+      // exits. 0 tries once. Inside the startup probe's window.
+      startup_wait: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"90s"
     }
     healthcheck_period: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
     // Optional read replica for listing / counting / searching objects.

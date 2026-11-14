@@ -290,6 +290,10 @@ type PostgresPool struct {
 type PostgresTimeouts struct {
 	Connect   time.Duration `yaml:"connect" json:"connect"`
 	Statement time.Duration `yaml:"statement" json:"statement"`
+	// StartupWait is how long a role waits at start for Postgres to answer,
+	// retrying, before it gives up and exits. 0 tries once. Keep it inside
+	// the startup probe's window, or the kubelet kills the pod first.
+	StartupWait time.Duration `yaml:"startup_wait" json:"startup_wait"`
 }
 
 // Storage is the registry of physical object-storage backends. Each logical

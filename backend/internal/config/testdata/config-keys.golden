@@ -183,6 +183,7 @@ datastores.postgres.replica.password_secret.name
 datastores.postgres.replica.password_secret.namespace
 datastores.postgres.timeouts
 datastores.postgres.timeouts.connect
+datastores.postgres.timeouts.startup_wait
 datastores.postgres.timeouts.statement
 datastores.valkey
 datastores.valkey.addr
