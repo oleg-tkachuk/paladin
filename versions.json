@@ -1,6 +1,6 @@
 {
   "go": "1.27.0",
-  "postgresql": "18.6",
+  "postgresql": "18.7",
   "connect": "2.0.2",
   "cedar": "1.9.1",
   "mcp": "1.8.0",
