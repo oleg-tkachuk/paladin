@@ -92,7 +92,7 @@ func ProvideDB(cfg config.Config, l *zap.Logger) (*postgres.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := db.Ping(context.Background()); err != nil {
+	if err := waitForPostgres(context.Background(), db.Ping, cfg.Datastores.Postgres.Timeouts.StartupWait, l.Named("postgres"), sleepOnClock); err != nil {
 		db.Close()
 		return nil, err
 	}

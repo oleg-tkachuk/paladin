@@ -128,6 +128,7 @@ datastores:
       max_conn_idle_time: 5m
     timeouts:
       connect: 5s
+      startup_wait: 90s                 # retry Postgres at start this long before exiting; inside the startup probe's window
       statement: 30s                    # server-side statement_timeout; 0 = disabled (do not ship)
     healthcheck_period: 30s
   valkey:                               # optional; where rate limits count when middleware.rate_limit.backend is valkey

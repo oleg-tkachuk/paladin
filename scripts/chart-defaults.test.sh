@@ -351,6 +351,18 @@ check "tls on: api probe over HTTPS" "$(deployment tls api '.spec.template.spec.
 check "tls on: iam probe over HTTPS" "$(deployment tls iam '.spec.template.spec.containers[0].readinessProbe.httpGet.scheme')" "HTTPS"
 check "tls on: mcp probe stays plain" "$(deployment tls mcp '.spec.template.spec.containers[0].livenessProbe.httpGet.scheme // "HTTP"')" "HTTP"
 
+# A role waits datastores.postgres.timeouts.startup_wait for Postgres at start
+# before it exits. Past its startup probe's window the kubelet kills it first,
+# and the wait buys nothing; so the wait must end inside every window.
+startup_wait=$(config defaults .datastores.postgres.timeouts.startup_wait)
+[[ "$startup_wait" =~ ^([0-9]+)s$ ]] || bad "startup_wait $startup_wait is not whole seconds"
+startup_wait_s=${BASH_REMATCH[1]}
+for role in api iam session admin worker dispatcher; do
+    cases=$((cases + 1))
+    window=$(deployment defaults "$role" '.spec.template.spec.containers[0].startupProbe | (.initialDelaySeconds // 0) + .periodSeconds * .failureThreshold')
+    (( startup_wait_s < window )) || bad "$role: startup_wait ${startup_wait_s}s is not inside its startup probe's ${window}s"
+done
+
 # A core role's liveness probe gives /livez as long as its readiness probe
 # gives /readyz: at 1s a CPU-starved host restarted pods into the load that
 # slowed them.

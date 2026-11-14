@@ -963,6 +963,7 @@ config:
         max_conn_idle_time: 5m
       timeouts:
         connect: 5s
+        startup_wait: 90s       # retry Postgres at start this long before exiting; inside the startup probe's window
         statement: 30s
       healthcheck_period: 30s
     # Optional Valkey the request rate limits count in when
