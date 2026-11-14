@@ -17,7 +17,9 @@ export default defineConfig({
         test: {
           name: "node",
           environment: "node",
-          include: ["src/**/*.test.ts"],
+          // The e2e fixtures' own logic is unit-tested too, as *.unit.ts:
+          // Playwright would pick up a *.test.ts under tests/e2e.
+          include: ["src/**/*.test.ts", "tests/e2e/fixtures/**/*.unit.ts"],
         },
       },
       {

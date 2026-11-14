@@ -38,6 +38,7 @@ import { MultipartUploadService } from "@/gen/paladin/data/v1/multipart_service_
 import { ChecksumAlgorithm } from "@/gen/paladin/common/v1/resource_pb";
 import { UserService } from "@/gen/paladin/iam/v1/user_service_pb";
 import { TenantService } from "@/gen/paladin/admin/v1/tenant_service_pb";
+import { jwtExpiryMs, newTokenCache } from "./token-cache";
 import { QuotaService } from "@/gen/paladin/admin/v1/quota_service_pb";
 import { EventSubscriptionService } from "@/gen/paladin/admin/v1/event_subscription_service_pb";
 import { TenantBudgetService } from "@/gen/paladin/admin/v1/tenant_budget_service_pb";
@@ -97,36 +98,13 @@ export const MCP_RESOURCE =
 // four wrong explanations before reading the error: "jwt: token expired".
 //
 // So: keep the expiry, and re-login before it lapses.
-interface CachedToken {
-  token: string;
-  /** Epoch ms. Read from the JWT's own `exp`, not assumed. */
-  expiresAt: number;
-}
-const tokenCache = new Map<string, CachedToken>();
 
 /** Seconds of headroom: refresh this long before the token actually lapses,
  *  so a call that starts just under the wire does not finish just over it. */
 const TOKEN_REFRESH_MARGIN_MS = 60_000;
 
-/** Read `exp` out of a JWT without verifying it — this is a test helper
- *  deciding when to re-login, not an authorization check. A token whose exp
- *  cannot be read is treated as already expired, so the next call re-logins
- *  rather than sending something unusable. */
-function jwtExpiryMs(token: string): number {
-  try {
-    const payload = token.split(".")[1];
-    const json = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return typeof json.exp === "number" ? json.exp * 1000 : 0;
-  } catch {
-    return 0;
-  }
-}
-
-async function getAdminToken(): Promise<string> {
-  const cached = tokenCache.get("paladin-admin");
-  if (cached && Date.now() < cached.expiresAt - TOKEN_REFRESH_MARGIN_MS) {
-    return cached.token;
-  }
+/** Logs the seeded admin in for one audience and returns the access token. */
+async function loginFor(audience: string): Promise<string> {
   const iam = createClient(
     AuthService,
     createConnectTransport({
@@ -138,54 +116,35 @@ async function getAdminToken(): Promise<string> {
   const res = await iam.login({
     subject: SEEDED_ADMIN.subject,
     password: SEEDED_ADMIN.password,
-    requestedAudience: "paladin-admin",
+    requestedAudience: audience,
   });
   const access = res.tokens?.accessToken;
   if (!access) {
     throw new Error(
-      `seed.ts: Login(audience=paladin-admin) returned no access_token — ` +
+      `seed.ts: Login(audience=${audience}) returned no access_token — ` +
         `check the bootstrap container provisioned ${SEEDED_ADMIN.subject}`,
     );
   }
-  tokenCache.set("paladin-admin", {
-    token: access,
-    expiresAt: jwtExpiryMs(access),
-  });
   return access;
+}
+
+/** One login per audience at a time, kept until just before it lapses
+ *  (token-cache.ts says why both matter). */
+const tokenFor = newTokenCache({
+  login: loginFor,
+  expiry: jwtExpiryMs,
+  refreshMarginMs: TOKEN_REFRESH_MARGIN_MS,
+});
+
+function getAdminToken(): Promise<string> {
+  return tokenFor("paladin-admin");
 }
 
 // Shared admin transport: one createConnectTransport call per
 // helper would force a new fetch pool on every seed call. We
 // build it once and reuse across TenantService / BucketService.
-async function getDataToken(): Promise<string> {
-  const cached = tokenCache.get("paladin-data");
-  if (cached && Date.now() < cached.expiresAt - TOKEN_REFRESH_MARGIN_MS) {
-    return cached.token;
-  }
-  const client = createClient(
-    AuthService,
-    createConnectTransport({
-      baseUrl: IAM_URL,
-      httpVersion: "1.1",
-      useBinaryFormat: false,
-    }),
-  );
-  const res = await client.login({
-    subject: SEEDED_ADMIN.subject,
-    password: SEEDED_ADMIN.password,
-    requestedAudience: "paladin-data",
-  });
-  const access = res.tokens?.accessToken;
-  if (!access) {
-    throw new Error(
-      "seed.ts: Login(audience=paladin-data) returned no access_token",
-    );
-  }
-  tokenCache.set("paladin-data", {
-    token: access,
-    expiresAt: jwtExpiryMs(access),
-  });
-  return access;
+function getDataToken(): Promise<string> {
+  return tokenFor("paladin-data");
 }
 
 // dataTransport mirrors adminTransport for the data plane: same JSON codec,
@@ -337,7 +296,7 @@ export interface SeededTenant {
  * predictable labels).
  *
  * The platform-admin Bearer is fetched on first call and
- * cached for the lifetime of the worker (see tokenCache).
+ * cached for the lifetime of the worker (see tokenFor).
  */
 export async function seedTenant(opts?: {
   slugPrefix?: string;
@@ -691,36 +650,8 @@ export async function seedCapability(opts: {
 // caller's existing identity, no password re-check), but CreateUser
 // requires one ≥12 chars.
 
-async function getIamToken(): Promise<string> {
-  const cached = tokenCache.get("paladin-iam");
-  if (cached && Date.now() < cached.expiresAt - TOKEN_REFRESH_MARGIN_MS) {
-    return cached.token;
-  }
-  const iam = createClient(
-    AuthService,
-    createConnectTransport({
-      baseUrl: IAM_URL,
-      httpVersion: "1.1",
-      useBinaryFormat: false,
-    }),
-  );
-  const res = await iam.login({
-    subject: SEEDED_ADMIN.subject,
-    password: SEEDED_ADMIN.password,
-    requestedAudience: "paladin-iam",
-  });
-  const access = res.tokens?.accessToken;
-  if (!access) {
-    throw new Error(
-      `seed.ts: Login(audience=paladin-iam) returned no access_token — ` +
-        `check the bootstrap container provisioned ${SEEDED_ADMIN.subject}`,
-    );
-  }
-  tokenCache.set("paladin-iam", {
-    token: access,
-    expiresAt: jwtExpiryMs(access),
-  });
-  return access;
+function getIamToken(): Promise<string> {
+  return tokenFor("paladin-iam");
 }
 
 function iamAdminTransport() {
