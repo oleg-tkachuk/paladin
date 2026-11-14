@@ -120,7 +120,7 @@ tasks:
           set -u
           fail=0
           svc={{._K8S_SVC | q}}
-          ctx={{.K8S_CONTEXT | q}}
+          ctx={{.K8S_CONTEXT | default "" | q}}
           ns={{._K8S_NS | q}}
           deploy={{._K8S_DEPLOY | q}}
           chart={{._K8S_CHART_DIR | q}}
