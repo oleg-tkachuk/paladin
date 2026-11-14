@@ -45,7 +45,7 @@ require (
 	github.com/oleg-tkachuk/limes/biscuit v0.1.33
 	github.com/oleg-tkachuk/limes/exchange v0.25.5
 	github.com/oleg-tkachuk/limes/otelmetric v0.23.0
-	github.com/oleg-tkachuk/limes/pgstore v0.82.0
+	github.com/oleg-tkachuk/limes/pgstore v0.83.0
 	github.com/oleg-tkachuk/paladin/sdk/go v0.145.4
 	github.com/pressly/goose/v3 v3.30.0
 	github.com/prometheus/client_golang v1.25.0
