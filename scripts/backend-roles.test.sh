@@ -8,8 +8,10 @@
 # nothing, and pass with a skip line — every restart a no-op. ROLES in
 # backend/Taskfile.yaml now names each one, and two things are held here:
 #
-#   1. ROLES spells exactly the Deployments the chart renders, so a role
-#      added, dropped or renamed in one place fails here, not as a silent skip.
+#   1. ROLES spells exactly the chart's roles — every key of `deployments`,
+#      the ones disabled by default included — and each renders as the
+#      Deployment ROLES names once enabled. A role added, dropped or renamed
+#      in one place fails here, not as a silent skip.
 #   2. restart and status reach every one of them, and logs the ROLE it is
 #      given — read from a dry run, so nothing here reaches a cluster.
 #
@@ -57,11 +59,18 @@ fail() { echo "FAIL $*" >&2; failed=1; }
 
 want=$(for r in "${roles[@]}"; do echo "$project-$r"; done | sort)
 
-# 1. The chart's Deployments.
-rendered=$(helm template "$RELEASE" "$CHART" -f "$REQUIRED_VALUES" |
+# 1. The chart's roles, and the Deployments they render with all enabled.
+chart_roles=$(yq -r '.deployments | keys | .[]' "$CHART/values.yaml" | sort)
+if [ "$(printf '%s\n' "${roles[@]}" | sort)" != "$chart_roles" ]; then
+    fail "ROLES in $TASKFILE and the keys of deployments in $CHART/values.yaml differ:"
+    diff <(printf '%s\n' "${roles[@]}" | sort) <(echo "$chart_roles") | sed 's/^/      /' >&2 || true
+fi
+enable_all=()
+for r in $chart_roles; do enable_all+=(--set "deployments.$r.enabled=true"); done
+rendered=$(helm template "$RELEASE" "$CHART" -f "$REQUIRED_VALUES" "${enable_all[@]}" |
     yq -r 'select(.kind == "Deployment") | .metadata.name' | grep -v '^---$' | sort)
 if [ "$want" != "$rendered" ]; then
-    fail "ROLES in $TASKFILE and the chart's Deployments differ:"
+    fail "ROLES in $TASKFILE and the Deployments the chart renders with every role enabled differ:"
     diff <(echo "$want") <(echo "$rendered") | sed 's/^/      /' >&2 || true
 fi
 

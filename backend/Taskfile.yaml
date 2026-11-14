@@ -51,9 +51,10 @@ vars:
   HELM_TEMPLATE_FLAGS: '-f deploy/chart/ci/required-values.yaml'
   # The chart runs one Deployment per role, named <PROJECT_NAME>-<role>; there
   # is no Deployment called PROJECT_NAME itself. restart and status act on
-  # each of them, and scripts/backend-roles.test.sh fails when this list and
-  # the Deployments the chart renders come apart.
-  ROLES: [api, iam, session, admin, worker, mcp, dispatcher]
+  # each of them — a role the chart leaves disabled is skipped as absent — and
+  # scripts/backend-roles.test.sh fails when this list and the chart's
+  # `deployments` come apart.
+  ROLES: [api, iam, session, admin, worker, mcp, dispatcher, ingest]
   # The role `logs` follows when ROLE is not given.
   DEFAULT_LOG_ROLE: api
 
