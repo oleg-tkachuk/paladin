@@ -30,10 +30,16 @@ version: "3"
 #   PROJECT_NAME         the label in every log line
 #   K8S_NAMESPACE        default "default"
 #   K8S_DEPLOYMENT_NAME  default PROJECT_NAME
+#                        These three are also read from the `vars:` of a
+#                        `task:` call, where a value that is not empty wins
+#                        for that call alone; an empty one falls back to the
+#                        include's, and then to the default.
 #   K8S_CONTEXT          pin a cluster                    (default: current)
 #   CHART_DIR            for k8s:upgrade  (default ./deploy/chart)
 #   VALUES               a values file for k8s:upgrade
 #   ROLLOUT_TIMEOUT      how long to wait for a roll      (default 2m)
+#   RESTART_UNREACHABLE  what k8s:restart does when the cluster does not
+#                        answer: "skip", or "fail"        (default skip)
 #   VERSION              required by rollout:wait: the version to wait for
 #   ROLLOUT_MATCH        what says a Deployment runs VERSION: "image", a
 #                        container's image tag, or "chart", its helm.sh/chart
@@ -54,9 +60,17 @@ version: "3"
 silent: true
 
 vars:
+  # What the include gave, or the default. A module's own vars are evaluated
+  # as the include loads and see nothing a `task:` call passes, so every task
+  # below declares these three names again, as vars of its own: the call's
+  # value where it is not empty, and the value here otherwise.
   _K8S_SVC: '{{.PROJECT_NAME | default "service"}}'
   _K8S_NS: '{{.K8S_NAMESPACE | default "default"}}'
   _K8S_DEPLOY: '{{.K8S_DEPLOYMENT_NAME | default .PROJECT_NAME | default "service"}}'
+  # The Deployment's name where the include gave one, empty where it follows
+  # PROJECT_NAME: a call that names a project then names its Deployment too,
+  # unless the include pinned another.
+  _K8S_DEPLOY_NAME: '{{.K8S_DEPLOYMENT_NAME | default ""}}'
   _K8S_CHART_DIR: '{{.CHART_DIR | default "./deploy/chart"}}'
   # Empty = whatever kubectl's current-context is. Set it to pin a cluster.
   # A command fragment spliced in as shell: the context is quoted here.
@@ -64,6 +78,9 @@ vars:
   # How long restart's reachability probe waits before calling the cluster
   # gone: a dead context would otherwise hang the chain it sits in.
   _K8S_PROBE_TIMEOUT: 3s
+  # What RESTART_UNREACHABLE may be.
+  _K8S_UNREACHABLE_SKIP: skip
+  _K8S_UNREACHABLE_FAIL: fail
   # What ROLLOUT_MATCH may be.
   _K8S_MATCH_IMAGE: image
   _K8S_MATCH_CHART: chart
@@ -94,12 +111,16 @@ tasks:
     # The cluster half degrades to a warning rather than a failure. A
     # kubeconfig that cannot be reached is the normal state on a laptop, and a
     # doctor that fails there teaches people to stop running it.
+    vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_DEPLOY: '{{or .K8S_DEPLOYMENT_NAME ._K8S_DEPLOY_NAME .PROJECT_NAME ._K8S_DEPLOY}}'
     cmds:
       - cmd: |-
           set -u
           fail=0
           svc={{._K8S_SVC | q}}
-          ctx={{.K8S_CONTEXT | q}}
+          ctx={{.K8S_CONTEXT | default "" | q}}
           ns={{._K8S_NS | q}}
           deploy={{._K8S_DEPLOY | q}}
           chart={{._K8S_CHART_DIR | q}}
@@ -158,10 +179,25 @@ tasks:
     # "not found", and the old pods kept running behind a green step.
     # --ignore-not-found turns "absent" into empty output and exit 0, so
     # "absent" is told from an error without reading kubectl's prose.
+    #
+    # RESTART_UNREACHABLE=fail is for a chain that deploys: there a cluster
+    # that did not answer is a roll that never ran. An absent deployment stays
+    # a skip under it — that one the cluster did answer about.
+    vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_DEPLOY: '{{or .K8S_DEPLOYMENT_NAME ._K8S_DEPLOY_NAME .PROJECT_NAME ._K8S_DEPLOY}}'
+    preconditions:
+      - sh: '{{$u := .RESTART_UNREACHABLE | default ._K8S_UNREACHABLE_SKIP}}{{if or (eq $u ._K8S_UNREACHABLE_SKIP) (eq $u ._K8S_UNREACHABLE_FAIL)}}true{{else}}false{{end}}'
+        msg: "RESTART_UNREACHABLE is {{.RESTART_UNREACHABLE}} — set it to {{._K8S_UNREACHABLE_SKIP}} (an unreachable cluster is skipped, the default) or {{._K8S_UNREACHABLE_FAIL}} (it fails the task)"
     cmds:
       - cmd: |-
           set -eu
           if ! {{._K8S_KUBECTL}} version --request-timeout={{._K8S_PROBE_TIMEOUT | q}} >/dev/null 2>&1; then
+            if [ {{.RESTART_UNREACHABLE | default ._K8S_UNREACHABLE_SKIP | q}} = {{._K8S_UNREACHABLE_FAIL | q}} ]; then
+              printf '%s %s · k8s · cluster unreachable — nothing was rolled\n' "{{._K8S_ERR}}" {{._K8S_SVC | q}} >&2
+              exit 1
+            fi
             printf '%s %s · k8s · cluster unreachable — skipping restart\n' "{{._K8S_SKIP}}" {{._K8S_SVC | q}}
             exit 0
           fi
@@ -191,6 +227,10 @@ tasks:
     # there yet is waited for, since a first install creates it.
     requires:
       vars: [VERSION]
+    vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_DEPLOY: '{{or .K8S_DEPLOYMENT_NAME ._K8S_DEPLOY_NAME .PROJECT_NAME ._K8S_DEPLOY}}'
     preconditions:
       - sh: '[ -n {{.VERSION | q}} ]'
         msg: "VERSION is empty — name the version to wait for, e.g. VERSION=1.4.0"
@@ -281,6 +321,10 @@ tasks:
 
   upgrade:
     desc: "helm upgrade --install the release from the local chart directory"
+    vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_DEPLOY: '{{or .K8S_DEPLOYMENT_NAME ._K8S_DEPLOY_NAME .PROJECT_NAME ._K8S_DEPLOY}}'
     preconditions:
       - sh: command -v helm >/dev/null
         msg: "helm is not installed — https://helm.sh/docs/intro/install/"
@@ -296,6 +340,10 @@ tasks:
 
   uninstall:
     desc: "helm uninstall this component's release — asks first"
+    vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_DEPLOY: '{{or .K8S_DEPLOYMENT_NAME ._K8S_DEPLOY_NAME .PROJECT_NAME ._K8S_DEPLOY}}'
     prompt: "Uninstall {{._K8S_DEPLOY}} from {{._K8S_NS}}{{if .K8S_CONTEXT}} on {{.K8S_CONTEXT}}{{end}}? This cannot be undone."
     preconditions:
       - sh: command -v helm >/dev/null
@@ -311,6 +359,10 @@ tasks:
   logs:
     desc: "Tail the deployment's logs (Ctrl-C to stop)"
     interactive: true
+    vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_DEPLOY: '{{or .K8S_DEPLOYMENT_NAME ._K8S_DEPLOY_NAME .PROJECT_NAME ._K8S_DEPLOY}}'
     preconditions:
       # Renamed from TAIL to match argocd's server:logs; refused rather than
       # ignored, so an old call does not quietly get the default backlog.
@@ -327,6 +379,10 @@ tasks:
     # because that is what actually decides which pods belong to it. Immune
     # to what a consumer's chart happens to label things, by construction
     # rather than by convention.
+    vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_DEPLOY: '{{or .K8S_DEPLOYMENT_NAME ._K8S_DEPLOY_NAME .PROJECT_NAME ._K8S_DEPLOY}}'
     cmds:
       - "{{._K8S_KUBECTL}} -n {{._K8S_NS | q}} get deploy/{{._K8S_DEPLOY | q}} -o wide"
       - cmd: |-
@@ -345,6 +401,9 @@ tasks:
     desc: "Port-forward the deployment (PORT local, TARGET_PORT in the pod)"
     interactive: true
     vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_DEPLOY: '{{or .K8S_DEPLOYMENT_NAME ._K8S_DEPLOY_NAME .PROJECT_NAME ._K8S_DEPLOY}}'
       PORT: '{{.PORT | default "8080"}}'
       # Defaults to PORT (already resolved above, never empty by the time
       # this reads it), so a service listening on the same number needs no

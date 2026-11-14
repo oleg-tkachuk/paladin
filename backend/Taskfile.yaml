@@ -14,7 +14,7 @@ vars:
   # Working on the library itself: point this at a checkout beside the
   # repository instead, keeping the %s:
   #   TASKLIB: '../../taskfiles/%s'
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.18.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.19.2'
   PROJECT_NAME: paladin-core
   K8S_NAMESPACE: paladin
   # GLOBAL_REGISTRY, IMAGE_NAMESPACE and K8S_CONTEXT are deliberately NOT
@@ -49,6 +49,14 @@ vars:
   # error the chart raises on purpose.
   HELM_LINT_FLAGS: '-f deploy/chart/ci/required-values.yaml'
   HELM_TEMPLATE_FLAGS: '-f deploy/chart/ci/required-values.yaml'
+  # The chart runs one Deployment per role, named <PROJECT_NAME>-<role>; there
+  # is no Deployment called PROJECT_NAME itself. restart and status act on
+  # each of them — a role the chart leaves disabled is skipped as absent — and
+  # scripts/backend-roles.test.sh fails when this list and the chart's
+  # `deployments` come apart.
+  ROLES: [api, iam, session, admin, worker, mcp, dispatcher, ingest]
+  # The role `logs` follows when ROLE is not given.
+  DEFAULT_LOG_ROLE: api
 
 includes:
   release:   { taskfile: '{{printf .TASKLIB "release"}}', dir: . }
@@ -144,10 +152,29 @@ tasks:
     cmds:
       - task: go:lint
 
+  # The library's k8s tasks act on one Deployment, by default PROJECT_NAME,
+  # which this chart never renders; a call naming K8S_DEPLOYMENT_NAME points
+  # each at a role's Deployment instead.
   restart:
-    desc: "Roll the deployment in {{.K8S_NAMESPACE}}"
+    desc: "Roll every role's deployment in {{.K8S_NAMESPACE}}"
     cmds:
-      - task: k8s:restart
+      - for: { var: ROLES }
+        task: k8s:restart
+        vars: { K8S_DEPLOYMENT_NAME: "{{.PROJECT_NAME}}-{{.ITEM}}" }
+
+  status:
+    desc: "Show every role's deployment and its pods"
+    cmds:
+      - for: { var: ROLES }
+        task: k8s:status
+        vars: { K8S_DEPLOYMENT_NAME: "{{.PROJECT_NAME}}-{{.ITEM}}" }
+
+  logs:
+    desc: "Tail one role's logs (ROLE={{.DEFAULT_LOG_ROLE}} by default)"
+    interactive: true
+    cmds:
+      - task: k8s:logs
+        vars: { K8S_DEPLOYMENT_NAME: "{{.PROJECT_NAME}}-{{.ROLE | default .DEFAULT_LOG_ROLE}}" }
 
   generate:
     desc: "Regenerate mocks, sqlc bindings and the SeaweedFS filer types"

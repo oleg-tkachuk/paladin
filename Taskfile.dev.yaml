@@ -34,7 +34,7 @@ vars:
   # before anything this entry point could read it from, and an included file
   # cannot hand a var upward. `tasklib:bump VERSION=<tag>` moves every copy
   # and its lock together, and `tasklib:check` fails when they disagree.
-  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.18.0'
+  TASKLIB: 'https://github.com/oleg-tkachuk/taskfiles.git//%s?ref=v14.19.2'
   # Pinned, and run through `uvx` rather than installed: the rules a scan
   # asserts against change between releases, so an unpinned checkov makes a
   # local run and the pipeline's disagree — a red nobody else can reproduce, or
@@ -306,6 +306,7 @@ tasks:
       - task: verify:chart-metrics
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
+      - task: verify:backend-roles
       - task: verify:publish-target
       - task: verify:postgres-version
       - task: verify:release-age
@@ -639,6 +640,13 @@ tasks:
     # the three copies stop agreeing.
     cmds:
       - ./scripts/taskfile-drift.test.sh
+
+  verify:backend-roles:
+    desc: "Fail when the backend's restart, status or logs act on a Deployment its chart does not render"
+    # The library's k8s tasks default to PROJECT_NAME, a Deployment this
+    # chart never renders, so restart passed as a skip and rolled nothing.
+    cmds:
+      - ./scripts/backend-roles.test.sh
 
   verify:image-uid:
     desc: "Fail when an image's UID/GID differs from what its chart runs it as"
