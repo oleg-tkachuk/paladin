@@ -4,4 +4,4 @@ package testimage
 // stacks and the cluster run, so a test passes against the Postgres Paladin
 // is deployed on. scripts/postgres-version.test.sh holds them together, and
 // Renovate updates them as one.
-const Postgres = "postgres:18.6-alpine"
+const Postgres = "postgres:18.7-alpine"
