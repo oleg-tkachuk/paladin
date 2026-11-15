@@ -57,6 +57,15 @@ const (
 	postgresReadyLog       = "database system is ready to accept connections"
 	postgresReadyLogCount  = 2
 	postgresStartupTimeout = 90 * time.Second
+	// How long one check of limes' contract suites (storetest, metertest)
+	// may run before their watchdog stops the binary as deadlocked. Their
+	// default is a minute, sized for a few hundred store calls; the purge
+	// check makes over a thousand, one commit each, against the container
+	// every parallel test here shares. That took 4s on an idle host and 85s
+	// on one running other builds, with the sessions busy on CPU and holding
+	// no lock — slow, not stuck. Still half of go test's own -timeout, so a
+	// real deadlock is named first.
+	contractCheckTimeout = 5 * time.Minute
 	// The prefix of every per-test database; a counter makes each unique for
 	// the life of the test binary, -count=N included.
 	testDBPrefix = "t_"
