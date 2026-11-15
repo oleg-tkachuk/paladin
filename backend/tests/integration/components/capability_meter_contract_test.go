@@ -68,7 +68,6 @@ func TestMeterContract(t *testing.T) {
 			TenantCtx:     func(tenant uuid.UUID) context.Context { return auth.WithActingTenant(ctx, tenant) },
 			ListCtx:       auth.WithCrossTenantRead(ctx),
 			ScopesTenants: true,
-			CheckTimeout:  contractCheckTimeout,
 			Advance:       clock.Advance,
 			Now:           clock.Now,
 			Ledger:        newLedger(t, pool, capstore.WithClock(clock.Now)),
