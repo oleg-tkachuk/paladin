@@ -307,6 +307,7 @@ tasks:
       - task: verify:taskfile-vars
       - task: verify:taskfile-drift
       - task: verify:backend-roles
+      - task: verify:live-smoke-paths
       - task: verify:publish-target
       - task: verify:postgres-version
       - task: verify:release-age
@@ -647,6 +648,11 @@ tasks:
     # chart never renders, so restart passed as a skip and rolled nothing.
     cmds:
       - ./scripts/backend-roles.test.sh
+
+  verify:live-smoke-paths:
+    desc: "Fail when live-smoke.sh calls other console paths than the console does"
+    cmds:
+      - ./scripts/live-smoke-paths.test.sh
 
   verify:image-uid:
     desc: "Fail when an image's UID/GID differs from what its chart runs it as"

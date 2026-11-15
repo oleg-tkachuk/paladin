@@ -98,6 +98,14 @@ readonly CODE_FAILED_PRECONDITION=failed_precondition
 readonly REASON_CAPABILITY_REVOKED=ERROR_REASON_CAPABILITY_REVOKED
 readonly HTTP_OK=200
 readonly HTTP_UNAUTHORIZED=401
+# The console's session role (ADR-0048), as frontend/src/constants/index.ts
+# names its paths: sign-in sets the session cookie, and every plane call the
+# console makes goes through its RPC prefix.
+readonly SESSION_LOGIN_PATH=/session/login
+readonly SESSION_LOGOUT_PATH=/session/logout
+readonly SESSION_RPC_PREFIX=/session/rpc
+# The health snapshot the console's health page reads, from the admin role.
+readonly HEALTH_PROCEDURE=paladin.admin.v1.SystemService/GetPlatformHealth
 
 for tool in kubectl curl jq uuidgen openssl; do
     command -v "$tool" >/dev/null 2>&1 || { echo "!!! $tool is not installed" >&2; exit 1; }
@@ -224,14 +232,22 @@ fi
 ok "admin login"
 
 # ── the health snapshot needs a session; the console's session works ────────
-c=$(curl -sk -o /dev/null -w '%{http_code}' "$console/api/health/all")
+# health <cookie args…>: the status of the console's health call through the
+# session role.
+health() {
+    curl -sk "$@" -o /dev/null -w '%{http_code}' -X POST "$console$SESSION_RPC_PREFIX/$HEALTH_PROCEDURE" \
+        -H "Origin: $console" -H 'Content-Type: application/json' -d '{}'
+}
+c=$(health)
 expect "anonymous health snapshot refused ($c)" "$c" test "$c" = "$HTTP_UNAUTHORIZED"
 c=$(jq -cn --arg s "$ADMIN_SUBJECT" --arg p "$password" '{subject:$s,password:$p}' |
-    curl -sk -c "$work/jar" -o /dev/null -w '%{http_code}' "$console/api/auth/login" \
+    curl -sk -c "$work/jar" -o /dev/null -w '%{http_code}' -X POST "$console$SESSION_LOGIN_PATH" \
         -H "Origin: $console" -H 'Content-Type: application/json' -d @-)
 expect "console sign-in ($c)" "$c" test "$c" = "$HTTP_OK"
-c=$(curl -sk -b "$work/jar" -o /dev/null -w '%{http_code}' "$console/api/health/all")
+c=$(health -b "$work/jar")
 expect "health snapshot with a session ($c)" "$c" test "$c" = "$HTTP_OK"
+# The session ends here rather than idling until it expires.
+curl -sk -b "$work/jar" -o /dev/null -X POST "$console$SESSION_LOGOUT_PATH" -H "Origin: $console"
 unset password
 
 # ── fixture ─────────────────────────────────────────────────────────────────
