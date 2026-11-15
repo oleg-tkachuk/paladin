@@ -44,6 +44,7 @@ func storeContractEnv(t *testing.T, admin, pool *pgxpool.Pool, scoped bool) stor
 		ScopesTenants: scoped,
 		Now:           clock.Now,
 		Advance:       clock.Advance,
+		CheckTimeout:  contractCheckTimeout,
 		DeleteTenant: func(id uuid.UUID) error {
 			_, err := admin.Exec(ctx, `UPDATE tenants SET deleted_at = now() WHERE id = $1`, id)
 			return err
