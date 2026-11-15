@@ -217,8 +217,11 @@ type listScenario struct {
 }
 
 // expiringTTLSeconds is the lifetime of the capability the listing test
-// waits out, so it lists one expired.
-const expiringTTLSeconds = 1
+// waits out, so it lists one expired. Two, not one: the expiry is cut to the
+// whole second, so a one-second lifetime leaves anywhere from a second to
+// nothing, and a loaded runner minting the biscuit just past the cut was
+// refused it as expired. Two always leave at least a second.
+const expiringTTLSeconds = 2
 
 // The SDK's fake lists a tenant's capabilities as this handler does over
 // limes's own record listing: the same capabilities in the same order, each
