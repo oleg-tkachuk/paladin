@@ -195,3 +195,22 @@ SELECT
     (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = sqlc.arg('tenant_id')
         AND b.provision_state = 'deleting')::bigint AS buckets_deleting,
     (SELECT count(*) FROM users u WHERE u.tenant_id = sqlc.arg('tenant_id'))::bigint AS users;
+
+-- name: RetireTenantSlug :exec
+-- Records the slug of the tenant about to be deleted, so it is never handed
+-- to another tenant while slugs are reserved. Runs in the purge's transaction,
+-- before the tenant row goes.
+INSERT INTO retired_tenant_slugs (slug, former_tenant_id)
+SELECT slug, id FROM tenants WHERE id = $1
+ON CONFLICT (slug) DO NOTHING;
+
+-- name: TenantSlugHolder :one
+-- Who holds a slug, in one statement so a purge committing between two reads
+-- cannot hide it: 'live', 'trashed', 'retired', or '' when it is free.
+SELECT COALESCE(
+    (SELECT CASE WHEN t.deleted_at IS NULL THEN 'live' ELSE 'trashed' END
+       FROM tenants t WHERE t.slug = $1
+      ORDER BY t.deleted_at NULLS FIRST LIMIT 1),
+    (SELECT 'retired' FROM retired_tenant_slugs r WHERE r.slug = $1),
+    ''
+)::text AS holder;

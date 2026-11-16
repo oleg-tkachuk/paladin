@@ -730,6 +730,12 @@ type ReplicationState struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type RetiredTenantSlug struct {
+	Slug           string             `json:"slug"`
+	FormerTenantID pgtype.UUID        `json:"former_tenant_id"`
+	RetiredAt      pgtype.Timestamptz `json:"retired_at"`
+}
+
 type StorageBackend struct {
 	ID                            pgtype.UUID        `json:"id"`
 	Name                          string             `json:"name"`

@@ -454,6 +454,20 @@ func (q *Queries) RestoreTenant(ctx context.Context, id pgtype.UUID) (int64, err
 	return result.RowsAffected(), nil
 }
 
+const retireTenantSlug = `-- name: RetireTenantSlug :exec
+INSERT INTO retired_tenant_slugs (slug, former_tenant_id)
+SELECT slug, id FROM tenants WHERE id = $1
+ON CONFLICT (slug) DO NOTHING
+`
+
+// Records the slug of the tenant about to be deleted, so it is never handed
+// to another tenant while slugs are reserved. Runs in the purge's transaction,
+// before the tenant row goes.
+func (q *Queries) RetireTenantSlug(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, retireTenantSlug, id)
+	return err
+}
+
 const softDeleteTenant = `-- name: SoftDeleteTenant :execrows
 UPDATE tenants
    SET deleted_at = now(),
@@ -475,6 +489,25 @@ func (q *Queries) SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expected
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const tenantSlugHolder = `-- name: TenantSlugHolder :one
+SELECT COALESCE(
+    (SELECT CASE WHEN t.deleted_at IS NULL THEN 'live' ELSE 'trashed' END
+       FROM tenants t WHERE t.slug = $1
+      ORDER BY t.deleted_at NULLS FIRST LIMIT 1),
+    (SELECT 'retired' FROM retired_tenant_slugs r WHERE r.slug = $1),
+    ''
+)::text AS holder
+`
+
+// Who holds a slug, in one statement so a purge committing between two reads
+// cannot hide it: 'live', 'trashed', 'retired', or ” when it is free.
+func (q *Queries) TenantSlugHolder(ctx context.Context, slug string) (string, error) {
+	row := q.db.QueryRow(ctx, tenantSlugHolder, slug)
+	var holder string
+	err := row.Scan(&holder)
+	return holder, err
 }
 
 const updateTenant = `-- name: UpdateTenant :execrows

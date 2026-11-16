@@ -94,6 +94,10 @@ type CreateTenantArgs struct {
 	// StorageLayout — "shared" (default) or "dedicated" (ADR-0015). Settable
 	// only at create; empty defaults to "shared".
 	StorageLayout string
+	// AllowSlugReuse is set by the handler from admin.tenants.reserve_slugs:
+	// true lets a slug a trashed or purged tenant held go to a new tenant.
+	// The zero value reserves them.
+	AllowSlugReuse bool
 	// DedicatedBackend is set by the handler (not the client) for a dedicated
 	// tenant: the backend its own bucket is provisioned on. The repo derives
 	// the bucket name and inserts a pending row + default binding in the
@@ -323,12 +327,20 @@ type Handler struct {
 	events EventProducer
 	log    *zap.Logger // best-effort sink for fan-out failures
 
+	// allowSlugReuse is admin.tenants.reserve_slugs negated, so the zero
+	// value of a Handler reserves slugs: a test or a caller that never sets
+	// it gets the safe behaviour.
+	allowSlugReuse bool
 	// trashRetention is admin.tenants.trash_retention, which the derived
 	// purge_eligible filter field reads; zero leaves every tenant ineligible.
 	trashRetention time.Duration
 	// now is the clock purge_eligible is judged by. Nil: time.Now.
 	now func() time.Time
 }
+
+// SetSlugReuse sets whether a slug a trashed or purged tenant held may go to
+// a new tenant (admin.tenants.reserve_slugs false). Off by default.
+func (h *Handler) SetSlugReuse(allowed bool) { h.allowSlugReuse = allowed }
 
 // SetTrashRetention sets how long a trashed tenant waits before
 // purge_eligible holds for it.
@@ -539,8 +551,7 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	// A tenant with no inherited policy would be deny-all at the Cedar layer
 	// (empty policy set → no permit rule matches). Seed a sensible default so
 	// newly-created tenants can immediately read/write their own objects.
-	// The default policy keys on the slug, so policies remain readable even
-	// when the platform regenerates them after a rename.
+	// The default policy keys on the slug, which never changes.
 	if args.InheritedCedarPolicy == "" {
 		args.InheritedCedarPolicy = renderDefaultPolicy(args.TenantID, args.Slug)
 	}
@@ -566,6 +577,7 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	// `set_by` actor still reads from the principal), authorization already
 	// happened above, and every row written here is keyed to args.TenantID.
 	ctx = auth.WithActingTenant(ctx, args.TenantID)
+	args.AllowSlugReuse = h.allowSlugReuse
 	// Create + paladin.tenant.created in one tx (ADR-0003). The event payload
 	// is built from args (== the inserted row), so the row can be enqueued
 	// without a read-back inside the tx; the full row is fetched post-commit
@@ -582,6 +594,10 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 				"display_name": args.DisplayName,
 			})
 	}); err != nil {
+		if errors.Is(err, ErrSlugHeldInTrash) || errors.Is(err, ErrSlugRetired) {
+			h.log.Warn("tenant create refused: the slug is reserved",
+				zap.String("slug", args.Slug), zap.Error(err))
+		}
 		return nil, apiutil.MapError(fmt.Errorf("create tenant: %w", err))
 	}
 	// The request carries the id (or none), not a name; the audit row needs
@@ -1155,6 +1171,16 @@ var ErrNotFound = errors.New("tenant not found")
 // requested slug is already in use by another tenant.
 var ErrSlugConflict = errors.New("tenant slug already in use")
 
+// ErrSlugHeldInTrash — Repository.Create returns this, while slugs are
+// reserved, for a slug a trashed tenant still holds: it may be restored, and
+// until it is purged its slug names it in every policy and token.
+var ErrSlugHeldInTrash = errors.New("tenant slug is held by a tenant in the trash")
+
+// ErrSlugRetired — Repository.Create returns this, while slugs are reserved,
+// for a slug a purged tenant held: policies, tokens and clients may still
+// name it, and would name the new tenant instead.
+var ErrSlugRetired = errors.New("tenant slug belonged to a purged tenant and is reserved")
+
 // ErrTenantIDConflict — Repository.Create returns this when the
 // caller-supplied tenant_id (UUID) collides with an existing row.
 var ErrTenantIDConflict = errors.New("tenant_id already in use")
@@ -1203,6 +1229,8 @@ func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
 	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
 	apiutil.RegisterError(ErrSlugConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
+	apiutil.RegisterError(ErrSlugHeldInTrash, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
+	apiutil.RegisterError(ErrSlugRetired, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
 	apiutil.RegisterError(ErrTenantIDConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_TENANT_ID_TAKEN)
 	apiutil.RegisterError(ErrDisplayNameConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_DISPLAY_NAME_TAKEN)
 	apiutil.RegisterError(ErrAlreadyDeleted, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_ALREADY_DELETED)

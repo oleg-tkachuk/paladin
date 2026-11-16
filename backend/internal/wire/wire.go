@@ -130,6 +130,7 @@ func ProvideCollectionHandler(repos Repos, pe *policy.Engine, _ config.Config) *
 func ProvideTenantHandler(repos Repos, pe *policy.Engine, cfg config.Config) *tenanth.Handler {
 	h := tenanth.NewHandler(repos.Tenant, pe)
 	h.SetTrashRetention(cfg.Admin.Tenants.TrashRetention)
+	h.SetSlugReuse(!cfg.Admin.Tenants.ReserveSlugs)
 	return h
 }
 

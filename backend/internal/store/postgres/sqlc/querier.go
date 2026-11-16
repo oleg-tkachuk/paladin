@@ -787,6 +787,10 @@ type Querier interface {
 	// Clears deleted_at on a trashed row. Bumps resource_version +
 	// updated_at.
 	RestoreTenant(ctx context.Context, id pgtype.UUID) (int64, error)
+	// Records the slug of the tenant about to be deleted, so it is never handed
+	// to another tenant while slugs are reserved. Runs in the purge's transaction,
+	// before the tenant row goes.
+	RetireTenantSlug(ctx context.Context, id pgtype.UUID) error
 	// Starts a failed migration over from the beginning, in place: the row is the
 	// tenant's migration history (attempts keeps counting failures), so it is
 	// reset rather than deleted and re-inserted. Applies only while the row is
@@ -963,6 +967,9 @@ type Querier interface {
 	// grant. The binding trigger enforces the same rule; this asks it first, so a
 	// refusal is a clear answer rather than a failed write.
 	TenantMayBindBucket(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (bool, error)
+	// Who holds a slug, in one statement so a purge committing between two reads
+	// cannot hide it: 'live', 'trashed', 'retired', or '' when it is free.
+	TenantSlugHolder(ctx context.Context, slug string) (string, error)
 	// Heartbeat for a RUNNING operation. Bumps updated_at and nothing else — in
 	// particular it must not touch progress, which an executor may be writing
 	// concurrently.

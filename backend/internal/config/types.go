@@ -605,6 +605,11 @@ type AdminTenants struct {
 	// on its own — PurgeTenant stays an operator call. Must be positive;
 	// default 720h (30 days).
 	TrashRetention time.Duration `yaml:"trash_retention" json:"trash_retention"`
+	// ReserveSlugs keeps a slug a trashed or purged tenant held from going to
+	// another tenant: Cedar names a tenant by its slug, and so do policies,
+	// tokens and every tenants/<slug> a client holds, which would all name
+	// the new tenant instead. false allows the reuse. Default true.
+	ReserveSlugs bool `yaml:"reserve_slugs" json:"reserve_slugs"`
 }
 
 // Worker is the per-role config block for the worker binary. Carries
