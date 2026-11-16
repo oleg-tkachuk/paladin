@@ -31,7 +31,7 @@ ARG GO_VERSION=1.27
 # re-fetch the pnpm content-addressable store per arch (the resulting
 # node_modules are pure JS).
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS deps
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS deps
 ARG PNPM_VERSION
 
 # `node:${VERSION}-alpine` ships npm but NOT corepack since upstream removed
@@ -54,7 +54,7 @@ RUN pnpm install --frozen-lockfile
 # Stage 2 — builder. `next build` writes the static export to out/, with
 # build-time metadata baked in via NEXT_PUBLIC_-prefixed env vars.
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:8996bb5821d62a8fd9bb27c1cb07462f3fdce6e47d640c6a881ead0b064ce216 AS builder
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5 AS builder
 ARG PNPM_VERSION
 
 WORKDIR /app
@@ -105,7 +105,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # -----------------------------------------------------------------------------
 # Stage 4 — runtime. One static binary on distroless.
 # -----------------------------------------------------------------------------
-FROM gcr.io/distroless/static:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329 AS runtime
+FROM gcr.io/distroless/static:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931 AS runtime
 
 # ARGs do not cross stage boundaries — redeclared for the labels.
 ARG APP_VERSION=undefined
