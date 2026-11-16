@@ -81,6 +81,10 @@ test.describe("US7 — User administration", () => {
 
     await row.getByRole("button", { name: `Actions for ${subject}` }).click();
     await page.getByText("Disable", { exact: true }).click();
+    // Disabling cuts the user off, so it asks first.
+    const confirm = page.getByRole("alertdialog");
+    await expect(confirm).toContainText("can no longer sign in");
+    await confirm.getByRole("button", { name: "Disable" }).click();
 
     await expect(
       page
