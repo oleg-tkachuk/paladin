@@ -57,7 +57,7 @@ func TestValkeyComponentOffWithThePostgresBackend(t *testing.T) {
 // decided in the process.
 func TestValkeyComponentFollowsTheStore(t *testing.T) {
 	store := &valkeyStore{}
-	shared := ratecount.NewDegrading(store, config.RateLimitBackendValkey, zap.NewNop())
+	shared := ratecount.NewDegrading(store, config.RateLimitBackendValkey, testValkeyTimeout, zap.NewNop())
 	ctx := context.Background()
 	_, _ = shared.Bump(ctx, "tenant:t")
 

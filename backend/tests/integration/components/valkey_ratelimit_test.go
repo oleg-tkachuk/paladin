@@ -241,7 +241,7 @@ func TestValkeyWindow(t *testing.T) {
 		if waited := time.Since(start); waited > 4*shortTimeout {
 			t.Fatalf("call waited %v past a %v timeout", waited, shortTimeout)
 		}
-		d := ratecount.NewDegrading(c, "valkey", zap.NewNop())
+		d := ratecount.NewDegrading(c, "valkey", shortTimeout, zap.NewNop())
 		got, err := d.BumpIfFits(ctx, key, 1)
 		if err != nil || !got.Admitted {
 			t.Fatalf("degraded call: %+v %v", got, err)

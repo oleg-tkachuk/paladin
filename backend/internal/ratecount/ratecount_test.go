@@ -189,7 +189,7 @@ func (s *switchable) Read(ctx context.Context, k string) (Counts, error) {
 
 func TestDegradingKeepsTheLimitWhenTheStoreFails(t *testing.T) {
 	const capacity = 2
-	d := NewDegrading(failing{errors.New("boom")}, "valkey", zap.NewNop())
+	d := NewDegrading(failing{errors.New("boom")}, "valkey", testStoreTimeout, zap.NewNop())
 	ctx := context.Background()
 	admitted := 0
 	for i := 0; i < capacity+1; i++ {
@@ -215,7 +215,7 @@ func TestDegradingKeepsTheLimitWhenTheStoreFails(t *testing.T) {
 func TestDegradingLogsEachSwitchOnce(t *testing.T) {
 	core, logs := observer.New(zapcore.InfoLevel)
 	s := &switchable{inner: NewLocal()}
-	d := NewDegrading(s, "valkey", zap.New(core))
+	d := NewDegrading(s, "valkey", testStoreTimeout, zap.New(core))
 	ctx := context.Background()
 
 	_, _ = d.Bump(ctx, testKey)
@@ -322,7 +322,7 @@ func TestDegradingCountsEachLocalDecision(t *testing.T) {
 	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
 	t.Cleanup(func() { otel.SetMeterProvider(prev) })
 
-	d := NewDegrading(failing{errors.New("down")}, "valkey", zap.NewNop())
+	d := NewDegrading(failing{errors.New("down")}, "valkey", testStoreTimeout, zap.NewNop())
 	ctx := context.Background()
 	const calls = 3
 	for i := 0; i < calls; i++ {
@@ -360,7 +360,7 @@ func (p pingable) Ping(context.Context) error { return p.pingErr }
 
 func TestDegradingStatsFollowTheStore(t *testing.T) {
 	s := &switchable{inner: NewLocal()}
-	d := NewDegrading(s, "valkey", zap.NewNop())
+	d := NewDegrading(s, "valkey", testStoreTimeout, zap.NewNop())
 	ctx := context.Background()
 
 	_, _ = d.Bump(ctx, testKey)
@@ -395,7 +395,7 @@ func TestDegradingPingAsksTheStore(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := NewDegrading(tc.shared, "valkey", zap.NewNop()).Ping(context.Background())
+			err := NewDegrading(tc.shared, "valkey", testStoreTimeout, zap.NewNop()).Ping(context.Background())
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("Ping = %v, want %v", err, tc.want)
 			}
@@ -414,7 +414,7 @@ func (f fixed) Read(context.Context, string) (Counts, error)            { return
 // consulted.
 func TestDegradingReturnsTheStoresAnswer(t *testing.T) {
 	const shared = 42
-	d := NewDegrading(fixed{Counts{Current: shared}}, "valkey", zap.NewNop())
+	d := NewDegrading(fixed{Counts{Current: shared}}, "valkey", testStoreTimeout, zap.NewNop())
 	ctx := context.Background()
 	calls := map[string]func() (Counts, error){
 		"bump":         func() (Counts, error) { return d.Bump(ctx, testKey) },

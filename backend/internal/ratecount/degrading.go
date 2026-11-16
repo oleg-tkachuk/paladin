@@ -3,7 +3,9 @@ package ratecount
 import (
 	"context"
 	"errors"
+	"math"
 	"sync/atomic"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -66,7 +68,7 @@ func (f *Fallback) Degraded() bool { return f.degraded.Load() }
 func (f *Fallback) CountLocal(ctx context.Context) {
 	f.local.Add(1)
 	if f.calls != nil {
-		f.calls.Add(ctx, 1, metric.WithAttributes(attribute.String("backend", f.backend)))
+		f.calls.Add(ctx, 1, metric.WithAttributes(attribute.String(attrBackend, f.backend)))
 	}
 }
 
@@ -91,6 +93,44 @@ type Pinger interface {
 // ErrNoPing answers Ping for a shared store that is not a Pinger.
 var ErrNoPing = errors.New("ratecount: the shared store cannot be pinged")
 
+// storeDurationMetric names the histogram of calls to the shared store.
+const storeDurationMetric = "paladin.ratelimit.store.duration"
+
+// storeDurationUnit is the histogram's unit, as UCUM spells seconds.
+const storeDurationUnit = "s"
+
+// The attributes every recorded call carries.
+const (
+	attrBackend = "backend"
+	attrOutcome = "outcome"
+)
+
+// The outcomes of a call to the shared store.
+const (
+	outcomeAnswered = "answered"
+	outcomeFailed   = "failed"
+)
+
+// timeoutMultiples are the histogram's bucket bounds, as multiples of the
+// store's timeout: fine below it, one bound at it, a few past it. A call that
+// times out ends near 1; one well past it was held up before it was sent.
+var timeoutMultiples = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2.5, 5, 10}
+
+// boundsPerSecond is the precision bucket bounds are rounded to: a
+// microsecond, so a bound reads 0.075 in its `le` label, not the
+// 0.07500000000000001 floating-point multiplication leaves.
+const boundsPerSecond = float64(time.Second / time.Microsecond)
+
+// storeDurationBuckets are the bucket bounds, in seconds, for a store whose
+// calls time out after timeout.
+func storeDurationBuckets(timeout time.Duration) []float64 {
+	bounds := make([]float64, len(timeoutMultiples))
+	for i, m := range timeoutMultiples {
+		bounds[i] = math.Round(m*timeout.Seconds()*boundsPerSecond) / boundsPerSecond
+	}
+	return bounds
+}
+
 // Degrading counts on a shared store and, for each call the store cannot
 // answer, on this process instead, so a limit stays in force at the
 // configured rate per replica rather than being lifted.
@@ -98,15 +138,44 @@ type Degrading struct {
 	shared   Counter
 	local    *Local
 	fallback *Fallback
+	backend  string
+	// durations times each call to the shared store, against its timeout:
+	// a fallback alone does not say whether the store or the timeout is off.
+	durations metric.Float64Histogram
+	now       func() time.Time
 }
 
-// NewDegrading wraps shared. backend names the store in logs and metrics.
-func NewDegrading(shared Counter, backend string, log *zap.Logger) *Degrading {
-	return &Degrading{shared: shared, local: NewLocal(), fallback: NewFallback(backend, log)}
+// NewDegrading wraps shared, whose calls time out after timeout. backend
+// names the store in logs and metrics.
+func NewDegrading(shared Counter, backend string, timeout time.Duration, log *zap.Logger) *Degrading {
+	durations, err := otel.Meter("github.com/oleg-tkachuk/paladin/internal/ratecount").Float64Histogram(
+		storeDurationMetric,
+		metric.WithUnit(storeDurationUnit),
+		metric.WithDescription(
+			"How long each rate-limit call to the shared store took, answered or not. "+
+				"Bucketed around the store's timeout, past which a call falls back to this process."),
+		metric.WithExplicitBucketBoundaries(storeDurationBuckets(timeout)...),
+	)
+	if err != nil {
+		log.Warn("rate limit store duration histogram not registered", zap.Error(err))
+	}
+	return &Degrading{
+		shared: shared, local: NewLocal(), fallback: NewFallback(backend, log),
+		backend: backend, durations: durations, now: time.Now,
+	}
 }
 
-// answered settles the store's answer and reports whether to fall back.
-func (d *Degrading) answered(ctx context.Context, err error) bool {
+// answered times a call to the shared store that began at start, settles its
+// answer and reports whether to fall back.
+func (d *Degrading) answered(ctx context.Context, start time.Time, err error) bool {
+	if d.durations != nil {
+		outcome := outcomeAnswered
+		if err != nil {
+			outcome = outcomeFailed
+		}
+		d.durations.Record(ctx, d.now().Sub(start).Seconds(), metric.WithAttributes(
+			attribute.String(attrBackend, d.backend), attribute.String(attrOutcome, outcome)))
+	}
 	d.fallback.Settle(err)
 	if err != nil {
 		d.fallback.CountLocal(ctx)
@@ -117,7 +186,8 @@ func (d *Degrading) answered(ctx context.Context, err error) bool {
 
 // Bump implements Counter.
 func (d *Degrading) Bump(ctx context.Context, key string) (Counts, error) {
-	if c, err := d.shared.Bump(ctx, key); d.answered(ctx, err) {
+	start := d.now()
+	if c, err := d.shared.Bump(ctx, key); d.answered(ctx, start, err) {
 		return c, nil
 	}
 	return d.local.Bump(ctx, key)
@@ -125,7 +195,8 @@ func (d *Degrading) Bump(ctx context.Context, key string) (Counts, error) {
 
 // BumpIfFits implements Counter.
 func (d *Degrading) BumpIfFits(ctx context.Context, key string, capacity int) (Counts, error) {
-	if c, err := d.shared.BumpIfFits(ctx, key, capacity); d.answered(ctx, err) {
+	start := d.now()
+	if c, err := d.shared.BumpIfFits(ctx, key, capacity); d.answered(ctx, start, err) {
 		return c, nil
 	}
 	return d.local.BumpIfFits(ctx, key, capacity)
@@ -134,7 +205,8 @@ func (d *Degrading) BumpIfFits(ctx context.Context, key string, capacity int) (C
 // Read implements Counter. A read the shared store cannot answer shows what
 // this process counted, which is what decided the calls meanwhile.
 func (d *Degrading) Read(ctx context.Context, key string) (Counts, error) {
-	if c, err := d.shared.Read(ctx, key); d.answered(ctx, err) {
+	start := d.now()
+	if c, err := d.shared.Read(ctx, key); d.answered(ctx, start, err) {
 		return c, nil
 	}
 	return d.local.Read(ctx, key)
