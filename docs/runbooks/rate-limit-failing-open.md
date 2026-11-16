@@ -25,6 +25,9 @@ first failure and the recovery are each logged once.
 
 - `paladin_ratelimit_degraded_total{backend}` — calls decided in the process
   because the shared store did not answer (`internal/ratecount`).
+- `paladin_ratelimit_store_duration_seconds{backend,outcome}` — how long each
+  call to the shared store took, `answered` or `failed`, bucketed around
+  `datastores.valkey.timeout` with one bucket bound at it.
 - `paladin_tenant_ratelimit_fail_open_total{tenant_id}` and
   `paladin_api_token_ratelimit_fail_open_total{tenant_id}` — requests admitted
   with no decision at all. The counters above never return an error, so these
@@ -67,6 +70,17 @@ as zero.
    says, per role, whether Valkey answers a ping and whether the limits are
    counted shared or per process. Check the Valkey pods,
    `valkey-cli --latency`, and whether the password Secret still matches.
+
+   Then whether the calls run close to the timeout or past it:
+
+   ```
+   histogram_quantile(0.99, sum by (le) (rate(paladin_ratelimit_store_duration_seconds_bucket{outcome="answered"}[10m])))
+   ```
+
+   A p99 near the timeout while `valkey-cli --latency` stays low is the
+   caller's side: a pod starved of CPU, or the network between. A starved
+   Valkey shows as both, and its pod's `cpu.weight` (from its CPU request)
+   says why.
 
 5. **Is the sweeper keeping the table small?** The worker's
    `RateLimitBucketSweeper` deletes buckets older than five minutes:

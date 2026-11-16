@@ -59,7 +59,7 @@ func buildRateCounter(cfg config.Config, db pgsync.Batcher, log *zap.Logger) (co
 			Addr: v.Addr, Username: v.Username, Password: v.Password, TLS: v.TLS, Timeout: v.Timeout,
 		}, log)
 		log.Info("rate limits count in valkey", zap.String("addr", v.Addr))
-		d := ratecount.NewDegrading(c, rl.Backend, log)
+		d := ratecount.NewDegrading(c, rl.Backend, v.Timeout, log)
 		return d, d, stop
 	}
 	c := pgsync.New(pgsync.NewPostgresStore(db), rl.SyncInterval, log)
