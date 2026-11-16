@@ -20,6 +20,8 @@ import {
   EyeIcon,
 } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
+import { TaintBadge } from "@/components/features/objects/TaintBadge";
+import { taintSignalsOf } from "@/lib/objects/taint";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -136,6 +138,7 @@ export function ObjectInspector({
               <Badge variant="outline" className={T.codeSmall}>
                 <Bytes value={object.sizeBytes} />
               </Badge>
+              <TaintBadge signals={taintSignalsOf(object)} />
             </div>
           )}
         </div>

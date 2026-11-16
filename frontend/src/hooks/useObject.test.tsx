@@ -1,17 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
+import { ObjectState, TaintSignal } from "@/gen/paladin/data/v1/types_pb";
 import { PRESIGN_EXPIRY_SKEW_MS } from "@/lib/upload/retry";
 
 const h = vi.hoisted(() => ({
   lookupObject: vi.fn(),
   presignDownload: vi.fn(),
+  setObjectTaint: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
-  objectClient: { lookupObject: h.lookupObject },
+  objectClient: {
+    lookupObject: h.lookupObject,
+    setObjectTaint: h.setObjectTaint,
+  },
   presignClient: { presignDownload: h.presignDownload },
 }));
 vi.mock("@/context/AuthContext", () => ({
@@ -83,5 +87,48 @@ describe("downloadUrlLifetime", () => {
       undefined,
     );
     expect(downloadUrlLifetime(undefined, now)).toBeUndefined();
+  });
+});
+
+// setTaint replaces the object's signals by its own RPC, gated on the server
+// by its own Cedar action, and reloads the object so the badge follows.
+describe("useObject setTaint", () => {
+  const OBJECT = {
+    name: "tenants/t1/collections/default/objects/o1",
+    key: "docs/report.pdf",
+    state: ObjectState.AVAILABLE,
+    taint: [],
+  };
+
+  it("sends the signals for this object and reloads it", async () => {
+    h.lookupObject.mockResolvedValue(OBJECT);
+    h.presignDownload.mockResolvedValue({ downloadUrl: null });
+    h.setObjectTaint.mockResolvedValue({ ...OBJECT, taint: [TaintSignal.PII] });
+    const { result } = renderHook(() => useObject("docs/report.pdf"), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.object).not.toBeNull());
+    const loads = h.lookupObject.mock.calls.length;
+
+    await act(() => result.current.setTaint([TaintSignal.PII]));
+
+    expect(h.setObjectTaint).toHaveBeenCalledWith({
+      name: OBJECT.name,
+      signals: [TaintSignal.PII],
+    });
+    expect(h.lookupObject.mock.calls.length).toBeGreaterThan(loads);
+  });
+
+  it("passes a refusal on to the caller", async () => {
+    h.lookupObject.mockResolvedValue(OBJECT);
+    h.presignDownload.mockResolvedValue({ downloadUrl: null });
+    h.setObjectTaint.mockRejectedValue(new Error("permission denied"));
+    const { result } = renderHook(() => useObject("docs/report.pdf"), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.object).not.toBeNull());
+    await expect(result.current.setTaint([])).rejects.toThrow(
+      "permission denied",
+    );
   });
 });

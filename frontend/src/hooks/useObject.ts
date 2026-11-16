@@ -6,7 +6,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { objectClient, presignClient } from "@/lib/connect/client";
 import type { Object$ } from "@/gen/paladin/data/v1/types_pb";
-import { ObjectState } from "@/gen/paladin/data/v1/types_pb";
+import { ObjectState, type TaintSignal } from "@/gen/paladin/data/v1/types_pb";
 import type { PresignedUrl } from "@/gen/paladin/common/v1/resource_pb";
 import { useActingTenantId } from "@/hooks/useActingTenant";
 import { useRefreshSignal, useBumpRefresh } from "@/context/RefreshContext";
@@ -152,6 +152,36 @@ export function useObject(
     [object, refresh, bumpRefresh, showNotification],
   );
 
+  // Replaces the object's taint signals; an empty list clears them. Its own
+  // RPC, gated by its own Cedar action: clearing a signal re-opens content to
+  // agents, which write access to the collection does not imply.
+  const setTaint = useCallback(
+    async (signals: TaintSignal[]) => {
+      if (!object) return;
+      try {
+        await objectClient.setObjectTaint({ name: object.name, signals });
+        await refresh();
+        bumpRefresh("objects");
+        showNotification({
+          type: "success",
+          title: "Taint updated",
+          message:
+            signals.length > 0
+              ? "Agents not allowed tainted content are refused this object."
+              : "The object is no longer marked as tainted.",
+        });
+      } catch (err: unknown) {
+        showNotification({
+          type: "error",
+          title: "Taint not updated",
+          message: (err as Error).message,
+        });
+        throw err;
+      }
+    },
+    [object, refresh, bumpRefresh, showNotification],
+  );
+
   // Resolves to the object as the trash holds it; the caller offers the Undo
   // (useUndoTrash), so this says nothing on success.
   const softDeleteObject = useCallback(async (): Promise<
@@ -235,6 +265,7 @@ export function useObject(
     error: (query.error as Error | null) ?? null,
     refresh,
     patchObjectMeta,
+    setTaint,
     softDeleteObject,
     restoreObject,
     purgeObject,
