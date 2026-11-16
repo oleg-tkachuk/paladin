@@ -53,8 +53,6 @@ type fakeRepo struct {
 	getFn            func(context.Context, uuid.UUID) (Tenant, error)
 	getBySlugFn      func(context.Context, string) (Tenant, error)
 	updateFn         func(context.Context, UpdateTenantArgs) (Tenant, error)
-	renameFn         func(context.Context, RenameTenantSlugArgs) (Tenant, error)
-	lookupRenamedFn  func(ctx context.Context, oldSlug string, window time.Duration) (RenamedSlug, bool, error)
 	listFn           func(context.Context, ListTenantsArgs) ([]Tenant, string, error)
 	createTxFn       func(context.Context, pgx.Tx, CreateTenantArgs) error
 	updateTxFn       func(context.Context, pgx.Tx, UpdateTenantArgs) (Tenant, error)
@@ -76,7 +74,6 @@ type fakeRepo struct {
 		setBy    string
 	}
 	lastListArgs   ListTenantsArgs
-	lastRename     RenameTenantSlugArgs
 	lastStartArgs  StartStorageMigrationArgs
 	lastSoftDelete struct {
 		tenantID uuid.UUID
@@ -148,21 +145,6 @@ func (f *fakeRepo) List(ctx context.Context, a ListTenantsArgs) ([]Tenant, strin
 		return f.listFn(ctx, a)
 	}
 	return nil, "", nil
-}
-
-func (f *fakeRepo) Rename(ctx context.Context, a RenameTenantSlugArgs) (Tenant, error) {
-	f.lastRename = a
-	if f.renameFn != nil {
-		return f.renameFn(ctx, a)
-	}
-	return Tenant{}, nil
-}
-
-func (f *fakeRepo) LookupRenamedSlug(ctx context.Context, oldSlug string, window time.Duration) (RenamedSlug, bool, error) {
-	if f.lookupRenamedFn != nil {
-		return f.lookupRenamedFn(ctx, oldSlug, window)
-	}
-	return RenamedSlug{}, false, nil
 }
 
 // RunInTx runs fn with a nil tx — none of the fake *Tx methods touch it and the
@@ -833,56 +815,6 @@ func TestPurgeTenant(t *testing.T) {
 	})
 }
 
-// ─── RenameTenantSlug ───────────────────────────────────────────────────────
-
-func TestRenameTenantSlug(t *testing.T) {
-	tid := uuid.New()
-
-	t.Run("non-admin → permission denied", func(t *testing.T) {
-		_, err := NewHandler(&fakeRepo{}, allow()).RenameTenantSlug(principalCtx(tid),
-			RenameTenantSlugArgs{TenantID: tid, NewSlug: "new-name"})
-		wantCode(t, err, connect.CodePermissionDenied)
-	})
-
-	t.Run("policy denies → permission denied", func(t *testing.T) {
-		_, err := NewHandler(&fakeRepo{}, deny()).RenameTenantSlug(adminCtx(tid),
-			RenameTenantSlugArgs{TenantID: tid, NewSlug: "new-name"})
-		wantCode(t, err, connect.CodePermissionDenied)
-	})
-
-	t.Run("invalid new slug → invalid argument", func(t *testing.T) {
-		_, err := NewHandler(&fakeRepo{}, allow()).RenameTenantSlug(adminCtx(tid),
-			RenameTenantSlugArgs{TenantID: tid, NewSlug: "NO"})
-		wantCode(t, err, connect.CodeInvalidArgument)
-	})
-
-	t.Run("slug conflict → already exists", func(t *testing.T) {
-		fr := &fakeRepo{renameFn: func(context.Context, RenameTenantSlugArgs) (Tenant, error) {
-			return Tenant{}, ErrSlugConflict
-		}}
-		_, err := NewHandler(fr, allow()).RenameTenantSlug(adminCtx(tid),
-			RenameTenantSlugArgs{TenantID: tid, NewSlug: "taken-slug"})
-		wantCode(t, err, connect.CodeAlreadyExists)
-	})
-
-	t.Run("ok forwards args + returns renamed row", func(t *testing.T) {
-		fr := &fakeRepo{renameFn: func(_ context.Context, a RenameTenantSlugArgs) (Tenant, error) {
-			return Tenant{TenantID: a.TenantID, Slug: a.NewSlug, ResourceVersion: a.ExpectedVersion + 1}, nil
-		}}
-		got, err := NewHandler(fr, allow()).RenameTenantSlug(adminCtx(tid),
-			RenameTenantSlugArgs{TenantID: tid, NewSlug: "new-name", ExpectedVersion: 2})
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if fr.lastRename.NewSlug != "new-name" || fr.lastRename.ExpectedVersion != 2 {
-			t.Fatalf("forwarded %+v", fr.lastRename)
-		}
-		if got.Slug != "new-name" {
-			t.Fatalf("returned slug %q", got.Slug)
-		}
-	})
-}
-
 // ─── ListTenants ────────────────────────────────────────────────────────────
 
 func TestListTenants(t *testing.T) {
@@ -1252,58 +1184,6 @@ func TestGetTenantStorageMigration(t *testing.T) {
 		}
 		if got.State != "copying" || got.ObjectsCopied != 4 {
 			t.Fatalf("got %+v", got)
-		}
-	})
-}
-
-// ─── ResolveRenamedSlug ─────────────────────────────────────────────────────
-
-func TestResolveRenamedSlug(t *testing.T) {
-	tid := uuid.New()
-
-	t.Run("unauthenticated", func(t *testing.T) {
-		fr := &fakeRepo{lookupRenamedFn: func(context.Context, string, time.Duration) (RenamedSlug, bool, error) {
-			return RenamedSlug{TenantID: tid, NewSlug: "new"}, true, nil
-		}}
-		_, _, err := NewHandler(fr, allow()).ResolveRenamedSlug(context.Background(), "old")
-		wantCode(t, err, connect.CodeUnauthenticated)
-	})
-
-	t.Run("policy denies collapses to not found", func(t *testing.T) {
-		fr := &fakeRepo{lookupRenamedFn: func(context.Context, string, time.Duration) (RenamedSlug, bool, error) {
-			return RenamedSlug{TenantID: tid, NewSlug: "new"}, true, nil
-		}}
-		_, _, err := NewHandler(fr, deny()).ResolveRenamedSlug(principalCtx(tid), "old")
-		wantCode(t, err, connect.CodeNotFound)
-	})
-
-	t.Run("lookup error → internal", func(t *testing.T) {
-		fr := &fakeRepo{lookupRenamedFn: func(context.Context, string, time.Duration) (RenamedSlug, bool, error) {
-			return RenamedSlug{}, false, errors.New("db fault")
-		}}
-		_, _, err := NewHandler(fr, allow()).ResolveRenamedSlug(principalCtx(tid), "old")
-		wantCode(t, err, connect.CodeInternal)
-	})
-
-	t.Run("no history → not found", func(t *testing.T) {
-		fr := &fakeRepo{lookupRenamedFn: func(context.Context, string, time.Duration) (RenamedSlug, bool, error) {
-			return RenamedSlug{}, false, nil
-		}}
-		_, _, err := NewHandler(fr, allow()).ResolveRenamedSlug(principalCtx(tid), "old")
-		wantCode(t, err, connect.CodeNotFound)
-	})
-
-	t.Run("ok returns current slug + rotation time", func(t *testing.T) {
-		when := time.Now().Add(-time.Hour).UTC()
-		fr := &fakeRepo{lookupRenamedFn: func(context.Context, string, time.Duration) (RenamedSlug, bool, error) {
-			return RenamedSlug{TenantID: tid, NewSlug: "fresh-slug", RenamedAt: when}, true, nil
-		}}
-		slug, at, err := NewHandler(fr, allow()).ResolveRenamedSlug(principalCtx(tid), "stale-slug")
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		if slug != "fresh-slug" || !at.Equal(when) {
-			t.Fatalf("got slug=%q at=%v", slug, at)
 		}
 	})
 }

@@ -22,7 +22,7 @@ from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DE
 from paladin.admin.v1.types_pb2 import Tenant
 from pyqwest import Client, SyncClient
 
-from .tenant_service_pb2 import ClearTenantDefaultBindingRequest, ClearTenantDefaultBindingResponse, CreateTenantRequest, DeleteTenantRequest, DeleteTenantResponse, GetTenantDefaultBindingRequest, GetTenantRequest, GetTenantStorageMigrationRequest, ListTenantsRequest, ListTenantsResponse, MigrateTenantStorageLayoutRequest, PreviewPurgeTenantRequest, PreviewPurgeTenantResponse, PurgeTenantRequest, PurgeTenantResponse, RenameTenantSlugRequest, ResolveRenamedSlugRequest, ResolveRenamedSlugResponse, RestoreTenantRequest, SetInheritedPolicyRequest, SetTenantDefaultBindingRequest, StorageMigrationStatus, TenantDefaultBinding, UpdateTenantRequest
+from .tenant_service_pb2 import ClearTenantDefaultBindingRequest, ClearTenantDefaultBindingResponse, CreateTenantRequest, DeleteTenantRequest, DeleteTenantResponse, GetTenantDefaultBindingRequest, GetTenantRequest, GetTenantStorageMigrationRequest, ListTenantsRequest, ListTenantsResponse, MigrateTenantStorageLayoutRequest, PreviewPurgeTenantRequest, PreviewPurgeTenantResponse, PurgeTenantRequest, PurgeTenantResponse, RestoreTenantRequest, SetInheritedPolicyRequest, SetTenantDefaultBindingRequest, StorageMigrationStatus, TenantDefaultBinding, UpdateTenantRequest
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -62,9 +62,8 @@ class TenantService(Protocol):
     async def update_tenant(self, request: UpdateTenantRequest, ctx: RequestContext[UpdateTenantRequest, Tenant], /) -> Tenant:
         """
         UpdateTenant applies update_mask to display_name, labels and
-        inherited_cedar_policy. tenant_id and slug are immutable (use
-        RenameTenantSlug for the latter); resource_version is required and a stale
-        one is Aborted.
+        inherited_cedar_policy. tenant_id and slug are immutable;
+        resource_version is required and a stale one is Aborted.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -99,8 +98,8 @@ class TenantService(Protocol):
         it to the active set. Slug + display_name are unique among live
         tenants (`001_initial_schema.sql`), and a trashed row keeps both —
         if a new tenant claimed the slug while this one was
-        trashed, restore fails with ALREADY_EXISTS and the operator must
-        rename one side first.
+        trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
+        the other tenant has to be purged before this one comes back.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -122,16 +121,6 @@ class TenantService(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
-    async def rename_tenant_slug(self, request: RenameTenantSlugRequest, ctx: RequestContext[RenameTenantSlugRequest, Tenant], /) -> Tenant:
-        """
-        RenameTenantSlug rewrites the tenant's `slug` and rewrites every
-        `Tenant::"<old_slug>"` reference in the tenant's
-        inherited_cedar_policy AND in every collection's cedar_policy to
-        `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
-        the supplied resource_version. Returns the renamed Tenant.
-        """
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
     async def migrate_tenant_storage_layout(self, request: MigrateTenantStorageLayoutRequest, ctx: RequestContext[MigrateTenantStorageLayoutRequest, StorageMigrationStatus], /) -> StorageMigrationStatus:
         """
         MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
@@ -147,19 +136,6 @@ class TenantService(Protocol):
         """
         GetTenantStorageMigration returns the current migration status for a
         tenant, or NOT_FOUND if none was ever started.
-        """
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
-    async def resolve_renamed_slug(self, request: ResolveRenamedSlugRequest, ctx: RequestContext[ResolveRenamedSlugRequest, ResolveRenamedSlugResponse], /) -> ResolveRenamedSlugResponse:
-        """
-        ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
-        renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
-        "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
-        is NOT platform-admin gated — it authorizes by READ access to the resolved
-        target tenant, so an ordinary member of that tenant can follow a stale
-        link. Every failure (no rename history, outside the grace window, or
-        read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
-        enumerate slug→tenant mappings.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -298,17 +274,6 @@ class TenantServiceASGIApplication(ConnectASGIApplication[TenantService]):
                     ),
                     function=svc.preview_purge_tenant,
                 ),
-                "/paladin.admin.v1.TenantService/RenameTenantSlug": Endpoint.unary(
-                    method=MethodInfo(
-                        name="RenameTenantSlug",
-                        service_name="paladin.admin.v1.TenantService",
-                        input=RenameTenantSlugRequest,
-                        output=Tenant,
-                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
-                        stream_type=StreamType.UNARY,
-                    ),
-                    function=svc.rename_tenant_slug,
-                ),
                 "/paladin.admin.v1.TenantService/MigrateTenantStorageLayout": Endpoint.unary(
                     method=MethodInfo(
                         name="MigrateTenantStorageLayout",
@@ -330,17 +295,6 @@ class TenantServiceASGIApplication(ConnectASGIApplication[TenantService]):
                         stream_type=StreamType.UNARY,
                     ),
                     function=svc.get_tenant_storage_migration,
-                ),
-                "/paladin.admin.v1.TenantService/ResolveRenamedSlug": Endpoint.unary(
-                    method=MethodInfo(
-                        name="ResolveRenamedSlug",
-                        service_name="paladin.admin.v1.TenantService",
-                        input=ResolveRenamedSlugRequest,
-                        output=ResolveRenamedSlugResponse,
-                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
-                        stream_type=StreamType.UNARY,
-                    ),
-                    function=svc.resolve_renamed_slug,
                 ),
                 "/paladin.admin.v1.TenantService/GetTenantDefaultBinding": Endpoint.unary(
                     method=MethodInfo(
@@ -478,9 +432,8 @@ class TenantServiceClient(ConnectClient):
     ) -> Tenant:
         """
         UpdateTenant applies update_mask to display_name, labels and
-        inherited_cedar_policy. tenant_id and slug are immutable (use
-        RenameTenantSlug for the latter); resource_version is required and a stale
-        one is Aborted.
+        inherited_cedar_policy. tenant_id and slug are immutable;
+        resource_version is required and a stale one is Aborted.
         """
         return await self.execute_unary(
             request=request,
@@ -585,8 +538,8 @@ class TenantServiceClient(ConnectClient):
         it to the active set. Slug + display_name are unique among live
         tenants (`001_initial_schema.sql`), and a trashed row keeps both —
         if a new tenant claimed the slug while this one was
-        trashed, restore fails with ALREADY_EXISTS and the operator must
-        rename one side first.
+        trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
+        the other tenant has to be purged before this one comes back.
         """
         return await self.execute_unary(
             request=request,
@@ -655,33 +608,6 @@ class TenantServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
             use_get=use_get,
         )
-    async def rename_tenant_slug(
-        self,
-        request: RenameTenantSlugRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-    ) -> Tenant:
-        """
-        RenameTenantSlug rewrites the tenant's `slug` and rewrites every
-        `Tenant::"<old_slug>"` reference in the tenant's
-        inherited_cedar_policy AND in every collection's cedar_policy to
-        `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
-        the supplied resource_version. Returns the renamed Tenant.
-        """
-        return await self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="RenameTenantSlug",
-                service_name="paladin.admin.v1.TenantService",
-                input=RenameTenantSlugRequest,
-                output=Tenant,
-                idempotency_level=IdempotencyLevel.IDEMPOTENT,
-                stream_type=StreamType.UNARY,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-        )
     async def migrate_tenant_storage_layout(
         self,
         request: MigrateTenantStorageLayoutRequest,
@@ -729,38 +655,6 @@ class TenantServiceClient(ConnectClient):
                 service_name="paladin.admin.v1.TenantService",
                 input=GetTenantStorageMigrationRequest,
                 output=StorageMigrationStatus,
-                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
-                stream_type=StreamType.UNARY,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-            use_get=use_get,
-        )
-    async def resolve_renamed_slug(
-        self,
-        request: ResolveRenamedSlugRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-        use_get: bool = False,
-    ) -> ResolveRenamedSlugResponse:
-        """
-        ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
-        renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
-        "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
-        is NOT platform-admin gated — it authorizes by READ access to the resolved
-        target tenant, so an ordinary member of that tenant can follow a stale
-        link. Every failure (no rename history, outside the grace window, or
-        read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
-        enumerate slug→tenant mappings.
-        """
-        return await self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="ResolveRenamedSlug",
-                service_name="paladin.admin.v1.TenantService",
-                input=ResolveRenamedSlugRequest,
-                output=ResolveRenamedSlugResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                 stream_type=StreamType.UNARY,
             ),
@@ -868,9 +762,8 @@ class TenantServiceSync(Protocol):
     def update_tenant(self, request: UpdateTenantRequest, ctx: RequestContext[UpdateTenantRequest, Tenant], /) -> Tenant:
         """
         UpdateTenant applies update_mask to display_name, labels and
-        inherited_cedar_policy. tenant_id and slug are immutable (use
-        RenameTenantSlug for the latter); resource_version is required and a stale
-        one is Aborted.
+        inherited_cedar_policy. tenant_id and slug are immutable;
+        resource_version is required and a stale one is Aborted.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -905,8 +798,8 @@ class TenantServiceSync(Protocol):
         it to the active set. Slug + display_name are unique among live
         tenants (`001_initial_schema.sql`), and a trashed row keeps both —
         if a new tenant claimed the slug while this one was
-        trashed, restore fails with ALREADY_EXISTS and the operator must
-        rename one side first.
+        trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
+        the other tenant has to be purged before this one comes back.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -928,16 +821,6 @@ class TenantServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
-    def rename_tenant_slug(self, request: RenameTenantSlugRequest, ctx: RequestContext[RenameTenantSlugRequest, Tenant], /) -> Tenant:
-        """
-        RenameTenantSlug rewrites the tenant's `slug` and rewrites every
-        `Tenant::"<old_slug>"` reference in the tenant's
-        inherited_cedar_policy AND in every collection's cedar_policy to
-        `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
-        the supplied resource_version. Returns the renamed Tenant.
-        """
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
     def migrate_tenant_storage_layout(self, request: MigrateTenantStorageLayoutRequest, ctx: RequestContext[MigrateTenantStorageLayoutRequest, StorageMigrationStatus], /) -> StorageMigrationStatus:
         """
         MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
@@ -953,19 +836,6 @@ class TenantServiceSync(Protocol):
         """
         GetTenantStorageMigration returns the current migration status for a
         tenant, or NOT_FOUND if none was ever started.
-        """
-        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
-
-    def resolve_renamed_slug(self, request: ResolveRenamedSlugRequest, ctx: RequestContext[ResolveRenamedSlugRequest, ResolveRenamedSlugResponse], /) -> ResolveRenamedSlugResponse:
-        """
-        ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
-        renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
-        "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
-        is NOT platform-admin gated — it authorizes by READ access to the resolved
-        target tenant, so an ordinary member of that tenant can follow a stale
-        link. Every failure (no rename history, outside the grace window, or
-        read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
-        enumerate slug→tenant mappings.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -1102,17 +972,6 @@ class TenantServiceWSGIApplication(ConnectWSGIApplication):
                     ),
                     function=service.preview_purge_tenant,
                 ),
-                "/paladin.admin.v1.TenantService/RenameTenantSlug": EndpointSync.unary(
-                    method=MethodInfo(
-                        name="RenameTenantSlug",
-                        service_name="paladin.admin.v1.TenantService",
-                        input=RenameTenantSlugRequest,
-                        output=Tenant,
-                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
-                        stream_type=StreamType.UNARY,
-                    ),
-                    function=service.rename_tenant_slug,
-                ),
                 "/paladin.admin.v1.TenantService/MigrateTenantStorageLayout": EndpointSync.unary(
                     method=MethodInfo(
                         name="MigrateTenantStorageLayout",
@@ -1134,17 +993,6 @@ class TenantServiceWSGIApplication(ConnectWSGIApplication):
                         stream_type=StreamType.UNARY,
                     ),
                     function=service.get_tenant_storage_migration,
-                ),
-                "/paladin.admin.v1.TenantService/ResolveRenamedSlug": EndpointSync.unary(
-                    method=MethodInfo(
-                        name="ResolveRenamedSlug",
-                        service_name="paladin.admin.v1.TenantService",
-                        input=ResolveRenamedSlugRequest,
-                        output=ResolveRenamedSlugResponse,
-                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
-                        stream_type=StreamType.UNARY,
-                    ),
-                    function=service.resolve_renamed_slug,
                 ),
                 "/paladin.admin.v1.TenantService/GetTenantDefaultBinding": EndpointSync.unary(
                     method=MethodInfo(
@@ -1282,9 +1130,8 @@ class TenantServiceClientSync(ConnectClientSync):
     ) -> Tenant:
         """
         UpdateTenant applies update_mask to display_name, labels and
-        inherited_cedar_policy. tenant_id and slug are immutable (use
-        RenameTenantSlug for the latter); resource_version is required and a stale
-        one is Aborted.
+        inherited_cedar_policy. tenant_id and slug are immutable;
+        resource_version is required and a stale one is Aborted.
         """
         return self.execute_unary(
             request=request,
@@ -1389,8 +1236,8 @@ class TenantServiceClientSync(ConnectClientSync):
         it to the active set. Slug + display_name are unique among live
         tenants (`001_initial_schema.sql`), and a trashed row keeps both —
         if a new tenant claimed the slug while this one was
-        trashed, restore fails with ALREADY_EXISTS and the operator must
-        rename one side first.
+        trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
+        the other tenant has to be purged before this one comes back.
         """
         return self.execute_unary(
             request=request,
@@ -1459,33 +1306,6 @@ class TenantServiceClientSync(ConnectClientSync):
             timeout_ms=timeout_ms,
             use_get=use_get,
         )
-    def rename_tenant_slug(
-        self,
-        request: RenameTenantSlugRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-    ) -> Tenant:
-        """
-        RenameTenantSlug rewrites the tenant's `slug` and rewrites every
-        `Tenant::"<old_slug>"` reference in the tenant's
-        inherited_cedar_policy AND in every collection's cedar_policy to
-        `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
-        the supplied resource_version. Returns the renamed Tenant.
-        """
-        return self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="RenameTenantSlug",
-                service_name="paladin.admin.v1.TenantService",
-                input=RenameTenantSlugRequest,
-                output=Tenant,
-                idempotency_level=IdempotencyLevel.IDEMPOTENT,
-                stream_type=StreamType.UNARY,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-        )
     def migrate_tenant_storage_layout(
         self,
         request: MigrateTenantStorageLayoutRequest,
@@ -1533,38 +1353,6 @@ class TenantServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.TenantService",
                 input=GetTenantStorageMigrationRequest,
                 output=StorageMigrationStatus,
-                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
-                stream_type=StreamType.UNARY,
-            ),
-            headers=headers,
-            timeout_ms=timeout_ms,
-            use_get=use_get,
-        )
-    def resolve_renamed_slug(
-        self,
-        request: ResolveRenamedSlugRequest,
-        *,
-        headers: Headers | Mapping[str, str] | None = None, 
-        timeout_ms: int | None = None,
-        use_get: bool = False,
-    ) -> ResolveRenamedSlugResponse:
-        """
-        ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
-        renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
-        "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
-        is NOT platform-admin gated — it authorizes by READ access to the resolved
-        target tenant, so an ordinary member of that tenant can follow a stale
-        link. Every failure (no rename history, outside the grace window, or
-        read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
-        enumerate slug→tenant mappings.
-        """
-        return self.execute_unary(
-            request=request,
-            method=MethodInfo(
-                name="ResolveRenamedSlug",
-                service_name="paladin.admin.v1.TenantService",
-                input=ResolveRenamedSlugRequest,
-                output=ResolveRenamedSlugResponse,
                 idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
                 stream_type=StreamType.UNARY,
             ),

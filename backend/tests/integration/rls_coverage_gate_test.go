@@ -30,23 +30,16 @@ import (
 // the reason, and it belongs in the failure message when the list is wrong.
 var exemptFromRLS = map[string]string{
 	// Read before the tenant is known — the row is what identifies it. RLS
-	// cannot scope a lookup whose whole purpose is to discover the scope.
-	// Both are gated in the application instead, and both gates are real:
-	//
-	//   oauth_authorization_codes — ConsumeCode matches on a hash of the
-	//   code and stamps consumed_at in the same statement, so possession of
-	//   the secret is the authorisation and a replay finds no row.
-	//
-	//   tenant_slug_history — ResolveRenamedSlug looks the old slug up
-	//   across all tenants, then authorises ReadTenant against the tenant it
-	//   resolved to, collapsing every failure (absent, expired, denied) to
-	//   NotFound so the endpoint cannot be used to enumerate slugs.
+	// cannot scope a lookup whose whole purpose is to discover the scope, so
+	// it is gated in the application instead, and the gate is real:
+	// ConsumeCode matches on a hash of the code and stamps consumed_at in the
+	// same statement, so possession of the secret is the authorisation and a
+	// replay finds no row.
 	//
 	// api_tokens has the same constraint and solves it with a second,
-	// grant-narrowed pre-auth policy. These two could follow that pattern;
-	// neither is a hole today.
+	// grant-narrowed pre-auth policy. This could follow that pattern; it is
+	// not a hole today.
 	"oauth_authorization_codes": "pre-auth: the code hash is the credential; ConsumeCode is single-use and atomic",
-	"tenant_slug_history":       "pre-auth: ResolveRenamedSlug authorises against the resolved tenant, not the query",
 
 	// Platform configuration, like buckets and bucket_quotas (ADR-0025,
 	// ADR-0032). The collection binding trigger reads it under the inserting

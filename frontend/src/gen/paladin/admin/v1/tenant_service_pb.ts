@@ -33,7 +33,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2FkbWluL3YxL3RlbmFudF9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxInIKE0NyZWF0ZVRlbmFudFJlcXVlc3QSEQoJdGVuYW50X2lkGAEgASgJEjAKBnRlbmFudBgCIAEoCzIYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrIBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIoCgZ0ZW5hbnQYBCABKAsyGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCJcChNEZWxldGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQAUoECAMQBFIFZm9yY2UiFgoURGVsZXRlVGVuYW50UmVzcG9uc2UigQEKEkxpc3RUZW5hbnRzUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEhcKD2luY2x1ZGVfdHJhc2hlZBgDIAEoCBIUCgxvbmx5X3RyYXNoZWQYBCABKAgibwoTTGlzdFRlbmFudHNSZXNwb25zZRIpCgd0ZW5hbnRzGAEgAygLMhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJrChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlIjIKGVByZXZpZXdQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKYAgoaUHJldmlld1B1cmdlVGVuYW50UmVzcG9uc2USNAoKYXBpX3Rva2VucxgBIAMoCzIgLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VkUmVzb3VyY2USFwoPYXBpX3Rva2VuX2NvdW50GAIgASgDEj0KE2V2ZW50X3N1YnNjcmlwdGlvbnMYAyADKAsyIC5wYWxhZGluLmFkbWluLnYxLlB1cmdlZFJlc291cmNlEiAKGGV2ZW50X3N1YnNjcmlwdGlvbl9jb3VudBgEIAEoAxIYChBjYXBhYmlsaXR5X2NvdW50GAUgASgDEjAKCGJsb2NrZXJzGAYgAygLMh4ucGFsYWRpbi5hZG1pbi52MS5QdXJnZUJsb2NrZXIiNAoOUHVyZ2VkUmVzb3VyY2USDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkiTwoMUHVyZ2VCbG9ja2VyEjAKBGtpbmQYASABKA4yIi5wYWxhZGluLmFkbWluLnYxLlB1cmdlQmxvY2tlcktpbmQSDQoFY291bnQYAiABKAMibgoXUmVuYW1lVGVuYW50U2x1Z1JlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQARIhChByZXNvdXJjZV92ZXJzaW9uGAIgASgJQge6SARyAhABEhkKCG5ld19zbHVnGAMgASgJQge6SARyAhABIjYKGVJlc29sdmVSZW5hbWVkU2x1Z1JlcXVlc3QSGQoIb2xkX3NsdWcYASABKAlCB7pIBHICEAEiXgoaUmVzb2x2ZVJlbmFtZWRTbHVnUmVzcG9uc2USEAoIbmV3X3NsdWcYASABKAkSLgoKcmVuYW1lZF9hdBgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAieAohTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGQoRdGFyZ2V0X2JhY2tlbmRfaWQYAiABKAkSIQoZY2xlYW51cF9yZXRlbnRpb25fc2Vjb25kcxgDIAEoAyI5CiBHZXRUZW5hbnRTdG9yYWdlTWlncmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIq8BChZTdG9yYWdlTWlncmF0aW9uU3RhdHVzEg4KBnRlbmFudBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIVCg1vYmplY3RzX3RvdGFsGAMgASgDEhYKDm9iamVjdHNfY29waWVkGAQgASgDEhUKDXNvdXJjZV9idWNrZXQYBSABKAkSFQoNdGFyZ2V0X2J1Y2tldBgGIAEoCRINCgVlcnJvchgJIAEoCUoECAcQCEoECAgQCSJ6ChRUZW5hbnREZWZhdWx0QmluZGluZxIRCgRuYW1lGAEgASgJQgPgQQgSDgoGYnVja2V0GAIgASgJEi8KBnNldF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIOCgZzZXRfYnkYBSABKAkiNwoeR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiUAoeU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESFwoGYnVja2V0GAIgASgJQge6SARyAhABIjkKIENsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiIwohQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlKsEBChBQdXJnZUJsb2NrZXJLaW5kEiIKHlBVUkdFX0JMT0NLRVJfS0lORF9VTlNQRUNJRklFRBAAEiIKHlBVUkdFX0JMT0NLRVJfS0lORF9DT0xMRUNUSU9OUxABEh4KGlBVUkdFX0JMT0NLRVJfS0lORF9CVUNLRVRTEAISHAoYUFVSR0VfQkxPQ0tFUl9LSU5EX1VTRVJTEAMSJwojUFVSR0VfQkxPQ0tFUl9LSU5EX0JVQ0tFVFNfREVMRVRJTkcQBDKoDQoNVGVuYW50U2VydmljZRJPCgxDcmVhdGVUZW5hbnQSJS5wYWxhZGluLmFkbWluLnYxLkNyZWF0ZVRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudBJOCglHZXRUZW5hbnQSIi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAIBElQKDFVwZGF0ZVRlbmFudBIlLnBhbGFkaW4uYWRtaW4udjEuVXBkYXRlVGVuYW50UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50IgOQAgISYgoMRGVsZXRlVGVuYW50EiUucGFsYWRpbi5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZSIDkAICEl8KC0xpc3RUZW5hbnRzEiQucGFsYWRpbi5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaJS5wYWxhZGluLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVzcG9uc2UiA5ACARJgChJTZXRJbmhlcml0ZWRQb2xpY3kSKy5wYWxhZGluLmFkbWluLnYxLlNldEluaGVyaXRlZFBvbGljeVJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAICElEKDVJlc3RvcmVUZW5hbnQSJi5wYWxhZGluLmFkbWluLnYxLlJlc3RvcmVUZW5hbnRSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSXwoLUHVyZ2VUZW5hbnQSJC5wYWxhZGluLmFkbWluLnYxLlB1cmdlVGVuYW50UmVxdWVzdBolLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXNwb25zZSIDkAICEnQKElByZXZpZXdQdXJnZVRlbmFudBIrLnBhbGFkaW4uYWRtaW4udjEuUHJldmlld1B1cmdlVGVuYW50UmVxdWVzdBosLnBhbGFkaW4uYWRtaW4udjEuUHJldmlld1B1cmdlVGVuYW50UmVzcG9uc2UiA5ACARJcChBSZW5hbWVUZW5hbnRTbHVnEikucGFsYWRpbi5hZG1pbi52MS5SZW5hbWVUZW5hbnRTbHVnUmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50IgOQAgISewoaTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXQSMy5wYWxhZGluLmFkbWluLnYxLk1pZ3JhdGVUZW5hbnRTdG9yYWdlTGF5b3V0UmVxdWVzdBooLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZU1pZ3JhdGlvblN0YXR1cxJ+ChlHZXRUZW5hbnRTdG9yYWdlTWlncmF0aW9uEjIucGFsYWRpbi5hZG1pbi52MS5HZXRUZW5hbnRTdG9yYWdlTWlncmF0aW9uUmVxdWVzdBooLnBhbGFkaW4uYWRtaW4udjEuU3RvcmFnZU1pZ3JhdGlvblN0YXR1cyIDkAIBEnQKElJlc29sdmVSZW5hbWVkU2x1ZxIrLnBhbGFkaW4uYWRtaW4udjEuUmVzb2x2ZVJlbmFtZWRTbHVnUmVxdWVzdBosLnBhbGFkaW4uYWRtaW4udjEuUmVzb2x2ZVJlbmFtZWRTbHVnUmVzcG9uc2UiA5ACARJ4ChdHZXRUZW5hbnREZWZhdWx0QmluZGluZxIwLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5UZW5hbnREZWZhdWx0QmluZGluZyIDkAIBEngKF1NldFRlbmFudERlZmF1bHRCaW5kaW5nEjAucGFsYWRpbi5hZG1pbi52MS5TZXRUZW5hbnREZWZhdWx0QmluZGluZ1JlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLlRlbmFudERlZmF1bHRCaW5kaW5nIgOQAgISiQEKGUNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmcSMi5wYWxhZGluLmFkbWluLnYxLkNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GjMucGFsYWRpbi5hZG1pbi52MS5DbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVzcG9uc2UiA5ACAkJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
+    "CiVwYWxhZGluL2FkbWluL3YxL3RlbmFudF9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxInIKE0NyZWF0ZVRlbmFudFJlcXVlc3QSEQoJdGVuYW50X2lkGAEgASgJEjAKBnRlbmFudBgCIAEoCzIYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrIBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIoCgZ0ZW5hbnQYBCABKAsyGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCJcChNEZWxldGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQAUoECAMQBFIFZm9yY2UiFgoURGVsZXRlVGVuYW50UmVzcG9uc2UigQEKEkxpc3RUZW5hbnRzUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEhcKD2luY2x1ZGVfdHJhc2hlZBgDIAEoCBIUCgxvbmx5X3RyYXNoZWQYBCABKAgibwoTTGlzdFRlbmFudHNSZXNwb25zZRIpCgd0ZW5hbnRzGAEgAygLMhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJrChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlIjIKGVByZXZpZXdQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKYAgoaUHJldmlld1B1cmdlVGVuYW50UmVzcG9uc2USNAoKYXBpX3Rva2VucxgBIAMoCzIgLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VkUmVzb3VyY2USFwoPYXBpX3Rva2VuX2NvdW50GAIgASgDEj0KE2V2ZW50X3N1YnNjcmlwdGlvbnMYAyADKAsyIC5wYWxhZGluLmFkbWluLnYxLlB1cmdlZFJlc291cmNlEiAKGGV2ZW50X3N1YnNjcmlwdGlvbl9jb3VudBgEIAEoAxIYChBjYXBhYmlsaXR5X2NvdW50GAUgASgDEjAKCGJsb2NrZXJzGAYgAygLMh4ucGFsYWRpbi5hZG1pbi52MS5QdXJnZUJsb2NrZXIiNAoOUHVyZ2VkUmVzb3VyY2USDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkiTwoMUHVyZ2VCbG9ja2VyEjAKBGtpbmQYASABKA4yIi5wYWxhZGluLmFkbWluLnYxLlB1cmdlQmxvY2tlcktpbmQSDQoFY291bnQYAiABKAMieAohTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGQoRdGFyZ2V0X2JhY2tlbmRfaWQYAiABKAkSIQoZY2xlYW51cF9yZXRlbnRpb25fc2Vjb25kcxgDIAEoAyI5CiBHZXRUZW5hbnRTdG9yYWdlTWlncmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIq8BChZTdG9yYWdlTWlncmF0aW9uU3RhdHVzEg4KBnRlbmFudBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIVCg1vYmplY3RzX3RvdGFsGAMgASgDEhYKDm9iamVjdHNfY29waWVkGAQgASgDEhUKDXNvdXJjZV9idWNrZXQYBSABKAkSFQoNdGFyZ2V0X2J1Y2tldBgGIAEoCRINCgVlcnJvchgJIAEoCUoECAcQCEoECAgQCSJ6ChRUZW5hbnREZWZhdWx0QmluZGluZxIRCgRuYW1lGAEgASgJQgPgQQgSDgoGYnVja2V0GAIgASgJEi8KBnNldF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIOCgZzZXRfYnkYBSABKAkiNwoeR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiUAoeU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESFwoGYnVja2V0GAIgASgJQge6SARyAhABIjkKIENsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiIwohQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlKsEBChBQdXJnZUJsb2NrZXJLaW5kEiIKHlBVUkdFX0JMT0NLRVJfS0lORF9VTlNQRUNJRklFRBAAEiIKHlBVUkdFX0JMT0NLRVJfS0lORF9DT0xMRUNUSU9OUxABEh4KGlBVUkdFX0JMT0NLRVJfS0lORF9CVUNLRVRTEAISHAoYUFVSR0VfQkxPQ0tFUl9LSU5EX1VTRVJTEAMSJwojUFVSR0VfQkxPQ0tFUl9LSU5EX0JVQ0tFVFNfREVMRVRJTkcQBDLUCwoNVGVuYW50U2VydmljZRJPCgxDcmVhdGVUZW5hbnQSJS5wYWxhZGluLmFkbWluLnYxLkNyZWF0ZVRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudBJOCglHZXRUZW5hbnQSIi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAIBElQKDFVwZGF0ZVRlbmFudBIlLnBhbGFkaW4uYWRtaW4udjEuVXBkYXRlVGVuYW50UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50IgOQAgISYgoMRGVsZXRlVGVuYW50EiUucGFsYWRpbi5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZSIDkAICEl8KC0xpc3RUZW5hbnRzEiQucGFsYWRpbi5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaJS5wYWxhZGluLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVzcG9uc2UiA5ACARJgChJTZXRJbmhlcml0ZWRQb2xpY3kSKy5wYWxhZGluLmFkbWluLnYxLlNldEluaGVyaXRlZFBvbGljeVJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAICElEKDVJlc3RvcmVUZW5hbnQSJi5wYWxhZGluLmFkbWluLnYxLlJlc3RvcmVUZW5hbnRSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSXwoLUHVyZ2VUZW5hbnQSJC5wYWxhZGluLmFkbWluLnYxLlB1cmdlVGVuYW50UmVxdWVzdBolLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXNwb25zZSIDkAICEnQKElByZXZpZXdQdXJnZVRlbmFudBIrLnBhbGFkaW4uYWRtaW4udjEuUHJldmlld1B1cmdlVGVuYW50UmVxdWVzdBosLnBhbGFkaW4uYWRtaW4udjEuUHJldmlld1B1cmdlVGVuYW50UmVzcG9uc2UiA5ACARJ7ChpNaWdyYXRlVGVuYW50U3RvcmFnZUxheW91dBIzLnBhbGFkaW4uYWRtaW4udjEuTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0GigucGFsYWRpbi5hZG1pbi52MS5TdG9yYWdlTWlncmF0aW9uU3RhdHVzEn4KGUdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb24SMi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb25SZXF1ZXN0GigucGFsYWRpbi5hZG1pbi52MS5TdG9yYWdlTWlncmF0aW9uU3RhdHVzIgOQAgESeAoXR2V0VGVuYW50RGVmYXVsdEJpbmRpbmcSMC5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBomLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50RGVmYXVsdEJpbmRpbmciA5ACARJ4ChdTZXRUZW5hbnREZWZhdWx0QmluZGluZxIwLnBhbGFkaW4uYWRtaW4udjEuU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5UZW5hbnREZWZhdWx0QmluZGluZyIDkAICEokBChlDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nEjIucGFsYWRpbi5hZG1pbi52MS5DbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBozLnBhbGFkaW4uYWRtaW4udjEuQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlIgOQAgJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -490,94 +490,6 @@ export const PurgeBlockerSchema: GenMessage<PurgeBlocker> =
   messageDesc(file_paladin_admin_v1_tenant_service, 14);
 
 /**
- * @generated from message paladin.admin.v1.RenameTenantSlugRequest
- */
-export type RenameTenantSlugRequest =
-  Message<"paladin.admin.v1.RenameTenantSlugRequest"> & {
-    /**
-     * name — "tenants/{tenant_id_or_slug}". Phase 3 path: slug-aware.
-     *
-     * @generated from field: string name = 1;
-     */
-    name: string;
-
-    /**
-     * resource_version — current tenant version, OCC-guarded.
-     * OCC, required: an absent guard would silently become a blind overwrite
-     *   (expected_version=0 disables the check in SQL). Read the current version
-     *   first; there is no bypass on this RPC by design.
-     *
-     * @generated from field: string resource_version = 2;
-     */
-    resourceVersion: string;
-
-    /**
-     * new_slug — kebab-case, validated by the same rules as
-     * CreateTenantRequest.slug. Uniqueness enforced by the database.
-     *
-     * @generated from field: string new_slug = 3;
-     */
-    newSlug: string;
-  };
-
-/**
- * Describes the message paladin.admin.v1.RenameTenantSlugRequest.
- * Use `create(RenameTenantSlugRequestSchema)` to create a new message.
- */
-export const RenameTenantSlugRequestSchema: GenMessage<RenameTenantSlugRequest> =
-  /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 15);
-
-/**
- * @generated from message paladin.admin.v1.ResolveRenamedSlugRequest
- */
-export type ResolveRenamedSlugRequest =
-  Message<"paladin.admin.v1.ResolveRenamedSlugRequest"> & {
-    /**
-     * old_slug — the slug that 404'd (the one in the stale bookmark).
-     *
-     * @generated from field: string old_slug = 1;
-     */
-    oldSlug: string;
-  };
-
-/**
- * Describes the message paladin.admin.v1.ResolveRenamedSlugRequest.
- * Use `create(ResolveRenamedSlugRequestSchema)` to create a new message.
- */
-export const ResolveRenamedSlugRequestSchema: GenMessage<ResolveRenamedSlugRequest> =
-  /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 16);
-
-/**
- * @generated from message paladin.admin.v1.ResolveRenamedSlugResponse
- */
-export type ResolveRenamedSlugResponse =
-  Message<"paladin.admin.v1.ResolveRenamedSlugResponse"> & {
-    /**
-     * new_slug — the slug the tenant uses now.
-     *
-     * @generated from field: string new_slug = 1;
-     */
-    newSlug: string;
-
-    /**
-     * renamed_at — when the rotation happened (for a "renamed N days ago" hint).
-     *
-     * @generated from field: google.protobuf.Timestamp renamed_at = 2;
-     */
-    renamedAt?: Timestamp | undefined;
-  };
-
-/**
- * Describes the message paladin.admin.v1.ResolveRenamedSlugResponse.
- * Use `create(ResolveRenamedSlugResponseSchema)` to create a new message.
- */
-export const ResolveRenamedSlugResponseSchema: GenMessage<ResolveRenamedSlugResponse> =
-  /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 17);
-
-/**
  * @generated from message paladin.admin.v1.MigrateTenantStorageLayoutRequest
  */
 export type MigrateTenantStorageLayoutRequest =
@@ -615,7 +527,7 @@ export type MigrateTenantStorageLayoutRequest =
  */
 export const MigrateTenantStorageLayoutRequestSchema: GenMessage<MigrateTenantStorageLayoutRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 18);
+  messageDesc(file_paladin_admin_v1_tenant_service, 15);
 
 /**
  * @generated from message paladin.admin.v1.GetTenantStorageMigrationRequest
@@ -636,7 +548,7 @@ export type GetTenantStorageMigrationRequest =
  */
 export const GetTenantStorageMigrationRequestSchema: GenMessage<GetTenantStorageMigrationRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 19);
+  messageDesc(file_paladin_admin_v1_tenant_service, 16);
 
 /**
  * StorageMigrationStatus mirrors a tenant_storage_migrations row (ADR-0015
@@ -697,7 +609,7 @@ export type StorageMigrationStatus =
  */
 export const StorageMigrationStatusSchema: GenMessage<StorageMigrationStatus> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 20);
+  messageDesc(file_paladin_admin_v1_tenant_service, 17);
 
 /**
  * TenantDefaultBinding is a tenant's default (backend, bucket) route for the
@@ -742,7 +654,7 @@ export type TenantDefaultBinding =
  */
 export const TenantDefaultBindingSchema: GenMessage<TenantDefaultBinding> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 21);
+  messageDesc(file_paladin_admin_v1_tenant_service, 18);
 
 /**
  * @generated from message paladin.admin.v1.GetTenantDefaultBindingRequest
@@ -763,7 +675,7 @@ export type GetTenantDefaultBindingRequest =
  */
 export const GetTenantDefaultBindingRequestSchema: GenMessage<GetTenantDefaultBindingRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 22);
+  messageDesc(file_paladin_admin_v1_tenant_service, 19);
 
 /**
  * @generated from message paladin.admin.v1.SetTenantDefaultBindingRequest
@@ -791,7 +703,7 @@ export type SetTenantDefaultBindingRequest =
  */
 export const SetTenantDefaultBindingRequestSchema: GenMessage<SetTenantDefaultBindingRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 23);
+  messageDesc(file_paladin_admin_v1_tenant_service, 20);
 
 /**
  * @generated from message paladin.admin.v1.ClearTenantDefaultBindingRequest
@@ -812,7 +724,7 @@ export type ClearTenantDefaultBindingRequest =
  */
 export const ClearTenantDefaultBindingRequestSchema: GenMessage<ClearTenantDefaultBindingRequest> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 24);
+  messageDesc(file_paladin_admin_v1_tenant_service, 21);
 
 /**
  * @generated from message paladin.admin.v1.ClearTenantDefaultBindingResponse
@@ -826,7 +738,7 @@ export type ClearTenantDefaultBindingResponse =
  */
 export const ClearTenantDefaultBindingResponseSchema: GenMessage<ClearTenantDefaultBindingResponse> =
   /*@__PURE__*/
-  messageDesc(file_paladin_admin_v1_tenant_service, 25);
+  messageDesc(file_paladin_admin_v1_tenant_service, 22);
 
 /**
  * The rows that keep a tenant alive: ON DELETE RESTRICT children of tenants
@@ -912,9 +824,8 @@ export const TenantService: GenService<{
   };
   /**
    * UpdateTenant applies update_mask to display_name, labels and
-   * inherited_cedar_policy. tenant_id and slug are immutable (use
-   * RenameTenantSlug for the latter); resource_version is required and a stale
-   * one is Aborted.
+   * inherited_cedar_policy. tenant_id and slug are immutable;
+   * resource_version is required and a stale one is Aborted.
    *
    * @generated from rpc paladin.admin.v1.TenantService.UpdateTenant
    */
@@ -965,8 +876,8 @@ export const TenantService: GenService<{
    * it to the active set. Slug + display_name are unique among live
    * tenants (`001_initial_schema.sql`), and a trashed row keeps both —
    * if a new tenant claimed the slug while this one was
-   * trashed, restore fails with ALREADY_EXISTS and the operator must
-   * rename one side first.
+   * trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
+   * the other tenant has to be purged before this one comes back.
    *
    * @generated from rpc paladin.admin.v1.TenantService.RestoreTenant
    */
@@ -1002,20 +913,6 @@ export const TenantService: GenService<{
     output: typeof PreviewPurgeTenantResponseSchema;
   };
   /**
-   * RenameTenantSlug rewrites the tenant's `slug` and rewrites every
-   * `Tenant::"<old_slug>"` reference in the tenant's
-   * inherited_cedar_policy AND in every collection's cedar_policy to
-   * `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
-   * the supplied resource_version. Returns the renamed Tenant.
-   *
-   * @generated from rpc paladin.admin.v1.TenantService.RenameTenantSlug
-   */
-  renameTenantSlug: {
-    methodKind: "unary";
-    input: typeof RenameTenantSlugRequestSchema;
-    output: typeof TenantSchema;
-  };
-  /**
    * MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
    * (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
    * async copy job that server-side-copies every object into it, then rebinds
@@ -1040,23 +937,6 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof GetTenantStorageMigrationRequestSchema;
     output: typeof StorageMigrationStatusSchema;
-  };
-  /**
-   * ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
-   * renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
-   * "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
-   * is NOT platform-admin gated — it authorizes by READ access to the resolved
-   * target tenant, so an ordinary member of that tenant can follow a stale
-   * link. Every failure (no rename history, outside the grace window, or
-   * read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
-   * enumerate slug→tenant mappings.
-   *
-   * @generated from rpc paladin.admin.v1.TenantService.ResolveRenamedSlug
-   */
-  resolveRenamedSlug: {
-    methodKind: "unary";
-    input: typeof ResolveRenamedSlugRequestSchema;
-    output: typeof ResolveRenamedSlugResponseSchema;
   };
   /**
    * GetTenantDefaultBinding returns the tenant's default (backend, bucket)

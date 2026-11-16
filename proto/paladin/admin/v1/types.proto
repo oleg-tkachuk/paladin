@@ -333,8 +333,9 @@ message Tenant {
   google.protobuf.Timestamp created_at = 7 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp updated_at = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Human-readable kebab-case handle (e.g. "platform", "acme-prod").
-  // Stable across the tenant's lifetime unless rotated via
-  // RenameTenantSlug. Persisted as `tenants.slug` (UNIQUE), populated
+  // Set at creation and never changed: Cedar names the tenant by it
+  // (`Tenant::"<slug>"`), and so do tokens, policies and every
+  // `tenants/<slug>` a client holds. Persisted as `tenants.slug` (UNIQUE), populated
   // by every read RPC. Front-end uses this to render slug-first URLs
   // (`/tenants/<slug>/...`) and canonicalises UUID URLs to it.
   string slug = 9 [(google.api.field_behavior) = IMMUTABLE];

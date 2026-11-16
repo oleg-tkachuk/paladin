@@ -40,8 +40,6 @@ const ALLOWED: Record<string, string> = {
     "a failed lookup shows the recorded capability:<id> subject, which is what it resolves",
   "components/SettingsSync.tsx#{data, isPending}":
     "a failed read keeps the current theme and zone; /profile renders the error",
-  "components/features/tenants/RenamedSlugHint.tsx#{data}":
-    "an optional hint: a failed lookup shows no hint, and nothing else",
   "context/ScopeContext.tsx#tenantQuery":
     "the scope shows the tenant id it already has, and logs the failure",
   "hooks/usePreference.ts#{data}":

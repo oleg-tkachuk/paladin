@@ -864,8 +864,9 @@ export type Tenant = Message<"paladin.admin.v1.Tenant"> & {
 
   /**
    * Human-readable kebab-case handle (e.g. "platform", "acme-prod").
-   * Stable across the tenant's lifetime unless rotated via
-   * RenameTenantSlug. Persisted as `tenants.slug` (UNIQUE), populated
+   * Set at creation and never changed: Cedar names the tenant by it
+   * (`Tenant::"<slug>"`), and so do tokens, policies and every
+   * `tenants/<slug>` a client holds. Persisted as `tenants.slug` (UNIQUE), populated
    * by every read RPC. Front-end uses this to render slug-first URLs
    * (`/tenants/<slug>/...`) and canonicalises UUID URLs to it.
    *

@@ -693,7 +693,7 @@ what each field means, are documented in the `.proto` files under
 | `QuotaService` | `GetQuota`, `SetQuota`, `ResetUsage` |
 | `SystemService` | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants`, `GetPlatformHealth` |
 | `TenantBudgetService` | `Get`, `Set`, `Summarize`, `ListReservations` |
-| `TenantService` | `CreateTenant`, `GetTenant`, `UpdateTenant`, `DeleteTenant`, `ListTenants`, `SetInheritedPolicy`, `RestoreTenant`, `PurgeTenant`, `PreviewPurgeTenant`, `RenameTenantSlug`, `MigrateTenantStorageLayout`, `GetTenantStorageMigration`, `ResolveRenamedSlug`, `GetTenantDefaultBinding`, `SetTenantDefaultBinding`, `ClearTenantDefaultBinding` |
+| `TenantService` | `CreateTenant`, `GetTenant`, `UpdateTenant`, `DeleteTenant`, `ListTenants`, `SetInheritedPolicy`, `RestoreTenant`, `PurgeTenant`, `PreviewPurgeTenant`, `MigrateTenantStorageLayout`, `GetTenantStorageMigration`, `GetTenantDefaultBinding`, `SetTenantDefaultBinding`, `ClearTenantDefaultBinding` |
 
 ### Data plane
 

@@ -797,14 +797,6 @@ type TenantDefaultBinding struct {
 	SetBy    string             `json:"set_by"`
 }
 
-type TenantSlugHistory struct {
-	ID        int64              `json:"id"`
-	TenantID  pgtype.UUID        `json:"tenant_id"`
-	OldSlug   string             `json:"old_slug"`
-	NewSlug   string             `json:"new_slug"`
-	RenamedAt pgtype.Timestamptz `json:"renamed_at"`
-}
-
 type TenantStorageMigration struct {
 	ID                      pgtype.UUID        `json:"id"`
 	TenantID                pgtype.UUID        `json:"tenant_id"`

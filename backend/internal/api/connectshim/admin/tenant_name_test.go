@@ -47,14 +47,9 @@ func (f *slugTenant) UpdateTenant(_ context.Context, args tenanth.UpdateTenantAr
 	return &tenanth.Tenant{TenantID: args.TenantID}, nil
 }
 
-func (f *slugTenant) RenameTenantSlug(_ context.Context, args tenanth.RenameTenantSlugArgs) (*tenanth.Tenant, error) {
-	f.got = args.TenantID
-	return &tenanth.Tenant{TenantID: args.TenantID}, nil
-}
-
 // Every RPC that names one tenant takes `tenants/{tenant_id_or_slug}`, as the
-// proto documents. DeleteTenant, UpdateTenant, SetInheritedPolicy and
-// RenameTenantSlug used to parse the name as a UUID only, so a slug that
+// proto documents. DeleteTenant, UpdateTenant and SetInheritedPolicy used
+// to parse the name as a UUID only, so a slug that
 // GetTenant and PurgeTenant accepted was InvalidArgument on the call between
 // them.
 func TestTenantRPCsAcceptASlug(t *testing.T) {
@@ -91,12 +86,6 @@ func TestTenantRPCsAcceptASlug(t *testing.T) {
 		"SetInheritedPolicy": func(s *TenantServer) error {
 			_, err := s.SetInheritedPolicy(context.Background(), &pb.SetInheritedPolicyRequest{
 				Name: name, ResourceVersion: version,
-			})
-			return err
-		},
-		"RenameTenantSlug": func(s *TenantServer) error {
-			_, err := s.RenameTenantSlug(context.Background(), &pb.RenameTenantSlugRequest{
-				Name: name, ResourceVersion: version, NewSlug: "acme-2",
 			})
 			return err
 		},

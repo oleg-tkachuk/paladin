@@ -152,30 +152,6 @@ class PurgeBlocker(_message.Message):
     count: int
     def __init__(self, kind: _Optional[_Union[PurgeBlockerKind, str]] = ..., count: _Optional[int] = ...) -> None: ...
 
-class RenameTenantSlugRequest(_message.Message):
-    __slots__ = ("name", "resource_version", "new_slug")
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
-    NEW_SLUG_FIELD_NUMBER: _ClassVar[int]
-    name: str
-    resource_version: str
-    new_slug: str
-    def __init__(self, name: _Optional[str] = ..., resource_version: _Optional[str] = ..., new_slug: _Optional[str] = ...) -> None: ...
-
-class ResolveRenamedSlugRequest(_message.Message):
-    __slots__ = ("old_slug",)
-    OLD_SLUG_FIELD_NUMBER: _ClassVar[int]
-    old_slug: str
-    def __init__(self, old_slug: _Optional[str] = ...) -> None: ...
-
-class ResolveRenamedSlugResponse(_message.Message):
-    __slots__ = ("new_slug", "renamed_at")
-    NEW_SLUG_FIELD_NUMBER: _ClassVar[int]
-    RENAMED_AT_FIELD_NUMBER: _ClassVar[int]
-    new_slug: str
-    renamed_at: _timestamp_pb2.Timestamp
-    def __init__(self, new_slug: _Optional[str] = ..., renamed_at: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
-
 class MigrateTenantStorageLayoutRequest(_message.Message):
     __slots__ = ("name", "target_backend_id", "cleanup_retention_seconds")
     NAME_FIELD_NUMBER: _ClassVar[int]

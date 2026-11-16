@@ -943,172 +943,6 @@ func (x *PurgeBlocker) GetCount() int64 {
 	return 0
 }
 
-type RenameTenantSlugRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// name — "tenants/{tenant_id_or_slug}". Phase 3 path: slug-aware.
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// resource_version — current tenant version, OCC-guarded.
-	// OCC, required: an absent guard would silently become a blind overwrite
-	//   (expected_version=0 disables the check in SQL). Read the current version
-	//   first; there is no bypass on this RPC by design.
-	ResourceVersion string `protobuf:"bytes,2,opt,name=resource_version,json=resourceVersion,proto3" json:"resource_version,omitempty"`
-	// new_slug — kebab-case, validated by the same rules as
-	// CreateTenantRequest.slug. Uniqueness enforced by the database.
-	NewSlug       string `protobuf:"bytes,3,opt,name=new_slug,json=newSlug,proto3" json:"new_slug,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RenameTenantSlugRequest) Reset() {
-	*x = RenameTenantSlugRequest{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RenameTenantSlugRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RenameTenantSlugRequest) ProtoMessage() {}
-
-func (x *RenameTenantSlugRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RenameTenantSlugRequest.ProtoReflect.Descriptor instead.
-func (*RenameTenantSlugRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *RenameTenantSlugRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *RenameTenantSlugRequest) GetResourceVersion() string {
-	if x != nil {
-		return x.ResourceVersion
-	}
-	return ""
-}
-
-func (x *RenameTenantSlugRequest) GetNewSlug() string {
-	if x != nil {
-		return x.NewSlug
-	}
-	return ""
-}
-
-type ResolveRenamedSlugRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// old_slug — the slug that 404'd (the one in the stale bookmark).
-	OldSlug       string `protobuf:"bytes,1,opt,name=old_slug,json=oldSlug,proto3" json:"old_slug,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResolveRenamedSlugRequest) Reset() {
-	*x = ResolveRenamedSlugRequest{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResolveRenamedSlugRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResolveRenamedSlugRequest) ProtoMessage() {}
-
-func (x *ResolveRenamedSlugRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResolveRenamedSlugRequest.ProtoReflect.Descriptor instead.
-func (*ResolveRenamedSlugRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *ResolveRenamedSlugRequest) GetOldSlug() string {
-	if x != nil {
-		return x.OldSlug
-	}
-	return ""
-}
-
-type ResolveRenamedSlugResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// new_slug — the slug the tenant uses now.
-	NewSlug string `protobuf:"bytes,1,opt,name=new_slug,json=newSlug,proto3" json:"new_slug,omitempty"`
-	// renamed_at — when the rotation happened (for a "renamed N days ago" hint).
-	RenamedAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=renamed_at,json=renamedAt,proto3" json:"renamed_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResolveRenamedSlugResponse) Reset() {
-	*x = ResolveRenamedSlugResponse{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResolveRenamedSlugResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResolveRenamedSlugResponse) ProtoMessage() {}
-
-func (x *ResolveRenamedSlugResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResolveRenamedSlugResponse.ProtoReflect.Descriptor instead.
-func (*ResolveRenamedSlugResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *ResolveRenamedSlugResponse) GetNewSlug() string {
-	if x != nil {
-		return x.NewSlug
-	}
-	return ""
-}
-
-func (x *ResolveRenamedSlugResponse) GetRenamedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.RenamedAt
-	}
-	return nil
-}
-
 type MigrateTenantStorageLayoutRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name — "tenants/{tenant_id_or_slug}". The tenant MUST currently be shared.
@@ -1128,7 +962,7 @@ type MigrateTenantStorageLayoutRequest struct {
 
 func (x *MigrateTenantStorageLayoutRequest) Reset() {
 	*x = MigrateTenantStorageLayoutRequest{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[18]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1140,7 +974,7 @@ func (x *MigrateTenantStorageLayoutRequest) String() string {
 func (*MigrateTenantStorageLayoutRequest) ProtoMessage() {}
 
 func (x *MigrateTenantStorageLayoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[18]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1153,7 +987,7 @@ func (x *MigrateTenantStorageLayoutRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use MigrateTenantStorageLayoutRequest.ProtoReflect.Descriptor instead.
 func (*MigrateTenantStorageLayoutRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{18}
+	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MigrateTenantStorageLayoutRequest) GetName() string {
@@ -1187,7 +1021,7 @@ type GetTenantStorageMigrationRequest struct {
 
 func (x *GetTenantStorageMigrationRequest) Reset() {
 	*x = GetTenantStorageMigrationRequest{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[19]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1199,7 +1033,7 @@ func (x *GetTenantStorageMigrationRequest) String() string {
 func (*GetTenantStorageMigrationRequest) ProtoMessage() {}
 
 func (x *GetTenantStorageMigrationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[19]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1212,7 +1046,7 @@ func (x *GetTenantStorageMigrationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTenantStorageMigrationRequest.ProtoReflect.Descriptor instead.
 func (*GetTenantStorageMigrationRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{19}
+	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetTenantStorageMigrationRequest) GetName() string {
@@ -1244,7 +1078,7 @@ type StorageMigrationStatus struct {
 
 func (x *StorageMigrationStatus) Reset() {
 	*x = StorageMigrationStatus{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[20]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1256,7 +1090,7 @@ func (x *StorageMigrationStatus) String() string {
 func (*StorageMigrationStatus) ProtoMessage() {}
 
 func (x *StorageMigrationStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[20]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1269,7 +1103,7 @@ func (x *StorageMigrationStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageMigrationStatus.ProtoReflect.Descriptor instead.
 func (*StorageMigrationStatus) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{20}
+	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *StorageMigrationStatus) GetTenant() string {
@@ -1340,7 +1174,7 @@ type TenantDefaultBinding struct {
 
 func (x *TenantDefaultBinding) Reset() {
 	*x = TenantDefaultBinding{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[21]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1352,7 +1186,7 @@ func (x *TenantDefaultBinding) String() string {
 func (*TenantDefaultBinding) ProtoMessage() {}
 
 func (x *TenantDefaultBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[21]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1365,7 +1199,7 @@ func (x *TenantDefaultBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TenantDefaultBinding.ProtoReflect.Descriptor instead.
 func (*TenantDefaultBinding) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{21}
+	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *TenantDefaultBinding) GetName() string {
@@ -1406,7 +1240,7 @@ type GetTenantDefaultBindingRequest struct {
 
 func (x *GetTenantDefaultBindingRequest) Reset() {
 	*x = GetTenantDefaultBindingRequest{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[22]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1418,7 +1252,7 @@ func (x *GetTenantDefaultBindingRequest) String() string {
 func (*GetTenantDefaultBindingRequest) ProtoMessage() {}
 
 func (x *GetTenantDefaultBindingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[22]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1431,7 +1265,7 @@ func (x *GetTenantDefaultBindingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTenantDefaultBindingRequest.ProtoReflect.Descriptor instead.
 func (*GetTenantDefaultBindingRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{22}
+	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetTenantDefaultBindingRequest) GetName() string {
@@ -1453,7 +1287,7 @@ type SetTenantDefaultBindingRequest struct {
 
 func (x *SetTenantDefaultBindingRequest) Reset() {
 	*x = SetTenantDefaultBindingRequest{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[23]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1465,7 +1299,7 @@ func (x *SetTenantDefaultBindingRequest) String() string {
 func (*SetTenantDefaultBindingRequest) ProtoMessage() {}
 
 func (x *SetTenantDefaultBindingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[23]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1478,7 +1312,7 @@ func (x *SetTenantDefaultBindingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetTenantDefaultBindingRequest.ProtoReflect.Descriptor instead.
 func (*SetTenantDefaultBindingRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{23}
+	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetTenantDefaultBindingRequest) GetName() string {
@@ -1505,7 +1339,7 @@ type ClearTenantDefaultBindingRequest struct {
 
 func (x *ClearTenantDefaultBindingRequest) Reset() {
 	*x = ClearTenantDefaultBindingRequest{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[24]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1517,7 +1351,7 @@ func (x *ClearTenantDefaultBindingRequest) String() string {
 func (*ClearTenantDefaultBindingRequest) ProtoMessage() {}
 
 func (x *ClearTenantDefaultBindingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[24]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1530,7 +1364,7 @@ func (x *ClearTenantDefaultBindingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearTenantDefaultBindingRequest.ProtoReflect.Descriptor instead.
 func (*ClearTenantDefaultBindingRequest) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{24}
+	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ClearTenantDefaultBindingRequest) GetName() string {
@@ -1548,7 +1382,7 @@ type ClearTenantDefaultBindingResponse struct {
 
 func (x *ClearTenantDefaultBindingResponse) Reset() {
 	*x = ClearTenantDefaultBindingResponse{}
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[25]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1560,7 +1394,7 @@ func (x *ClearTenantDefaultBindingResponse) String() string {
 func (*ClearTenantDefaultBindingResponse) ProtoMessage() {}
 
 func (x *ClearTenantDefaultBindingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[25]
+	mi := &file_paladin_admin_v1_tenant_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1573,7 +1407,7 @@ func (x *ClearTenantDefaultBindingResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ClearTenantDefaultBindingResponse.ProtoReflect.Descriptor instead.
 func (*ClearTenantDefaultBindingResponse) Descriptor() ([]byte, []int) {
-	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{25}
+	return file_paladin_admin_v1_tenant_service_proto_rawDescGZIP(), []int{22}
 }
 
 var File_paladin_admin_v1_tenant_service_proto protoreflect.FileDescriptor
@@ -1629,17 +1463,7 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\"\\\n" +
 	"\fPurgeBlocker\x126\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\".paladin.admin.v1.PurgeBlockerKindR\x04kind\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\"\x8e\x01\n" +
-	"\x17RenameTenantSlugRequest\x12\x1b\n" +
-	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x122\n" +
-	"\x10resource_version\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0fresourceVersion\x12\"\n" +
-	"\bnew_slug\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\anewSlug\"?\n" +
-	"\x19ResolveRenamedSlugRequest\x12\"\n" +
-	"\bold_slug\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\aoldSlug\"r\n" +
-	"\x1aResolveRenamedSlugResponse\x12\x19\n" +
-	"\bnew_slug\x18\x01 \x01(\tR\anewSlug\x129\n" +
-	"\n" +
-	"renamed_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\trenamedAt\"\xa8\x01\n" +
+	"\x05count\x18\x02 \x01(\x03R\x05count\"\xa8\x01\n" +
 	"!MigrateTenantStorageLayoutRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12*\n" +
 	"\x11target_backend_id\x18\x02 \x01(\tR\x0ftargetBackendId\x12:\n" +
@@ -1672,7 +1496,7 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x1ePURGE_BLOCKER_KIND_COLLECTIONS\x10\x01\x12\x1e\n" +
 	"\x1aPURGE_BLOCKER_KIND_BUCKETS\x10\x02\x12\x1c\n" +
 	"\x18PURGE_BLOCKER_KIND_USERS\x10\x03\x12'\n" +
-	"#PURGE_BLOCKER_KIND_BUCKETS_DELETING\x10\x042\xa8\r\n" +
+	"#PURGE_BLOCKER_KIND_BUCKETS_DELETING\x10\x042\xd4\v\n" +
 	"\rTenantService\x12O\n" +
 	"\fCreateTenant\x12%.paladin.admin.v1.CreateTenantRequest\x1a\x18.paladin.admin.v1.Tenant\x12N\n" +
 	"\tGetTenant\x12\".paladin.admin.v1.GetTenantRequest\x1a\x18.paladin.admin.v1.Tenant\"\x03\x90\x02\x01\x12T\n" +
@@ -1682,11 +1506,9 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x12SetInheritedPolicy\x12+.paladin.admin.v1.SetInheritedPolicyRequest\x1a\x18.paladin.admin.v1.Tenant\"\x03\x90\x02\x02\x12Q\n" +
 	"\rRestoreTenant\x12&.paladin.admin.v1.RestoreTenantRequest\x1a\x18.paladin.admin.v1.Tenant\x12_\n" +
 	"\vPurgeTenant\x12$.paladin.admin.v1.PurgeTenantRequest\x1a%.paladin.admin.v1.PurgeTenantResponse\"\x03\x90\x02\x02\x12t\n" +
-	"\x12PreviewPurgeTenant\x12+.paladin.admin.v1.PreviewPurgeTenantRequest\x1a,.paladin.admin.v1.PreviewPurgeTenantResponse\"\x03\x90\x02\x01\x12\\\n" +
-	"\x10RenameTenantSlug\x12).paladin.admin.v1.RenameTenantSlugRequest\x1a\x18.paladin.admin.v1.Tenant\"\x03\x90\x02\x02\x12{\n" +
+	"\x12PreviewPurgeTenant\x12+.paladin.admin.v1.PreviewPurgeTenantRequest\x1a,.paladin.admin.v1.PreviewPurgeTenantResponse\"\x03\x90\x02\x01\x12{\n" +
 	"\x1aMigrateTenantStorageLayout\x123.paladin.admin.v1.MigrateTenantStorageLayoutRequest\x1a(.paladin.admin.v1.StorageMigrationStatus\x12~\n" +
-	"\x19GetTenantStorageMigration\x122.paladin.admin.v1.GetTenantStorageMigrationRequest\x1a(.paladin.admin.v1.StorageMigrationStatus\"\x03\x90\x02\x01\x12t\n" +
-	"\x12ResolveRenamedSlug\x12+.paladin.admin.v1.ResolveRenamedSlugRequest\x1a,.paladin.admin.v1.ResolveRenamedSlugResponse\"\x03\x90\x02\x01\x12x\n" +
+	"\x19GetTenantStorageMigration\x122.paladin.admin.v1.GetTenantStorageMigrationRequest\x1a(.paladin.admin.v1.StorageMigrationStatus\"\x03\x90\x02\x01\x12x\n" +
 	"\x17GetTenantDefaultBinding\x120.paladin.admin.v1.GetTenantDefaultBindingRequest\x1a&.paladin.admin.v1.TenantDefaultBinding\"\x03\x90\x02\x01\x12x\n" +
 	"\x17SetTenantDefaultBinding\x120.paladin.admin.v1.SetTenantDefaultBindingRequest\x1a&.paladin.admin.v1.TenantDefaultBinding\"\x03\x90\x02\x02\x12\x89\x01\n" +
 	"\x19ClearTenantDefaultBinding\x122.paladin.admin.v1.ClearTenantDefaultBindingRequest\x1a3.paladin.admin.v1.ClearTenantDefaultBindingResponse\"\x03\x90\x02\x02BLZJgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1;paladinadminv1b\x06proto3"
@@ -1704,7 +1526,7 @@ func file_paladin_admin_v1_tenant_service_proto_rawDescGZIP() []byte {
 }
 
 var file_paladin_admin_v1_tenant_service_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_paladin_admin_v1_tenant_service_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_paladin_admin_v1_tenant_service_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_paladin_admin_v1_tenant_service_proto_goTypes = []any{
 	(PurgeBlockerKind)(0),                     // 0: paladin.admin.v1.PurgeBlockerKind
 	(*CreateTenantRequest)(nil),               // 1: paladin.admin.v1.CreateTenantRequest
@@ -1722,73 +1544,65 @@ var file_paladin_admin_v1_tenant_service_proto_goTypes = []any{
 	(*PreviewPurgeTenantResponse)(nil),        // 13: paladin.admin.v1.PreviewPurgeTenantResponse
 	(*PurgedResource)(nil),                    // 14: paladin.admin.v1.PurgedResource
 	(*PurgeBlocker)(nil),                      // 15: paladin.admin.v1.PurgeBlocker
-	(*RenameTenantSlugRequest)(nil),           // 16: paladin.admin.v1.RenameTenantSlugRequest
-	(*ResolveRenamedSlugRequest)(nil),         // 17: paladin.admin.v1.ResolveRenamedSlugRequest
-	(*ResolveRenamedSlugResponse)(nil),        // 18: paladin.admin.v1.ResolveRenamedSlugResponse
-	(*MigrateTenantStorageLayoutRequest)(nil), // 19: paladin.admin.v1.MigrateTenantStorageLayoutRequest
-	(*GetTenantStorageMigrationRequest)(nil),  // 20: paladin.admin.v1.GetTenantStorageMigrationRequest
-	(*StorageMigrationStatus)(nil),            // 21: paladin.admin.v1.StorageMigrationStatus
-	(*TenantDefaultBinding)(nil),              // 22: paladin.admin.v1.TenantDefaultBinding
-	(*GetTenantDefaultBindingRequest)(nil),    // 23: paladin.admin.v1.GetTenantDefaultBindingRequest
-	(*SetTenantDefaultBindingRequest)(nil),    // 24: paladin.admin.v1.SetTenantDefaultBindingRequest
-	(*ClearTenantDefaultBindingRequest)(nil),  // 25: paladin.admin.v1.ClearTenantDefaultBindingRequest
-	(*ClearTenantDefaultBindingResponse)(nil), // 26: paladin.admin.v1.ClearTenantDefaultBindingResponse
-	(*Tenant)(nil),                            // 27: paladin.admin.v1.Tenant
-	(*fieldmaskpb.FieldMask)(nil),             // 28: google.protobuf.FieldMask
-	(*v1.PageRequest)(nil),                    // 29: paladin.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                   // 30: paladin.common.v1.PageResponse
-	(*timestamppb.Timestamp)(nil),             // 31: google.protobuf.Timestamp
+	(*MigrateTenantStorageLayoutRequest)(nil), // 16: paladin.admin.v1.MigrateTenantStorageLayoutRequest
+	(*GetTenantStorageMigrationRequest)(nil),  // 17: paladin.admin.v1.GetTenantStorageMigrationRequest
+	(*StorageMigrationStatus)(nil),            // 18: paladin.admin.v1.StorageMigrationStatus
+	(*TenantDefaultBinding)(nil),              // 19: paladin.admin.v1.TenantDefaultBinding
+	(*GetTenantDefaultBindingRequest)(nil),    // 20: paladin.admin.v1.GetTenantDefaultBindingRequest
+	(*SetTenantDefaultBindingRequest)(nil),    // 21: paladin.admin.v1.SetTenantDefaultBindingRequest
+	(*ClearTenantDefaultBindingRequest)(nil),  // 22: paladin.admin.v1.ClearTenantDefaultBindingRequest
+	(*ClearTenantDefaultBindingResponse)(nil), // 23: paladin.admin.v1.ClearTenantDefaultBindingResponse
+	(*Tenant)(nil),                            // 24: paladin.admin.v1.Tenant
+	(*fieldmaskpb.FieldMask)(nil),             // 25: google.protobuf.FieldMask
+	(*v1.PageRequest)(nil),                    // 26: paladin.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                   // 27: paladin.common.v1.PageResponse
+	(*timestamppb.Timestamp)(nil),             // 28: google.protobuf.Timestamp
 }
 var file_paladin_admin_v1_tenant_service_proto_depIdxs = []int32{
-	27, // 0: paladin.admin.v1.CreateTenantRequest.tenant:type_name -> paladin.admin.v1.Tenant
-	28, // 1: paladin.admin.v1.UpdateTenantRequest.update_mask:type_name -> google.protobuf.FieldMask
-	27, // 2: paladin.admin.v1.UpdateTenantRequest.tenant:type_name -> paladin.admin.v1.Tenant
-	29, // 3: paladin.admin.v1.ListTenantsRequest.page:type_name -> paladin.common.v1.PageRequest
-	27, // 4: paladin.admin.v1.ListTenantsResponse.tenants:type_name -> paladin.admin.v1.Tenant
-	30, // 5: paladin.admin.v1.ListTenantsResponse.page:type_name -> paladin.common.v1.PageResponse
+	24, // 0: paladin.admin.v1.CreateTenantRequest.tenant:type_name -> paladin.admin.v1.Tenant
+	25, // 1: paladin.admin.v1.UpdateTenantRequest.update_mask:type_name -> google.protobuf.FieldMask
+	24, // 2: paladin.admin.v1.UpdateTenantRequest.tenant:type_name -> paladin.admin.v1.Tenant
+	26, // 3: paladin.admin.v1.ListTenantsRequest.page:type_name -> paladin.common.v1.PageRequest
+	24, // 4: paladin.admin.v1.ListTenantsResponse.tenants:type_name -> paladin.admin.v1.Tenant
+	27, // 5: paladin.admin.v1.ListTenantsResponse.page:type_name -> paladin.common.v1.PageResponse
 	14, // 6: paladin.admin.v1.PreviewPurgeTenantResponse.api_tokens:type_name -> paladin.admin.v1.PurgedResource
 	14, // 7: paladin.admin.v1.PreviewPurgeTenantResponse.event_subscriptions:type_name -> paladin.admin.v1.PurgedResource
 	15, // 8: paladin.admin.v1.PreviewPurgeTenantResponse.blockers:type_name -> paladin.admin.v1.PurgeBlocker
 	0,  // 9: paladin.admin.v1.PurgeBlocker.kind:type_name -> paladin.admin.v1.PurgeBlockerKind
-	31, // 10: paladin.admin.v1.ResolveRenamedSlugResponse.renamed_at:type_name -> google.protobuf.Timestamp
-	31, // 11: paladin.admin.v1.TenantDefaultBinding.set_at:type_name -> google.protobuf.Timestamp
-	1,  // 12: paladin.admin.v1.TenantService.CreateTenant:input_type -> paladin.admin.v1.CreateTenantRequest
-	2,  // 13: paladin.admin.v1.TenantService.GetTenant:input_type -> paladin.admin.v1.GetTenantRequest
-	3,  // 14: paladin.admin.v1.TenantService.UpdateTenant:input_type -> paladin.admin.v1.UpdateTenantRequest
-	4,  // 15: paladin.admin.v1.TenantService.DeleteTenant:input_type -> paladin.admin.v1.DeleteTenantRequest
-	6,  // 16: paladin.admin.v1.TenantService.ListTenants:input_type -> paladin.admin.v1.ListTenantsRequest
-	8,  // 17: paladin.admin.v1.TenantService.SetInheritedPolicy:input_type -> paladin.admin.v1.SetInheritedPolicyRequest
-	9,  // 18: paladin.admin.v1.TenantService.RestoreTenant:input_type -> paladin.admin.v1.RestoreTenantRequest
-	10, // 19: paladin.admin.v1.TenantService.PurgeTenant:input_type -> paladin.admin.v1.PurgeTenantRequest
-	12, // 20: paladin.admin.v1.TenantService.PreviewPurgeTenant:input_type -> paladin.admin.v1.PreviewPurgeTenantRequest
-	16, // 21: paladin.admin.v1.TenantService.RenameTenantSlug:input_type -> paladin.admin.v1.RenameTenantSlugRequest
-	19, // 22: paladin.admin.v1.TenantService.MigrateTenantStorageLayout:input_type -> paladin.admin.v1.MigrateTenantStorageLayoutRequest
-	20, // 23: paladin.admin.v1.TenantService.GetTenantStorageMigration:input_type -> paladin.admin.v1.GetTenantStorageMigrationRequest
-	17, // 24: paladin.admin.v1.TenantService.ResolveRenamedSlug:input_type -> paladin.admin.v1.ResolveRenamedSlugRequest
-	23, // 25: paladin.admin.v1.TenantService.GetTenantDefaultBinding:input_type -> paladin.admin.v1.GetTenantDefaultBindingRequest
-	24, // 26: paladin.admin.v1.TenantService.SetTenantDefaultBinding:input_type -> paladin.admin.v1.SetTenantDefaultBindingRequest
-	25, // 27: paladin.admin.v1.TenantService.ClearTenantDefaultBinding:input_type -> paladin.admin.v1.ClearTenantDefaultBindingRequest
-	27, // 28: paladin.admin.v1.TenantService.CreateTenant:output_type -> paladin.admin.v1.Tenant
-	27, // 29: paladin.admin.v1.TenantService.GetTenant:output_type -> paladin.admin.v1.Tenant
-	27, // 30: paladin.admin.v1.TenantService.UpdateTenant:output_type -> paladin.admin.v1.Tenant
-	5,  // 31: paladin.admin.v1.TenantService.DeleteTenant:output_type -> paladin.admin.v1.DeleteTenantResponse
-	7,  // 32: paladin.admin.v1.TenantService.ListTenants:output_type -> paladin.admin.v1.ListTenantsResponse
-	27, // 33: paladin.admin.v1.TenantService.SetInheritedPolicy:output_type -> paladin.admin.v1.Tenant
-	27, // 34: paladin.admin.v1.TenantService.RestoreTenant:output_type -> paladin.admin.v1.Tenant
-	11, // 35: paladin.admin.v1.TenantService.PurgeTenant:output_type -> paladin.admin.v1.PurgeTenantResponse
-	13, // 36: paladin.admin.v1.TenantService.PreviewPurgeTenant:output_type -> paladin.admin.v1.PreviewPurgeTenantResponse
-	27, // 37: paladin.admin.v1.TenantService.RenameTenantSlug:output_type -> paladin.admin.v1.Tenant
-	21, // 38: paladin.admin.v1.TenantService.MigrateTenantStorageLayout:output_type -> paladin.admin.v1.StorageMigrationStatus
-	21, // 39: paladin.admin.v1.TenantService.GetTenantStorageMigration:output_type -> paladin.admin.v1.StorageMigrationStatus
-	18, // 40: paladin.admin.v1.TenantService.ResolveRenamedSlug:output_type -> paladin.admin.v1.ResolveRenamedSlugResponse
-	22, // 41: paladin.admin.v1.TenantService.GetTenantDefaultBinding:output_type -> paladin.admin.v1.TenantDefaultBinding
-	22, // 42: paladin.admin.v1.TenantService.SetTenantDefaultBinding:output_type -> paladin.admin.v1.TenantDefaultBinding
-	26, // 43: paladin.admin.v1.TenantService.ClearTenantDefaultBinding:output_type -> paladin.admin.v1.ClearTenantDefaultBindingResponse
-	28, // [28:44] is the sub-list for method output_type
-	12, // [12:28] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	28, // 10: paladin.admin.v1.TenantDefaultBinding.set_at:type_name -> google.protobuf.Timestamp
+	1,  // 11: paladin.admin.v1.TenantService.CreateTenant:input_type -> paladin.admin.v1.CreateTenantRequest
+	2,  // 12: paladin.admin.v1.TenantService.GetTenant:input_type -> paladin.admin.v1.GetTenantRequest
+	3,  // 13: paladin.admin.v1.TenantService.UpdateTenant:input_type -> paladin.admin.v1.UpdateTenantRequest
+	4,  // 14: paladin.admin.v1.TenantService.DeleteTenant:input_type -> paladin.admin.v1.DeleteTenantRequest
+	6,  // 15: paladin.admin.v1.TenantService.ListTenants:input_type -> paladin.admin.v1.ListTenantsRequest
+	8,  // 16: paladin.admin.v1.TenantService.SetInheritedPolicy:input_type -> paladin.admin.v1.SetInheritedPolicyRequest
+	9,  // 17: paladin.admin.v1.TenantService.RestoreTenant:input_type -> paladin.admin.v1.RestoreTenantRequest
+	10, // 18: paladin.admin.v1.TenantService.PurgeTenant:input_type -> paladin.admin.v1.PurgeTenantRequest
+	12, // 19: paladin.admin.v1.TenantService.PreviewPurgeTenant:input_type -> paladin.admin.v1.PreviewPurgeTenantRequest
+	16, // 20: paladin.admin.v1.TenantService.MigrateTenantStorageLayout:input_type -> paladin.admin.v1.MigrateTenantStorageLayoutRequest
+	17, // 21: paladin.admin.v1.TenantService.GetTenantStorageMigration:input_type -> paladin.admin.v1.GetTenantStorageMigrationRequest
+	20, // 22: paladin.admin.v1.TenantService.GetTenantDefaultBinding:input_type -> paladin.admin.v1.GetTenantDefaultBindingRequest
+	21, // 23: paladin.admin.v1.TenantService.SetTenantDefaultBinding:input_type -> paladin.admin.v1.SetTenantDefaultBindingRequest
+	22, // 24: paladin.admin.v1.TenantService.ClearTenantDefaultBinding:input_type -> paladin.admin.v1.ClearTenantDefaultBindingRequest
+	24, // 25: paladin.admin.v1.TenantService.CreateTenant:output_type -> paladin.admin.v1.Tenant
+	24, // 26: paladin.admin.v1.TenantService.GetTenant:output_type -> paladin.admin.v1.Tenant
+	24, // 27: paladin.admin.v1.TenantService.UpdateTenant:output_type -> paladin.admin.v1.Tenant
+	5,  // 28: paladin.admin.v1.TenantService.DeleteTenant:output_type -> paladin.admin.v1.DeleteTenantResponse
+	7,  // 29: paladin.admin.v1.TenantService.ListTenants:output_type -> paladin.admin.v1.ListTenantsResponse
+	24, // 30: paladin.admin.v1.TenantService.SetInheritedPolicy:output_type -> paladin.admin.v1.Tenant
+	24, // 31: paladin.admin.v1.TenantService.RestoreTenant:output_type -> paladin.admin.v1.Tenant
+	11, // 32: paladin.admin.v1.TenantService.PurgeTenant:output_type -> paladin.admin.v1.PurgeTenantResponse
+	13, // 33: paladin.admin.v1.TenantService.PreviewPurgeTenant:output_type -> paladin.admin.v1.PreviewPurgeTenantResponse
+	18, // 34: paladin.admin.v1.TenantService.MigrateTenantStorageLayout:output_type -> paladin.admin.v1.StorageMigrationStatus
+	18, // 35: paladin.admin.v1.TenantService.GetTenantStorageMigration:output_type -> paladin.admin.v1.StorageMigrationStatus
+	19, // 36: paladin.admin.v1.TenantService.GetTenantDefaultBinding:output_type -> paladin.admin.v1.TenantDefaultBinding
+	19, // 37: paladin.admin.v1.TenantService.SetTenantDefaultBinding:output_type -> paladin.admin.v1.TenantDefaultBinding
+	23, // 38: paladin.admin.v1.TenantService.ClearTenantDefaultBinding:output_type -> paladin.admin.v1.ClearTenantDefaultBindingResponse
+	25, // [25:39] is the sub-list for method output_type
+	11, // [11:25] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_tenant_service_proto_init() }
@@ -1803,7 +1617,7 @@ func file_paladin_admin_v1_tenant_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_paladin_admin_v1_tenant_service_proto_rawDesc), len(file_paladin_admin_v1_tenant_service_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   26,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
