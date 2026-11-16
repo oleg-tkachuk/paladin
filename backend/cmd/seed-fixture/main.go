@@ -20,7 +20,7 @@
 //	        cursor pagination logic gets exercised across a boundary.
 //
 // load / stress take --object-key (an existing collection bound to a bucket,
-// like smoke-upload), --tenant (slug for the parent name), and --count (0 =
+// like smoke-upload), --tenant (its slug or id), and --count (0 =
 // the flavour default). Objects are stamped at the current time — the API
 // can't backdate created_at, so the "/billing 24h time-series spread" remains
 // a separate concern (see BACKLOG).
@@ -117,9 +117,9 @@ func main() {
 		RunE: func(cmd *cobra.Command, _ []string) error { return runSmokeUpload(cmd) },
 	}
 	for _, c := range []*cobra.Command{upCmd, downCmd, smokeCmd} {
-		c.Flags().String("admin-url", "https://paladin.local/api/rpc/admin", "Admin plane URL")
-		c.Flags().String("iam-url", "https://paladin.local/api/rpc/iam", "IAM plane URL")
-		c.Flags().String("data-url", "https://paladin.local/api/rpc/data", "Data plane URL")
+		c.Flags().String("admin-url", defaultAdminURL, "Admin plane URL")
+		c.Flags().String("iam-url", defaultIAMURL, "IAM plane URL")
+		c.Flags().String("data-url", defaultDataURL, "Data plane URL")
 		c.Flags().String("user", "admin", "Bootstrap admin subject")
 		c.Flags().String("password", "password", "Bootstrap admin password")
 		// Port-forwarded planes present the cluster's self-signed cert for a
@@ -135,7 +135,7 @@ func main() {
 		c.Flags().String("object-key", "test",
 			"load/stress: existing collection (bound to a bucket) to seed objects under")
 		c.Flags().String("tenant", "platform",
-			"load/stress: tenant slug for the parent resource name")
+			"the tenant to seed into, by slug or id")
 		c.Flags().Int("count", 0,
 			"load/stress: number of objects to seed (0 = flavour default: load 500, stress 1001)")
 	}
@@ -144,8 +144,7 @@ func main() {
 	smokeCmd.Flags().String("key", "",
 		"storage key (server picks when empty)")
 	smokeCmd.Flags().String("tenant", "platform",
-		"tenant slug for the parent resource name; data plane resolves "+
-			"the actual tenant from JWT, slug is just shape")
+		"the tenant to upload into, by slug or id")
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "seed-fixture:", err)
 		os.Exit(1)
@@ -310,24 +309,29 @@ func runUp(cmd *cobra.Command) error {
 
 	switch flavour {
 	case "demo":
-		return seedDemo(ctx, clients)
+		tenant, _ := cmd.Flags().GetString("tenant")
+		return seedDemo(ctx, clients, tenant)
 	case "load", "stress":
-		return runObjectSeed(cmd, ctx, iamURL, dataURL, user, password, flavour, true)
+		return runObjectSeed(cmd, ctx, clients, iamURL, dataURL, user, password, flavour, true)
 	default:
 		return fmt.Errorf("unknown flavour %q (use demo, load, or stress)", flavour)
 	}
 }
 
 // runObjectSeed applies (seed=true) or removes (seed=false) the load / stress
-// object fixture. Objects live on the data plane, so this logs in for a data
-// token separately from the admin token runUp/runDown already hold (mirrors
-// smoke-upload's rationale).
-func runObjectSeed(cmd *cobra.Command, ctx context.Context, iamURL, dataURL, user, password, flavour string, seed bool) error {
+// object fixture. The admin clients name the tenant and check the collection;
+// objects live on the data plane, so this logs in for a data token beside the
+// admin one runUp/runDown already hold.
+func runObjectSeed(cmd *cobra.Command, ctx context.Context, admin *mcp.Clients, iamURL, dataURL, user, password, flavour string, seed bool) error {
 	collection, _ := cmd.Flags().GetString("object-key")
 	tenant, _ := cmd.Flags().GetString("tenant")
 	countOverride, _ := cmd.Flags().GetInt("count")
 	httpc := httpClientFor(cmd)
 
+	parent, err := collectionParent(ctx, admin.Tenant, admin.OKey, tenant, collection)
+	if err != nil {
+		return err
+	}
 	dataTok, err := login(ctx, httpc, iamURL, user, password, string(auth.AudienceData))
 	if err != nil {
 		return fmt.Errorf("data login: %w", err)
@@ -336,7 +340,6 @@ func runObjectSeed(cmd *cobra.Command, ctx context.Context, iamURL, dataURL, use
 	if err != nil {
 		return err
 	}
-	parent := fmt.Sprintf("tenants/%s/collections/%s", tenant, collection)
 
 	if !seed {
 		return teardownObjects(ctx, dc, parent, flavour)
@@ -369,9 +372,10 @@ func runDown(cmd *cobra.Command) error {
 
 	switch flavour {
 	case "demo":
-		return teardownDemo(ctx, clients)
+		tenant, _ := cmd.Flags().GetString("tenant")
+		return teardownDemo(ctx, clients, tenant)
 	case "load", "stress":
-		return runObjectSeed(cmd, ctx, iamURL, dataURL, user, password, flavour, false)
+		return runObjectSeed(cmd, ctx, clients, iamURL, dataURL, user, password, flavour, false)
 	default:
 		return fmt.Errorf("unknown flavour %q (use demo, load, or stress)", flavour)
 	}
@@ -388,32 +392,23 @@ func runDown(cmd *cobra.Command) error {
 //   - HTTP sink, disabled — exercises the dim "disabled" pill
 //   - HTTP sink, with CEL filter — exercises the filter column
 //
-// We seed onto the caller's tenant (platform tenant for the
-// bootstrap admin) rather than minting a new fixture tenant —
-// `event_subscriptions` is RLS-enforced and the producer-side
-// INSERT runs as `paladin_app` with a session GUC pinned to the
-// caller's tenant_id. A cross-tenant create from
-// platform.admin would hit a WITH CHECK violation. Operators
-// who want fixture data on a non-platform tenant should run
-// the CLI with --user / --password for that tenant's admin.
+// It seeds onto the tenant --tenant names — the platform tenant,
+// the bootstrap admin's own, by default — rather than minting a
+// fixture tenant. It once took the first tenant listed, which a
+// platform.admin may write to: on a shared cluster that was another
+// project's tenant.
 //
 // Idempotency: every sink is keyed by sink shape (URL or
 // subject). Re-running produces the same on-disk state.
-func seedDemo(ctx context.Context, c *mcp.Clients) error {
-	// Look up the caller's own tenant via Login response side-effect:
-	// the JWT carries it, but we don't decode JWTs here. Use ListTenants
-	// instead — bootstrap admin sees only their tenant unless they're
-	// platform.admin (in which case the first hit is fine because we
-	// only need ANY tenant scoped to the caller for RLS).
-	resp, err := c.Tenant.ListTenants(ctx, &adminv1.ListTenantsRequest{})
+func seedDemo(ctx context.Context, c *mcp.Clients, tenantRef string) error {
+	// Into the tenant --tenant names, never the first one listed: on a
+	// shared cluster that is another project's, and its events would go to
+	// the fixture's sinks.
+	tenantID, err := resolveTenantID(ctx, c.Tenant, tenantRef)
 	if err != nil {
-		return fmt.Errorf("list tenants: %w", err)
+		return err
 	}
-	if len(resp.GetTenants()) == 0 {
-		return errors.New("no tenants visible — bootstrap admin should at least see the Platform tenant")
-	}
-	tenant := resp.GetTenants()[0]
-	fmt.Printf("tenant: %s (%s)\n", tenant.GetDisplayName(), tenant.GetTenantId())
+	fmt.Printf("tenant: %s (%s)\n", tenantRef, tenantID)
 
 	subscriptions := []demoSubscription{
 		{
@@ -448,7 +443,7 @@ func seedDemo(ctx context.Context, c *mcp.Clients) error {
 		},
 	}
 	for _, s := range subscriptions {
-		if err := ensureSubscription(ctx, c, tenant.GetTenantId(), s); err != nil {
+		if err := ensureSubscription(ctx, c, tenantID, s); err != nil {
 			return fmt.Errorf("subscription %s: %w", s.suffix, err)
 		}
 		fmt.Printf("subscription: %s%s\n", fixturePrefix+"demo:sub:", s.suffix)
@@ -457,39 +452,44 @@ func seedDemo(ctx context.Context, c *mcp.Clients) error {
 	return nil
 }
 
-func teardownDemo(ctx context.Context, c *mcp.Clients) error {
-	// Walk the caller's tenants and delete every subscription whose
-	// sink target matches a fixture-shaped URL or subject. We can't
-	// delete-by-display-name because EventSubscription has no
-	// display name in v1 — discriminating by sink config is what
-	// the seedDemo idempotency check uses too.
-	tenants, err := c.Tenant.ListTenants(ctx, &adminv1.ListTenantsRequest{})
+func teardownDemo(ctx context.Context, c *mcp.Clients, tenantRef string) error {
+	// Only in the tenant --tenant names, as seedDemo writes there: a walk of
+	// every tenant would delete what matches a fixture sink in tenants this
+	// seeder never wrote to. EventSubscription has no display name in v1, so
+	// the sink config is what tells a fixture apart, as seedDemo's
+	// idempotency check does.
+	tenantID, err := resolveTenantID(ctx, c.Tenant, tenantRef)
 	if err != nil {
-		return fmt.Errorf("list tenants: %w", err)
+		return err
 	}
-	deleted := 0
-	for _, t := range tenants.GetTenants() {
-		parent := "tenants/" + t.GetTenantId()
-		listResp, err := c.EventSub.ListSubscriptions(ctx,
-			&adminv1.ListSubscriptionsRequest{Parent: parent},
-		)
-		if err != nil {
-			return fmt.Errorf("list subs %s: %w", t.GetTenantId(), err)
-		}
-		for _, sub := range listResp.GetSubscriptions() {
-			if !isFixtureSink(sub.GetSink()) {
-				continue
-			}
-			if _, err := c.EventSub.DeleteSubscription(ctx,
-				&adminv1.DeleteSubscriptionRequest{Name: sub.GetName()},
-			); err != nil {
-				return fmt.Errorf("delete sub %s: %w", sub.GetName(), err)
-			}
-			deleted++
+	listResp, err := c.EventSub.ListSubscriptions(ctx,
+		&adminv1.ListSubscriptionsRequest{Parent: tenantPrefix + tenantID},
+	)
+	if err != nil {
+		return fmt.Errorf("list subs %s: %w", tenantID, err)
+	}
+	deletes := fixtureSubscriptionDeletes(listResp.GetSubscriptions())
+	for _, req := range deletes {
+		if _, err := c.EventSub.DeleteSubscription(ctx, req); err != nil {
+			return fmt.Errorf("delete sub %s: %w", req.GetName(), err)
 		}
 	}
-	fmt.Printf("demo flavour torn down (deleted %d subscriptions)\n", deleted)
+	fmt.Printf("demo flavour torn down (deleted %d subscriptions)\n", len(deletes))
 	return nil
+}
+
+// fixtureSubscriptionDeletes deletes each of subs that seedDemo wrote, at the
+// version it was listed at: DeleteSubscription requires one.
+func fixtureSubscriptionDeletes(subs []*adminv1.EventSubscription) []*adminv1.DeleteSubscriptionRequest {
+	var out []*adminv1.DeleteSubscriptionRequest
+	for _, sub := range subs {
+		if isFixtureSink(sub.GetSink()) {
+			out = append(out, &adminv1.DeleteSubscriptionRequest{
+				Name: sub.GetName(), ResourceVersion: sub.GetResourceVersion(),
+			})
+		}
+	}
+	return out
 }
 
 // ─── Load / stress flavours: object seeding ───────────────────────────────
@@ -575,14 +575,14 @@ func uploadFixtureObject(ctx context.Context, dc *mcp.Clients, parent, key strin
 // countFixtureObjects pages the collection's objects and counts the ones this
 // seeder wrote for the flavour (by user-key prefix).
 func countFixtureObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string) (int, error) {
-	names, err := listFixtureObjectNames(ctx, dc, parent, flavour)
-	return len(names), err
+	objects, err := listFixtureObjects(ctx, dc, parent, flavour)
+	return len(objects), err
 }
 
-// listFixtureObjectNames returns the resource names of every fixture object
-// under `parent` for the flavour, walking all pages.
-func listFixtureObjectNames(ctx context.Context, dc *mcp.Clients, parent, flavour string) ([]string, error) {
-	var names []string
+// listFixtureObjects returns every fixture object under `parent` for the
+// flavour, walking all pages.
+func listFixtureObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string) ([]*datav1.Object, error) {
+	var objects []*datav1.Object
 	token := ""
 	for {
 		resp, err := dc.Object.ListObjects(ctx, &datav1.ListObjectsRequest{
@@ -594,7 +594,7 @@ func listFixtureObjectNames(ctx context.Context, dc *mcp.Clients, parent, flavou
 		}
 		for _, o := range resp.GetObjects() {
 			if isFixtureCollection(flavour, o.GetKey()) {
-				names = append(names, o.GetName())
+				objects = append(objects, o)
 			}
 		}
 		token = resp.GetPage().GetNextPageToken()
@@ -602,26 +602,34 @@ func listFixtureObjectNames(ctx context.Context, dc *mcp.Clients, parent, flavou
 			break
 		}
 	}
-	return names, nil
+	return objects, nil
+}
+
+// fixtureDeleteRequest permanently deletes o, at the version it was listed
+// at: DeleteObject requires one, and refuses the call if the object changed
+// since.
+func fixtureDeleteRequest(o *datav1.Object) *datav1.DeleteObjectRequest {
+	return &datav1.DeleteObjectRequest{
+		Name:            o.GetName(),
+		ResourceVersion: o.GetResourceVersion(),
+		Permanent:       true, // hard-delete so /objects is actually cleared
+	}
 }
 
 // teardownObjects permanently deletes every fixture object the flavour wrote
 // under `parent`. Collect-then-delete (rather than delete-while-paging) so the
 // cursor isn't invalidated mid-walk.
 func teardownObjects(ctx context.Context, dc *mcp.Clients, parent, flavour string) error {
-	names, err := listFixtureObjectNames(ctx, dc, parent, flavour)
+	objects, err := listFixtureObjects(ctx, dc, parent, flavour)
 	if err != nil {
 		return err
 	}
-	for _, name := range names {
-		if _, err := dc.Object.DeleteObject(ctx, &datav1.DeleteObjectRequest{
-			Name:      name,
-			Permanent: true, // hard-delete so /objects is actually cleared
-		}); err != nil {
-			return fmt.Errorf("delete %s: %w", name, err)
+	for _, o := range objects {
+		if _, err := dc.Object.DeleteObject(ctx, fixtureDeleteRequest(o)); err != nil {
+			return fmt.Errorf("delete %s: %w", o.GetName(), err)
 		}
 	}
-	fmt.Printf("%s flavour torn down (deleted %d objects under %s)\n", flavour, len(names), parent)
+	fmt.Printf("%s flavour torn down (deleted %d objects under %s)\n", flavour, len(objects), parent)
 	return nil
 }
 
@@ -736,17 +744,24 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	collection, _ := cmd.Flags().GetString("object-key")
 	storageKey, _ := cmd.Flags().GetString("key")
 
-	tenantHint, _ := cmd.Flags().GetString("tenant")
+	tenant, _ := cmd.Flags().GetString("tenant")
 	if err := assertDevTarget(adminURL); err != nil {
 		return err
 	}
-	_ = adminURL // kept for assertDevTarget heuristic; admin RPC unused below
-	// Single data-audience token. Earlier iterations used a sibling
-	// admin token to resolve the caller's tenant via ListTenants —
-	// dropped because (a) the data plane resolves tenant from the JWT
-	// at handler time and only uses parent's tenant segment for
-	// resource-name shape, (b) double-login amplified port-forward
-	// flakiness on round trips.
+	// The parent names the tenant by its id, which the admin plane resolves
+	// from a slug, and the collection must exist before anything is uploaded.
+	adminTok, err := login(ctx, httpc, iamURL, user, password, string(auth.AudienceAdmin))
+	if err != nil {
+		return err
+	}
+	admin, err := mcp.NewClients(httpc, adminURL, "", iamURL, adminTok)
+	if err != nil {
+		return err
+	}
+	parent, err := collectionParent(ctx, admin.Tenant, admin.OKey, tenant, collection)
+	if err != nil {
+		return err
+	}
 	dataTok, err := login(ctx, httpc, iamURL, user, password, string(auth.AudienceData))
 	if err != nil {
 		return fmt.Errorf("data login: %w", err)
@@ -755,8 +770,6 @@ func runSmokeUpload(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-
-	parent := fmt.Sprintf("tenants/%s/collections/%s", tenantHint, collection)
 
 	// Compose a deterministic-looking storage key when the operator
 	// didn't pass one. Includes a unix timestamp so re-runs don't

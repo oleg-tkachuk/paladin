@@ -195,45 +195,71 @@ tasks:
       - task: filerpb:proto:check
 
   # ─── seed fixture ───────────────────────────────────────────────────────────
-  # Applies (or removes) the demo fixture against a running cluster. Both
-  # directions port-forward the three planes themselves, so neither needs a
-  # terminal already holding them open.
+  # Applies (or removes) a fixture against a running cluster: demo (event
+  # subscriptions), or load / stress (objects under COLLECTION, an existing
+  # collection bound to a bucket, in TENANT, a slug or id). Both directions
+  # port-forward the three planes themselves, so neither needs a terminal
+  # already holding them open, and sign in as the bootstrap admin with the
+  # password the cluster holds for it.
   seed:up:
-    desc: "Apply the demo fixture (idempotent)"
+    desc: "Apply a fixture: FLAVOUR=demo|load|stress (idempotent)"
     cmds:
       - task: _seed
-        vars: { ACTION: up, FLAVOUR: '{{.FLAVOUR | default "demo"}}', COUNT: "{{.COUNT}}" }
+        vars: { ACTION: up, FLAVOUR: '{{.FLAVOUR | default "demo"}}', COUNT: "{{.COUNT}}", TENANT: "{{.TENANT}}", COLLECTION: "{{.COLLECTION}}" }
 
   seed:down:
-    desc: "Remove the demo fixture"
+    desc: "Remove a fixture: FLAVOUR=demo|load|stress"
     cmds:
       - task: _seed
-        vars: { ACTION: down, FLAVOUR: '{{.FLAVOUR | default "demo"}}' }
+        vars: { ACTION: down, FLAVOUR: '{{.FLAVOUR | default "demo"}}', TENANT: "{{.TENANT}}", COLLECTION: "{{.COLLECTION}}" }
 
   _seed:
     internal: true
     requires: { vars: [K8S_CONTEXT] }
+    vars:
+      # The scheme the planes speak inside the cluster: http unless the
+      # release turns internalTLS on, when it is https and the forwarded
+      # plane's certificate names its Service, not localhost.
+      SEED_SCHEME: '{{.SEED_SCHEME | default "http"}}'
+      # The local ports the planes are forwarded to; seed-fixture's flags
+      # default to the same, for a run outside this task. Set them when
+      # another forward holds one.
+      SEED_ADMIN_PORT: '{{.SEED_ADMIN_PORT | default "18090"}}'
+      SEED_IAM_PORT: '{{.SEED_IAM_PORT | default "18085"}}'
+      SEED_DATA_PORT: '{{.SEED_DATA_PORT | default "18080"}}'
+      # The bootstrap admin's Secret, as the chart names it.
+      SEED_ADMIN_SECRET: paladin-bootstrap-admin
     cmds:
       - cmd: |-
           set -eu
           ctx='{{.K8S_CONTEXT}}'; ns='{{.K8S_NAMESPACE}}'
           pids=""
           trap 'kill $pids 2>/dev/null || true' EXIT
-          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-admin 18090:8090 >/dev/null 2>&1 & pids="$pids $!"
-          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api   18085:8085 >/dev/null 2>&1 & pids="$pids $!"
-          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api   18080:8080 >/dev/null 2>&1 & pids="$pids $!"
-          for p in 18090 18085 18080; do
+          # A port another process holds makes port-forward exit at once, and
+          # the readiness probe below would then reach that process instead.
+          for p in {{.SEED_ADMIN_PORT}} {{.SEED_IAM_PORT}} {{.SEED_DATA_PORT}}; do
+            if curl -sk -m 1 -o /dev/null "http://localhost:$p/" 2>/dev/null || curl -sk -m 1 -o /dev/null "https://localhost:$p/" 2>/dev/null; then
+              echo "✖ seed · localhost:$p is taken by another process; set SEED_ADMIN_PORT / SEED_IAM_PORT / SEED_DATA_PORT" >&2
+              exit 1
+            fi
+          done
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-admin {{.SEED_ADMIN_PORT}}:8090 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-iam   {{.SEED_IAM_PORT}}:8085 >/dev/null 2>&1 & pids="$pids $!"
+          kubectl --context "$ctx" -n "$ns" port-forward svc/paladin-core-api   {{.SEED_DATA_PORT}}:8080 >/dev/null 2>&1 & pids="$pids $!"
+          for p in {{.SEED_ADMIN_PORT}} {{.SEED_IAM_PORT}} {{.SEED_DATA_PORT}}; do
             ok=0
             for _ in $(seq 1 40); do
-              curl -sk -m 1 -o /dev/null "https://localhost:$p/" 2>/dev/null && { ok=1; break; }
+              curl -sk -m 1 -o /dev/null "{{.SEED_SCHEME}}://localhost:$p/" 2>/dev/null && { ok=1; break; }
               sleep 0.5
             done
-            [ "$ok" = 1 ] || { echo "✖ seed · port-forward :$p never became ready (context=$ctx ns=$ns)" >&2; exit 1; }
+            [ "$ok" = 1 ] || { echo "✖ seed · port-forward :$p never answered {{.SEED_SCHEME}} (context=$ctx ns=$ns)" >&2; exit 1; }
           done
+          password=$(kubectl --context "$ctx" -n "$ns" get secret {{.SEED_ADMIN_SECRET}} -o jsonpath='{.data.password}' | base64 -d)
           go run ./cmd/seed-fixture {{.ACTION}} \
             --flavour={{.FLAVOUR}} {{if .COUNT}}--count={{.COUNT}}{{end}} \
-            --admin-url=https://localhost:18090 \
-            --iam-url=https://localhost:18085 \
-            --data-url=https://localhost:18080 \
-            --insecure-tls
+            {{if .TENANT}}--tenant={{.TENANT | q}}{{end}} {{if .COLLECTION}}--object-key={{.COLLECTION | q}}{{end}} \
+            --admin-url={{.SEED_SCHEME}}://localhost:{{.SEED_ADMIN_PORT}} \
+            --iam-url={{.SEED_SCHEME}}://localhost:{{.SEED_IAM_PORT}} \
+            --data-url={{.SEED_SCHEME}}://localhost:{{.SEED_DATA_PORT}} \
+            --password="$password" {{if eq .SEED_SCHEME "https"}}--insecure-tls{{end}}
       - echo "✔ paladin-core · fixture {{.ACTION}} ({{.FLAVOUR}})"
