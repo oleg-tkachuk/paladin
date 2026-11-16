@@ -46,18 +46,12 @@ const (
 	// TenantServicePreviewPurgeTenantProcedure is the procedure name of the TenantService's
 	// PreviewPurgeTenant RPC.
 	TenantServicePreviewPurgeTenantProcedure = "/paladin.admin.v1.TenantService/PreviewPurgeTenant"
-	// TenantServiceRenameTenantSlugProcedure is the procedure name of the TenantService's
-	// RenameTenantSlug RPC.
-	TenantServiceRenameTenantSlugProcedure = "/paladin.admin.v1.TenantService/RenameTenantSlug"
 	// TenantServiceMigrateTenantStorageLayoutProcedure is the procedure name of the TenantService's
 	// MigrateTenantStorageLayout RPC.
 	TenantServiceMigrateTenantStorageLayoutProcedure = "/paladin.admin.v1.TenantService/MigrateTenantStorageLayout"
 	// TenantServiceGetTenantStorageMigrationProcedure is the procedure name of the TenantService's
 	// GetTenantStorageMigration RPC.
 	TenantServiceGetTenantStorageMigrationProcedure = "/paladin.admin.v1.TenantService/GetTenantStorageMigration"
-	// TenantServiceResolveRenamedSlugProcedure is the procedure name of the TenantService's
-	// ResolveRenamedSlug RPC.
-	TenantServiceResolveRenamedSlugProcedure = "/paladin.admin.v1.TenantService/ResolveRenamedSlug"
 	// TenantServiceGetTenantDefaultBindingProcedure is the procedure name of the TenantService's
 	// GetTenantDefaultBinding RPC.
 	TenantServiceGetTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/GetTenantDefaultBinding"
@@ -140,14 +134,6 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
-	tenantServiceRenameTenantSlugSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType:       connect.StreamTypeUnary,
-			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("RenameTenantSlug"),
-			Procedure:        TenantServiceRenameTenantSlugProcedure,
-			IdempotencyLevel: connect.IdempotencyIdempotent,
-		}
-	})
 	tenantServiceMigrateTenantStorageLayoutSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -160,14 +146,6 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("GetTenantStorageMigration"),
 			Procedure:        TenantServiceGetTenantStorageMigrationProcedure,
-			IdempotencyLevel: connect.IdempotencyNoSideEffects,
-		}
-	})
-	tenantServiceResolveRenamedSlugSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType:       connect.StreamTypeUnary,
-			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("ResolveRenamedSlug"),
-			Procedure:        TenantServiceResolveRenamedSlugProcedure,
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
@@ -209,9 +187,8 @@ type TenantServiceClient interface {
 	// can show them.
 	GetTenant(context.Context, *v1.GetTenantRequest) (*v1.Tenant, error)
 	// UpdateTenant applies update_mask to display_name, labels and
-	// inherited_cedar_policy. tenant_id and slug are immutable (use
-	// RenameTenantSlug for the latter); resource_version is required and a stale
-	// one is Aborted.
+	// inherited_cedar_policy. tenant_id and slug are immutable;
+	// resource_version is required and a stale one is Aborted.
 	UpdateTenant(context.Context, *v1.UpdateTenantRequest) (*v1.Tenant, error)
 	// DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
 	// remains recoverable via RestoreTenant within the retention window.
@@ -230,8 +207,8 @@ type TenantServiceClient interface {
 	// it to the active set. Slug + display_name are unique among live
 	// tenants (`001_initial_schema.sql`), and a trashed row keeps both —
 	// if a new tenant claimed the slug while this one was
-	// trashed, restore fails with ALREADY_EXISTS and the operator must
-	// rename one side first.
+	// trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
+	// the other tenant has to be purged before this one comes back.
 	RestoreTenant(context.Context, *v1.RestoreTenantRequest) (*v1.Tenant, error)
 	// PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
 	// an active tenant (operators have to soft-delete first) so the
@@ -243,12 +220,6 @@ type TenantServiceClient interface {
 	// an operator reads before a delete nothing undoes. The tenant may be
 	// active or trashed; the answer is the same either way.
 	PreviewPurgeTenant(context.Context, *v1.PreviewPurgeTenantRequest) (*v1.PreviewPurgeTenantResponse, error)
-	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
-	// `Tenant::"<old_slug>"` reference in the tenant's
-	// inherited_cedar_policy AND in every collection's cedar_policy to
-	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
-	// the supplied resource_version. Returns the renamed Tenant.
-	RenameTenantSlug(context.Context, *v1.RenameTenantSlugRequest) (*v1.Tenant, error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
 	// (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
 	// async copy job that server-side-copies every object into it, then rebinds
@@ -259,15 +230,6 @@ type TenantServiceClient interface {
 	// GetTenantStorageMigration returns the current migration status for a
 	// tenant, or NOT_FOUND if none was ever started.
 	GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error)
-	// ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
-	// renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
-	// "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
-	// is NOT platform-admin gated — it authorizes by READ access to the resolved
-	// target tenant, so an ordinary member of that tenant can follow a stale
-	// link. Every failure (no rename history, outside the grace window, or
-	// read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
-	// enumerate slug→tenant mappings.
-	ResolveRenamedSlug(context.Context, *v1.ResolveRenamedSlugRequest) (*v1.ResolveRenamedSlugResponse, error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
 	// route used to complete the bare collection name shape (ADR-0014 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
@@ -298,9 +260,8 @@ type TenantServiceHandler interface {
 	// can show them.
 	GetTenant(context.Context, *v1.GetTenantRequest) (*v1.Tenant, error)
 	// UpdateTenant applies update_mask to display_name, labels and
-	// inherited_cedar_policy. tenant_id and slug are immutable (use
-	// RenameTenantSlug for the latter); resource_version is required and a stale
-	// one is Aborted.
+	// inherited_cedar_policy. tenant_id and slug are immutable;
+	// resource_version is required and a stale one is Aborted.
 	UpdateTenant(context.Context, *v1.UpdateTenantRequest) (*v1.Tenant, error)
 	// DeleteTenant is a SOFT delete (sets `deleted_at`), always: the row
 	// remains recoverable via RestoreTenant within the retention window.
@@ -319,8 +280,8 @@ type TenantServiceHandler interface {
 	// it to the active set. Slug + display_name are unique among live
 	// tenants (`001_initial_schema.sql`), and a trashed row keeps both —
 	// if a new tenant claimed the slug while this one was
-	// trashed, restore fails with ALREADY_EXISTS and the operator must
-	// rename one side first.
+	// trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
+	// the other tenant has to be purged before this one comes back.
 	RestoreTenant(context.Context, *v1.RestoreTenantRequest) (*v1.Tenant, error)
 	// PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
 	// an active tenant (operators have to soft-delete first) so the
@@ -332,12 +293,6 @@ type TenantServiceHandler interface {
 	// an operator reads before a delete nothing undoes. The tenant may be
 	// active or trashed; the answer is the same either way.
 	PreviewPurgeTenant(context.Context, *v1.PreviewPurgeTenantRequest) (*v1.PreviewPurgeTenantResponse, error)
-	// RenameTenantSlug rewrites the tenant's `slug` and rewrites every
-	// `Tenant::"<old_slug>"` reference in the tenant's
-	// inherited_cedar_policy AND in every collection's cedar_policy to
-	// `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
-	// the supplied resource_version. Returns the renamed Tenant.
-	RenameTenantSlug(context.Context, *v1.RenameTenantSlugRequest) (*v1.Tenant, error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
 	// (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
 	// async copy job that server-side-copies every object into it, then rebinds
@@ -348,15 +303,6 @@ type TenantServiceHandler interface {
 	// GetTenantStorageMigration returns the current migration status for a
 	// tenant, or NOT_FOUND if none was ever started.
 	GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error)
-	// ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
-	// renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
-	// "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
-	// is NOT platform-admin gated — it authorizes by READ access to the resolved
-	// target tenant, so an ordinary member of that tenant can follow a stale
-	// link. Every failure (no rename history, outside the grace window, or
-	// read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
-	// enumerate slug→tenant mappings.
-	ResolveRenamedSlug(context.Context, *v1.ResolveRenamedSlugRequest) (*v1.ResolveRenamedSlugResponse, error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
 	// route used to complete the bare collection name shape (ADR-0014 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
@@ -383,10 +329,8 @@ func RegisterTenantServiceHandler(server *connect.Server, svc TenantServiceHandl
 		connect.Method{Spec: tenantServiceRestoreTenantSpec(), Handler: adapter.restoreTenant},
 		connect.Method{Spec: tenantServicePurgeTenantSpec(), Handler: adapter.purgeTenant},
 		connect.Method{Spec: tenantServicePreviewPurgeTenantSpec(), Handler: adapter.previewPurgeTenant},
-		connect.Method{Spec: tenantServiceRenameTenantSlugSpec(), Handler: adapter.renameTenantSlug},
 		connect.Method{Spec: tenantServiceMigrateTenantStorageLayoutSpec(), Handler: adapter.migrateTenantStorageLayout},
 		connect.Method{Spec: tenantServiceGetTenantStorageMigrationSpec(), Handler: adapter.getTenantStorageMigration},
-		connect.Method{Spec: tenantServiceResolveRenamedSlugSpec(), Handler: adapter.resolveRenamedSlug},
 		connect.Method{Spec: tenantServiceGetTenantDefaultBindingSpec(), Handler: adapter.getTenantDefaultBinding},
 		connect.Method{Spec: tenantServiceSetTenantDefaultBindingSpec(), Handler: adapter.setTenantDefaultBinding},
 		connect.Method{Spec: tenantServiceClearTenantDefaultBindingSpec(), Handler: adapter.clearTenantDefaultBinding},
@@ -432,20 +376,12 @@ func (UnimplementedTenantServiceHandler) PreviewPurgeTenant(context.Context, *v1
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.PreviewPurgeTenant is not implemented")
 }
 
-func (UnimplementedTenantServiceHandler) RenameTenantSlug(context.Context, *v1.RenameTenantSlugRequest) (*v1.Tenant, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.RenameTenantSlug is not implemented")
-}
-
 func (UnimplementedTenantServiceHandler) MigrateTenantStorageLayout(context.Context, *v1.MigrateTenantStorageLayoutRequest) (*v1.StorageMigrationStatus, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.MigrateTenantStorageLayout is not implemented")
 }
 
 func (UnimplementedTenantServiceHandler) GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.GetTenantStorageMigration is not implemented")
-}
-
-func (UnimplementedTenantServiceHandler) ResolveRenamedSlug(context.Context, *v1.ResolveRenamedSlugRequest) (*v1.ResolveRenamedSlugResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.ResolveRenamedSlug is not implemented")
 }
 
 func (UnimplementedTenantServiceHandler) GetTenantDefaultBinding(context.Context, *v1.GetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error) {
@@ -536,14 +472,6 @@ func (c *tenantServiceClient) PreviewPurgeTenant(ctx context.Context, req *v1.Pr
 	return &res, nil
 }
 
-func (c *tenantServiceClient) RenameTenantSlug(ctx context.Context, req *v1.RenameTenantSlugRequest) (*v1.Tenant, error) {
-	var res v1.Tenant
-	if err := c.client.CallUnary(ctx, tenantServiceRenameTenantSlugSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
 func (c *tenantServiceClient) MigrateTenantStorageLayout(ctx context.Context, req *v1.MigrateTenantStorageLayoutRequest) (*v1.StorageMigrationStatus, error) {
 	var res v1.StorageMigrationStatus
 	if err := c.client.CallUnary(ctx, tenantServiceMigrateTenantStorageLayoutSpec(), req, &res); err != nil {
@@ -555,14 +483,6 @@ func (c *tenantServiceClient) MigrateTenantStorageLayout(ctx context.Context, re
 func (c *tenantServiceClient) GetTenantStorageMigration(ctx context.Context, req *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error) {
 	var res v1.StorageMigrationStatus
 	if err := c.client.CallUnary(ctx, tenantServiceGetTenantStorageMigrationSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (c *tenantServiceClient) ResolveRenamedSlug(ctx context.Context, req *v1.ResolveRenamedSlugRequest) (*v1.ResolveRenamedSlugResponse, error) {
-	var res v1.ResolveRenamedSlugResponse
-	if err := c.client.CallUnary(ctx, tenantServiceResolveRenamedSlugSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -702,18 +622,6 @@ func (h tenantServiceHandler) previewPurgeTenant(ctx context.Context, _ connect.
 	return stream.Send(res)
 }
 
-func (h tenantServiceHandler) renameTenantSlug(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.RenameTenantSlugRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.RenameTenantSlug(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
 func (h tenantServiceHandler) migrateTenantStorageLayout(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
 	var req v1.MigrateTenantStorageLayoutRequest
 	if err := stream.Receive(&req); err != nil {
@@ -732,18 +640,6 @@ func (h tenantServiceHandler) getTenantStorageMigration(ctx context.Context, _ c
 		return err
 	}
 	res, err := h.svc.GetTenantStorageMigration(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
-func (h tenantServiceHandler) resolveRenamedSlug(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.ResolveRenamedSlugRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.ResolveRenamedSlug(ctx, &req)
 	if err != nil {
 		return err
 	}

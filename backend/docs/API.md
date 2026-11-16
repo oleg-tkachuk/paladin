@@ -136,7 +136,7 @@ Every service and RPC in `proto/`, by plane.
 | `QuotaService` | 3 | `GetQuota`, `SetQuota`, `ResetUsage` |
 | `SystemService` | 5 | `GetConfig`, `GetDispatcherStats`, `GetPlatformStats`, `ListPlatformStatsTenants`, `GetPlatformHealth` |
 | `TenantBudgetService` | 4 | `Get`, `Set`, `Summarize`, `ListReservations` |
-| `TenantService` | 15 | `CreateTenant`, `GetTenant`, `UpdateTenant`, `DeleteTenant`, `ListTenants`, `SetInheritedPolicy`, `RestoreTenant`, `PurgeTenant`, `RenameTenantSlug`, `MigrateTenantStorageLayout`, `GetTenantStorageMigration`, `ResolveRenamedSlug`, `GetTenantDefaultBinding`, `SetTenantDefaultBinding`, `ClearTenantDefaultBinding` |
+| `TenantService` | 13 | `CreateTenant`, `GetTenant`, `UpdateTenant`, `DeleteTenant`, `ListTenants`, `SetInheritedPolicy`, `RestoreTenant`, `PurgeTenant`, `MigrateTenantStorageLayout`, `GetTenantStorageMigration`, `GetTenantDefaultBinding`, `SetTenantDefaultBinding`, `ClearTenantDefaultBinding` |
 
 **data** (`:8080`, `paladin.data.v1`)
 

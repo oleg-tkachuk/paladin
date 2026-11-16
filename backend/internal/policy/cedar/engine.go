@@ -1023,8 +1023,8 @@ when {
 // no DeleteObject/GetObject/PutObject (no data-plane reach at all), no
 // ManageBackend (it may bind to an existing backend, not create or rotate
 // one), no IAM or token actions (it cannot mint a credential), and nothing
-// that removes a tenant — DeleteTenant/PurgeTenant/RestoreTenant/
-// RenameTenantSlug all route through ManageTenant, so the handler-side gates
+// that removes a tenant — DeleteTenant/PurgeTenant/RestoreTenant all route
+// through ManageTenant, so the handler-side gates
 // keep those on platform.admin and this permit alone cannot reach them.
 //
 // ManageCollection covers both reading and creating a collection: the

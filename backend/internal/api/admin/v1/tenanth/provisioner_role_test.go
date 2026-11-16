@@ -117,12 +117,6 @@ func TestTenantLifecycle_StaysPlatformAdminOnly(t *testing.T) {
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
-	t.Run("RenameTenantSlug", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{}, allow())
-		_, err := h.RenameTenantSlug(ctx, RenameTenantSlugArgs{TenantID: tid, NewSlug: "taken-over"})
-		wantCode(t, err, connect.CodePermissionDenied)
-	})
-
 	t.Run("MigrateTenantStorageLayout", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allow())
 		_, err := h.MigrateTenantStorageLayout(ctx, tid, "other-backend", 0)

@@ -1,13 +1,11 @@
 import Link from "next/link";
 
-import { RenamedSlugHint } from "@/components/features/tenants/RenamedSlugHint";
 import { PRESSED } from "@/lib/ui/states";
 import { cn } from "@/lib/utils";
 
 // Rendered when the tenant layout calls notFound() — i.e. the slug (or UUID)
-// in the URL matches no visible tenant. Beyond the standard 404 chrome it
-// mounts RenamedSlugHint, which offers a redirect when the slug was simply
-// renamed (a stale bookmark) rather than genuinely gone.
+// in the URL matches no visible tenant. A slug never changes, so a link that
+// worked once and 404s now names a tenant that is gone or out of reach.
 export default function TenantNotFound() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 animate-fade-in">
@@ -18,7 +16,7 @@ export default function TenantNotFound() {
         Workspace Not Found
       </h1>
       <p className="mb-8 max-w-md text-center text-sm text-muted-foreground">
-        This workspace doesn’t exist, or its address has changed.
+        This workspace doesn’t exist, or you cannot see it.
       </p>
       <Link
         href="/"
@@ -29,7 +27,6 @@ export default function TenantNotFound() {
       >
         Return to Dashboard
       </Link>
-      <RenamedSlugHint />
     </div>
   );
 }

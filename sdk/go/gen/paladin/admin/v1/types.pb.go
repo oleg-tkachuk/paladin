@@ -1776,8 +1776,9 @@ type Tenant struct {
 	CreatedAt            *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt            *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Human-readable kebab-case handle (e.g. "platform", "acme-prod").
-	// Stable across the tenant's lifetime unless rotated via
-	// RenameTenantSlug. Persisted as `tenants.slug` (UNIQUE), populated
+	// Set at creation and never changed: Cedar names the tenant by it
+	// (`Tenant::"<slug>"`), and so do tokens, policies and every
+	// `tenants/<slug>` a client holds. Persisted as `tenants.slug` (UNIQUE), populated
 	// by every read RPC. Front-end uses this to render slug-first URLs
 	// (`/tenants/<slug>/...`) and canonicalises UUID URLs to it.
 	Slug string `protobuf:"bytes,9,opt,name=slug,proto3" json:"slug,omitempty"`

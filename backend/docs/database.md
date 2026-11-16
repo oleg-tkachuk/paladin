@@ -136,10 +136,10 @@ the OAuth protocol itself defines.
 
 ## Table groups
 
-**Tenancy** — `tenants`, `tenant_slug_history`, `tenant_default_bindings`,
+**Tenancy** — `tenants`, `tenant_default_bindings`,
 `tenant_storage_migrations`. A tenant's slug is unique
-among live tenants only; a soft-deleted tenant keeps its slug so the audit
-trail stays resolvable, and renames are recorded in `tenant_slug_history`.
+among live tenants only, and never changes; a soft-deleted tenant keeps its
+slug so the audit trail stays resolvable.
 
 **Identity** — `users`, `user_settings`, `refresh_tokens`, `api_tokens`,
 `oauth_clients`, `oauth_authorization_codes`.

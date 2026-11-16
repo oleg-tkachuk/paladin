@@ -25,9 +25,8 @@ service TenantService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // UpdateTenant applies update_mask to display_name, labels and
-  // inherited_cedar_policy. tenant_id and slug are immutable (use
-  // RenameTenantSlug for the latter); resource_version is required and a stale
-  // one is Aborted.
+  // inherited_cedar_policy. tenant_id and slug are immutable;
+  // resource_version is required and a stale one is Aborted.
   rpc UpdateTenant(UpdateTenantRequest) returns (Tenant) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -56,8 +55,8 @@ service TenantService {
   // it to the active set. Slug + display_name are unique among live
   // tenants (`001_initial_schema.sql`), and a trashed row keeps both —
   // if a new tenant claimed the slug while this one was
-  // trashed, restore fails with ALREADY_EXISTS and the operator must
-  // rename one side first.
+  // trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
+  // the other tenant has to be purged before this one comes back.
   rpc RestoreTenant(RestoreTenantRequest) returns (Tenant);
 
   // PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
@@ -76,15 +75,6 @@ service TenantService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
-  // RenameTenantSlug rewrites the tenant's `slug` and rewrites every
-  // `Tenant::"<old_slug>"` reference in the tenant's
-  // inherited_cedar_policy AND in every collection's cedar_policy to
-  // `Tenant::"<new_slug>"`. Single transaction, OCC-guarded against
-  // the supplied resource_version. Returns the renamed Tenant.
-  rpc RenameTenantSlug(RenameTenantSlugRequest) returns (Tenant) {
-    option idempotency_level = IDEMPOTENT;
-  }
-
   // MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
   // (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
   // async copy job that server-side-copies every object into it, then rebinds
@@ -96,18 +86,6 @@ service TenantService {
   // GetTenantStorageMigration returns the current migration status for a
   // tenant, or NOT_FOUND if none was ever started.
   rpc GetTenantStorageMigration(GetTenantStorageMigrationRequest) returns (StorageMigrationStatus) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
-
-  // ResolveRenamedSlug maps a no-longer-valid tenant slug to the slug it was
-  // renamed to, so a 404 on an old `/tenants/<old-slug>/...` URL can offer a
-  // "did you mean <new-slug>?" redirect. Unlike the rest of TenantService this
-  // is NOT platform-admin gated — it authorizes by READ access to the resolved
-  // target tenant, so an ordinary member of that tenant can follow a stale
-  // link. Every failure (no rename history, outside the grace window, or
-  // read-denied) collapses to NOT_FOUND so the endpoint cannot be used to
-  // enumerate slug→tenant mappings.
-  rpc ResolveRenamedSlug(ResolveRenamedSlugRequest) returns (ResolveRenamedSlugResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
@@ -289,31 +267,6 @@ enum PurgeBlockerKind {
   // operator: each row goes once the backend bucket is gone, and the purge
   // can be retried then.
   PURGE_BLOCKER_KIND_BUCKETS_DELETING = 4;
-}
-
-message RenameTenantSlugRequest {
-  // name — "tenants/{tenant_id_or_slug}". Phase 3 path: slug-aware.
-  string name = 1 [(buf.validate.field).string.min_len = 1];
-  // resource_version — current tenant version, OCC-guarded.
-  // OCC, required: an absent guard would silently become a blind overwrite
-  //   (expected_version=0 disables the check in SQL). Read the current version
-  //   first; there is no bypass on this RPC by design.
-  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
-  // new_slug — kebab-case, validated by the same rules as
-  // CreateTenantRequest.slug. Uniqueness enforced by the database.
-  string new_slug = 3 [(buf.validate.field).string.min_len = 1];
-}
-
-message ResolveRenamedSlugRequest {
-  // old_slug — the slug that 404'd (the one in the stale bookmark).
-  string old_slug = 1 [(buf.validate.field).string.min_len = 1];
-}
-
-message ResolveRenamedSlugResponse {
-  // new_slug — the slug the tenant uses now.
-  string new_slug = 1;
-  // renamed_at — when the rotation happened (for a "renamed N days ago" hint).
-  google.protobuf.Timestamp renamed_at = 2;
 }
 
 message MigrateTenantStorageLayoutRequest {

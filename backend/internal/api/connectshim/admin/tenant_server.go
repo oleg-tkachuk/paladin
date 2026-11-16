@@ -170,7 +170,7 @@ func (s *TenantServer) UpdateTenant(ctx context.Context, req *pb.UpdateTenantReq
 				"tenant_id is immutable")
 		case "slug":
 			return nil, connect.Errorf(connect.CodeInvalidArgument,
-				"slug is immutable; use RenameTenantSlug")
+				"slug is immutable")
 		}
 	}
 	if err := convx.CheckMask(mask, updateTenantPaths); err != nil {
@@ -305,40 +305,6 @@ func (s *TenantServer) SetInheritedPolicy(ctx context.Context, req *pb.SetInheri
 		return nil, err
 	}
 	return tenantDomainToProto(t, s.TrashRetention), nil
-}
-
-// RenameTenantSlug rotates the tenant's slug and rewrites every
-// `Tenant::"<old_slug>"` reference in inherited + per-collection
-// policies. See proto comments and tenant.Handler.RenameTenantSlug.
-func (s *TenantServer) RenameTenantSlug(ctx context.Context, req *pb.RenameTenantSlugRequest) (*pb.Tenant, error) {
-	id, err := s.resolveTenantID(ctx, req.GetName())
-	if err != nil {
-		return nil, err
-	}
-	rv, err := convx.ParseRV(req.GetResourceVersion())
-	if err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
-	}
-	t, err := s.H.RenameTenantSlug(ctx, tenanth.RenameTenantSlugArgs{
-		TenantID:        id,
-		NewSlug:         req.GetNewSlug(),
-		ExpectedVersion: rv,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return tenantDomainToProto(t, s.TrashRetention), nil
-}
-
-func (s *TenantServer) ResolveRenamedSlug(ctx context.Context, req *pb.ResolveRenamedSlugRequest) (*pb.ResolveRenamedSlugResponse, error) {
-	newSlug, renamedAt, err := s.H.ResolveRenamedSlug(ctx, req.GetOldSlug())
-	if err != nil {
-		return nil, err
-	}
-	return &pb.ResolveRenamedSlugResponse{
-		NewSlug:   newSlug,
-		RenamedAt: timestamppb.New(renamedAt),
-	}, nil
 }
 
 var _ paladinadminv1connect.TenantServiceHandler = (*TenantServer)(nil)

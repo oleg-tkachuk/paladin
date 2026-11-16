@@ -149,17 +149,6 @@ type Repository interface {
 	// ErrNotTrashed when the row is currently active.
 	Restore(ctx context.Context, tenantID uuid.UUID) (Tenant, error)
 	List(ctx context.Context, args ListTenantsArgs) ([]Tenant, string, error)
-	// Rename atomically updates tenants.slug AND rewrites every
-	// `Tenant::"<old>"` reference in the tenant's
-	// inherited_cedar_policy + every collections row's cedar_policy
-	// for that tenant. Returns the renamed Tenant (with the new
-	// resource_version). ErrVersionMismatch on OCC failure.
-	Rename(ctx context.Context, args RenameTenantSlugArgs) (Tenant, error)
-	// LookupRenamedSlug finds the most recent rotation away FROM oldSlug
-	// within `window` (0 = unbounded), reading the tenant_slug_history table
-	// written by Rename. found=false when no matching rotation exists. Used
-	// by ResolveRenamedSlug to back a 404 "did you mean?" redirect.
-	LookupRenamedSlug(ctx context.Context, oldSlug string, window time.Duration) (res RenamedSlug, found bool, err error)
 
 	// RunInTx + the *Tx mutation variants are the ADR-0003 seam: the
 	// handler runs a mutation and its event record on one tx so a crash
@@ -275,22 +264,6 @@ var ErrSourceBucketAmbiguous = errors.New("tenant collections span multiple buck
 // has no private collection: none at all, or only public ones, which stay in
 // their bucket (ADR-0027) and leave the migration nothing to move.
 var ErrNoCollectionsToMigrate = errors.New("tenant has no private collections to migrate; public collections stay in their bucket")
-
-// RenameTenantSlugArgs is the input shape for Repository.Rename and
-// Handler.RenameTenantSlug.
-type RenameTenantSlugArgs struct {
-	TenantID        uuid.UUID
-	NewSlug         string
-	ExpectedVersion int64
-}
-
-// RenamedSlug is one resolved rotation row from tenant_slug_history: the
-// tenant that owns the new slug, the new slug itself, and when it rotated.
-type RenamedSlug struct {
-	TenantID  uuid.UUID
-	NewSlug   string
-	RenamedAt time.Time
-}
 
 // ListTenantsArgs replaces the previous List(pageSize, afterID) so
 // callers can opt into seeing soft-deleted rows. Default behaviour
@@ -888,46 +861,6 @@ func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.U
 	return &m, nil
 }
 
-// defaultRenameGraceWindow bounds how long after a rename the old slug still
-// resolves. A candidate config knob; 30d matches the BACKLOG default and a
-// typical bookmark-staleness horizon.
-const defaultRenameGraceWindow = 30 * 24 * time.Hour
-
-// ResolveRenamedSlug maps oldSlug → the slug its tenant uses now, for a 404
-// "did you mean?" redirect. Authorized by READ access to the RESOLVED target
-// tenant — so a member of that tenant (or a platform admin) can follow a stale
-// link, but nobody else. Every non-success outcome (no history, outside the
-// grace window, read-denied) collapses to NotFound, the same anti-enumeration
-// contract as GetTenantBySlug: the endpoint can't be used to map slugs to
-// tenants the caller has no access to.
-func (h *Handler) ResolveRenamedSlug(ctx context.Context, oldSlug string) (string, time.Time, error) {
-	res, found, lookupErr := h.repo.LookupRenamedSlug(ctx, oldSlug, defaultRenameGraceWindow)
-
-	// Run the auth dance regardless of the lookup outcome so existing-but-
-	// denied and missing are timing-indistinguishable. Authorize ReadTenant
-	// on the resolved tenant when present, else on the caller's own (a no-op
-	// query of ~the same cost).
-	target := res.TenantID
-	if !found || lookupErr != nil {
-		if ct, terr := auth.TenantFromContext(ctx); terr == nil {
-			target = ct
-		}
-	}
-	if _, perr := auth.PrincipalFromContext(ctx); perr != nil {
-		return "", time.Time{}, connect.NewError(connect.CodeUnauthenticated, perr.Error()).WithCause(perr)
-	}
-	if authErr := h.authorize(ctx, cedar.ActionReadTenant, target); authErr != nil {
-		return "", time.Time{}, connect.NewError(connect.CodeNotFound, ErrNotFound.Error()).WithCause(ErrNotFound)
-	}
-	if lookupErr != nil {
-		return "", time.Time{}, connect.NewError(connect.CodeInternal, lookupErr.Error()).WithCause(lookupErr)
-	}
-	if !found {
-		return "", time.Time{}, connect.NewError(connect.CodeNotFound, ErrNotFound.Error()).WithCause(ErrNotFound)
-	}
-	return res.NewSlug, res.RenamedAt, nil
-}
-
 func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Tenant, error) {
 	// SetInheritedPolicy lands here, and it is the one edit a provisioner must
 	// make: a freshly created tenant is unusable until its policy admits the
@@ -1120,33 +1053,6 @@ type PurgeTenantArgs struct {
 	Actor    string
 }
 
-// RenameTenantSlug rewrites the tenant's slug AND rewrites every
-// `Tenant::"<old_slug>"` reference in the tenant's inherited
-// cedar_policy plus every collection's cedar_policy for the tenant.
-// Single transaction in the repository; OCC-guarded against
-// args.ExpectedVersion. Platform-admin only.
-//
-// Out of scope: per-bucket cedar_policy is not touched today — buckets
-// don't carry slug references in current default policies. If a future
-// bucket policy template starts referring to the slug, extend
-// Repository.Rename to cover it.
-func (h *Handler) RenameTenantSlug(ctx context.Context, args RenameTenantSlugArgs) (*Tenant, error) {
-	if err := requirePlatformAdmin(ctx); err != nil {
-		return nil, err
-	}
-	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
-		return nil, err
-	}
-	if err := apiutil.ValidateTenantSlug(args.NewSlug); err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("new_slug: %w", err))
-	}
-	t, err := h.repo.Rename(ctx, args)
-	if err != nil {
-		return nil, apiutil.MapError(err)
-	}
-	return &t, nil
-}
-
 func (h *Handler) ListTenants(ctx context.Context, args ListTenantsArgs, pageToken string) ([]Tenant, string, error) {
 	if err := requirePlatformAdmin(ctx); err != nil {
 		return nil, "", err
@@ -1245,7 +1151,7 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // unambiguous "missing", not a version conflict).
 var ErrNotFound = errors.New("tenant not found")
 
-// ErrSlugConflict — Repository.Rename or Create returns this when the
+// ErrSlugConflict — Repository.Create returns this when the
 // requested slug is already in use by another tenant.
 var ErrSlugConflict = errors.New("tenant slug already in use")
 

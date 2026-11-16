@@ -80,7 +80,6 @@ func (s adminStateServers) fill(readers middleware.StateReaders) {
 		adminconnect.TenantServiceSetInheritedPolicyProcedure,
 		adminconnect.TenantServiceRestoreTenantProcedure,
 		adminconnect.TenantServicePurgeTenantProcedure,
-		adminconnect.TenantServiceRenameTenantSlugProcedure,
 	} {
 		readers[p] = tenant
 	}

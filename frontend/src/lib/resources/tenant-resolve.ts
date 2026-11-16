@@ -7,12 +7,8 @@
 // the canonical slug form so the address bar always reads as the
 // human-friendly identifier.
 //
-// Slug-rename caveat: a tenant whose slug got rotated (via the
-// admin RenameTenantSlug RPC) breaks any bookmark using the old
-// slug — that URL 404s as designed (fail-fast over silent redirect
-// to the wrong tenant). A future "slug rename history redirect"
-// follow-up could keep old slugs alive for a grace window using
-// the audit_log; tracked in BACKLOG.
+// A slug never changes, so a slug-first URL stays valid for the
+// tenant's whole life.
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
