@@ -20,6 +20,9 @@ import {
   ObjectNotFound,
 } from "@/components/features/ObjectDetailStates";
 import { ObjectTagsCard } from "@/components/features/ObjectTagsCard";
+import { ObjectTaintCard } from "@/components/features/ObjectTaintCard";
+import { TaintBadge } from "@/components/features/objects/TaintBadge";
+import { taintSignalsOf } from "@/lib/objects/taint";
 import { ObjectLockCard } from "@/components/features/ObjectLockCard";
 import { ObjectSpecsPanel } from "@/components/features/ObjectSpecsPanel";
 import { ObjectPreview } from "@/components/features/objects/ObjectPreview";
@@ -57,6 +60,7 @@ export function ObjectDetailView({
     loading,
     refresh,
     patchObjectMeta,
+    setTaint,
     softDeleteObject,
     restoreObject,
     purgeObject,
@@ -182,6 +186,7 @@ export function ObjectDetailView({
             </Button>
             <DocumentIcon className="size-6 text-primary" />
             <span className="truncate font-mono text-xl">{fileName}</span>
+            <TaintBadge signals={taintSignalsOf(object)} />
           </h1>
         }
         description={object.key}
@@ -235,6 +240,11 @@ export function ObjectDetailView({
                   COMPLIANCE control in a column of metadata invites clicking
                   it the way one edits a label. */}
               <ObjectLockCard objectName={object.name} />
+
+              <ObjectTaintCard
+                signals={taintSignalsOf(object)}
+                onSave={setTaint}
+              />
             </TabsContent>
 
             <TabsContent value="versions">
