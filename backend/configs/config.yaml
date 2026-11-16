@@ -91,6 +91,10 @@ admin:
     # console marks the tenant "Past retention". Surfaced only — nothing
     # purges a tenant on its own. Must be positive.
     trash_retention: 720h               # 30 days
+    # A slug a trashed or purged tenant held is never given to another
+    # tenant: Cedar, tokens, policies and clients name tenants by slug, and
+    # would all name the new one. false lets a new tenant take it.
+    reserve_slugs: true
 
 # ─── Datastores ─────────────────────────────────────────────────────────────
 datastores:

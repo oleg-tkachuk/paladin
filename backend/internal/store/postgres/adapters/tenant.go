@@ -60,6 +60,12 @@ func (r *TenantRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, t
 	return nil
 }
 
+// What TenantSlugHolder answers: who holds a slug a create asks for.
+const (
+	slugHolderTrashed = "trashed"
+	slugHolderRetired = "retired"
+)
+
 func (r *TenantRepo) Create(ctx context.Context, args tenanth.CreateTenantArgs) (tenanth.Tenant, error) {
 	// The tenant insert + the optional default-binding insert already need
 	// one tx; RunInTx provides it. A binding FK violation rolls the tenant
@@ -89,6 +95,22 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 	storageLayout := args.StorageLayout
 	if storageLayout == "" {
 		storageLayout = "shared"
+	}
+	// While slugs are reserved, a slug a trashed tenant still holds or a
+	// purged one held is refused before the insert, in one read so a purge
+	// committing meanwhile cannot hide it. A live holder is left to the
+	// unique index, which reports it as ErrSlugConflict.
+	if !args.AllowSlugReuse {
+		holder, err := qtx.TenantSlugHolder(ctx, args.Slug)
+		if err != nil {
+			return fmt.Errorf("create tenant: slug holder: %w", err)
+		}
+		switch holder {
+		case slugHolderTrashed:
+			return tenanth.ErrSlugHeldInTrash
+		case slugHolderRetired:
+			return tenanth.ErrSlugRetired
+		}
 	}
 	if err := qtx.CreateTenant(ctx,
 		pgUUID(args.TenantID),
@@ -444,6 +466,13 @@ func (r *TenantRepo) Purge(ctx context.Context, args tenanth.PurgeTenantArgs) er
 }
 
 func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, expectedVersion int64) error {
+	// The slug is retired on the delete's own transaction, whatever
+	// admin.tenants.reserve_slugs says: it decides whether a retired slug is
+	// refused, not whether it is recorded. Both callers run on a tx, so a
+	// delete refused below takes this insert back with it.
+	if err := q.RetireTenantSlug(ctx, pgUUID(tenantID)); err != nil {
+		return fmt.Errorf("retire tenant slug: %w", err)
+	}
 	rows, err := q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
 		// A legal hold or an unexpired retention window refuses the purge

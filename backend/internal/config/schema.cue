@@ -90,6 +90,10 @@ admin: {
     // purge (Tenant.purge_eligible_at). Surfaced only — nothing purges on
     // its own. Must be positive (checked in Validate).
     trash_retention: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"720h"
+    // A slug a trashed or purged tenant held is never given to another
+    // tenant: Cedar, tokens, policies and clients name tenants by slug. false
+    // lets a new tenant take it once its tenant is trashed or purged.
+    reserve_slugs: bool | *true
   }
   // The roles SystemService.GetPlatformHealth reads, each at its health
   // listener. The chart lists every role it deploys.
