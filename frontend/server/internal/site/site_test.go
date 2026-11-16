@@ -25,6 +25,7 @@ func export() fstest.MapFS {
 		"index.txt":                              file("home rsc"),
 		"404.html":                               file("not found"),
 		"login.html":                             file("login"),
+		"login.txt":                              file("login rsc"),
 		"favicon.ico":                            file("icon"),
 		"tenants.html":                           file("tenants"),
 		"tenants/new.html":                       file("new tenant"),
@@ -70,6 +71,10 @@ func TestResolve(t *testing.T) {
 		{"the payload of a page whose id holds a slash", "/tenants/acme/collections/x/objects/a%2Freport.txt.txt", true, "tenants/_/collections/_/objects/_.txt"},
 		{"an encoded slash inside a segment", "/tenants/a%2Fb/collections/x%2Fy/objects/k%2Fey", false, "tenants/_/collections/_/objects/_.html"},
 		{"an id ending in .txt, as a page", "/tenants/notes.txt", false, "tenants/_.html"},
+		// The router asks for a page with a trailing slash at index.txt below
+		// it: where TxtRedirect sends a page whose id ends in .txt.
+		{"the payload of a page with a trailing slash", "/tenants/notes.txt/index.txt", true, "tenants/_.txt"},
+		{"the payload of a static page with a trailing slash", "/login/index.txt", true, "login.txt"},
 		{"the placeholder itself", "/tenants/_", false, "tenants/_.html"},
 		{"a malformed escape, as a dynamic value", "/tenants/bad%zz", false, "tenants/_.html"},
 		{"a dot-dot segment, as a dynamic value", "/tenants/%2e%2e/billing", false, "tenants/_/billing.html"},
@@ -157,9 +162,8 @@ func TestServe(t *testing.T) {
 func TestTxtRedirect(t *testing.T) {
 	s := newSite(t)
 	for _, tc := range []struct{ name, path, want string }{
-		{"an object named report.txt", "/tenants/acme/collections/x/objects/a%2Freport.txt", "/tenants/acme/collections/x/objects/a%2Freport%2Etxt"},
-		{"a dynamic page", "/tenants/notes.txt", "/tenants/notes%2Etxt"},
-		{"with a trailing slash", "/tenants/notes.txt/", "/tenants/notes%2Etxt"},
+		{"an object named report.txt", "/tenants/acme/collections/x/objects/a%2Freport.txt", "/tenants/acme/collections/x/objects/a%2Freport.txt/"},
+		{"a dynamic page", "/tenants/notes.txt", "/tenants/notes.txt/"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := s.TxtRedirect(tc.path)
@@ -174,7 +178,8 @@ func TestTxtRedirect(t *testing.T) {
 
 	for _, p := range []string{
 		"/tenants/acme",             // no suffix
-		"/tenants/notes%2Etxt",      // already encoded
+		"/tenants/notes.txt/",       // already sent on
+		"/tenants/notes%2Etxt",      // the old encoded form: no ".txt" suffix
 		"/index.txt",                // a payload the export holds
 		"/tenants/acme/billing.txt", // likewise, under a placeholder
 		"/nowhere/at/all.txt",       // no page

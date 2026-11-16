@@ -36,11 +36,9 @@ const (
 	// RSCHeader marks the client router's request for a page's payload.
 	RSCHeader = "RSC"
 
-	htmlExt = ".html"
-	rscExt  = ".txt"
-	// encodedRSCExt is rscExt with its dot percent-encoded.
-	encodedRSCExt = "%2Etxt"
-	indexDoc      = "index"
+	htmlExt  = ".html"
+	rscExt   = ".txt"
+	indexDoc = "index"
 	// notFoundDoc is the export's own 404 page.
 	notFoundDoc = "404.html"
 
@@ -166,6 +164,12 @@ func segments(escapedPath string) []segment {
 
 // Resolve names the file a request path is served from, or false.
 func (s *Site) Resolve(escapedPath string, rsc bool) (string, bool) {
+	// The router asks for the payload of a page addressed with a trailing
+	// slash at index.txt below it, as TxtRedirect addresses one: the page's
+	// own payload.
+	if page, ok := strings.CutSuffix(escapedPath, segmentSeparator+indexDoc+rscExt); rsc && ok && page != "" {
+		escapedPath = page + rscExt
+	}
 	segs := segments(escapedPath)
 	if len(segs) == 0 {
 		return s.leafAtRoot(rsc)
@@ -173,19 +177,23 @@ func (s *Site) Resolve(escapedPath string, rsc bool) (string, bool) {
 	return s.walk(".", segs, rsc)
 }
 
-// TxtRedirect is where a page request whose last segment ends in ".txt" goes
-// instead: the same address with that dot encoded. False when the path is no
-// page, already encoded, or a file the export holds under that name.
+// TxtRedirect is where a page request whose address ends in ".txt" goes
+// instead: the same address with a trailing slash, which the router keeps
+// apart from its own ".txt" payload marker. False when the path is no page,
+// already ends in a slash, or names a file the export holds.
+//
+// Not the dot percent-encoded: %2E escapes an unreserved character, which a
+// proxy may decode on the way in (RFC 3986 §6.2.2.2), and the ingress does,
+// so the encoded address came back as the one redirected from.
 func (s *Site) TxtRedirect(escapedPath string) (string, bool) {
-	trimmed := strings.TrimRight(escapedPath, segmentSeparator)
-	if !strings.HasSuffix(trimmed, rscExt) {
+	if !strings.HasSuffix(escapedPath, rscExt) {
 		return "", false
 	}
 	file, ok := s.Resolve(escapedPath, false)
 	if !ok || !strings.HasSuffix(file, htmlExt) {
 		return "", false
 	}
-	return strings.TrimSuffix(trimmed, rscExt) + encodedRSCExt, true
+	return escapedPath + segmentSeparator, true
 }
 
 func (s *Site) leafAtRoot(rsc bool) (string, bool) {
