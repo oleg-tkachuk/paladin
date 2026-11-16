@@ -31,10 +31,7 @@ COLLECTION="${COLLECTION:-default}"
 JWT="${JWT:-}"
 
 if [[ -z "$JWT" ]]; then
-    JWT=$(awk '/devToken:/ {gsub(/"/,""); print $2}' configs/config.yaml | head -n1)
-fi
-if [[ -z "$JWT" ]]; then
-    echo "no JWT (set \$JWT or have configs/config.yaml.devToken)" >&2
+    echo "no JWT: set \$JWT to a token from \`task backend:auth:mint-token\`" >&2
     exit 1
 fi
 

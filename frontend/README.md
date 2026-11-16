@@ -55,9 +55,8 @@ bootstrap password. The session role keeps the refresh token in the httpOnly
 and between tenants through `src/lib/session/client.ts`, and learns who is
 signed in from `WhoAmI`.
 
-`configs/config.yaml`'s `auth.devToken` is read only by
-`scripts/dev-bootstrap.sh`, which uses it to seed a local stack. It ships
-empty: this repository is public. To fill it for your stack:
+`scripts/dev-bootstrap.sh` seeds a local stack with a token it is given in
+`$JWT`. Mint one for your stack:
 
 ```bash
 task backend:auth:mint-token   # from the repository root
@@ -87,8 +86,7 @@ frontend/
 │   ├── gen/              GENERATED Connect-ES stubs — do not hand-edit
 │   ├── lib/              client helpers, formatting; connect/ (the transport
 │   │                     to the session role), session/ (its endpoints)
-│   └── config.ts         loads configs/config.yaml (uiMetadata only), via zod
-├── configs/config.yaml   dev-bootstrap's JWT; the app reads only uiMetadata
+│   └── buildMeta.ts      the build's version, commit and time, for the bundle
 ├── server/               the Go server the export ships in; contract/ holds
 │                         the names it and the pages spell alike
 ├── tests/e2e/            Playwright suite + its compose stack
