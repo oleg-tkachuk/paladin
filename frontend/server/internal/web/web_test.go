@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -274,18 +277,66 @@ func TestMethodsAndLogs(t *testing.T) {
 	assert.Equal(t, int64(http.StatusOK), served[0].ContextMap()["status"])
 }
 
-// The router strips a trailing ".txt" from the address it loads on; a page
-// whose id ends so is sent where the dot is encoded.
-func TestTxtSuffixRedirect(t *testing.T) {
+// maxHops bounds the redirects a page may take to open: a loop runs past it.
+const maxHops = 5
+
+// unreservedEscape is a percent-escape a proxy may decode on the way in: one
+// of an unreserved character (RFC 3986 §6.2.2.2), as the cluster's ingress
+// does with %2E.
+var unreservedEscape = regexp.MustCompile(`%[0-9A-Fa-f]{2}`)
+
+func normalizeUnreserved(escapedPath string) string {
+	return unreservedEscape.ReplaceAllStringFunc(escapedPath, func(esc string) string {
+		b, err := strconv.ParseUint(esc[1:], 16, 8)
+		if err != nil {
+			return esc
+		}
+		c := byte(b)
+		if c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || strings.IndexByte("-._~", c) >= 0 {
+			return string(c)
+		}
+		return esc
+	})
+}
+
+// The router strips a trailing ".txt" from the address it loads on, so a page
+// whose last segment ends so is sent where it no longer does. It opens behind
+// a proxy that passes the address on as it came and behind one that decodes
+// unreserved escapes: an encoded dot comes back a dot there, and was sent
+// round the same redirect for ever.
+func TestATxtPageOpensBehindAnyProxy(t *testing.T) {
 	f := newFixture(t, nil, web.Banner{})
-
-	rec := f.do(f.signedIn(http.MethodGet, "/tenants/notes.txt?tab=x", nil))
-	assert.Equal(t, http.StatusPermanentRedirect, rec.Code)
-	assert.Equal(t, "/tenants/notes%2Etxt?tab=x", rec.Header().Get("Location"))
-
-	rec = f.do(f.signedIn(http.MethodGet, "/tenants/notes%2Etxt", nil))
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "tenant", rec.Body.String())
+	for name, proxy := range map[string]func(string) string{
+		"as it came":                  func(p string) string { return p },
+		"decoding unreserved escapes": normalizeUnreserved,
+	} {
+		t.Run(name, func(t *testing.T) {
+			target := "/tenants/notes.txt?tab=x"
+			var rec *httptest.ResponseRecorder
+			for hop := 0; ; hop++ {
+				require.Less(t, hop, maxHops, "still redirecting at %s", target)
+				u, err := url.Parse(target)
+				require.NoError(t, err)
+				u.RawPath = proxy(u.EscapedPath())
+				u.Path, err = url.PathUnescape(u.RawPath)
+				require.NoError(t, err)
+				rec = f.do(f.signedIn(http.MethodGet, u.RequestURI(), nil))
+				if rec.Code != http.StatusPermanentRedirect {
+					break
+				}
+				target = rec.Header().Get("Location")
+			}
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, "tenant", rec.Body.String())
+			final, err := url.Parse(target)
+			require.NoError(t, err)
+			// The router reads the address as the browser keeps it, escapes
+			// and all.
+			assert.False(t, strings.HasSuffix(final.EscapedPath(), ".txt"), "the router would strip the suffix of %s", final.EscapedPath())
+			assert.Equal(t, "notes.txt", path.Base(final.Path), "the address still names the page")
+			assert.Equal(t, "tab=x", final.RawQuery)
+		})
+	}
 
 	rsc := f.signedIn(http.MethodGet, "/tenants/notes.txt", nil)
 	rsc.Header.Set(site.RSCHeader, "1")
