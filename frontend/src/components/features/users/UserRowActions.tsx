@@ -46,29 +46,48 @@ export function UserRowActions({
   const { busy, updateUser, deleteUser, resetPassword } = useUserAdmin();
   const { showNotification } = useNotification();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Disabling cuts the user off, so it asks first like Reset and Delete;
+  // enabling takes nothing away and stays one click.
+  const [confirmDisable, setConfirmDisable] = useState(false);
   // Resetting a password ends the current one at once, so it asks first, as
   // Delete beside it always did. One click on the menu row used to do it.
   const [confirmReset, setConfirmReset] = useState(false);
 
   const label = user.displayName || user.subject;
 
-  async function toggleDisabled() {
+  async function enable() {
     const res = await updateUser({
       name: user.name,
       resourceVersion: user.resourceVersion,
-      disabled: !user.disabled,
+      disabled: false,
     });
     if (!res.ok) {
       showNotification({
         type: "error",
-        title: user.disabled ? "Could not enable" : "Could not disable",
+        title: "Could not enable",
         message: res.error ?? "",
       });
       return;
     }
     showNotification({
       type: "success",
-      title: user.disabled ? "User enabled" : "User disabled",
+      title: "User enabled",
+      message: label,
+    });
+    onChanged();
+  }
+
+  // A refusal is thrown for the confirmation to show, as Delete's is.
+  async function doDisable() {
+    const res = await updateUser({
+      name: user.name,
+      resourceVersion: user.resourceVersion,
+      disabled: true,
+    });
+    if (!res.ok) throw new Error(res.error ?? "");
+    showNotification({
+      type: "success",
+      title: "User disabled",
       message: label,
     });
     onChanged();
@@ -118,7 +137,9 @@ export function UserRowActions({
           <span aria-hidden="true">⋯</span>
         </Dropdown.Trigger>
         <Dropdown.Menu className="py-1">
-          <Dropdown.Item onClick={toggleDisabled}>
+          <Dropdown.Item
+            onClick={user.disabled ? enable : () => setConfirmDisable(true)}
+          >
             <span className="px-3 py-1.5 text-xs font-medium">
               {user.disabled ? "Enable" : "Disable"}
             </span>
@@ -136,6 +157,18 @@ export function UserRowActions({
           </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
+
+      <ConfirmModal
+        isOpen={confirmDisable}
+        onClose={() => setConfirmDisable(false)}
+        onConfirm={doDisable}
+        type="warning"
+        title="Disable user"
+        message={`${label} can no longer sign in, and their console session ends on its next request. Enable them again to give access back.`}
+        warning="Tokens already issued to API clients keep working until they expire."
+        confirmText="Disable"
+        loading={busy}
+      />
 
       <ConfirmModal
         isOpen={confirmReset}
