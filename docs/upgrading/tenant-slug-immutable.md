@@ -1,4 +1,4 @@
-## Unreleased — a tenant's slug never changes
+## sdk/python/v0.147.0, sdk/go/v0.147.0 — a tenant's slug never changes
 
 - `TenantService.RenameTenantSlug` and `TenantService.ResolveRenamedSlug` are
   removed, from the API and from both SDKs. A slug is set when the tenant is
