@@ -68,75 +68,6 @@
       },
       "type": "object"
     },
-    "config": {
-      "additionalProperties": false,
-      "properties": {
-        "runtimeConfig": {
-          "additionalProperties": false,
-          "properties": {
-            "public": {
-              "additionalProperties": false,
-              "properties": {
-                "auth": {
-                  "additionalProperties": false,
-                  "description": "accepted and ignored: src/config.ts no longer reads this. Kept so an overlay outside this repository does not fail validation over it.",
-                  "properties": {
-                    "devToken": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "paladin": {
-                  "additionalProperties": false,
-                  "description": "accepted and ignored: src/config.ts no longer reads this. Kept so an overlay outside this repository does not fail validation over it.",
-                  "properties": {
-                    "baseUrl": {
-                      "type": "string"
-                    },
-                    "timeoutMs": {
-                      "type": "integer"
-                    },
-                    "upstreamUrl": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                },
-                "oidc": {
-                  "additionalProperties": false,
-                  "description": "accepted and ignored: src/config.ts no longer reads this. Kept so an overlay outside this repository does not fail validation over it.",
-                  "properties": {
-                    "authority": {
-                      "type": "string"
-                    },
-                    "clientId": {
-                      "type": "string"
-                    },
-                    "disableAuth": {
-                      "type": "boolean"
-                    },
-                    "postLogoutRedirectUri": {
-                      "type": "string"
-                    },
-                    "redirectUri": {
-                      "type": "string"
-                    },
-                    "scope": {
-                      "type": "string"
-                    }
-                  },
-                  "type": "object"
-                }
-              },
-              "type": "object"
-            }
-          },
-          "type": "object"
-        }
-      },
-      "type": "object"
-    },
     "banner": {
       "additionalProperties": false,
       "properties": {
@@ -252,21 +183,6 @@
         "timeoutSeconds": {
           "type": "integer",
           "minimum": 1
-        }
-      },
-      "type": "object"
-    },
-    "metadata": {
-      "additionalProperties": false,
-      "properties": {
-        "buildTime": {
-          "type": "string"
-        },
-        "commit": {
-          "type": "string"
-        },
-        "version": {
-          "type": "string"
         }
       },
       "type": "object"

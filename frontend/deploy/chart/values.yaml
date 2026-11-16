@@ -9,10 +9,6 @@ replicaCount: 1
 # default; with a release per merge that is ten idle ReplicaSets. GitOps rolls
 # back by reverting the revision, so a few are enough.
 revisionHistoryLimit: 3
-metadata:
-  version: ""
-  commit: "unknown"
-  buildTime: "unknown"
 
 # The storage origins presigned URLs point at: each backend's public_endpoint,
 # as an origin (`https://s3.example.com`). The browser uploads to them and
@@ -247,17 +243,11 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
 
 volumes:
-  - name: config
-    configMap:
-      name: paladin-console-config
   # A writable /tmp under readOnlyRootFilesystem, for the Go runtime.
   - name: tmp
     emptyDir: {}
 
 volumeMounts:
-  - name: config
-    mountPath: /app/configs
-    readOnly: true
   - name: tmp
     mountPath: /tmp
 
@@ -274,17 +264,3 @@ topologySpreadConstraints: []
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
-
-# ─── App config (templated into the ConfigMap) ─────────────────────────────
-#
-# Empty, and the ConfigMap it renders now carries nothing the console reads.
-# It used to hold `paladin`, `oidc` and `auth` subtrees; none of them was ever
-# read by any code. The console authenticates through the backend's IAM plane
-# (there is no OIDC client library in the bundle) through the session role, the
-# OAuth relay reaches iam through PALADIN_IAM_URL, and the build metadata
-# the UI does show is threaded in as Docker build args.
-#
-# The key stays, and so does the ConfigMap, because overlays outside this repo
-# mount it. Anything an overlay sets here is accepted and ignored — src/config.ts
-# is deliberately non-strict so that cannot fail a build.
-config: {}
