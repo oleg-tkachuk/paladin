@@ -98,6 +98,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	events := worker.NewEventRecorder(l.Named("event-recorder"))
 	tenantH.SetEventProducer(events)
 	tenantH.SetLogger(l.Named("tenant-events"))
+	policyH.SetLogger(l.Named("policies"))
 	eventSubH.SetLogger(l.Named("event-subscriptions"))
 	bucketV2H.SetEventProducer(events)
 	bucketV2H.SetLogger(l.Named("bucket-events"))
@@ -407,7 +408,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			WithRunRevocation(deps.Capability.Auth.BulkRevocation).
 			WithLeases(deps.Capability.Leases).
 			WithLineage(deps.Capability.Lineage).
-			WithCurrency(deps.Cfg.Capability.Currency)
+			WithCurrency(deps.Cfg.Capability.Currency).
+			WithLogger(l.Named("capabilities"))
 		paladinadminv1connect.RegisterCapabilityServiceHandler(adminServer, capH)
 	} else {
 		// Subsystem disabled — mount the disabled-subsystem stub so

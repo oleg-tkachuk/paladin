@@ -8,7 +8,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
-	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -62,7 +61,7 @@ func (h *Handler) RevokeBiscuit(ctx context.Context, req *adminv1.CapabilityServ
 	if err != nil {
 		// As in Revoke: no such capability and another tenant's are one
 		// answer, so the endpoint is no oracle.
-		return nil, auth.AnswerCapabilityError(err, recordExceptions)
+		return nil, h.answer("revoke biscuit", err, recordExceptions)
 	}
 	stashCapabilityInScope(ctx, c.CapabilityID())
 	return &adminv1.CapabilityServiceRevokeBiscuitResponse{

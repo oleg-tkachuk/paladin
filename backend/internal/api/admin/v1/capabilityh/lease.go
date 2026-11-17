@@ -57,7 +57,7 @@ func (h *Handler) Lease(ctx context.Context, req *adminv1.CapabilityServiceLease
 	}
 	subject, err := limes.StoredMeterSubject(ctx, h.store, id)
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(err, leaseExceptions)
+		return nil, h.answer("lease", err, leaseExceptions)
 	}
 	amount, err := leaseAmount(subject, req)
 	if err != nil {
@@ -70,7 +70,7 @@ func (h *Handler) Lease(ctx context.Context, req *adminv1.CapabilityServiceLease
 		TTL:      req.GetTtl().AsDuration(),
 	})
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(fmt.Errorf("lease %s: %w", id, err), leaseExceptions)
+		return nil, h.answer("lease", fmt.Errorf("lease %s: %w", id, err), leaseExceptions)
 	}
 	stashCapabilityInScope(ctx, id)
 	return &adminv1.CapabilityServiceLeaseResponse{Lease: leaseToProto(lease)}, nil
@@ -84,7 +84,7 @@ func (h *Handler) GetLease(ctx context.Context, req *adminv1.CapabilityServiceGe
 	}
 	lease, err := h.leases.GetLease(ctx, id)
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(err, leaseExceptions)
+		return nil, h.answer("get lease", err, leaseExceptions)
 	}
 	return &adminv1.CapabilityServiceGetLeaseResponse{Lease: leaseToProto(lease)}, nil
 }
@@ -98,11 +98,11 @@ func (h *Handler) SettleLease(ctx context.Context, req *adminv1.CapabilityServic
 	// The record names the capability's tenant, which settling needs.
 	subject, err := limes.StoredMeterSubject(ctx, h.store, id)
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(err, leaseExceptions)
+		return nil, h.answer("settle lease", err, leaseExceptions)
 	}
 	lease, err := h.leases.SettleLease(ctx, meter.SettleLeaseRequest{Subject: subject})
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(fmt.Errorf("settle lease %s: %w", id, err), leaseExceptions)
+		return nil, h.answer("settle lease", fmt.Errorf("settle lease %s: %w", id, err), leaseExceptions)
 	}
 	stashCapabilityInScope(ctx, id)
 	return &adminv1.CapabilityServiceSettleLeaseResponse{Lease: leaseToProto(lease)}, nil
@@ -124,7 +124,7 @@ func (h *Handler) leaseTarget(ctx context.Context, action cedar.Action, raw stri
 	// No leaser is wired when the deployment turned leasing off
 	// (capability.budget_leases): answered as the meter answers it.
 	if h.leases == nil {
-		return nil, uuid.Nil(), auth.AnswerCapabilityError(meter.ErrLeasingDisabled, leaseExceptions)
+		return nil, uuid.Nil(), h.answer("lease target", meter.ErrLeasingDisabled, leaseExceptions)
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
@@ -169,10 +169,10 @@ func (h *Handler) presentedLeaseTarget(ctx context.Context, verified limes.Verif
 	}
 	answer, err := h.lineage.RevocationLineage(ctx, id)
 	if err != nil {
-		return nil, uuid.Nil(), auth.AnswerCapabilityError(err, leaseExceptions)
+		return nil, uuid.Nil(), h.answer("presented lease target", err, leaseExceptions)
 	}
 	if answer.Revoked {
-		return nil, uuid.Nil(), auth.AnswerCapabilityError(fmt.Errorf("lease %s: %w", id, limes.ErrRevoked), nil)
+		return nil, uuid.Nil(), h.answer("presented lease target", fmt.Errorf("lease %s: %w", id, limes.ErrRevoked), nil)
 	}
 	if !answer.Below(holder.ID) {
 		return nil, uuid.Nil(), connect.NewError(connect.CodePermissionDenied, errLeaseNotBelow)

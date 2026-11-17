@@ -23,6 +23,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+	"go.uber.org/zap"
 
 	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -64,6 +65,8 @@ type Handler struct {
 	holds HoldReleaser
 	// runs revokes an agent run's capabilities; see WithRunRevocation.
 	runs RunRevoker
+	// log records how each operation ended; see WithLogger.
+	log *zap.Logger
 	// leases serves Lease, GetLease and SettleLease; see WithLeases.
 	leases meter.Leaser
 	// lineage names a capability's ancestors for a presented capability's
@@ -110,7 +113,32 @@ func NewHandler(
 	if issuer == nil || verifier == nil || store == nil || policy == nil {
 		panic("capabilityh: issuer / verifier / store / policy are required")
 	}
-	return &Handler{issuer: issuer, verifier: verifier, store: store, revoker: store, usage: usage, policy: policy, currency: apiutil.NoUnit}
+	return &Handler{issuer: issuer, verifier: verifier, store: store, revoker: store, usage: usage, policy: policy, currency: apiutil.NoUnit, log: zap.NewNop()}
+}
+
+// WithLogger sets where the handler records each capability issued and each
+// operation refused or failed. No line carries a token.
+func (h *Handler) WithLogger(l *zap.Logger) *Handler {
+	h.log = l
+	return h
+}
+
+// answer maps a capability error for the caller, as auth.AnswerCapabilityError
+// does, and logs it by what it is: a refusal the caller can act on at warn,
+// a failure of the store or the signer at error.
+func (h *Handler) answer(op string, err error, except auth.Exceptions) error {
+	mapped := auth.AnswerCapabilityError(err, except)
+	if mapped == nil {
+		return nil
+	}
+	code := connect.CodeOf(mapped)
+	switch code {
+	case connect.CodeInternal, connect.CodeUnavailable, connect.CodeUnknown, connect.CodeDataLoss:
+		h.log.Error("capability operation failed", zap.String("op", op), zap.String("code", code.String()), zap.Error(err))
+	default:
+		h.log.Warn("capability operation refused", zap.String("op", op), zap.String("code", code.String()), zap.Error(err))
+	}
+	return mapped
 }
 
 // CapabilityRevoker revokes one capability. limes.Store and limes.Revoker
@@ -177,7 +205,7 @@ func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Princ
 	case errors.Is(err, limes.ErrNotFound):
 		return ctx, nil
 	case err != nil:
-		return nil, auth.AnswerCapabilityError(err, nil)
+		return nil, h.answer("resolve tenant", err, nil)
 	}
 	return auth.WithActingTenant(ctx, rec.Capability.Subject.TenantID), nil
 }
@@ -258,7 +286,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		// By kind: a malformed request, a tenant that is not (or no longer)
 		// there, or the store or signer failing — which is not the caller's
 		// fault and must not read as a request to stop retrying.
-		return nil, auth.AnswerCapabilityError(err, issuanceExceptions)
+		return nil, h.answer("issue", err, issuanceExceptions)
 	}
 
 	apiutil.StashResource(ctx, capabilityResourceName(res.Capability.Subject.TenantID, res.Capability.ID))
@@ -362,7 +390,7 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		ConfirmationJKT: req.GetConfirmationJkt(),
 	})
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(err, delegationExceptions)
+		return nil, h.answer("delegate", err, delegationExceptions)
 	}
 	apiutil.StashResource(ctx, capabilityResourceName(res.Capability.Subject.TenantID, res.Capability.ID))
 	return h.issued(ctx, res)
@@ -395,7 +423,7 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.CapabilityServiceRevo
 		// a not-found here covers both "no such id" and "belongs to another
 		// tenant". Both answer NotFound: telling the caller which one it was
 		// would turn this endpoint into an id oracle.
-		return nil, auth.AnswerCapabilityError(err, recordExceptions)
+		return nil, h.answer("revoke", err, recordExceptions)
 	}
 	if err := h.releaseHolds(ctx, id); err != nil {
 		return nil, err
@@ -420,7 +448,7 @@ func (h *Handler) releaseHolds(ctx context.Context, id uuid.UUID) error {
 		return rpcerr.New(connect.CodeInternal, fmt.Errorf("release the holds of capability %s: %w", id, err))
 	}
 	if _, err := h.holds.ReleaseRevoked(ctx, tenant, id); err != nil {
-		return auth.AnswerCapabilityError(fmt.Errorf("release the holds of capability %s: %w", id, err), nil)
+		return h.answer("release holds", fmt.Errorf("release the holds of capability %s: %w", id, err), nil)
 	}
 	return nil
 }
@@ -454,7 +482,7 @@ func (h *Handler) Get(ctx context.Context, req *adminv1.CapabilityServiceGetRequ
 	// an ancestor too, though the record holds only its own entry.
 	listed, err := h.records.GetRecordListing(ctx, id)
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(err, recordExceptions)
+		return nil, h.answer("get", err, recordExceptions)
 	}
 	rec := listed.Record
 	out := &adminv1.CapabilityServiceGetResponse{
@@ -501,7 +529,7 @@ func (h *Handler) GetUsage(ctx context.Context, req *adminv1.CapabilityServiceGe
 	}
 	u, err := h.usage.GetUsage(ctx, id)
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(err, recordExceptions)
+		return nil, h.answer("get usage", err, recordExceptions)
 	}
 	return &adminv1.CapabilityServiceGetUsageResponse{
 		CapabilityId: u.CapabilityID.String(),
@@ -589,10 +617,16 @@ func stashCapabilityInScope(ctx context.Context, id uuid.UUID) {
 // issued answers Issue and Delegate: the capability, its JWT, and the same
 // capability as a Biscuit its holder can narrow offline — or why not.
 func (h *Handler) issued(ctx context.Context, res limes.IssueResult) (*adminv1.CapabilityServiceIssueResponse, error) {
+	fields := []zap.Field{
+		zap.String("capability_id", res.Capability.ID.String()),
+		zap.String("tenant_id", res.Capability.Subject.TenantID.String()),
+	}
 	bisc, status, err := h.seal(ctx, res)
 	if err != nil {
+		h.log.Error("capability issued but not sealed", append(fields, zap.Error(err))...)
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
+	h.log.Info("capability issued", fields...)
 	return &adminv1.CapabilityServiceIssueResponse{
 		Capability:    capabilityToProto(&res.Capability),
 		Token:         res.Token,

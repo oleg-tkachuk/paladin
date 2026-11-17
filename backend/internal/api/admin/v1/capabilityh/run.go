@@ -61,7 +61,7 @@ func (h *Handler) RevokeRun(ctx context.Context, req *adminv1.CapabilityServiceR
 	}
 	revoked, err := h.runs.RevokeRun(auth.WithActingTenant(ctx, tenant), tenant, run, req.GetReason(), caller.Subject)
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(fmt.Errorf("revoke run %s: %w", run, err), nil)
+		return nil, h.answer("revoke run", fmt.Errorf("revoke run %s: %w", run, err), nil)
 	}
 	// The audit row names the run under its tenant, so it shows in that
 	// tenant's trail.

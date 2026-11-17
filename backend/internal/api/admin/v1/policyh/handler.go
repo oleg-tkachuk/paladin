@@ -12,6 +12,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -30,17 +31,22 @@ type Handler struct {
 	// versions reads a layer's history; nil leaves ListPolicyVersions
 	// unimplemented.
 	versions VersionStore
+	log      *zap.Logger
 }
 
 // SetVersionStore wires the policy history ListPolicyVersions reads.
 func (h *Handler) SetVersionStore(v VersionStore) { h.versions = v }
+
+// SetLogger sets where a read that fails internally says why. Unset, it says
+// nothing.
+func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
 
 // NewHandler constructs a handler. engine and store are required.
 func NewHandler(engine cedar.Authorizer, store cedar.Store) *Handler {
 	if engine == nil || store == nil {
 		panic("policy: engine and store are required")
 	}
-	return &Handler{engine: engine, store: store}
+	return &Handler{engine: engine, store: store, log: zap.NewNop()}
 }
 
 // authorizeInspect gates a policy-introspection RPC against Cedar. Resource
@@ -91,6 +97,7 @@ func (h *Handler) ValidatePolicy(ctx context.Context, text string) (*ValidateOut
 	}
 	findings, err := policies.Check(validateName, []byte(text))
 	if err != nil {
+		h.log.Error("policy validate: schema check failed", zap.Error(err))
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("schema check: %w", err))
 	}
 	out := &ValidateOutput{OK: true}
@@ -175,22 +182,27 @@ func parseSimulateResource(name string, fallbackTenant uuid.UUID) (uuid.UUID, st
 		return collectionScope(c)
 	}
 	parts := strings.Split(name, "/")
-	if len(parts) >= 4 && parts[0] == "tenants" && parts[2] == "collections" {
-		id, err := uuid.Parse(parts[1])
-		if err != nil {
-			return uuid.Nil(), "", fmt.Errorf("invalid tenant id in %q: %w", name, err)
-		}
+	if len(parts) < 2 || parts[0] != "tenants" {
+		// Backend / bucket names — Cedar only sees the tenant-level policy.
+		return fallbackTenant, "", nil
+	}
+	id, err := tenantIDIn(name, parts[1])
+	if err != nil {
+		return uuid.Nil(), "", err
+	}
+	if len(parts) >= 4 && parts[2] == "collections" {
 		return id, parts[3], nil
 	}
-	if len(parts) >= 2 && parts[0] == "tenants" {
-		id, err := uuid.Parse(parts[1])
-		if err != nil {
-			return uuid.Nil(), "", fmt.Errorf("invalid tenant id in %q: %w", name, err)
-		}
-		return id, "", nil
+	return id, "", nil
+}
+
+// tenantIDIn parses the tenant id segment of the resource name it came from.
+func tenantIDIn(name, segment string) (uuid.UUID, error) {
+	id, err := uuid.Parse(segment)
+	if err != nil {
+		return uuid.Nil(), fmt.Errorf("invalid tenant id in %q: %w", name, err)
 	}
-	// Backend / bucket names — Cedar only sees the tenant-level policy.
-	return fallbackTenant, "", nil
+	return id, nil
 }
 
 func collectionScope(n paladin.CollectionName) (uuid.UUID, string, error) {
@@ -233,6 +245,8 @@ func (h *Handler) GetEffectivePolicy(ctx context.Context, resourceName string, f
 	// bucket's — an admin inspecting tenant X saw neither.
 	stored, _, _, err := h.store.Fetch(auth.WithActingTenant(ctx, tenantID), tenantID, collection)
 	if err != nil {
+		h.log.Error("effective policy: fetch failed",
+			zap.String("tenant_id", tenantID.String()), zap.String("collection", collection), zap.Error(err))
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("fetch policy: %w", err))
 	}
 	// Built by the engine's own join, so what this returns is what the
