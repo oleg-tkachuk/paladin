@@ -2,10 +2,12 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
@@ -27,11 +29,14 @@ var _ presignh.Repository = (*PresignRepo)(nil)
 
 func (r *PresignRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (presignh.ObjectRef, error) {
 	row, err := r.q.GetObject(ctx, pgUUID(tenantID), pgUUID(objectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return presignh.ObjectRef{}, fmt.Errorf("object %s: %w", objectID, presignh.ErrObjectNotFound)
+	}
 	if err != nil {
-		return presignh.ObjectRef{}, err
+		return presignh.ObjectRef{}, fmt.Errorf("look up object %s: %w", objectID, err)
 	}
 	if row.CollectionName != collection {
-		return presignh.ObjectRef{}, fmt.Errorf("object %s not in collection %s", objectID, collection)
+		return presignh.ObjectRef{}, fmt.Errorf("object %s not in collection %s: %w", objectID, collection, presignh.ErrObjectNotFound)
 	}
 	return presignh.ObjectRef{
 		Collection:    row.CollectionName,
