@@ -22,7 +22,7 @@ from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DE
 from paladin.admin.v1.types_pb2 import Tenant
 from pyqwest import Client, SyncClient
 
-from .tenant_service_pb2 import ClearTenantDefaultBindingRequest, ClearTenantDefaultBindingResponse, CreateTenantRequest, DeleteTenantRequest, DeleteTenantResponse, GetTenantDefaultBindingRequest, GetTenantRequest, GetTenantStorageMigrationRequest, ListTenantsRequest, ListTenantsResponse, MigrateTenantStorageLayoutRequest, PreviewPurgeTenantRequest, PreviewPurgeTenantResponse, PurgeTenantRequest, PurgeTenantResponse, RestoreTenantRequest, SetInheritedPolicyRequest, SetTenantDefaultBindingRequest, StorageMigrationStatus, TenantDefaultBinding, UpdateTenantRequest
+from .tenant_service_pb2 import ClearTenantDefaultBindingRequest, ClearTenantDefaultBindingResponse, CreateTenantRequest, DeleteTenantRequest, DeleteTenantResponse, GetTenantDefaultBindingRequest, GetTenantRequest, GetTenantStorageMigrationRequest, ListRetiredTenantSlugsRequest, ListRetiredTenantSlugsResponse, ListTenantsRequest, ListTenantsResponse, MigrateTenantStorageLayoutRequest, PreviewPurgeTenantRequest, PreviewPurgeTenantResponse, PurgeTenantRequest, PurgeTenantResponse, ReleaseTenantSlugRequest, ReleaseTenantSlugResponse, RestoreTenantRequest, SetInheritedPolicyRequest, SetTenantDefaultBindingRequest, StorageMigrationStatus, TenantDefaultBinding, UpdateTenantRequest
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -46,8 +46,10 @@ class TenantService(Protocol):
         """
         CreateTenant provisions a tenant and, unless the request opts out, its
         default storage binding. storage_layout="dedicated" also provisions a
-        physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
-        slug is taken.
+        physical bucket owned by the tenant (ADR-0015). AlreadyExists, reason
+        SLUG_TAKEN, when the slug is taken: by a live tenant always, and, while
+        admin.tenants.reserve_slugs is on, by a trashed tenant or a purged one
+        (see ListRetiredTenantSlugs).
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -96,10 +98,10 @@ class TenantService(Protocol):
         """
         RestoreTenant clears `deleted_at` on a soft-deleted row, returning
         it to the active set. Slug + display_name are unique among live
-        tenants (`001_initial_schema.sql`), and a trashed row keeps both —
-        if a new tenant claimed the slug while this one was
-        trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
-        the other tenant has to be purged before this one comes back.
+        tenants (`001_initial_schema.sql`). While admin.tenants.reserve_slugs is
+        on, no new tenant can take a trashed tenant's slug; with it off, one
+        can, and restore then fails with ALREADY_EXISTS: a slug never changes,
+        so the other tenant has to be purged before this one comes back.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -151,6 +153,23 @@ class TenantService(Protocol):
         """
         SetTenantDefaultBinding upserts the tenant's default route. The
         (backend, bucket) MUST reference an existing bucket.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def list_retired_tenant_slugs(self, request: ListRetiredTenantSlugsRequest, ctx: RequestContext[ListRetiredTenantSlugsRequest, ListRetiredTenantSlugsResponse], /) -> ListRetiredTenantSlugsResponse:
+        """
+        ListRetiredTenantSlugs lists the slugs of purged tenants, by slug. Each
+        is recorded by the purge, whatever admin.tenants.reserve_slugs says;
+        while it is on, CreateTenant refuses them.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def release_tenant_slug(self, request: ReleaseTenantSlugRequest, ctx: RequestContext[ReleaseTenantSlugRequest, ReleaseTenantSlugResponse], /) -> ReleaseTenantSlugResponse:
+        """
+        ReleaseTenantSlug forgets a retired slug, so a new tenant can take it.
+        Whatever still names it — a Cedar policy, a token claim, an audit row,
+        a client's tenants/<slug> path — then names that new tenant. Idempotent
+        on a slug not retired.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -318,6 +337,28 @@ class TenantServiceASGIApplication(ConnectASGIApplication[TenantService]):
                     ),
                     function=svc.set_tenant_default_binding,
                 ),
+                "/paladin.admin.v1.TenantService/ListRetiredTenantSlugs": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ListRetiredTenantSlugs",
+                        service_name="paladin.admin.v1.TenantService",
+                        input=ListRetiredTenantSlugsRequest,
+                        output=ListRetiredTenantSlugsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.list_retired_tenant_slugs,
+                ),
+                "/paladin.admin.v1.TenantService/ReleaseTenantSlug": Endpoint.unary(
+                    method=MethodInfo(
+                        name="ReleaseTenantSlug",
+                        service_name="paladin.admin.v1.TenantService",
+                        input=ReleaseTenantSlugRequest,
+                        output=ReleaseTenantSlugResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.release_tenant_slug,
+                ),
                 "/paladin.admin.v1.TenantService/ClearTenantDefaultBinding": Endpoint.unary(
                     method=MethodInfo(
                         name="ClearTenantDefaultBinding",
@@ -380,8 +421,10 @@ class TenantServiceClient(ConnectClient):
         """
         CreateTenant provisions a tenant and, unless the request opts out, its
         default storage binding. storage_layout="dedicated" also provisions a
-        physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
-        slug is taken.
+        physical bucket owned by the tenant (ADR-0015). AlreadyExists, reason
+        SLUG_TAKEN, when the slug is taken: by a live tenant always, and, while
+        admin.tenants.reserve_slugs is on, by a trashed tenant or a purged one
+        (see ListRetiredTenantSlugs).
         """
         return await self.execute_unary(
             request=request,
@@ -536,10 +579,10 @@ class TenantServiceClient(ConnectClient):
         """
         RestoreTenant clears `deleted_at` on a soft-deleted row, returning
         it to the active set. Slug + display_name are unique among live
-        tenants (`001_initial_schema.sql`), and a trashed row keeps both —
-        if a new tenant claimed the slug while this one was
-        trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
-        the other tenant has to be purged before this one comes back.
+        tenants (`001_initial_schema.sql`). While admin.tenants.reserve_slugs is
+        on, no new tenant can take a trashed tenant's slug; with it off, one
+        can, and restore then fails with ALREADY_EXISTS: a slug never changes,
+        so the other tenant has to be purged before this one comes back.
         """
         return await self.execute_unary(
             request=request,
@@ -713,6 +756,59 @@ class TenantServiceClient(ConnectClient):
             headers=headers,
             timeout_ms=timeout_ms,
         )
+    async def list_retired_tenant_slugs(
+        self,
+        request: ListRetiredTenantSlugsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListRetiredTenantSlugsResponse:
+        """
+        ListRetiredTenantSlugs lists the slugs of purged tenants, by slug. Each
+        is recorded by the purge, whatever admin.tenants.reserve_slugs says;
+        while it is on, CreateTenant refuses them.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListRetiredTenantSlugs",
+                service_name="paladin.admin.v1.TenantService",
+                input=ListRetiredTenantSlugsRequest,
+                output=ListRetiredTenantSlugsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    async def release_tenant_slug(
+        self,
+        request: ReleaseTenantSlugRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> ReleaseTenantSlugResponse:
+        """
+        ReleaseTenantSlug forgets a retired slug, so a new tenant can take it.
+        Whatever still names it — a Cedar policy, a token claim, an audit row,
+        a client's tenants/<slug> path — then names that new tenant. Idempotent
+        on a slug not retired.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ReleaseTenantSlug",
+                service_name="paladin.admin.v1.TenantService",
+                input=ReleaseTenantSlugRequest,
+                output=ReleaseTenantSlugResponse,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
     async def clear_tenant_default_binding(
         self,
         request: ClearTenantDefaultBindingRequest,
@@ -746,8 +842,10 @@ class TenantServiceSync(Protocol):
         """
         CreateTenant provisions a tenant and, unless the request opts out, its
         default storage binding. storage_layout="dedicated" also provisions a
-        physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
-        slug is taken.
+        physical bucket owned by the tenant (ADR-0015). AlreadyExists, reason
+        SLUG_TAKEN, when the slug is taken: by a live tenant always, and, while
+        admin.tenants.reserve_slugs is on, by a trashed tenant or a purged one
+        (see ListRetiredTenantSlugs).
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -796,10 +894,10 @@ class TenantServiceSync(Protocol):
         """
         RestoreTenant clears `deleted_at` on a soft-deleted row, returning
         it to the active set. Slug + display_name are unique among live
-        tenants (`001_initial_schema.sql`), and a trashed row keeps both —
-        if a new tenant claimed the slug while this one was
-        trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
-        the other tenant has to be purged before this one comes back.
+        tenants (`001_initial_schema.sql`). While admin.tenants.reserve_slugs is
+        on, no new tenant can take a trashed tenant's slug; with it off, one
+        can, and restore then fails with ALREADY_EXISTS: a slug never changes,
+        so the other tenant has to be purged before this one comes back.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -851,6 +949,23 @@ class TenantServiceSync(Protocol):
         """
         SetTenantDefaultBinding upserts the tenant's default route. The
         (backend, bucket) MUST reference an existing bucket.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def list_retired_tenant_slugs(self, request: ListRetiredTenantSlugsRequest, ctx: RequestContext[ListRetiredTenantSlugsRequest, ListRetiredTenantSlugsResponse], /) -> ListRetiredTenantSlugsResponse:
+        """
+        ListRetiredTenantSlugs lists the slugs of purged tenants, by slug. Each
+        is recorded by the purge, whatever admin.tenants.reserve_slugs says;
+        while it is on, CreateTenant refuses them.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    def release_tenant_slug(self, request: ReleaseTenantSlugRequest, ctx: RequestContext[ReleaseTenantSlugRequest, ReleaseTenantSlugResponse], /) -> ReleaseTenantSlugResponse:
+        """
+        ReleaseTenantSlug forgets a retired slug, so a new tenant can take it.
+        Whatever still names it — a Cedar policy, a token claim, an audit row,
+        a client's tenants/<slug> path — then names that new tenant. Idempotent
+        on a slug not retired.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -1016,6 +1131,28 @@ class TenantServiceWSGIApplication(ConnectWSGIApplication):
                     ),
                     function=service.set_tenant_default_binding,
                 ),
+                "/paladin.admin.v1.TenantService/ListRetiredTenantSlugs": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ListRetiredTenantSlugs",
+                        service_name="paladin.admin.v1.TenantService",
+                        input=ListRetiredTenantSlugsRequest,
+                        output=ListRetiredTenantSlugsResponse,
+                        idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.list_retired_tenant_slugs,
+                ),
+                "/paladin.admin.v1.TenantService/ReleaseTenantSlug": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="ReleaseTenantSlug",
+                        service_name="paladin.admin.v1.TenantService",
+                        input=ReleaseTenantSlugRequest,
+                        output=ReleaseTenantSlugResponse,
+                        idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.release_tenant_slug,
+                ),
                 "/paladin.admin.v1.TenantService/ClearTenantDefaultBinding": EndpointSync.unary(
                     method=MethodInfo(
                         name="ClearTenantDefaultBinding",
@@ -1078,8 +1215,10 @@ class TenantServiceClientSync(ConnectClientSync):
         """
         CreateTenant provisions a tenant and, unless the request opts out, its
         default storage binding. storage_layout="dedicated" also provisions a
-        physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
-        slug is taken.
+        physical bucket owned by the tenant (ADR-0015). AlreadyExists, reason
+        SLUG_TAKEN, when the slug is taken: by a live tenant always, and, while
+        admin.tenants.reserve_slugs is on, by a trashed tenant or a purged one
+        (see ListRetiredTenantSlugs).
         """
         return self.execute_unary(
             request=request,
@@ -1234,10 +1373,10 @@ class TenantServiceClientSync(ConnectClientSync):
         """
         RestoreTenant clears `deleted_at` on a soft-deleted row, returning
         it to the active set. Slug + display_name are unique among live
-        tenants (`001_initial_schema.sql`), and a trashed row keeps both —
-        if a new tenant claimed the slug while this one was
-        trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
-        the other tenant has to be purged before this one comes back.
+        tenants (`001_initial_schema.sql`). While admin.tenants.reserve_slugs is
+        on, no new tenant can take a trashed tenant's slug; with it off, one
+        can, and restore then fails with ALREADY_EXISTS: a slug never changes,
+        so the other tenant has to be purged before this one comes back.
         """
         return self.execute_unary(
             request=request,
@@ -1405,6 +1544,59 @@ class TenantServiceClientSync(ConnectClientSync):
                 service_name="paladin.admin.v1.TenantService",
                 input=SetTenantDefaultBindingRequest,
                 output=TenantDefaultBinding,
+                idempotency_level=IdempotencyLevel.IDEMPOTENT,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
+    def list_retired_tenant_slugs(
+        self,
+        request: ListRetiredTenantSlugsRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+        use_get: bool = False,
+    ) -> ListRetiredTenantSlugsResponse:
+        """
+        ListRetiredTenantSlugs lists the slugs of purged tenants, by slug. Each
+        is recorded by the purge, whatever admin.tenants.reserve_slugs says;
+        while it is on, CreateTenant refuses them.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ListRetiredTenantSlugs",
+                service_name="paladin.admin.v1.TenantService",
+                input=ListRetiredTenantSlugsRequest,
+                output=ListRetiredTenantSlugsResponse,
+                idempotency_level=IdempotencyLevel.NO_SIDE_EFFECTS,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+            use_get=use_get,
+        )
+    def release_tenant_slug(
+        self,
+        request: ReleaseTenantSlugRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> ReleaseTenantSlugResponse:
+        """
+        ReleaseTenantSlug forgets a retired slug, so a new tenant can take it.
+        Whatever still names it — a Cedar policy, a token claim, an audit row,
+        a client's tenants/<slug> path — then names that new tenant. Idempotent
+        on a slug not retired.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="ReleaseTenantSlug",
+                service_name="paladin.admin.v1.TenantService",
+                input=ReleaseTenantSlugRequest,
+                output=ReleaseTenantSlugResponse,
                 idempotency_level=IdempotencyLevel.IDEMPOTENT,
                 stream_type=StreamType.UNARY,
             ),

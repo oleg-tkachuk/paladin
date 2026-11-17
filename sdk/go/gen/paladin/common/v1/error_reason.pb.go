@@ -49,10 +49,13 @@ const (
 	// object holds it as much as a live one: until it is purged or restored it
 	// can still come back. ErrorInfo.metadata says how many of each, as base-10
 	// integers: "live_objects" and "trashed_objects".
-	ErrorReason_ERROR_REASON_COLLECTION_NOT_EMPTY           ErrorReason = 9
-	ErrorReason_ERROR_REASON_COLLECTION_EXISTS              ErrorReason = 10
-	ErrorReason_ERROR_REASON_BUCKET_NOT_FOUND               ErrorReason = 11
-	ErrorReason_ERROR_REASON_POLICY_UNPARSEABLE             ErrorReason = 12
+	ErrorReason_ERROR_REASON_COLLECTION_NOT_EMPTY ErrorReason = 9
+	ErrorReason_ERROR_REASON_COLLECTION_EXISTS    ErrorReason = 10
+	ErrorReason_ERROR_REASON_BUCKET_NOT_FOUND     ErrorReason = 11
+	ErrorReason_ERROR_REASON_POLICY_UNPARSEABLE   ErrorReason = 12
+	// The tenant slug is taken. ErrorInfo.metadata "holder" says by what:
+	// "live" (a tenant using it), "trashed" (a tenant in the trash) or
+	// "retired" (a purged tenant; see TenantService.ListRetiredTenantSlugs).
 	ErrorReason_ERROR_REASON_SLUG_TAKEN                     ErrorReason = 13
 	ErrorReason_ERROR_REASON_TENANT_ID_TAKEN                ErrorReason = 14
 	ErrorReason_ERROR_REASON_DISPLAY_NAME_TAKEN             ErrorReason = 15

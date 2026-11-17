@@ -160,6 +160,8 @@ type tenantHandler interface {
 	MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string, cleanupRetentionSeconds int64) (*tenanth.StorageMigration, error)
 	PurgeTenant(ctx context.Context, tenantID uuid.UUID) error
 	PreviewPurgeTenant(ctx context.Context, tenantID uuid.UUID) (*tenanth.PurgePreview, error)
+	ListRetiredTenantSlugs(ctx context.Context, pageSize int32, pageToken string) (tenanth.RetiredSlugPage, error)
+	ReleaseTenantSlug(ctx context.Context, name string) error
 	RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*tenanth.Tenant, error)
 	SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, bucket string) (*tenanth.DefaultBinding, error)
 	UpdateTenant(ctx context.Context, args tenanth.UpdateTenantArgs) (*tenanth.Tenant, error)

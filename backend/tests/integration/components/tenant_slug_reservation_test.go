@@ -118,6 +118,65 @@ func TestTenantSlugReservation(t *testing.T) {
 		}
 	})
 
+	t.Run("a released slug is free, and listed no more", func(t *testing.T) {
+		id, err := create("released", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		trash(id)
+		purge(id)
+		page, _, err := repo.ListRetiredSlugs(ctx, "", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !hasRetired(page, "released", id) {
+			t.Fatalf("released not listed with its former tenant: %+v", page)
+		}
+		former, err := repo.ReleaseSlug(ctx, "released")
+		if err != nil || former != id {
+			t.Fatalf("release = %s, %v; want %s", former, err, id)
+		}
+		if _, err := repo.ReleaseSlug(ctx, "released"); !errors.Is(err, tenanth.ErrSlugNotRetired) {
+			t.Fatalf("second release err = %v, want ErrSlugNotRetired", err)
+		}
+		page, _, err = repo.ListRetiredSlugs(ctx, "", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasRetired(page, "released", id) {
+			t.Fatal("still listed after release")
+		}
+		if _, err := create("released", false); err != nil {
+			t.Fatalf("create after release: %v", err)
+		}
+	})
+
+	t.Run("retired slugs page by slug", func(t *testing.T) {
+		for _, slug := range []string{"page-a", "page-b", "page-c"} {
+			id, err := create(slug, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			trash(id)
+			purge(id)
+		}
+		const pageSize = 2
+		first, next, err := repo.ListRetiredSlugs(ctx, "page-", pageSize)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(first) != pageSize || first[0].Slug != "page-a" || first[1].Slug != "page-b" || next != "page-b" {
+			t.Fatalf("first page = %+v, next %q", first, next)
+		}
+		second, _, err := repo.ListRetiredSlugs(ctx, next, pageSize)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(second) == 0 || second[0].Slug != "page-c" {
+			t.Fatalf("second page = %+v", second)
+		}
+	})
+
 	t.Run("a refused purge retires nothing", func(t *testing.T) {
 		id, err := create("kept", false)
 		if err != nil {
@@ -146,4 +205,13 @@ func TestTenantSlugReservation(t *testing.T) {
 			t.Fatal("the slug changed")
 		}
 	})
+}
+
+func hasRetired(page []tenanth.RetiredSlug, slug string, former uuid.UUID) bool {
+	for _, r := range page {
+		if r.Slug == slug && r.FormerTenantID == former && !r.RetiredAt.IsZero() {
+			return true
+		}
+	}
+	return false
 }

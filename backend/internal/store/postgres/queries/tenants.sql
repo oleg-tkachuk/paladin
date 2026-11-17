@@ -206,7 +206,8 @@ ON CONFLICT (slug) DO NOTHING;
 
 -- name: TenantSlugHolder :one
 -- Who holds a slug, in one statement so a purge committing between two reads
--- cannot hide it: 'live', 'trashed', 'retired', or '' when it is free.
+-- cannot hide it: 'live', 'trashed', 'retired', or '' when it is free. The
+-- values are tenanth.SlugHolder's.
 SELECT COALESCE(
     (SELECT CASE WHEN t.deleted_at IS NULL THEN 'live' ELSE 'trashed' END
        FROM tenants t WHERE t.slug = $1
@@ -214,3 +215,17 @@ SELECT COALESCE(
     (SELECT 'retired' FROM retired_tenant_slugs r WHERE r.slug = $1),
     ''
 )::text AS holder;
+
+-- name: ListRetiredTenantSlugs :many
+-- A page of retired slugs by slug, after the last one of the previous page.
+SELECT slug, former_tenant_id, retired_at
+FROM retired_tenant_slugs
+WHERE slug > sqlc.arg('after_slug')::text
+ORDER BY slug
+LIMIT sqlc.arg('page_limit')::int;
+
+-- name: ReleaseTenantSlug :one
+-- Forgets a retired slug and says whose it was; no row when it was not
+-- retired.
+DELETE FROM retired_tenant_slugs WHERE slug = $1
+RETURNING former_tenant_id;

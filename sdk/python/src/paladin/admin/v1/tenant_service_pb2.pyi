@@ -221,3 +221,41 @@ class ClearTenantDefaultBindingRequest(_message.Message):
 class ClearTenantDefaultBindingResponse(_message.Message):
     __slots__ = ()
     def __init__(self) -> None: ...
+
+class RetiredTenantSlug(_message.Message):
+    __slots__ = ("name", "slug", "former_tenant_id", "retire_time")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    SLUG_FIELD_NUMBER: _ClassVar[int]
+    FORMER_TENANT_ID_FIELD_NUMBER: _ClassVar[int]
+    RETIRE_TIME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    slug: str
+    former_tenant_id: str
+    retire_time: _timestamp_pb2.Timestamp
+    def __init__(self, name: _Optional[str] = ..., slug: _Optional[str] = ..., former_tenant_id: _Optional[str] = ..., retire_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+
+class ListRetiredTenantSlugsRequest(_message.Message):
+    __slots__ = ("page",)
+    PAGE_FIELD_NUMBER: _ClassVar[int]
+    page: _pagination_pb2.PageRequest
+    def __init__(self, page: _Optional[_Union[_pagination_pb2.PageRequest, _Mapping]] = ...) -> None: ...
+
+class ListRetiredTenantSlugsResponse(_message.Message):
+    __slots__ = ("retired_slugs", "page", "reservation_enforced")
+    RETIRED_SLUGS_FIELD_NUMBER: _ClassVar[int]
+    PAGE_FIELD_NUMBER: _ClassVar[int]
+    RESERVATION_ENFORCED_FIELD_NUMBER: _ClassVar[int]
+    retired_slugs: _containers.RepeatedCompositeFieldContainer[RetiredTenantSlug]
+    page: _pagination_pb2.PageResponse
+    reservation_enforced: bool
+    def __init__(self, retired_slugs: _Optional[_Iterable[_Union[RetiredTenantSlug, _Mapping]]] = ..., page: _Optional[_Union[_pagination_pb2.PageResponse, _Mapping]] = ..., reservation_enforced: _Optional[bool] = ...) -> None: ...
+
+class ReleaseTenantSlugRequest(_message.Message):
+    __slots__ = ("name",)
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    def __init__(self, name: _Optional[str] = ...) -> None: ...
+
+class ReleaseTenantSlugResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...

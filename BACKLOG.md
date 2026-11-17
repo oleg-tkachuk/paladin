@@ -105,6 +105,9 @@ the same commit. Treat this file like a runtime invariant.
     `SetReplication` (no replicator applies it yet, see Replication below).
   - Tenant lifecycle and budget `Set`, as before; UserSettingsService, which
     holds console display preferences.
+  - `ListRetiredTenantSlugs` and `ReleaseTenantSlug` — releasing a purged
+    tenant's slug lets a new tenant inherit what still names it, a human
+    call.
   - `OAuthClientService.DeleteOAuthClient` — it ends every agent's grant
     under that client, the bridge's own callers included.
 - **Definition of Done (only if revisited):** a tool per RPC in

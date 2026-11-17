@@ -313,6 +313,35 @@ func (q *Queries) ListPurgeEventSubscriptions(ctx context.Context, tenantID pgty
 	return items, nil
 }
 
+const listRetiredTenantSlugs = `-- name: ListRetiredTenantSlugs :many
+SELECT slug, former_tenant_id, retired_at
+FROM retired_tenant_slugs
+WHERE slug > $1::text
+ORDER BY slug
+LIMIT $2::int
+`
+
+// A page of retired slugs by slug, after the last one of the previous page.
+func (q *Queries) ListRetiredTenantSlugs(ctx context.Context, afterSlug string, pageLimit int32) ([]RetiredTenantSlug, error) {
+	rows, err := q.db.Query(ctx, listRetiredTenantSlugs, afterSlug, pageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RetiredTenantSlug
+	for rows.Next() {
+		var i RetiredTenantSlug
+		if err := rows.Scan(&i.Slug, &i.FormerTenantID, &i.RetiredAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTenants = `-- name: ListTenants :many
 SELECT tenants.id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.storage_layout, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.deleted_at,
        COALESCE(sb.name, '') AS backend_name,
@@ -435,6 +464,20 @@ func (q *Queries) ListTenants(ctx context.Context, afterID pgtype.UUID, onlyTras
 	return items, nil
 }
 
+const releaseTenantSlug = `-- name: ReleaseTenantSlug :one
+DELETE FROM retired_tenant_slugs WHERE slug = $1
+RETURNING former_tenant_id
+`
+
+// Forgets a retired slug and says whose it was; no row when it was not
+// retired.
+func (q *Queries) ReleaseTenantSlug(ctx context.Context, slug string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, releaseTenantSlug, slug)
+	var former_tenant_id pgtype.UUID
+	err := row.Scan(&former_tenant_id)
+	return former_tenant_id, err
+}
+
 const restoreTenant = `-- name: RestoreTenant :execrows
 UPDATE tenants
    SET deleted_at = NULL,
@@ -502,7 +545,8 @@ SELECT COALESCE(
 `
 
 // Who holds a slug, in one statement so a purge committing between two reads
-// cannot hide it: 'live', 'trashed', 'retired', or ” when it is free.
+// cannot hide it: 'live', 'trashed', 'retired', or ” when it is free. The
+// values are tenanth.SlugHolder's.
 func (q *Queries) TenantSlugHolder(ctx context.Context, slug string) (string, error) {
 	row := q.db.QueryRow(ctx, tenantSlugHolder, slug)
 	var holder string

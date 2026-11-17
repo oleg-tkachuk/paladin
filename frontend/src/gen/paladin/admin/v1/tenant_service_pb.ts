@@ -33,7 +33,7 @@ import type { Message } from "@bufbuild/protobuf";
 export const file_paladin_admin_v1_tenant_service: GenFile =
   /*@__PURE__*/
   fileDesc(
-    "CiVwYWxhZGluL2FkbWluL3YxL3RlbmFudF9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxInIKE0NyZWF0ZVRlbmFudFJlcXVlc3QSEQoJdGVuYW50X2lkGAEgASgJEjAKBnRlbmFudBgCIAEoCzIYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrIBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIoCgZ0ZW5hbnQYBCABKAsyGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCJcChNEZWxldGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQAUoECAMQBFIFZm9yY2UiFgoURGVsZXRlVGVuYW50UmVzcG9uc2UigQEKEkxpc3RUZW5hbnRzUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEhcKD2luY2x1ZGVfdHJhc2hlZBgDIAEoCBIUCgxvbmx5X3RyYXNoZWQYBCABKAgibwoTTGlzdFRlbmFudHNSZXNwb25zZRIpCgd0ZW5hbnRzGAEgAygLMhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJrChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlIjIKGVByZXZpZXdQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKYAgoaUHJldmlld1B1cmdlVGVuYW50UmVzcG9uc2USNAoKYXBpX3Rva2VucxgBIAMoCzIgLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VkUmVzb3VyY2USFwoPYXBpX3Rva2VuX2NvdW50GAIgASgDEj0KE2V2ZW50X3N1YnNjcmlwdGlvbnMYAyADKAsyIC5wYWxhZGluLmFkbWluLnYxLlB1cmdlZFJlc291cmNlEiAKGGV2ZW50X3N1YnNjcmlwdGlvbl9jb3VudBgEIAEoAxIYChBjYXBhYmlsaXR5X2NvdW50GAUgASgDEjAKCGJsb2NrZXJzGAYgAygLMh4ucGFsYWRpbi5hZG1pbi52MS5QdXJnZUJsb2NrZXIiNAoOUHVyZ2VkUmVzb3VyY2USDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkiTwoMUHVyZ2VCbG9ja2VyEjAKBGtpbmQYASABKA4yIi5wYWxhZGluLmFkbWluLnYxLlB1cmdlQmxvY2tlcktpbmQSDQoFY291bnQYAiABKAMieAohTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGQoRdGFyZ2V0X2JhY2tlbmRfaWQYAiABKAkSIQoZY2xlYW51cF9yZXRlbnRpb25fc2Vjb25kcxgDIAEoAyI5CiBHZXRUZW5hbnRTdG9yYWdlTWlncmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIq8BChZTdG9yYWdlTWlncmF0aW9uU3RhdHVzEg4KBnRlbmFudBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIVCg1vYmplY3RzX3RvdGFsGAMgASgDEhYKDm9iamVjdHNfY29waWVkGAQgASgDEhUKDXNvdXJjZV9idWNrZXQYBSABKAkSFQoNdGFyZ2V0X2J1Y2tldBgGIAEoCRINCgVlcnJvchgJIAEoCUoECAcQCEoECAgQCSJ6ChRUZW5hbnREZWZhdWx0QmluZGluZxIRCgRuYW1lGAEgASgJQgPgQQgSDgoGYnVja2V0GAIgASgJEi8KBnNldF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIOCgZzZXRfYnkYBSABKAkiNwoeR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiUAoeU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESFwoGYnVja2V0GAIgASgJQge6SARyAhABIjkKIENsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiIwohQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlKsEBChBQdXJnZUJsb2NrZXJLaW5kEiIKHlBVUkdFX0JMT0NLRVJfS0lORF9VTlNQRUNJRklFRBAAEiIKHlBVUkdFX0JMT0NLRVJfS0lORF9DT0xMRUNUSU9OUxABEh4KGlBVUkdFX0JMT0NLRVJfS0lORF9CVUNLRVRTEAISHAoYUFVSR0VfQkxPQ0tFUl9LSU5EX1VTRVJTEAMSJwojUFVSR0VfQkxPQ0tFUl9LSU5EX0JVQ0tFVFNfREVMRVRJTkcQBDLUCwoNVGVuYW50U2VydmljZRJPCgxDcmVhdGVUZW5hbnQSJS5wYWxhZGluLmFkbWluLnYxLkNyZWF0ZVRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudBJOCglHZXRUZW5hbnQSIi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAIBElQKDFVwZGF0ZVRlbmFudBIlLnBhbGFkaW4uYWRtaW4udjEuVXBkYXRlVGVuYW50UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50IgOQAgISYgoMRGVsZXRlVGVuYW50EiUucGFsYWRpbi5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5EZWxldGVUZW5hbnRSZXNwb25zZSIDkAICEl8KC0xpc3RUZW5hbnRzEiQucGFsYWRpbi5hZG1pbi52MS5MaXN0VGVuYW50c1JlcXVlc3QaJS5wYWxhZGluLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVzcG9uc2UiA5ACARJgChJTZXRJbmhlcml0ZWRQb2xpY3kSKy5wYWxhZGluLmFkbWluLnYxLlNldEluaGVyaXRlZFBvbGljeVJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCIDkAICElEKDVJlc3RvcmVUZW5hbnQSJi5wYWxhZGluLmFkbWluLnYxLlJlc3RvcmVUZW5hbnRSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSXwoLUHVyZ2VUZW5hbnQSJC5wYWxhZGluLmFkbWluLnYxLlB1cmdlVGVuYW50UmVxdWVzdBolLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXNwb25zZSIDkAICEnQKElByZXZpZXdQdXJnZVRlbmFudBIrLnBhbGFkaW4uYWRtaW4udjEuUHJldmlld1B1cmdlVGVuYW50UmVxdWVzdBosLnBhbGFkaW4uYWRtaW4udjEuUHJldmlld1B1cmdlVGVuYW50UmVzcG9uc2UiA5ACARJ7ChpNaWdyYXRlVGVuYW50U3RvcmFnZUxheW91dBIzLnBhbGFkaW4uYWRtaW4udjEuTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0GigucGFsYWRpbi5hZG1pbi52MS5TdG9yYWdlTWlncmF0aW9uU3RhdHVzEn4KGUdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb24SMi5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudFN0b3JhZ2VNaWdyYXRpb25SZXF1ZXN0GigucGFsYWRpbi5hZG1pbi52MS5TdG9yYWdlTWlncmF0aW9uU3RhdHVzIgOQAgESeAoXR2V0VGVuYW50RGVmYXVsdEJpbmRpbmcSMC5wYWxhZGluLmFkbWluLnYxLkdldFRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBomLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50RGVmYXVsdEJpbmRpbmciA5ACARJ4ChdTZXRUZW5hbnREZWZhdWx0QmluZGluZxIwLnBhbGFkaW4uYWRtaW4udjEuU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5UZW5hbnREZWZhdWx0QmluZGluZyIDkAICEokBChlDbGVhclRlbmFudERlZmF1bHRCaW5kaW5nEjIucGFsYWRpbi5hZG1pbi52MS5DbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVxdWVzdBozLnBhbGFkaW4uYWRtaW4udjEuQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlIgOQAgJCTFpKZ2l0aHViLmNvbS9vbGVnLXRrYWNodWsvcGFsYWRpbi9zZGsvZ28vZ2VuL3BhbGFkaW4vYWRtaW4vdjE7cGFsYWRpbmFkbWludjFiBnByb3RvMw",
+    "CiVwYWxhZGluL2FkbWluL3YxL3RlbmFudF9zZXJ2aWNlLnByb3RvEhBwYWxhZGluLmFkbWluLnYxInIKE0NyZWF0ZVRlbmFudFJlcXVlc3QSEQoJdGVuYW50X2lkGAEgASgJEjAKBnRlbmFudBgCIAEoCzIYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50Qga6SAPIAQESFgoOZGVmYXVsdF9idWNrZXQYAyABKAkiKQoQR2V0VGVuYW50UmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIrIBChNVcGRhdGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARI3Cgt1cGRhdGVfbWFzaxgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2tCBrpIA8gBARIoCgZ0ZW5hbnQYBCABKAsyGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudCJcChNEZWxldGVUZW5hbnRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQAUoECAMQBFIFZm9yY2UiFgoURGVsZXRlVGVuYW50UmVzcG9uc2UigQEKEkxpc3RUZW5hbnRzUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QSDgoGZmlsdGVyGAIgASgJEhcKD2luY2x1ZGVfdHJhc2hlZBgDIAEoCBIUCgxvbmx5X3RyYXNoZWQYBCABKAgibwoTTGlzdFRlbmFudHNSZXNwb25zZRIpCgd0ZW5hbnRzGAEgAygLMhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQSLQoEcGFnZRgCIAEoCzIfLnBhbGFkaW4uY29tbW9uLnYxLlBhZ2VSZXNwb25zZSJrChlTZXRJbmhlcml0ZWRQb2xpY3lSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESIQoQcmVzb3VyY2VfdmVyc2lvbhgCIAEoCUIHukgEcgIQARIUCgxjZWRhcl9wb2xpY3kYAyABKAkiLQoUUmVzdG9yZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIrChJQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASIVChNQdXJnZVRlbmFudFJlc3BvbnNlIjIKGVByZXZpZXdQdXJnZVRlbmFudFJlcXVlc3QSFQoEbmFtZRgBIAEoCUIHukgEcgIQASKYAgoaUHJldmlld1B1cmdlVGVuYW50UmVzcG9uc2USNAoKYXBpX3Rva2VucxgBIAMoCzIgLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VkUmVzb3VyY2USFwoPYXBpX3Rva2VuX2NvdW50GAIgASgDEj0KE2V2ZW50X3N1YnNjcmlwdGlvbnMYAyADKAsyIC5wYWxhZGluLmFkbWluLnYxLlB1cmdlZFJlc291cmNlEiAKGGV2ZW50X3N1YnNjcmlwdGlvbl9jb3VudBgEIAEoAxIYChBjYXBhYmlsaXR5X2NvdW50GAUgASgDEjAKCGJsb2NrZXJzGAYgAygLMh4ucGFsYWRpbi5hZG1pbi52MS5QdXJnZUJsb2NrZXIiNAoOUHVyZ2VkUmVzb3VyY2USDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkiTwoMUHVyZ2VCbG9ja2VyEjAKBGtpbmQYASABKA4yIi5wYWxhZGluLmFkbWluLnYxLlB1cmdlQmxvY2tlcktpbmQSDQoFY291bnQYAiABKAMieAohTWlncmF0ZVRlbmFudFN0b3JhZ2VMYXlvdXRSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESGQoRdGFyZ2V0X2JhY2tlbmRfaWQYAiABKAkSIQoZY2xlYW51cF9yZXRlbnRpb25fc2Vjb25kcxgDIAEoAyI5CiBHZXRUZW5hbnRTdG9yYWdlTWlncmF0aW9uUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIq8BChZTdG9yYWdlTWlncmF0aW9uU3RhdHVzEg4KBnRlbmFudBgBIAEoCRINCgVzdGF0ZRgCIAEoCRIVCg1vYmplY3RzX3RvdGFsGAMgASgDEhYKDm9iamVjdHNfY29waWVkGAQgASgDEhUKDXNvdXJjZV9idWNrZXQYBSABKAkSFQoNdGFyZ2V0X2J1Y2tldBgGIAEoCRINCgVlcnJvchgJIAEoCUoECAcQCEoECAgQCSJ6ChRUZW5hbnREZWZhdWx0QmluZGluZxIRCgRuYW1lGAEgASgJQgPgQQgSDgoGYnVja2V0GAIgASgJEi8KBnNldF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAxIOCgZzZXRfYnkYBSABKAkiNwoeR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiUAoeU2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAESFwoGYnVja2V0GAIgASgJQge6SARyAhABIjkKIENsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEiIwohQ2xlYXJUZW5hbnREZWZhdWx0QmluZGluZ1Jlc3BvbnNlIo4BChFSZXRpcmVkVGVuYW50U2x1ZxIRCgRuYW1lGAEgASgJQgPgQQMSEQoEc2x1ZxgCIAEoCUID4EEDEh0KEGZvcm1lcl90ZW5hbnRfaWQYAyABKAlCA+BBAxI0CgtyZXRpcmVfdGltZRgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCA+BBAyJNCh1MaXN0UmV0aXJlZFRlbmFudFNsdWdzUmVxdWVzdBIsCgRwYWdlGAEgASgLMh4ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlcXVlc3QiqQEKHkxpc3RSZXRpcmVkVGVuYW50U2x1Z3NSZXNwb25zZRI6Cg1yZXRpcmVkX3NsdWdzGAEgAygLMiMucGFsYWRpbi5hZG1pbi52MS5SZXRpcmVkVGVuYW50U2x1ZxItCgRwYWdlGAIgASgLMh8ucGFsYWRpbi5jb21tb24udjEuUGFnZVJlc3BvbnNlEhwKFHJlc2VydmF0aW9uX2VuZm9yY2VkGAMgASgIIjEKGFJlbGVhc2VUZW5hbnRTbHVnUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABIhsKGVJlbGVhc2VUZW5hbnRTbHVnUmVzcG9uc2UqwQEKEFB1cmdlQmxvY2tlcktpbmQSIgoeUFVSR0VfQkxPQ0tFUl9LSU5EX1VOU1BFQ0lGSUVEEAASIgoeUFVSR0VfQkxPQ0tFUl9LSU5EX0NPTExFQ1RJT05TEAESHgoaUFVSR0VfQkxPQ0tFUl9LSU5EX0JVQ0tFVFMQAhIcChhQVVJHRV9CTE9DS0VSX0tJTkRfVVNFUlMQAxInCiNQVVJHRV9CTE9DS0VSX0tJTkRfQlVDS0VUU19ERUxFVElORxAEMsoNCg1UZW5hbnRTZXJ2aWNlEk8KDENyZWF0ZVRlbmFudBIlLnBhbGFkaW4uYWRtaW4udjEuQ3JlYXRlVGVuYW50UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50Ek4KCUdldFRlbmFudBIiLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50IgOQAgESVAoMVXBkYXRlVGVuYW50EiUucGFsYWRpbi5hZG1pbi52MS5VcGRhdGVUZW5hbnRSZXF1ZXN0GhgucGFsYWRpbi5hZG1pbi52MS5UZW5hbnQiA5ACAhJiCgxEZWxldGVUZW5hbnQSJS5wYWxhZGluLmFkbWluLnYxLkRlbGV0ZVRlbmFudFJlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLkRlbGV0ZVRlbmFudFJlc3BvbnNlIgOQAgISXwoLTGlzdFRlbmFudHMSJC5wYWxhZGluLmFkbWluLnYxLkxpc3RUZW5hbnRzUmVxdWVzdBolLnBhbGFkaW4uYWRtaW4udjEuTGlzdFRlbmFudHNSZXNwb25zZSIDkAIBEmAKElNldEluaGVyaXRlZFBvbGljeRIrLnBhbGFkaW4uYWRtaW4udjEuU2V0SW5oZXJpdGVkUG9saWN5UmVxdWVzdBoYLnBhbGFkaW4uYWRtaW4udjEuVGVuYW50IgOQAgISUQoNUmVzdG9yZVRlbmFudBImLnBhbGFkaW4uYWRtaW4udjEuUmVzdG9yZVRlbmFudFJlcXVlc3QaGC5wYWxhZGluLmFkbWluLnYxLlRlbmFudBJfCgtQdXJnZVRlbmFudBIkLnBhbGFkaW4uYWRtaW4udjEuUHVyZ2VUZW5hbnRSZXF1ZXN0GiUucGFsYWRpbi5hZG1pbi52MS5QdXJnZVRlbmFudFJlc3BvbnNlIgOQAgISdAoSUHJldmlld1B1cmdlVGVuYW50EisucGFsYWRpbi5hZG1pbi52MS5QcmV2aWV3UHVyZ2VUZW5hbnRSZXF1ZXN0GiwucGFsYWRpbi5hZG1pbi52MS5QcmV2aWV3UHVyZ2VUZW5hbnRSZXNwb25zZSIDkAIBEnsKGk1pZ3JhdGVUZW5hbnRTdG9yYWdlTGF5b3V0EjMucGFsYWRpbi5hZG1pbi52MS5NaWdyYXRlVGVuYW50U3RvcmFnZUxheW91dFJlcXVlc3QaKC5wYWxhZGluLmFkbWluLnYxLlN0b3JhZ2VNaWdyYXRpb25TdGF0dXMSfgoZR2V0VGVuYW50U3RvcmFnZU1pZ3JhdGlvbhIyLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50U3RvcmFnZU1pZ3JhdGlvblJlcXVlc3QaKC5wYWxhZGluLmFkbWluLnYxLlN0b3JhZ2VNaWdyYXRpb25TdGF0dXMiA5ACARJ4ChdHZXRUZW5hbnREZWZhdWx0QmluZGluZxIwLnBhbGFkaW4uYWRtaW4udjEuR2V0VGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GiYucGFsYWRpbi5hZG1pbi52MS5UZW5hbnREZWZhdWx0QmluZGluZyIDkAIBEngKF1NldFRlbmFudERlZmF1bHRCaW5kaW5nEjAucGFsYWRpbi5hZG1pbi52MS5TZXRUZW5hbnREZWZhdWx0QmluZGluZ1JlcXVlc3QaJi5wYWxhZGluLmFkbWluLnYxLlRlbmFudERlZmF1bHRCaW5kaW5nIgOQAgISgAEKFkxpc3RSZXRpcmVkVGVuYW50U2x1Z3MSLy5wYWxhZGluLmFkbWluLnYxLkxpc3RSZXRpcmVkVGVuYW50U2x1Z3NSZXF1ZXN0GjAucGFsYWRpbi5hZG1pbi52MS5MaXN0UmV0aXJlZFRlbmFudFNsdWdzUmVzcG9uc2UiA5ACARJxChFSZWxlYXNlVGVuYW50U2x1ZxIqLnBhbGFkaW4uYWRtaW4udjEuUmVsZWFzZVRlbmFudFNsdWdSZXF1ZXN0GisucGFsYWRpbi5hZG1pbi52MS5SZWxlYXNlVGVuYW50U2x1Z1Jlc3BvbnNlIgOQAgISiQEKGUNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmcSMi5wYWxhZGluLmFkbWluLnYxLkNsZWFyVGVuYW50RGVmYXVsdEJpbmRpbmdSZXF1ZXN0GjMucGFsYWRpbi5hZG1pbi52MS5DbGVhclRlbmFudERlZmF1bHRCaW5kaW5nUmVzcG9uc2UiA5ACAkJMWkpnaXRodWIuY29tL29sZWctdGthY2h1ay9wYWxhZGluL3Nkay9nby9nZW4vcGFsYWRpbi9hZG1pbi92MTtwYWxhZGluYWRtaW52MWIGcHJvdG8z",
     [
       file_buf_validate_validate,
       file_google_protobuf_field_mask,
@@ -741,6 +741,134 @@ export const ClearTenantDefaultBindingResponseSchema: GenMessage<ClearTenantDefa
   messageDesc(file_paladin_admin_v1_tenant_service, 22);
 
 /**
+ * The slug of a purged tenant, kept so that it cannot come to name another.
+ *
+ * @generated from message paladin.admin.v1.RetiredTenantSlug
+ */
+export type RetiredTenantSlug =
+  Message<"paladin.admin.v1.RetiredTenantSlug"> & {
+    /**
+     * Resource name: "retiredTenantSlugs/{slug}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+
+    /**
+     * @generated from field: string slug = 2;
+     */
+    slug: string;
+
+    /**
+     * The tenant that held it, now purged.
+     *
+     * @generated from field: string former_tenant_id = 3;
+     */
+    formerTenantId: string;
+
+    /**
+     * @generated from field: google.protobuf.Timestamp retire_time = 4;
+     */
+    retireTime?: Timestamp | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.RetiredTenantSlug.
+ * Use `create(RetiredTenantSlugSchema)` to create a new message.
+ */
+export const RetiredTenantSlugSchema: GenMessage<RetiredTenantSlug> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 23);
+
+/**
+ * @generated from message paladin.admin.v1.ListRetiredTenantSlugsRequest
+ */
+export type ListRetiredTenantSlugsRequest =
+  Message<"paladin.admin.v1.ListRetiredTenantSlugsRequest"> & {
+    /**
+     * Ordered by slug; page_token is the last slug of the previous page.
+     *
+     * @generated from field: paladin.common.v1.PageRequest page = 1;
+     */
+    page?: PageRequest | undefined;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListRetiredTenantSlugsRequest.
+ * Use `create(ListRetiredTenantSlugsRequestSchema)` to create a new message.
+ */
+export const ListRetiredTenantSlugsRequestSchema: GenMessage<ListRetiredTenantSlugsRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 24);
+
+/**
+ * @generated from message paladin.admin.v1.ListRetiredTenantSlugsResponse
+ */
+export type ListRetiredTenantSlugsResponse =
+  Message<"paladin.admin.v1.ListRetiredTenantSlugsResponse"> & {
+    /**
+     * @generated from field: repeated paladin.admin.v1.RetiredTenantSlug retired_slugs = 1;
+     */
+    retiredSlugs: RetiredTenantSlug[];
+
+    /**
+     * @generated from field: paladin.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+
+    /**
+     * Whether CreateTenant refuses these slugs: admin.tenants.reserve_slugs.
+     * When false they are recorded and nothing else.
+     *
+     * @generated from field: bool reservation_enforced = 3;
+     */
+    reservationEnforced: boolean;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ListRetiredTenantSlugsResponse.
+ * Use `create(ListRetiredTenantSlugsResponseSchema)` to create a new message.
+ */
+export const ListRetiredTenantSlugsResponseSchema: GenMessage<ListRetiredTenantSlugsResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 25);
+
+/**
+ * @generated from message paladin.admin.v1.ReleaseTenantSlugRequest
+ */
+export type ReleaseTenantSlugRequest =
+  Message<"paladin.admin.v1.ReleaseTenantSlugRequest"> & {
+    /**
+     * name — "retiredTenantSlugs/{slug}".
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+  };
+
+/**
+ * Describes the message paladin.admin.v1.ReleaseTenantSlugRequest.
+ * Use `create(ReleaseTenantSlugRequestSchema)` to create a new message.
+ */
+export const ReleaseTenantSlugRequestSchema: GenMessage<ReleaseTenantSlugRequest> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 26);
+
+/**
+ * @generated from message paladin.admin.v1.ReleaseTenantSlugResponse
+ */
+export type ReleaseTenantSlugResponse =
+  Message<"paladin.admin.v1.ReleaseTenantSlugResponse"> & {};
+
+/**
+ * Describes the message paladin.admin.v1.ReleaseTenantSlugResponse.
+ * Use `create(ReleaseTenantSlugResponseSchema)` to create a new message.
+ */
+export const ReleaseTenantSlugResponseSchema: GenMessage<ReleaseTenantSlugResponse> =
+  /*@__PURE__*/
+  messageDesc(file_paladin_admin_v1_tenant_service, 27);
+
+/**
  * The rows that keep a tenant alive: ON DELETE RESTRICT children of tenants
  * (docs/deletion-semantics.md). Remove them first, in this order.
  *
@@ -800,8 +928,10 @@ export const TenantService: GenService<{
   /**
    * CreateTenant provisions a tenant and, unless the request opts out, its
    * default storage binding. storage_layout="dedicated" also provisions a
-   * physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
-   * slug is taken.
+   * physical bucket owned by the tenant (ADR-0015). AlreadyExists, reason
+   * SLUG_TAKEN, when the slug is taken: by a live tenant always, and, while
+   * admin.tenants.reserve_slugs is on, by a trashed tenant or a purged one
+   * (see ListRetiredTenantSlugs).
    *
    * @generated from rpc paladin.admin.v1.TenantService.CreateTenant
    */
@@ -874,10 +1004,10 @@ export const TenantService: GenService<{
   /**
    * RestoreTenant clears `deleted_at` on a soft-deleted row, returning
    * it to the active set. Slug + display_name are unique among live
-   * tenants (`001_initial_schema.sql`), and a trashed row keeps both —
-   * if a new tenant claimed the slug while this one was
-   * trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
-   * the other tenant has to be purged before this one comes back.
+   * tenants (`001_initial_schema.sql`). While admin.tenants.reserve_slugs is
+   * on, no new tenant can take a trashed tenant's slug; with it off, one
+   * can, and restore then fails with ALREADY_EXISTS: a slug never changes,
+   * so the other tenant has to be purged before this one comes back.
    *
    * @generated from rpc paladin.admin.v1.TenantService.RestoreTenant
    */
@@ -960,6 +1090,31 @@ export const TenantService: GenService<{
     methodKind: "unary";
     input: typeof SetTenantDefaultBindingRequestSchema;
     output: typeof TenantDefaultBindingSchema;
+  };
+  /**
+   * ListRetiredTenantSlugs lists the slugs of purged tenants, by slug. Each
+   * is recorded by the purge, whatever admin.tenants.reserve_slugs says;
+   * while it is on, CreateTenant refuses them.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.ListRetiredTenantSlugs
+   */
+  listRetiredTenantSlugs: {
+    methodKind: "unary";
+    input: typeof ListRetiredTenantSlugsRequestSchema;
+    output: typeof ListRetiredTenantSlugsResponseSchema;
+  };
+  /**
+   * ReleaseTenantSlug forgets a retired slug, so a new tenant can take it.
+   * Whatever still names it — a Cedar policy, a token claim, an audit row,
+   * a client's tenants/<slug> path — then names that new tenant. Idempotent
+   * on a slug not retired.
+   *
+   * @generated from rpc paladin.admin.v1.TenantService.ReleaseTenantSlug
+   */
+  releaseTenantSlug: {
+    methodKind: "unary";
+    input: typeof ReleaseTenantSlugRequestSchema;
+    output: typeof ReleaseTenantSlugResponseSchema;
   };
   /**
    * ClearTenantDefaultBinding removes the tenant's default route; bare

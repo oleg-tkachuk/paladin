@@ -35,6 +35,9 @@ enum ErrorReason {
   ERROR_REASON_COLLECTION_EXISTS = 10;
   ERROR_REASON_BUCKET_NOT_FOUND = 11;
   ERROR_REASON_POLICY_UNPARSEABLE = 12;
+  // The tenant slug is taken. ErrorInfo.metadata "holder" says by what:
+  // "live" (a tenant using it), "trashed" (a tenant in the trash) or
+  // "retired" (a purged tenant; see TenantService.ListRetiredTenantSlugs).
   ERROR_REASON_SLUG_TAKEN = 13;
   ERROR_REASON_TENANT_ID_TAKEN = 14;
   ERROR_REASON_DISPLAY_NAME_TAKEN = 15;
