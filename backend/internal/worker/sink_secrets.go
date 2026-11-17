@@ -91,13 +91,21 @@ func (d *Dispatcher) resolveSinkValue(ctx context.Context, v string) (string, er
 
 	val, err := d.Secrets.ResolveSinkSecret(ctx, namespace, name, key)
 	if err != nil {
-		return "", fmt.Errorf("resolve sink secret %s: %w", v, err)
+		return "", fmt.Errorf("%w: %w", errSinkSecretUnresolved, err)
 	}
 	c.mu.Lock()
 	c.m[v] = cachedSinkSecret{value: val, at: now}
 	c.mu.Unlock()
 	return val, nil
 }
+
+// errSinkSecretRefMalformed is a "k8s:" field that is not k8s:[ns/]name/key.
+// errSinkSecretUnresolved is a well-formed one the resolver could not read.
+// Neither quotes the field: it sits where a credential goes.
+var (
+	errSinkSecretRefMalformed = errors.New("malformed sink secret ref: want k8s:<name>/<key> or k8s:<ns>/<name>/<key>, with neither empty")
+	errSinkSecretUnresolved   = errors.New("sink secret ref could not be resolved")
+)
 
 // parseSinkSecretRef splits "k8s:[ns/]name/key". The name/key form uses the
 // pod namespace (namespace returned empty).
@@ -109,11 +117,10 @@ func parseSinkSecretRef(ref string) (namespace, name, key string, err error) {
 	case 3:
 		namespace, name, key = parts[0], parts[1], parts[2]
 	default:
-		return "", "", "", fmt.Errorf(
-			"malformed sink secret ref %q: want k8s:<name>/<key> or k8s:<ns>/<name>/<key>", ref)
+		return "", "", "", errSinkSecretRefMalformed
 	}
 	if name == "" || key == "" {
-		return "", "", "", fmt.Errorf("malformed sink secret ref %q: empty name or key", ref)
+		return "", "", "", errSinkSecretRefMalformed
 	}
 	return namespace, name, key, nil
 }
