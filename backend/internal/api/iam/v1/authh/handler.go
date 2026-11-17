@@ -838,15 +838,7 @@ func loginOutcome(err error) string {
 
 func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstore.User, error) {
 	if in.TenantHint != uuid.Nil() {
-		u, err := h.users.GetBySubject(ctx, in.TenantHint, in.Subject)
-		if err != nil {
-			if errors.Is(err, authstore.ErrNotFound) {
-				// Same generic message — do not leak whether subject exists.
-				return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
-			}
-			return authstore.User{}, internalErr(ctx, "resolve login user", err)
-		}
-		return checkLoginRow(u, in.Password)
+		return h.loginInTenant(ctx, in)
 	}
 	matches, err := h.users.FindBySubjectGlobal(ctx, in.Subject)
 	if err != nil {
@@ -860,28 +852,50 @@ func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstor
 		// federated) — nothing to disambiguate, so nothing leaks.
 		return checkLoginRow(matches[0], in.Password)
 	}
-	// Multi-tenant subject: the password picks the memberships it actually
-	// opens; the most recently used one wins. Disabled / federated rows are
-	// silently skipped here (unlike the single-row path) — with several
-	// candidates, per-row detail would leak which tenants the subject is in.
-	var best *authstore.User
-	for i := range matches {
-		m := &matches[i]
-		if m.Disabled || len(m.PasswordHash) == 0 {
-			continue
-		}
-		if auth.CheckPassword(m.PasswordHash, in.Password) != nil {
-			continue
-		}
-		if best == nil ||
-			(m.LastLoginAt != nil && (best.LastLoginAt == nil || m.LastLoginAt.After(*best.LastLoginAt))) {
-			best = m
-		}
-	}
+	best := bestLoginMatch(matches, in.Password)
 	if best == nil {
 		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
 	}
 	return *best, nil
+}
+
+// loginInTenant authenticates against the subject's row in the tenant the
+// login names. A subject not there answers as a wrong password does, so the
+// endpoint does not say whether it exists.
+func (h *Handler) loginInTenant(ctx context.Context, in LoginInput) (authstore.User, error) {
+	u, err := h.users.GetBySubject(ctx, in.TenantHint, in.Subject)
+	if errors.Is(err, authstore.ErrNotFound) {
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
+	}
+	if err != nil {
+		return authstore.User{}, internalErr(ctx, "resolve login user", err)
+	}
+	return checkLoginRow(u, in.Password)
+}
+
+// bestLoginMatch is the membership of a multi-tenant subject that login lands
+// in: of those the password opens, the most recently used. Disabled and
+// federated rows are silently skipped (unlike the single-row path) — with
+// several candidates, per-row detail would leak which tenants the subject is
+// in. nil when the password opens none.
+func bestLoginMatch(matches []authstore.User, password string) *authstore.User {
+	var best *authstore.User
+	for i := range matches {
+		m := &matches[i]
+		if m.Disabled || len(m.PasswordHash) == 0 || auth.CheckPassword(m.PasswordHash, password) != nil {
+			continue
+		}
+		if best == nil || usedMoreRecently(*m, *best) {
+			best = m
+		}
+	}
+	return best
+}
+
+// usedMoreRecently reports whether a was logged into after b; a membership
+// never logged into is never the more recent.
+func usedMoreRecently(a, b authstore.User) bool {
+	return a.LastLoginAt != nil && (b.LastLoginAt == nil || a.LastLoginAt.After(*b.LastLoginAt))
 }
 
 // checkLoginRow applies the single-row login checks: disabled, federated

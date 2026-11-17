@@ -167,3 +167,46 @@ func TestInternalAuthFailuresAreLogged(t *testing.T) {
 		t.Fatalf("want one error line naming the op, got %v", lines)
 	}
 }
+
+// Of a subject's memberships, login lands in the most recently used one the
+// password opens; disabled and federated rows are never candidates.
+func TestBestLoginMatch(t *testing.T) {
+	const pw = "s3cret-pw"
+	hash, err := auth.HashPassword(pw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := auth.HashPassword("another-pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	older, newer := time.Unix(1_800_000_000, 0), time.Unix(1_900_000_000, 0)
+	row := func(h []byte, last *time.Time, disabled bool) authstore.User {
+		return authstore.User{UserID: uuid.New(), PasswordHash: h, LastLoginAt: last, Disabled: disabled}
+	}
+	never := row(hash, nil, false)
+	used := row(hash, &older, false)
+	recent := row(hash, &newer, false)
+	for _, tc := range []struct {
+		name    string
+		matches []authstore.User
+		want    *uuid.UUID
+	}{
+		{"none opens", []authstore.User{row(other, &newer, false)}, nil},
+		{"disabled is skipped", []authstore.User{row(hash, &newer, true), used}, &used.UserID},
+		{"federated is skipped", []authstore.User{row(nil, &newer, false), used}, &used.UserID},
+		{"most recent wins", []authstore.User{used, recent, never}, &recent.UserID},
+		{"a used one beats a never-used one", []authstore.User{never, used}, &used.UserID},
+		{"never used is still a match", []authstore.User{never}, &never.UserID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := bestLoginMatch(tc.matches, pw)
+			switch {
+			case tc.want == nil && got != nil:
+				t.Fatalf("matched %v, want none", got.UserID)
+			case tc.want != nil && (got == nil || got.UserID != *tc.want):
+				t.Fatalf("matched %v, want %v", got, *tc.want)
+			}
+		})
+	}
+}
