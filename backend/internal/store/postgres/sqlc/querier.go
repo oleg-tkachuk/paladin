@@ -794,7 +794,9 @@ type Querier interface {
 	RestoreTenant(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Records the slug of the tenant about to be deleted, so it is never handed
 	// to another tenant while slugs are reserved. Runs in the purge's transaction,
-	// before the tenant row goes.
+	// before the tenant row goes. A slug retired before, then taken again while
+	// reuse was allowed, is retired anew for the tenant purged last: the latest
+	// tokens and policies name it, and its reservation runs from this purge.
 	RetireTenantSlug(ctx context.Context, id pgtype.UUID) error
 	// Starts a failed migration over from the beginning, in place: the row is the
 	// tenant's migration history (attempts keeps counting failures), so it is

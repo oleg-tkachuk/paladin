@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
@@ -109,12 +110,22 @@ func TestTenantSlugReservation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("reuse allowed: %v", err)
 		}
-		// The second tenant's purge leaves the first record as it was.
+		var firstRetired time.Time
+		if err := pool.QueryRow(ctx, `SELECT retired_at FROM retired_tenant_slugs WHERE slug = $1`, "purged-reuse").Scan(&firstRetired); err != nil {
+			t.Fatal(err)
+		}
+		// The second tenant's purge restarts the reservation for it: the
+		// latest tokens and policies name the latest tenant, and a
+		// reservation period counted from the first purge would end early.
 		trash(next)
 		purge(next)
 		var former uuid.UUID
-		if err := pool.QueryRow(ctx, `SELECT former_tenant_id FROM retired_tenant_slugs WHERE slug = $1`, "purged-reuse").Scan(&former); err != nil || former != id {
-			t.Fatalf("retired row = %s, %v; want the first tenant %s", former, err, id)
+		var retired time.Time
+		if err := pool.QueryRow(ctx, `SELECT former_tenant_id, retired_at FROM retired_tenant_slugs WHERE slug = $1`, "purged-reuse").Scan(&former, &retired); err != nil || former != next {
+			t.Fatalf("retired row = %s, %v; want the second tenant %s", former, err, next)
+		}
+		if !retired.After(firstRetired) {
+			t.Fatalf("retired_at = %v, not after the first purge's %v", retired, firstRetired)
 		}
 	})
 

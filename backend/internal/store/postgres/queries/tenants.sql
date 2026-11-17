@@ -199,10 +199,14 @@ SELECT
 -- name: RetireTenantSlug :exec
 -- Records the slug of the tenant about to be deleted, so it is never handed
 -- to another tenant while slugs are reserved. Runs in the purge's transaction,
--- before the tenant row goes.
+-- before the tenant row goes. A slug retired before, then taken again while
+-- reuse was allowed, is retired anew for the tenant purged last: the latest
+-- tokens and policies name it, and its reservation runs from this purge.
 INSERT INTO retired_tenant_slugs (slug, former_tenant_id)
 SELECT slug, id FROM tenants WHERE id = $1
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE
+    SET former_tenant_id = EXCLUDED.former_tenant_id,
+        retired_at       = now();
 
 -- name: TenantSlugHolder :one
 -- Who holds a slug, in one statement so a purge committing between two reads
