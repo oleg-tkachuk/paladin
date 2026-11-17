@@ -142,8 +142,17 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	if err := auth.AssertCapabilityOp(ctx, presignGet.capOp, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	meta, ttl, err := h.grant(ctx, p, tenantID, collection, key, presignGet, ttl)
+	meta, ttl, err := h.resolve(ctx, tenantID, collection, presignGet, ttl)
 	if err != nil {
+		return "", nil, time.Time{}, err
+	}
+	if err := h.authorize(ctx, p, tenantID, collection, key, meta.BackendID, meta.BucketName, presignGet.action); err != nil {
+		return "", nil, time.Time{}, err
+	}
+	// Capability budget burn — gates issuance for an over-budget caller
+	// before a usable URL is handed over (a no-op for a JWT caller or a zero
+	// ChargePerRequest).
+	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	backendID, bucket := meta.BackendID, meta.BucketName
@@ -225,8 +234,14 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 	if err := auth.AssertCapabilityOp(ctx, presignPut.capOp, objectURI); err != nil {
 		return UploadURL{}, err
 	}
-	meta, ttl, err := h.grant(ctx, p, tenantID, collection, key, presignPut, ttl)
+	meta, ttl, err := h.resolve(ctx, tenantID, collection, presignPut, ttl)
 	if err != nil {
+		return UploadURL{}, err
+	}
+	if err := h.authorize(ctx, p, tenantID, collection, key, meta.BackendID, meta.BucketName, presignPut.action); err != nil {
+		return UploadURL{}, err
+	}
+	if err := auth.ChargeRequest(ctx); err != nil {
 		return UploadURL{}, err
 	}
 	url, headers, expires, err := h.storage.PresignPut(ctx, objecth.PresignPutArgs{
@@ -325,26 +340,17 @@ var (
 		ceiling: uploadpolicy.Policy.PutTTLCeiling}
 )
 
-// grant decides, once the capability allows it (assertPresignOps), whether
-// the caller may have a URL of kind for the object, and for how long. The
-// (backend, bucket) is resolved BEFORE authorization, so a bucket- or
-// collection-scoped credential is enforced here; the same resolution routes
-// the presign. The capability budget is charged last, gating issuance for an
-// over-budget caller before a usable URL is handed over (a no-op for a JWT
-// caller or a zero ChargePerRequest).
-func (h *Handler) grant(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection, key string, kind presignKind, ttl time.Duration) (objecth.BucketMeta, time.Duration, error) {
+// resolve finds the (backend, bucket) the object lives in and the TTL a URL
+// of kind gets there. It runs BEFORE authorization, so a bucket- or
+// collection-scoped credential is enforced against the resolved bucket; the
+// same resolution routes the presign.
+func (h *Handler) resolve(ctx context.Context, tenantID uuid.UUID, collection string, kind presignKind, ttl time.Duration) (objecth.BucketMeta, time.Duration, error) {
 	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, kind.write)
 	if err != nil {
 		return objecth.BucketMeta{}, 0, objecth.MapResolveErr(err)
 	}
 	ttl, err = h.cfg.TTL.ResolveWithin(kind.ttlOp, ttl, kind.ceiling(uploadpolicy.For(h.cfg.Limits, meta.Constraints)))
 	if err != nil {
-		return objecth.BucketMeta{}, 0, err
-	}
-	if err := h.authorize(ctx, p, tenantID, collection, key, meta.BackendID, meta.BucketName, kind.action); err != nil {
-		return objecth.BucketMeta{}, 0, err
-	}
-	if err := auth.ChargeRequest(ctx); err != nil {
 		return objecth.BucketMeta{}, 0, err
 	}
 	return meta, ttl, nil
