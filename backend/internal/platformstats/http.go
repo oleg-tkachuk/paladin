@@ -8,6 +8,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// RLSCensusPath is the worker ops endpoint serving the RLS'd census, which
+// the admin pod proxies behind its platform-admin gate.
+const RLSCensusPath = "/system/rls-census.json"
+
 // SignalTenantsPath is the worker ops endpoint serving CollectSignalTenants.
 // The admin pod proxies it behind its platform-admin gate, as it does the
 // census itself.

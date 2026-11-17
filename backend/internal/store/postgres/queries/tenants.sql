@@ -240,3 +240,10 @@ RETURNING slug, former_tenant_id, retired_at;
 -- retired.
 DELETE FROM retired_tenant_slugs WHERE slug = $1
 RETURNING former_tenant_id;
+
+-- name: TenantNamesByID :many
+-- Slug and display name of each tenant in ids, trashed ones included, for
+-- labelling the platform stats. By the primary key: ids is a uuid[].
+SELECT id, slug, display_name
+FROM tenants
+WHERE id = ANY(sqlc.arg('ids')::uuid[]);

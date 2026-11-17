@@ -335,7 +335,7 @@ func dispatcherOpsMux(deps *app.SharedDeps, runner *worker.OutboxRunner, subs si
 	// plane's SystemService.GetDispatcherStats proxies this endpoint after
 	// its own platform-admin gate; the ops listener itself is cluster-
 	// internal only (same trust posture as /system/health.json).
-	mux.HandleFunc("GET /system/dispatcher-stats.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+worker.DispatcherStatsPath, func(w http.ResponseWriter, r *http.Request) {
 		stats, err := runner.DeliveryStats(r.Context())
 		if err != nil {
 			l.Warn("dispatcher stats failed", zap.Error(err))

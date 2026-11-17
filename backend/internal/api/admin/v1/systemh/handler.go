@@ -8,12 +8,12 @@ package systemh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"connectrpc.com/connect/v2"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
@@ -32,10 +32,10 @@ import (
 type Handler struct {
 	cfg        config.Config
 	sourcePath string
-	// pool serves the control-plane half of PlatformStats. Nil-safe:
-	// a handler built without one reports zeroed inventory rather than
-	// panicking (the config-only unit tests construct it that way).
-	pool *pgxpool.Pool
+	// inv serves the control-plane half of PlatformStats and the tenant
+	// labels. Nil-safe: a handler built without one reports no inventory
+	// and no labels (the config-only unit tests construct it that way).
+	inv Inventory
 	// httpClient fetches the dispatcher / worker pods' ops endpoints for
 	// DispatcherStats and PlatformStats. Short timeout — dashboard reads.
 	httpClient *http.Client
@@ -70,12 +70,22 @@ func (h *Handler) WithLogger(l *zap.Logger) *Handler {
 	return h
 }
 
-// WithPool attaches the admin pod's request pool, enabling the
-// control-plane half of PlatformStats. Chained at wiring time so the
-// existing New signature (config-only) keeps working for the paths that
-// never touch the DB.
-func (h *Handler) WithPool(pool *pgxpool.Pool) *Handler {
-	h.pool = pool
+// Inventory is what the admin pod reads itself for the stats page: the
+// control-plane census over the un-RLS'd inventory tables, and the slug and
+// display name of tenants the worker's census names only by id.
+type Inventory interface {
+	ControlPlane(ctx context.Context) (*platformstats.ControlPlane, error)
+	// TenantNames labels the tenants in ids, trashed ones included: their
+	// objects still occupy storage. An id with no tenant row is left out.
+	TenantNames(ctx context.Context, ids []string) (map[string]TenantName, error)
+}
+
+// WithInventory attaches the admin pod's own reads, enabling the
+// control-plane half of PlatformStats and the tenant labels. Chained at
+// wiring time so the config-only New keeps working for the paths that never
+// touch the DB.
+func (h *Handler) WithInventory(inv Inventory) *Handler {
+	h.inv = inv
 	return h
 }
 
@@ -127,28 +137,23 @@ func (h *Handler) DispatcherStats(ctx context.Context) (stats *worker.DeliverySt
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
 		return nil, false, connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
-	url := h.cfg.Dispatcher.OpsURL
-	if url == "" {
-		return nil, false, nil
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/system/dispatcher-stats.json", nil)
-	if err != nil {
-		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	res, err := h.httpClient.Do(req)
-	if err != nil {
-		// Unreachable dispatcher = degraded view, not an RPC failure.
-		return nil, false, nil
-	}
-	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusOK {
-		return nil, false, nil
-	}
 	var s worker.DeliveryStats
-	if err := json.NewDecoder(res.Body).Decode(&s); err != nil {
+	err = h.getOps(ctx, h.cfg.Dispatcher.OpsURL, worker.DispatcherStatsPath, &s)
+	switch {
+	case err == nil:
+		return &s, true, nil
+	case errors.Is(err, errOpsBody):
+		// The dispatcher answered, and not with stats: a fault to report,
+		// not a view to degrade.
+		h.log.Error("dispatcher stats: unreadable answer",
+			zap.String("endpoint", worker.DispatcherStatsPath), zap.Error(err))
 		return nil, false, rpcerr.New(connect.CodeInternal, fmt.Errorf("decode dispatcher stats: %w", err))
+	default:
+		// Unconfigured or unreachable dispatcher = degraded view, not an RPC
+		// failure.
+		h.logDegraded("dispatcher stats unavailable", worker.DispatcherStatsPath, err)
+		return nil, false, nil
 	}
-	return &s, true, nil
 }
 
 // ─── Platform stats ─────────────────────────────────────────────────────────
@@ -189,14 +194,15 @@ func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPa
 	}
 	out := &PlatformStatsResult{TenantNames: map[string]TenantName{}}
 
-	if h.pool != nil {
+	if h.inv != nil {
 		// The census is a cross-tenant aggregate by definition, and its
 		// tenants query joins tenant_default_bindings, which is RLS-covered
 		// as of 016. Without the flag the subquery would see only the
 		// caller's binding and every OTHER tenant would be counted as having
 		// none — a wrong number on a page, with no error anywhere.
-		cp, err := platformstats.CollectControlPlane(auth.WithCrossTenantRead(ctx), h.pool)
+		cp, err := h.inv.ControlPlane(auth.WithCrossTenantRead(ctx))
 		if err != nil {
+			h.log.Error("platform stats: control plane census failed", zap.Error(err))
 			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		out.ControlPlane = cp
@@ -212,17 +218,15 @@ func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPa
 	// covering exactly the ids the worker reported — cheaper and more
 	// predictable than a per-row lookup, and it tolerates ids whose tenant
 	// row was purged while objects lingered (those stay unlabelled).
-	if h.pool != nil && len(census.Objects.Tenants) > 0 {
-		ids := make([]string, 0, len(census.Objects.Tenants))
-		for _, t := range census.Objects.Tenants {
-			ids = append(ids, t.TenantID)
-		}
-		names, err := h.tenantNames(ctx, ids)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-		out.TenantNames = names
+	ids := make([]string, 0, len(census.Objects.Tenants))
+	for _, t := range census.Objects.Tenants {
+		ids = append(ids, t.TenantID)
 	}
+	names, err := h.labelTenants(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out.TenantNames = names
 	return out, nil
 }
 
@@ -232,24 +236,9 @@ func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPa
 // available=false. A worker older than the paging parameters answers with
 // its first page and no next token, which reads as the last page.
 func (h *Handler) fetchRLSCensus(ctx context.Context, page platformstats.TenantPage) (*platformstats.RLSCensus, bool) {
-	url := h.cfg.Worker.OpsURL
-	if url == "" {
-		return nil, false
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/system/rls-census.json?"+page.Query().Encode(), nil)
-	if err != nil {
-		return nil, false
-	}
-	res, err := h.httpClient.Do(req)
-	if err != nil {
-		return nil, false
-	}
-	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusOK {
-		return nil, false
-	}
 	var census platformstats.RLSCensus
-	if err := json.NewDecoder(res.Body).Decode(&census); err != nil {
+	if err := h.getOps(ctx, h.cfg.Worker.OpsURL, platformstats.RLSCensusPath+"?"+page.Query().Encode(), &census); err != nil {
+		h.logDegraded("platform stats: worker census unavailable", platformstats.RLSCensusPath, err)
 		return nil, false
 	}
 	return &census, true
@@ -270,66 +259,77 @@ func (h *Handler) PlatformStatsTenants(ctx context.Context, signal platformstats
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
 		return nil, connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
-	base := h.cfg.Worker.OpsURL
-	if base == "" {
-		return nil, connect.NewError(connect.CodeUnavailable, "worker ops endpoint is not configured")
+	var tenants platformstats.SignalTenants
+	if err := h.getOps(ctx, h.cfg.Worker.OpsURL,
+		platformstats.SignalTenantsPath+"?"+platformstats.SignalQuery(signal, page).Encode(), &tenants); err != nil {
+		h.log.Warn("platform stats: signal tenants unavailable",
+			zap.String("endpoint", platformstats.SignalTenantsPath), zap.String("signal", string(signal)), zap.Error(err))
+		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		base+platformstats.SignalTenantsPath+"?"+platformstats.SignalQuery(signal, page).Encode(), nil)
+
+	ids := make([]string, 0, len(tenants.Tenants))
+	for _, t := range tenants.Tenants {
+		ids = append(ids, t.TenantID)
+	}
+	names, err := h.labelTenants(ctx, ids)
 	if err != nil {
+		return nil, err
+	}
+	return &SignalTenantsResult{Tenants: &tenants, TenantNames: names}, nil
+}
+
+// labelTenants is the slug and display name of each tenant in ids, read
+// from the inventory; none without one, or without ids.
+func (h *Handler) labelTenants(ctx context.Context, ids []string) (map[string]TenantName, error) {
+	if h.inv == nil || len(ids) == 0 {
+		return map[string]TenantName{}, nil
+	}
+	names, err := h.inv.TenantNames(ctx, ids)
+	if err != nil {
+		h.log.Error("platform stats: tenant labels failed", zap.Int("tenants", len(ids)), zap.Error(err))
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return names, nil
+}
+
+// errOpsUnconfigured is getOps's answer when the deployment set no ops URL
+// for the pod: a choice, not a fault.
+var errOpsUnconfigured = errors.New("ops endpoint is not configured")
+
+// errOpsBody wraps getOps's failure to decode an answer the pod gave.
+var errOpsBody = errors.New("ops endpoint answer unreadable")
+
+// getOps GETs path (with its query) from the ops listener at base and decodes
+// the JSON answer into out. The error says which step failed:
+// errOpsUnconfigured with no base, errOpsBody for an answer it cannot read.
+func (h *Handler) getOps(ctx context.Context, base, path string, out any) error {
+	if base == "" {
+		return errOpsUnconfigured
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
 	}
 	res, err := h.httpClient.Do(req)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
+		return fmt.Errorf("reach ops endpoint: %w", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return nil, connect.Errorf(connect.CodeUnavailable, "worker census: %s", res.Status)
+		return fmt.Errorf("ops endpoint answered %s", res.Status)
 	}
-	var tenants platformstats.SignalTenants
-	if err := json.NewDecoder(res.Body).Decode(&tenants); err != nil {
-		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
+	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
+		return fmt.Errorf("%w: %w", errOpsBody, err)
 	}
-
-	out := &SignalTenantsResult{Tenants: &tenants, TenantNames: map[string]TenantName{}}
-	if h.pool != nil && len(tenants.Tenants) > 0 {
-		ids := make([]string, 0, len(tenants.Tenants))
-		for _, t := range tenants.Tenants {
-			ids = append(ids, t.TenantID)
-		}
-		names, err := h.tenantNames(ctx, ids)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-		out.TenantNames = names
-	}
-	return out, nil
+	return nil
 }
 
-// tenantNames resolves slug + display name for the supplied tenant ids.
-// Trashed tenants are included: their objects still occupy storage and an
-// operator chasing usage needs to see whose they are.
-func (h *Handler) tenantNames(ctx context.Context, ids []string) (map[string]TenantName, error) {
-	rows, err := h.pool.Query(ctx, `
-		SELECT id::text, COALESCE(slug, ''), COALESCE(display_name, '')
-		FROM tenants
-		WHERE id::text = ANY($1)`, ids)
-	if err != nil {
-		return nil, fmt.Errorf("tenant names: %w", err)
+// logDegraded records why a stats read is shown as unavailable: at debug for
+// an endpoint the deployment left unconfigured, a warning otherwise.
+func (h *Handler) logDegraded(msg, endpoint string, err error) {
+	if errors.Is(err, errOpsUnconfigured) {
+		h.log.Debug(msg, zap.String("endpoint", endpoint), zap.Error(err))
+		return
 	}
-	defer rows.Close()
-	out := make(map[string]TenantName, len(ids))
-	for rows.Next() {
-		var id string
-		var n TenantName
-		if err := rows.Scan(&id, &n.Slug, &n.DisplayName); err != nil {
-			return nil, fmt.Errorf("tenant names: scan: %w", err)
-		}
-		out[id] = n
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("tenant names: rows: %w", err)
-	}
-	return out, nil
+	h.log.Warn(msg, zap.String("endpoint", endpoint), zap.Error(err))
 }

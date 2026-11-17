@@ -566,6 +566,40 @@ func (q *Queries) SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expected
 	return result.RowsAffected(), nil
 }
 
+const tenantNamesByID = `-- name: TenantNamesByID :many
+SELECT id, slug, display_name
+FROM tenants
+WHERE id = ANY($1::uuid[])
+`
+
+type TenantNamesByIDRow struct {
+	ID          pgtype.UUID `json:"id"`
+	Slug        string      `json:"slug"`
+	DisplayName string      `json:"display_name"`
+}
+
+// Slug and display name of each tenant in ids, trashed ones included, for
+// labelling the platform stats. By the primary key: ids is a uuid[].
+func (q *Queries) TenantNamesByID(ctx context.Context, ids []pgtype.UUID) ([]TenantNamesByIDRow, error) {
+	rows, err := q.db.Query(ctx, tenantNamesByID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TenantNamesByIDRow
+	for rows.Next() {
+		var i TenantNamesByIDRow
+		if err := rows.Scan(&i.ID, &i.Slug, &i.DisplayName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const tenantSlugHolder = `-- name: TenantSlugHolder :one
 SELECT COALESCE(
     (SELECT CASE WHEN t.deleted_at IS NULL THEN 'live' ELSE 'trashed' END
