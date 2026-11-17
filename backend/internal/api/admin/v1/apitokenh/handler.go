@@ -22,6 +22,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
+	"go.uber.org/zap"
 
 	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -59,7 +60,13 @@ type Handler struct {
 	store   api_token.Store
 	limiter ratelimit.Limiter
 	policy  cedar.Authorizer
+	log     *zap.Logger
 }
+
+// SetLogger sets where the handler records each credential issued, revoked
+// or refused. Unset, it records nothing. No line ever carries a token's
+// plaintext.
+func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
 
 // NewHandler builds the Handler. issuer / store / limiter / policy are
 // required; passing nil panics — wiring bugs should fail loud at boot.
@@ -76,7 +83,7 @@ func NewHandler(
 	if issuer == nil || store == nil || limiter == nil || policy == nil {
 		panic("apitokenh: issuer / store / limiter / policy are required")
 	}
-	return &Handler{issuer: issuer, store: store, limiter: limiter, policy: policy}
+	return &Handler{issuer: issuer, store: store, limiter: limiter, policy: policy, log: zap.NewNop()}
 }
 
 // authorize gates an RPC against Cedar, with the caller's own tenant as the
@@ -98,6 +105,53 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 
+	if err := h.checkCreate(caller, tenantID, req); err != nil {
+		return nil, err
+	}
+	rateLimit, err := rateLimitOf(req)
+	if err != nil {
+		return nil, err
+	}
+	tok, err := h.issuer.Issue(ctx, api_token.IssueRequest{
+		TenantID:     tenantID,
+		Name:         req.GetDisplayName(),
+		Scopes:       req.GetScopes(),
+		Roles:        req.GetRoles(),
+		Audience:     req.GetAudience(),
+		TTL:          time.Duration(req.GetTtlSeconds()) * time.Second,
+		RateLimitRPM: rateLimit,
+		CreatedBy:    caller.Subject,
+	})
+	if err != nil {
+		return nil, h.issueFailed(caller, tenantID, err)
+	}
+	h.log.Info("api token issued",
+		zap.String("tenant_id", tenantID.String()),
+		zap.String("token_id", tok.ID.String()),
+		zap.String("prefix", tok.Prefix),
+		zap.Strings("roles", tok.Roles),
+		zap.Strings("audience", tok.Audience),
+		zap.String("actor", caller.Subject))
+	return &adminv1.APITokenServiceCreateResponse{
+		ApiToken: tokenToProto(*tok),
+		Token:    tok.Plaintext,
+	}, nil
+}
+
+// issueFailed maps an Issue error: a request the issuer refused is the
+// caller's to fix, anything else is internal.
+func (h *Handler) issueFailed(caller *auth.Principal, tenantID uuid.UUID, err error) error {
+	fields := []zap.Field{zap.String("tenant_id", tenantID.String()), zap.String("actor", caller.Subject), zap.Error(err)}
+	if errors.Is(err, api_token.ErrInvalidIssue) {
+		h.log.Warn("api token refused: invalid request", fields...)
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	h.log.Error("api token issue failed", fields...)
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+}
+
+// checkCreate refuses what a caller may not mint, before anything is issued.
+func (h *Handler) checkCreate(caller *auth.Principal, tenantID uuid.UUID, req *adminv1.APITokenServiceCreateRequest) error {
 	// Minting for somebody else's tenant is a platform operation.
 	//
 	// This check is the gate, and it has to live here: the store now sets the
@@ -109,7 +163,9 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 	// tenant-level admin allowed to mint their own tokens could mint one for
 	// any tenant whose id they can guess.
 	if tenantID != caller.TenantID && !caller.HasRole(apiutil.RolePlatformAdmin) {
-		return nil, connect.NewError(connect.CodePermissionDenied,
+		h.log.Warn("api token refused: another tenant's",
+			zap.String("tenant_id", tenantID.String()), zap.String("actor", caller.Subject))
+		return connect.NewError(connect.CodePermissionDenied,
 			"minting an api_token for another tenant requires platform.admin")
 	}
 
@@ -121,7 +177,7 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 	// scoping set (tenant:/backend:/bucket:/collection:/*).
 	for _, s := range req.GetScopes() {
 		if _, perr := auth.ParseScope(s); perr != nil {
-			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("scope: %w", perr))
+			return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("scope: %w", perr))
 		}
 	}
 
@@ -133,7 +189,10 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 	// stricter than the cross-tenant check — that one is about WHOSE token this
 	// is, this one about WHAT AUTHORITY it carries.
 	if len(req.GetRoles()) > 0 && !caller.HasRole(apiutil.RolePlatformAdmin) {
-		return nil, connect.NewError(connect.CodePermissionDenied,
+		h.log.Warn("api token refused: roles need platform.admin",
+			zap.String("tenant_id", tenantID.String()), zap.Strings("roles", req.GetRoles()),
+			zap.String("actor", caller.Subject))
+		return connect.NewError(connect.CodePermissionDenied,
 			"granting roles to an api_token requires platform.admin")
 	}
 
@@ -141,32 +200,9 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 	// auth.APITokenRoleAuthInterceptor), so a roleless token for that plane
 	// could never authenticate there — not even to read itself.
 	if len(req.GetRoles()) == 0 && slices.Contains(req.GetAudience(), auth.TokenPlaneAdmin) {
-		return nil, apiutil.MapError(ErrAdminAudienceNeedsRoles)
+		return apiutil.MapError(ErrAdminAudienceNeedsRoles)
 	}
-
-	ttl := time.Duration(req.GetTtlSeconds()) * time.Second
-	rateLimit, err := rateLimitOf(req)
-	if err != nil {
-		return nil, err
-	}
-
-	tok, err := h.issuer.Issue(ctx, api_token.IssueRequest{
-		TenantID:     tenantID,
-		Name:         req.GetDisplayName(),
-		Scopes:       req.GetScopes(),
-		Roles:        req.GetRoles(),
-		Audience:     req.GetAudience(),
-		TTL:          ttl,
-		RateLimitRPM: rateLimit,
-		CreatedBy:    caller.Subject,
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
-	}
-	return &adminv1.APITokenServiceCreateResponse{
-		ApiToken: tokenToProto(*tok),
-		Token:    tok.Plaintext,
-	}, nil
+	return nil
 }
 
 // TokenName is the resource name of tenant's API token id, which every
@@ -247,9 +283,12 @@ func (h *Handler) Revoke(ctx context.Context, req *adminv1.APITokenServiceRevoke
 	if err != nil {
 		return nil, err
 	}
+	fields := []zap.Field{zap.String("tenant_id", tenantID.String()), zap.String("token_id", id.String()), zap.String("actor", caller.Subject)}
 	if err := h.store.Revoke(ctx, id); err != nil {
+		h.log.Error("api token revoke failed", append(fields, zap.Error(err))...)
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
+	h.log.Info("api token revoked", fields...)
 	return &adminv1.APITokenServiceRevokeResponse{}, nil
 }
 
