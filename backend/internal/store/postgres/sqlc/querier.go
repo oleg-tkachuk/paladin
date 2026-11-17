@@ -977,6 +977,9 @@ type Querier interface {
 	// grant. The binding trigger enforces the same rule; this asks it first, so a
 	// refusal is a clear answer rather than a failed write.
 	TenantMayBindBucket(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (bool, error)
+	// Slug and display name of each tenant in ids, trashed ones included, for
+	// labelling the platform stats. By the primary key: ids is a uuid[].
+	TenantNamesByID(ctx context.Context, ids []pgtype.UUID) ([]TenantNamesByIDRow, error)
 	// Who holds a slug, in one statement so a purge committing between two reads
 	// cannot hide it: 'live', 'trashed', 'retired', or '' when it is free. The
 	// values are tenanth.SlugHolder's.

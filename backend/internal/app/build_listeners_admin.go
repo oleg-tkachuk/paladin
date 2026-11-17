@@ -359,7 +359,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	}
 	paladinadminv1connect.RegisterOAuthClientServiceHandler(adminServer, oauthClientH)
 
-	systemHandler := systemh.New(cfg, meta.ConfigPath).WithPool(deps.Pool).WithLogger(l)
+	systemHandler := systemh.New(cfg, meta.ConfigPath).WithInventory(adapters.NewSystemInventory(deps.Pool)).WithLogger(l)
 	if caPath := cfg.Admin.Health.CAPath; caPath != "" {
 		client, err := caTrustingClient(caPath, cfg.Admin.Health.Timeout)
 		if err != nil {

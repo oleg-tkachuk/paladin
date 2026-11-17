@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
@@ -32,10 +31,10 @@ import (
 type Handler struct {
 	cfg        config.Config
 	sourcePath string
-	// pool serves the control-plane half of PlatformStats. Nil-safe:
-	// a handler built without one reports zeroed inventory rather than
-	// panicking (the config-only unit tests construct it that way).
-	pool *pgxpool.Pool
+	// inv serves the control-plane half of PlatformStats and the tenant
+	// labels. Nil-safe: a handler built without one reports no inventory
+	// and no labels (the config-only unit tests construct it that way).
+	inv Inventory
 	// httpClient fetches the dispatcher / worker pods' ops endpoints for
 	// DispatcherStats and PlatformStats. Short timeout — dashboard reads.
 	httpClient *http.Client
@@ -70,12 +69,22 @@ func (h *Handler) WithLogger(l *zap.Logger) *Handler {
 	return h
 }
 
-// WithPool attaches the admin pod's request pool, enabling the
-// control-plane half of PlatformStats. Chained at wiring time so the
-// existing New signature (config-only) keeps working for the paths that
-// never touch the DB.
-func (h *Handler) WithPool(pool *pgxpool.Pool) *Handler {
-	h.pool = pool
+// Inventory is what the admin pod reads itself for the stats page: the
+// control-plane census over the un-RLS'd inventory tables, and the slug and
+// display name of tenants the worker's census names only by id.
+type Inventory interface {
+	ControlPlane(ctx context.Context) (*platformstats.ControlPlane, error)
+	// TenantNames labels the tenants in ids, trashed ones included: their
+	// objects still occupy storage. An id with no tenant row is left out.
+	TenantNames(ctx context.Context, ids []string) (map[string]TenantName, error)
+}
+
+// WithInventory attaches the admin pod's own reads, enabling the
+// control-plane half of PlatformStats and the tenant labels. Chained at
+// wiring time so the config-only New keeps working for the paths that never
+// touch the DB.
+func (h *Handler) WithInventory(inv Inventory) *Handler {
+	h.inv = inv
 	return h
 }
 
@@ -189,14 +198,15 @@ func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPa
 	}
 	out := &PlatformStatsResult{TenantNames: map[string]TenantName{}}
 
-	if h.pool != nil {
+	if h.inv != nil {
 		// The census is a cross-tenant aggregate by definition, and its
 		// tenants query joins tenant_default_bindings, which is RLS-covered
 		// as of 016. Without the flag the subquery would see only the
 		// caller's binding and every OTHER tenant would be counted as having
 		// none — a wrong number on a page, with no error anywhere.
-		cp, err := platformstats.CollectControlPlane(auth.WithCrossTenantRead(ctx), h.pool)
+		cp, err := h.inv.ControlPlane(auth.WithCrossTenantRead(ctx))
 		if err != nil {
+			h.log.Error("platform stats: control plane census failed", zap.Error(err))
 			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 		}
 		out.ControlPlane = cp
@@ -212,17 +222,15 @@ func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPa
 	// covering exactly the ids the worker reported — cheaper and more
 	// predictable than a per-row lookup, and it tolerates ids whose tenant
 	// row was purged while objects lingered (those stay unlabelled).
-	if h.pool != nil && len(census.Objects.Tenants) > 0 {
-		ids := make([]string, 0, len(census.Objects.Tenants))
-		for _, t := range census.Objects.Tenants {
-			ids = append(ids, t.TenantID)
-		}
-		names, err := h.tenantNames(ctx, ids)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-		out.TenantNames = names
+	ids := make([]string, 0, len(census.Objects.Tenants))
+	for _, t := range census.Objects.Tenants {
+		ids = append(ids, t.TenantID)
 	}
+	names, err := h.labelTenants(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out.TenantNames = names
 	return out, nil
 }
 
@@ -292,44 +300,27 @@ func (h *Handler) PlatformStatsTenants(ctx context.Context, signal platformstats
 		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
 	}
 
-	out := &SignalTenantsResult{Tenants: &tenants, TenantNames: map[string]TenantName{}}
-	if h.pool != nil && len(tenants.Tenants) > 0 {
-		ids := make([]string, 0, len(tenants.Tenants))
-		for _, t := range tenants.Tenants {
-			ids = append(ids, t.TenantID)
-		}
-		names, err := h.tenantNames(ctx, ids)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-		out.TenantNames = names
+	ids := make([]string, 0, len(tenants.Tenants))
+	for _, t := range tenants.Tenants {
+		ids = append(ids, t.TenantID)
 	}
-	return out, nil
+	names, err := h.labelTenants(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	return &SignalTenantsResult{Tenants: &tenants, TenantNames: names}, nil
 }
 
-// tenantNames resolves slug + display name for the supplied tenant ids.
-// Trashed tenants are included: their objects still occupy storage and an
-// operator chasing usage needs to see whose they are.
-func (h *Handler) tenantNames(ctx context.Context, ids []string) (map[string]TenantName, error) {
-	rows, err := h.pool.Query(ctx, `
-		SELECT id::text, COALESCE(slug, ''), COALESCE(display_name, '')
-		FROM tenants
-		WHERE id::text = ANY($1)`, ids)
+// labelTenants is the slug and display name of each tenant in ids, read
+// from the inventory; none without one, or without ids.
+func (h *Handler) labelTenants(ctx context.Context, ids []string) (map[string]TenantName, error) {
+	if h.inv == nil || len(ids) == 0 {
+		return map[string]TenantName{}, nil
+	}
+	names, err := h.inv.TenantNames(ctx, ids)
 	if err != nil {
-		return nil, fmt.Errorf("tenant names: %w", err)
+		h.log.Error("platform stats: tenant labels failed", zap.Int("tenants", len(ids)), zap.Error(err))
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	defer rows.Close()
-	out := make(map[string]TenantName, len(ids))
-	for rows.Next() {
-		var id string
-		var n TenantName
-		if err := rows.Scan(&id, &n.Slug, &n.DisplayName); err != nil {
-			return nil, fmt.Errorf("tenant names: scan: %w", err)
-		}
-		out[id] = n
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("tenant names: rows: %w", err)
-	}
-	return out, nil
+	return names, nil
 }
