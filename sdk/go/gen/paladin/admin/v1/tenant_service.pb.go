@@ -1419,8 +1419,14 @@ type RetiredTenantSlug struct {
 	// The tenant that held it, now purged.
 	FormerTenantId string                 `protobuf:"bytes,3,opt,name=former_tenant_id,json=formerTenantId,proto3" json:"former_tenant_id,omitempty"`
 	RetireTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=retire_time,json=retireTime,proto3" json:"retire_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// When the worker releases it: retire_time + the server's
+	// admin.tenants.slug_reservation_period. Unset while that period is
+	// unset, which keeps the slug until ReleaseTenantSlug. Computed on read,
+	// so changing the period moves it for every slug already retired; the
+	// release happens on the worker's next pass after this moment.
+	ReleaseTime   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=release_time,json=releaseTime,proto3" json:"release_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RetiredTenantSlug) Reset() {
@@ -1477,6 +1483,13 @@ func (x *RetiredTenantSlug) GetFormerTenantId() string {
 func (x *RetiredTenantSlug) GetRetireTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.RetireTime
+	}
+	return nil
+}
+
+func (x *RetiredTenantSlug) GetReleaseTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReleaseTime
 	}
 	return nil
 }
@@ -1749,13 +1762,14 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x06bucket\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\"?\n" +
 	" ClearTenantDefaultBindingRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"#\n" +
-	"!ClearTenantDefaultBindingResponse\"\xb6\x01\n" +
+	"!ClearTenantDefaultBindingResponse\"\xfa\x01\n" +
 	"\x11RetiredTenantSlug\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\x03R\x04name\x12\x17\n" +
 	"\x04slug\x18\x02 \x01(\tB\x03\xe0A\x03R\x04slug\x12-\n" +
 	"\x10former_tenant_id\x18\x03 \x01(\tB\x03\xe0A\x03R\x0eformerTenantId\x12@\n" +
 	"\vretire_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\n" +
-	"retireTime\"S\n" +
+	"retireTime\x12B\n" +
+	"\frelease_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\vreleaseTime\"S\n" +
 	"\x1dListRetiredTenantSlugsRequest\x122\n" +
 	"\x04page\x18\x01 \x01(\v2\x1e.paladin.common.v1.PageRequestR\x04page\"\xd2\x01\n" +
 	"\x1eListRetiredTenantSlugsResponse\x12H\n" +
@@ -1852,46 +1866,47 @@ var file_paladin_admin_v1_tenant_service_proto_depIdxs = []int32{
 	0,  // 9: paladin.admin.v1.PurgeBlocker.kind:type_name -> paladin.admin.v1.PurgeBlockerKind
 	33, // 10: paladin.admin.v1.TenantDefaultBinding.set_at:type_name -> google.protobuf.Timestamp
 	33, // 11: paladin.admin.v1.RetiredTenantSlug.retire_time:type_name -> google.protobuf.Timestamp
-	31, // 12: paladin.admin.v1.ListRetiredTenantSlugsRequest.page:type_name -> paladin.common.v1.PageRequest
-	24, // 13: paladin.admin.v1.ListRetiredTenantSlugsResponse.retired_slugs:type_name -> paladin.admin.v1.RetiredTenantSlug
-	32, // 14: paladin.admin.v1.ListRetiredTenantSlugsResponse.page:type_name -> paladin.common.v1.PageResponse
-	1,  // 15: paladin.admin.v1.TenantService.CreateTenant:input_type -> paladin.admin.v1.CreateTenantRequest
-	2,  // 16: paladin.admin.v1.TenantService.GetTenant:input_type -> paladin.admin.v1.GetTenantRequest
-	3,  // 17: paladin.admin.v1.TenantService.UpdateTenant:input_type -> paladin.admin.v1.UpdateTenantRequest
-	4,  // 18: paladin.admin.v1.TenantService.DeleteTenant:input_type -> paladin.admin.v1.DeleteTenantRequest
-	6,  // 19: paladin.admin.v1.TenantService.ListTenants:input_type -> paladin.admin.v1.ListTenantsRequest
-	8,  // 20: paladin.admin.v1.TenantService.SetInheritedPolicy:input_type -> paladin.admin.v1.SetInheritedPolicyRequest
-	9,  // 21: paladin.admin.v1.TenantService.RestoreTenant:input_type -> paladin.admin.v1.RestoreTenantRequest
-	10, // 22: paladin.admin.v1.TenantService.PurgeTenant:input_type -> paladin.admin.v1.PurgeTenantRequest
-	12, // 23: paladin.admin.v1.TenantService.PreviewPurgeTenant:input_type -> paladin.admin.v1.PreviewPurgeTenantRequest
-	16, // 24: paladin.admin.v1.TenantService.MigrateTenantStorageLayout:input_type -> paladin.admin.v1.MigrateTenantStorageLayoutRequest
-	17, // 25: paladin.admin.v1.TenantService.GetTenantStorageMigration:input_type -> paladin.admin.v1.GetTenantStorageMigrationRequest
-	20, // 26: paladin.admin.v1.TenantService.GetTenantDefaultBinding:input_type -> paladin.admin.v1.GetTenantDefaultBindingRequest
-	21, // 27: paladin.admin.v1.TenantService.SetTenantDefaultBinding:input_type -> paladin.admin.v1.SetTenantDefaultBindingRequest
-	25, // 28: paladin.admin.v1.TenantService.ListRetiredTenantSlugs:input_type -> paladin.admin.v1.ListRetiredTenantSlugsRequest
-	27, // 29: paladin.admin.v1.TenantService.ReleaseTenantSlug:input_type -> paladin.admin.v1.ReleaseTenantSlugRequest
-	22, // 30: paladin.admin.v1.TenantService.ClearTenantDefaultBinding:input_type -> paladin.admin.v1.ClearTenantDefaultBindingRequest
-	29, // 31: paladin.admin.v1.TenantService.CreateTenant:output_type -> paladin.admin.v1.Tenant
-	29, // 32: paladin.admin.v1.TenantService.GetTenant:output_type -> paladin.admin.v1.Tenant
-	29, // 33: paladin.admin.v1.TenantService.UpdateTenant:output_type -> paladin.admin.v1.Tenant
-	5,  // 34: paladin.admin.v1.TenantService.DeleteTenant:output_type -> paladin.admin.v1.DeleteTenantResponse
-	7,  // 35: paladin.admin.v1.TenantService.ListTenants:output_type -> paladin.admin.v1.ListTenantsResponse
-	29, // 36: paladin.admin.v1.TenantService.SetInheritedPolicy:output_type -> paladin.admin.v1.Tenant
-	29, // 37: paladin.admin.v1.TenantService.RestoreTenant:output_type -> paladin.admin.v1.Tenant
-	11, // 38: paladin.admin.v1.TenantService.PurgeTenant:output_type -> paladin.admin.v1.PurgeTenantResponse
-	13, // 39: paladin.admin.v1.TenantService.PreviewPurgeTenant:output_type -> paladin.admin.v1.PreviewPurgeTenantResponse
-	18, // 40: paladin.admin.v1.TenantService.MigrateTenantStorageLayout:output_type -> paladin.admin.v1.StorageMigrationStatus
-	18, // 41: paladin.admin.v1.TenantService.GetTenantStorageMigration:output_type -> paladin.admin.v1.StorageMigrationStatus
-	19, // 42: paladin.admin.v1.TenantService.GetTenantDefaultBinding:output_type -> paladin.admin.v1.TenantDefaultBinding
-	19, // 43: paladin.admin.v1.TenantService.SetTenantDefaultBinding:output_type -> paladin.admin.v1.TenantDefaultBinding
-	26, // 44: paladin.admin.v1.TenantService.ListRetiredTenantSlugs:output_type -> paladin.admin.v1.ListRetiredTenantSlugsResponse
-	28, // 45: paladin.admin.v1.TenantService.ReleaseTenantSlug:output_type -> paladin.admin.v1.ReleaseTenantSlugResponse
-	23, // 46: paladin.admin.v1.TenantService.ClearTenantDefaultBinding:output_type -> paladin.admin.v1.ClearTenantDefaultBindingResponse
-	31, // [31:47] is the sub-list for method output_type
-	15, // [15:31] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	33, // 12: paladin.admin.v1.RetiredTenantSlug.release_time:type_name -> google.protobuf.Timestamp
+	31, // 13: paladin.admin.v1.ListRetiredTenantSlugsRequest.page:type_name -> paladin.common.v1.PageRequest
+	24, // 14: paladin.admin.v1.ListRetiredTenantSlugsResponse.retired_slugs:type_name -> paladin.admin.v1.RetiredTenantSlug
+	32, // 15: paladin.admin.v1.ListRetiredTenantSlugsResponse.page:type_name -> paladin.common.v1.PageResponse
+	1,  // 16: paladin.admin.v1.TenantService.CreateTenant:input_type -> paladin.admin.v1.CreateTenantRequest
+	2,  // 17: paladin.admin.v1.TenantService.GetTenant:input_type -> paladin.admin.v1.GetTenantRequest
+	3,  // 18: paladin.admin.v1.TenantService.UpdateTenant:input_type -> paladin.admin.v1.UpdateTenantRequest
+	4,  // 19: paladin.admin.v1.TenantService.DeleteTenant:input_type -> paladin.admin.v1.DeleteTenantRequest
+	6,  // 20: paladin.admin.v1.TenantService.ListTenants:input_type -> paladin.admin.v1.ListTenantsRequest
+	8,  // 21: paladin.admin.v1.TenantService.SetInheritedPolicy:input_type -> paladin.admin.v1.SetInheritedPolicyRequest
+	9,  // 22: paladin.admin.v1.TenantService.RestoreTenant:input_type -> paladin.admin.v1.RestoreTenantRequest
+	10, // 23: paladin.admin.v1.TenantService.PurgeTenant:input_type -> paladin.admin.v1.PurgeTenantRequest
+	12, // 24: paladin.admin.v1.TenantService.PreviewPurgeTenant:input_type -> paladin.admin.v1.PreviewPurgeTenantRequest
+	16, // 25: paladin.admin.v1.TenantService.MigrateTenantStorageLayout:input_type -> paladin.admin.v1.MigrateTenantStorageLayoutRequest
+	17, // 26: paladin.admin.v1.TenantService.GetTenantStorageMigration:input_type -> paladin.admin.v1.GetTenantStorageMigrationRequest
+	20, // 27: paladin.admin.v1.TenantService.GetTenantDefaultBinding:input_type -> paladin.admin.v1.GetTenantDefaultBindingRequest
+	21, // 28: paladin.admin.v1.TenantService.SetTenantDefaultBinding:input_type -> paladin.admin.v1.SetTenantDefaultBindingRequest
+	25, // 29: paladin.admin.v1.TenantService.ListRetiredTenantSlugs:input_type -> paladin.admin.v1.ListRetiredTenantSlugsRequest
+	27, // 30: paladin.admin.v1.TenantService.ReleaseTenantSlug:input_type -> paladin.admin.v1.ReleaseTenantSlugRequest
+	22, // 31: paladin.admin.v1.TenantService.ClearTenantDefaultBinding:input_type -> paladin.admin.v1.ClearTenantDefaultBindingRequest
+	29, // 32: paladin.admin.v1.TenantService.CreateTenant:output_type -> paladin.admin.v1.Tenant
+	29, // 33: paladin.admin.v1.TenantService.GetTenant:output_type -> paladin.admin.v1.Tenant
+	29, // 34: paladin.admin.v1.TenantService.UpdateTenant:output_type -> paladin.admin.v1.Tenant
+	5,  // 35: paladin.admin.v1.TenantService.DeleteTenant:output_type -> paladin.admin.v1.DeleteTenantResponse
+	7,  // 36: paladin.admin.v1.TenantService.ListTenants:output_type -> paladin.admin.v1.ListTenantsResponse
+	29, // 37: paladin.admin.v1.TenantService.SetInheritedPolicy:output_type -> paladin.admin.v1.Tenant
+	29, // 38: paladin.admin.v1.TenantService.RestoreTenant:output_type -> paladin.admin.v1.Tenant
+	11, // 39: paladin.admin.v1.TenantService.PurgeTenant:output_type -> paladin.admin.v1.PurgeTenantResponse
+	13, // 40: paladin.admin.v1.TenantService.PreviewPurgeTenant:output_type -> paladin.admin.v1.PreviewPurgeTenantResponse
+	18, // 41: paladin.admin.v1.TenantService.MigrateTenantStorageLayout:output_type -> paladin.admin.v1.StorageMigrationStatus
+	18, // 42: paladin.admin.v1.TenantService.GetTenantStorageMigration:output_type -> paladin.admin.v1.StorageMigrationStatus
+	19, // 43: paladin.admin.v1.TenantService.GetTenantDefaultBinding:output_type -> paladin.admin.v1.TenantDefaultBinding
+	19, // 44: paladin.admin.v1.TenantService.SetTenantDefaultBinding:output_type -> paladin.admin.v1.TenantDefaultBinding
+	26, // 45: paladin.admin.v1.TenantService.ListRetiredTenantSlugs:output_type -> paladin.admin.v1.ListRetiredTenantSlugsResponse
+	28, // 46: paladin.admin.v1.TenantService.ReleaseTenantSlug:output_type -> paladin.admin.v1.ReleaseTenantSlugResponse
+	23, // 47: paladin.admin.v1.TenantService.ClearTenantDefaultBinding:output_type -> paladin.admin.v1.ClearTenantDefaultBindingResponse
+	32, // [32:48] is the sub-list for method output_type
+	16, // [16:32] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_paladin_admin_v1_tenant_service_proto_init() }

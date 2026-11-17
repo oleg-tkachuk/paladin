@@ -364,6 +364,12 @@ message RetiredTenantSlug {
   // The tenant that held it, now purged.
   string former_tenant_id = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
   google.protobuf.Timestamp retire_time = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // When the worker releases it: retire_time + the server's
+  // admin.tenants.slug_reservation_period. Unset while that period is
+  // unset, which keeps the slug until ReleaseTenantSlug. Computed on read,
+  // so changing the period moves it for every slug already retired; the
+  // release happens on the worker's next pass after this moment.
+  google.protobuf.Timestamp release_time = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 message ListRetiredTenantSlugsRequest {

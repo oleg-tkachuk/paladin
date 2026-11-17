@@ -223,16 +223,18 @@ class ClearTenantDefaultBindingResponse(_message.Message):
     def __init__(self) -> None: ...
 
 class RetiredTenantSlug(_message.Message):
-    __slots__ = ("name", "slug", "former_tenant_id", "retire_time")
+    __slots__ = ("name", "slug", "former_tenant_id", "retire_time", "release_time")
     NAME_FIELD_NUMBER: _ClassVar[int]
     SLUG_FIELD_NUMBER: _ClassVar[int]
     FORMER_TENANT_ID_FIELD_NUMBER: _ClassVar[int]
     RETIRE_TIME_FIELD_NUMBER: _ClassVar[int]
+    RELEASE_TIME_FIELD_NUMBER: _ClassVar[int]
     name: str
     slug: str
     former_tenant_id: str
     retire_time: _timestamp_pb2.Timestamp
-    def __init__(self, name: _Optional[str] = ..., slug: _Optional[str] = ..., former_tenant_id: _Optional[str] = ..., retire_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
+    release_time: _timestamp_pb2.Timestamp
+    def __init__(self, name: _Optional[str] = ..., slug: _Optional[str] = ..., former_tenant_id: _Optional[str] = ..., retire_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., release_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class ListRetiredTenantSlugsRequest(_message.Message):
     __slots__ = ("page",)
