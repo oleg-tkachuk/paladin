@@ -233,6 +233,10 @@ func (l *Lease) run(ctx context.Context, do func(workCtx context.Context, genera
 		go l.renewer(workCtx, cancelWork, exp, renewerDone, claim)
 
 		err = do(workCtx, gen)
+		// Work that returns nil while its context is still alive finished on
+		// its own — a job its config switched off returns at once. Claiming
+		// again would run it in a tight loop; it is done.
+		finished := err == nil && workCtx.Err() == nil
 
 		cancelWork()
 		<-renewerDone
@@ -244,6 +248,11 @@ func (l *Lease) run(ctx context.Context, do func(workCtx context.Context, genera
 
 		if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			return err
+		}
+		if finished {
+			l.cfg.Logger.Info("work finished; lease released, not run again",
+				zap.String("name", l.cfg.Name), zap.Int64("generation", gen))
+			return nil
 		}
 
 		// `do` exited because either ctx (parent) was cancelled or the
