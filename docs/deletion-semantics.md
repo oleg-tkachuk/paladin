@@ -46,7 +46,7 @@ would verify again. Billing history does not outlive the tenant it belongs to.
 | Call | Effect | Reversible |
 | --- | --- | --- |
 | `DeleteTenant` | Moves to trash (`deleted_at` set). Nothing is destroyed. | `RestoreTenant` |
-| `PurgeTenant` | Hard delete of a **trashed** tenant. Refuses while the tenant owns anything (`RESTRICT`). Records the slug in `retired_tenant_slugs`. | No |
+| `PurgeTenant` | Hard delete of a **trashed** tenant. Refuses while the tenant owns anything (`RESTRICT`). Records the slug in `retired_tenant_slugs`; the worker releases it after `admin.tenants.slug_reservation_period`, when that is set. | No |
 | `ReleaseTenantSlug` | Forgets a purged tenant's slug, so a new tenant can take it — and whatever still names the slug then names that tenant. | No |
 | `PreviewPurgeTenant` | Changes nothing: names the API tokens and event subscriptions a purge would remove, counts them and the capabilities, and counts the `RESTRICT` children that would refuse it — buckets still being deleted on their backend apart, since they need only waiting for. | — |
 

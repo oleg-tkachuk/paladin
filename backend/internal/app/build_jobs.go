@@ -167,6 +167,16 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		Logger:   l.Named("rate-limit-sweeper"),
 	})
 
+	// Slug-reservation expirer — always registered, so a deploy with no
+	// admin.tenants.slug_reservation_period says once at start that retired
+	// slugs are kept until released.
+	out = append(out, &worker.SlugReservationExpirer{
+		Store:    adapters.NewRetiredSlugExpirer(reaperQ),
+		Period:   cfg.Admin.Tenants.SlugReservationPeriod,
+		Interval: cfg.Worker.Jobs.Housekeeping.Interval,
+		Logger:   l.Named("slug-reservation-expirer"),
+	})
+
 	// Trash-retention gauge — always on: admin.tenants.trash_retention is
 	// required to be positive, and a lapse nobody measures is one nobody
 	// learns of until they open the Trash page.

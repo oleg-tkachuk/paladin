@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
@@ -13,6 +14,7 @@ import (
 	tenanth "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // A slug names its tenant in Cedar, in policies, in tokens and in every
@@ -109,12 +111,22 @@ func TestTenantSlugReservation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("reuse allowed: %v", err)
 		}
-		// The second tenant's purge leaves the first record as it was.
+		var firstRetired time.Time
+		if err := pool.QueryRow(ctx, `SELECT retired_at FROM retired_tenant_slugs WHERE slug = $1`, "purged-reuse").Scan(&firstRetired); err != nil {
+			t.Fatal(err)
+		}
+		// The second tenant's purge restarts the reservation for it: the
+		// latest tokens and policies name the latest tenant, and a
+		// reservation period counted from the first purge would end early.
 		trash(next)
 		purge(next)
 		var former uuid.UUID
-		if err := pool.QueryRow(ctx, `SELECT former_tenant_id FROM retired_tenant_slugs WHERE slug = $1`, "purged-reuse").Scan(&former); err != nil || former != id {
-			t.Fatalf("retired row = %s, %v; want the first tenant %s", former, err, id)
+		var retired time.Time
+		if err := pool.QueryRow(ctx, `SELECT former_tenant_id, retired_at FROM retired_tenant_slugs WHERE slug = $1`, "purged-reuse").Scan(&former, &retired); err != nil || former != next {
+			t.Fatalf("retired row = %s, %v; want the second tenant %s", former, err, next)
+		}
+		if !retired.After(firstRetired) {
+			t.Fatalf("retired_at = %v, not after the first purge's %v", retired, firstRetired)
 		}
 	})
 
@@ -174,6 +186,45 @@ func TestTenantSlugReservation(t *testing.T) {
 		}
 		if len(second) == 0 || second[0].Slug != "page-c" {
 			t.Fatalf("second page = %+v", second)
+		}
+	})
+
+	// The worker, as the reaper role, releases what was retired a full
+	// period ago and nothing younger.
+	t.Run("an expired reservation is released, a current one kept", func(t *testing.T) {
+		const period = 90 * 24 * time.Hour
+		now := time.Now()
+		old, young := uuid.New(), uuid.New()
+		for _, r := range []struct {
+			slug    string
+			former  uuid.UUID
+			retired time.Time
+		}{
+			{"expiry-old", old, now.Add(-period - time.Hour)},
+			{"expiry-young", young, now.Add(-period + time.Hour)},
+		} {
+			if _, err := pool.Exec(ctx, `INSERT INTO retired_tenant_slugs (slug, former_tenant_id, retired_at) VALUES ($1, $2, $3)`,
+				r.slug, r.former, r.retired); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var expired []worker.ExpiredSlug
+		asRole(t, ctx, pool, reaperRole, nil, func(tx pgx.Tx) {
+			var err error
+			expired, err = adapters.NewRetiredSlugExpirer(sqlc.New(tx)).ExpireRetiredSlugs(ctx, now.Add(-period))
+			if err != nil {
+				t.Fatalf("expire as %s: %v", reaperRole, err)
+			}
+		})
+		if len(expired) != 1 || expired[0].Slug != "expiry-old" || expired[0].FormerTenantID != old.String() {
+			t.Fatalf("expired = %+v, want only expiry-old of %s", expired, old)
+		}
+		page, _, err := repo.ListRetiredSlugs(ctx, "expiry-", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasRetired(page, "expiry-old", old) || !hasRetired(page, "expiry-young", young) {
+			t.Fatalf("after expiry = %+v, want only expiry-young", page)
 		}
 	})
 

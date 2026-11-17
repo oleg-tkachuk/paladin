@@ -56,7 +56,7 @@ func has(names []string, want string) bool {
 	return false
 }
 
-// Five jobs carry comments saying they run whatever else is toggled, because
+// Seven jobs carry comments saying they run whatever else is toggled, because
 // the tables they reclaim grow on paths no toggle controls — the rate limiter
 // writes a row per active tenant per minute, idempotency keys accrue on every
 // idempotent Create. Nothing held that claim: wrapping one in a config flag
@@ -67,6 +67,7 @@ func TestBuildBackgroundJobs_AlwaysOn(t *testing.T) {
 		"*worker.PartitionMaintainer",
 		"*worker.RateLimitBucketSweeper",
 		"*worker.RefreshTokenPurger",
+		"*worker.SlugReservationExpirer",
 		"*worker.StorageMigrationWorker",
 		"*worker.TrashRetentionGauge",
 	}

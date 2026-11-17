@@ -94,6 +94,11 @@ admin: {
     // tenant: Cedar, tokens, policies and clients name tenants by slug. false
     // lets a new tenant take it once its tenant is trashed or purged.
     reserve_slugs: bool | *true
+    // How long a purged tenant's slug stays reserved before the worker
+    // releases it. Absent: until an operator releases it. Must be positive
+    // and no shorter than the longest token naming a tenant by slug
+    // (checked in Validate).
+    slug_reservation_period?: =~"^[0-9]+(ns|us|ms|s|m|h)$"
   }
   // The roles SystemService.GetPlatformHealth reads, each at its health
   // listener. The chart lists every role it deploys.

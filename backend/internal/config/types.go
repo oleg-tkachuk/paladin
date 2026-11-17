@@ -610,6 +610,13 @@ type AdminTenants struct {
 	// tokens and every tenants/<slug> a client holds, which would all name
 	// the new tenant instead. false allows the reuse. Default true.
 	ReserveSlugs bool `yaml:"reserve_slugs" json:"reserve_slugs"`
+	// SlugReservationPeriod is how long a purged tenant's slug stays
+	// reserved before the worker releases it. nil — the key absent — keeps
+	// it until an operator releases it. Must be positive, and no shorter
+	// than the longest self-contained token that names a tenant by slug
+	// (auth.access_token_ttl, auth.scoped_token_max_ttl): one still in a
+	// client's hands must not come to mean a new tenant.
+	SlugReservationPeriod *time.Duration `yaml:"slug_reservation_period,omitempty" json:"slug_reservation_period,omitempty"`
 }
 
 // Worker is the per-role config block for the worker binary. Carries
