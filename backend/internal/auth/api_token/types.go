@@ -69,7 +69,11 @@ const (
 // Errors returned by Verifier.Verify; the interceptor maps them to
 // connect.Error codes. Exposed here so tests / admin tooling can match.
 var (
-	ErrTokenMalformed   = errors.New("api_token: malformed token")
+	ErrTokenMalformed = errors.New("api_token: malformed token")
+	// ErrInvalidIssue wraps Issue's refusal of a request the caller can
+	// fix: a missing field, a TTL past the cap, a negative rate limit.
+	// Any other Issue error is the issuer's or the store's.
+	ErrInvalidIssue     = errors.New("api_token: invalid issue request")
 	ErrTokenNotFound    = errors.New("api_token: token not found")
 	ErrTokenExpired     = errors.New("api_token: token expired")
 	ErrTokenRevoked     = errors.New("api_token: token revoked")

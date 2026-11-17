@@ -72,20 +72,20 @@ type IssueRequest struct {
 // it and ships it to the consuming service; the database never sees it.
 func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 	if req.TenantID == uuid.Nil() {
-		return nil, errors.New("api_token: TenantID required")
+		return nil, fmt.Errorf("%w: TenantID required", ErrInvalidIssue)
 	}
 	if req.Name == "" {
-		return nil, errors.New("api_token: Name required")
+		return nil, fmt.Errorf("%w: Name required", ErrInvalidIssue)
 	}
 	if len(req.Audience) == 0 {
-		return nil, errors.New("api_token: Audience required (at least one plane)")
+		return nil, fmt.Errorf("%w: Audience required (at least one plane)", ErrInvalidIssue)
 	}
 	ttl := req.TTL
 	if ttl == 0 {
 		ttl = i.MaxTTL
 	}
 	if ttl > i.MaxTTL {
-		return nil, fmt.Errorf("api_token: TTL %s exceeds max %s", ttl, i.MaxTTL)
+		return nil, fmt.Errorf("%w: TTL %s exceeds max %s", ErrInvalidIssue, ttl, i.MaxTTL)
 	}
 
 	plaintext, prefix, digest, err := i.hasher.GenerateToken()
@@ -94,7 +94,7 @@ func (i *Issuer) Issue(ctx context.Context, req IssueRequest) (*Token, error) {
 	}
 
 	if req.RateLimitRPM != nil && *req.RateLimitRPM < 0 {
-		return nil, errors.New("api_token: RateLimitRPM must be >= 0")
+		return nil, fmt.Errorf("%w: RateLimitRPM must be >= 0", ErrInvalidIssue)
 	}
 
 	// Normalise nil → empty slice. The api_tokens.scopes / .audience

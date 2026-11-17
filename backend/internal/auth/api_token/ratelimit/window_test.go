@@ -88,3 +88,14 @@ func TestRetryAfterIsExactAcrossTheWindow(t *testing.T) {
 		}
 	}
 }
+
+// A token whose limit admits no request (capacity 0) on an empty window asks
+// the client to wait out the rest of the bucket — not forever, which a
+// division by the empty current count would make it.
+func TestRetryAfterForANoRequestLimit(t *testing.T) {
+	const elapsed = 10 * time.Second
+	want := Window - elapsed
+	if got := RetryAfter(0, 0, elapsed, 0); got != want {
+		t.Fatalf("RetryAfter = %v, want %v", got, want)
+	}
+}

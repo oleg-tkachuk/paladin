@@ -429,6 +429,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// stub so methods return 501 (see CapabilityService rationale).
 	if deps.APIToken != nil {
 		apiTokH := apitokenh.NewHandler(deps.APIToken.Auth.Issuer, deps.APIToken.Store, deps.RateLimits().Tokens, polEngine)
+		apiTokH.SetLogger(l.Named("api-tokens"))
 		paladinadminv1connect.RegisterAPITokenServiceHandler(adminServer, apiTokH)
 	} else {
 		// See disabledCapabilityServiceHandler rationale.
