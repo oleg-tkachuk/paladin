@@ -1,4 +1,4 @@
-## Unreleased — retired tenant slugs can be listed and released
+## sdk/python/v0.148.0, sdk/go/v0.148.0 — retired tenant slugs can be listed and released
 
 - **`TenantService.ListRetiredTenantSlugs` and `ReleaseTenantSlug`**: list the
   slugs purged tenants held, and forget one so a new tenant can take it.
