@@ -96,7 +96,7 @@ const (
 // capability off the context, as "dir.Type.Method" relative to internal/api,
 // with why that is safe without AssertCapabilityOp.
 var capabilityReaders = map[string]string{
-	"admin/v1/capabilityh.Handler.Delegate": "the agent share path: requires OpShare and that " +
+	"admin/v1/capabilityh.presentedParent": "Delegate's agent share path: requires OpShare and that " +
 		"parent_id is the caller's own capability, checked in the handler",
 	"admin/v1/capabilityh.Handler.leaseTarget": "the agent lease path: requires OpShare, refuses a " +
 		"Biscuit, and admits only the caller's own capability or one delegated from it, read from " +

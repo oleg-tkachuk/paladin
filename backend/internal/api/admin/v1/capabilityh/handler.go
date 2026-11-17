@@ -305,62 +305,16 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 // Caveat narrowing is enforced downstream by Issuer.Delegate
 // (ErrDelegationTooWide); this handler only gates *who* may delegate.
 func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDelegateRequest) (*adminv1.CapabilityServiceIssueResponse, error) {
-	parentID, err := uuid.Parse(req.GetParentId())
+	verified, err := presentedParent(ctx, req.GetParentId())
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
+		return nil, err
 	}
-
-	// Gated entirely by the presented capability's own caveats — no Cedar
-	// admin check: the capability is the grant.
-	verified, ok := auth.VerifiedCapabilityFromContext(ctx)
-	if !ok {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			"capability: delegation narrows a presented capability; send it in the "+auth.HeaderCapability+" header")
-	}
-	// A parent without OpShare is limes's to refuse (Issuer.Delegate), which
-	// tells the caller its code.
 	parent := verified.Capability()
-	if parent.ID != parentID {
-		return nil, connect.NewError(connect.CodePermissionDenied, "capability: parent_id must equal caller's own capability id")
+	terms, err := delegationTerms(req, parent, h.currency)
+	if err != nil {
+		return nil, err
 	}
-	// A Biscuit copy's attenuation, and any limits of its own, are not in a
-	// token the issuer can extend: a child would shed them. Its holder
-	// narrows offline instead. Issuer.Delegate refuses it too, as
-	// ErrDelegationTooWide; asking first answers with a precondition the
-	// caller can act on, not a permission denial.
-	if verified.FromBiscuit() {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, "capability: a Biscuit copy cannot delegate; attenuate it instead")
-	}
-
-	// No caveats in the request means "the parent's, unchanged" — asked for
-	// explicitly, so that caveats which ARE sent are never silently replaced.
-	var caveats limes.Caveats
-	inherit := req.GetCaveats() == nil
-	if !inherit {
-		// A ceiling left unset keeps the parent's, in the parent's unit.
-		if caveats, err = protoToCaveats(req.GetCaveats(), &parent.Caveats, h.currency); err != nil {
-			return nil, err
-		}
-	}
-	audience := parent.Audience
-	if a := req.GetAudience(); len(a) > 0 {
-		audience = a
-	}
-	ttl := time.Duration(req.GetTtlSeconds()) * time.Second
-	var nbf time.Time
-	if t := req.GetNotBefore(); t.IsValid() {
-		nbf = t.AsTime()
-	}
-
-	// Resolve subject explicitly: msg.subject if supplied, else parent's.
-	delegSubj := parent.Subject
-	if msg := req.GetSubject(); msg != nil {
-		s, perr := protoToPrincipal(msg)
-		if perr != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, perr.Error()).WithCause(perr)
-		}
-		delegSubj = s
-	}
+	nbf := terms.notBefore
 
 	if req.GetRequireBiscuit() {
 		// The child as limes will mint it: bound to the parent's key unless
@@ -381,11 +335,11 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 	ctx = auth.WithActingTenant(ctx, parent.Subject.TenantID)
 	res, err := h.issuer.Delegate(ctx, limes.DelegateRequest{
 		Parent:          verified,
-		Subject:         delegSubj,
-		Audience:        audience,
-		Caveats:         caveats,
-		InheritCaveats:  inherit,
-		TTL:             ttl,
+		Subject:         terms.subject,
+		Audience:        terms.audience,
+		Caveats:         terms.caveats,
+		InheritCaveats:  terms.inherit,
+		TTL:             time.Duration(req.GetTtlSeconds()) * time.Second,
 		NotBefore:       nbf,
 		ConfirmationJKT: req.GetConfirmationJkt(),
 	})
@@ -716,32 +670,16 @@ func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats, currenc
 	if !ok {
 		requests = inherited.Requests
 	}
-	budget, ok, err := budgetCeilingOf(c)
+	budget, err := budgetFor(c, parent, currency)
 	if err != nil {
 		return limes.Caveats{}, err
 	}
-	if !ok {
-		budget = budgetCeiling{ceiling: inherited.Budget, unit: inherited.Budget.UnitCode}
-	}
-	if budget.unit == "" {
-		budget.unit = currency
-		if parent != nil && parent.Budget.UnitCode != "" {
-			budget.unit = parent.Budget.UnitCode
-		}
-	}
-	budget.ceiling.UnitCode = budget.unit
-	copies, ok := copyQuotaOf(c)
-	if !ok {
-		copies = limes.CopyQuota{Unlimited: true}
-		if parent != nil {
-			copies = parent.Copies
-		}
-	}
+	copies := copiesFor(c, parent)
 	out := limes.Caveats{
 		ResourcePrefixes:       c.GetResourcePrefixes(),
 		ResourceURIs:           c.GetResourceUris(),
 		Requests:               requests,
-		Budget:                 budget.ceiling,
+		Budget:                 budget,
 		Copies:                 copies,
 		AllowTaintedRead:       c.GetAllowTaintedRead(),
 		IdempotencyKeyRequired: c.GetIdempotencyKeyRequired(),
@@ -751,6 +689,108 @@ func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats, currenc
 		out.Ops = append(out.Ops, limes.Op(op))
 	}
 	return out, nil
+}
+
+// presentedParent is the capability a Delegate narrows: the one the caller
+// presents, which the request must name. A delegation is gated entirely by
+// that capability's own caveats — no Cedar admin check: the capability is
+// the grant. A parent without OpShare is limes's to refuse (Issuer.Delegate),
+// which tells the caller its code.
+func presentedParent(ctx context.Context, parentIDStr string) (limes.VerifiedCapability, error) {
+	parentID, err := uuid.Parse(parentIDStr)
+	if err != nil {
+		return limes.VerifiedCapability{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("parent_id: %w", err))
+	}
+	verified, ok := auth.VerifiedCapabilityFromContext(ctx)
+	if !ok {
+		return limes.VerifiedCapability{}, connect.NewError(connect.CodeFailedPrecondition,
+			"capability: delegation narrows a presented capability; send it in the "+auth.HeaderCapability+" header")
+	}
+	if verified.Capability().ID != parentID {
+		return limes.VerifiedCapability{}, connect.NewError(connect.CodePermissionDenied, "capability: parent_id must equal caller's own capability id")
+	}
+	// A Biscuit copy's attenuation, and any limits of its own, are not in a
+	// token the issuer can extend: a child would shed them. Its holder
+	// narrows offline instead. Issuer.Delegate refuses it too, as
+	// ErrDelegationTooWide; asking first answers with a precondition the
+	// caller can act on, not a permission denial.
+	if verified.FromBiscuit() {
+		return limes.VerifiedCapability{}, connect.NewError(connect.CodeFailedPrecondition, "capability: a Biscuit copy cannot delegate; attenuate it instead")
+	}
+	return verified, nil
+}
+
+// delegation is what a Delegate request asks of the child, settled against
+// its parent.
+type delegation struct {
+	caveats   limes.Caveats
+	inherit   bool
+	audience  []string
+	notBefore time.Time
+	subject   limes.Principal
+}
+
+// delegationTerms settles a Delegate request against its parent. No caveats
+// means "the parent's, unchanged" — asked for explicitly, so caveats which
+// ARE sent are never silently replaced; a ceiling left unset keeps the
+// parent's, in the parent's unit. The audience and the subject are the
+// request's when it names them, else the parent's.
+func delegationTerms(req *adminv1.CapabilityServiceDelegateRequest, parent limes.Capability, currency string) (delegation, error) {
+	d := delegation{inherit: req.GetCaveats() == nil, audience: parent.Audience, subject: parent.Subject}
+	if !d.inherit {
+		caveats, err := protoToCaveats(req.GetCaveats(), &parent.Caveats, currency)
+		if err != nil {
+			return delegation{}, err
+		}
+		d.caveats = caveats
+	}
+	if a := req.GetAudience(); len(a) > 0 {
+		d.audience = a
+	}
+	if t := req.GetNotBefore(); t.IsValid() {
+		d.notBefore = t.AsTime()
+	}
+	if msg := req.GetSubject(); msg != nil {
+		subject, err := protoToPrincipal(msg)
+		if err != nil {
+			return delegation{}, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		}
+		d.subject = subject
+	}
+	return d, nil
+}
+
+// budgetFor is the budget a capability gets: the one the request sets, else
+// its parent's. A budget with no unit takes the parent's unit when the parent
+// has one, else the deployment's currency.
+func budgetFor(c *adminv1.CapabilityCaveats, parent *limes.Caveats, currency string) (limes.BudgetCeiling, error) {
+	budget, ok, err := budgetCeilingOf(c)
+	if err != nil {
+		return limes.BudgetCeiling{}, err
+	}
+	if !ok && parent != nil {
+		budget = budgetCeiling{ceiling: parent.Budget, unit: parent.Budget.UnitCode}
+	}
+	if budget.unit == "" {
+		budget.unit = currency
+		if parent != nil && parent.Budget.UnitCode != "" {
+			budget.unit = parent.Budget.UnitCode
+		}
+	}
+	budget.ceiling.UnitCode = budget.unit
+	return budget.ceiling, nil
+}
+
+// copiesFor is the Biscuit copy quota a capability gets: the one the request
+// sets, else its parent's, else unlimited.
+func copiesFor(c *adminv1.CapabilityCaveats, parent *limes.Caveats) limes.CopyQuota {
+	if copies, ok := copyQuotaOf(c); ok {
+		return copies
+	}
+	if parent != nil {
+		return parent.Copies
+	}
+	return limes.CopyQuota{Unlimited: true}
 }
 
 func principalToProto(p limes.Principal) *adminv1.CapabilityPrincipal {
