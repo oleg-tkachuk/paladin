@@ -92,7 +92,7 @@ func TestParseVersionToken(t *testing.T) {
 }
 
 func TestClampVersionPageSize(t *testing.T) {
-	for in, want := range map[int32]int32{0: DefaultVersionPageSize, -1: DefaultVersionPageSize, 3: 3, MaxVersionPageSize + 1: MaxVersionPageSize} {
+	for in, want := range map[int32]int32{0: DefaultVersionPageSize, -1: DefaultVersionPageSize, 1: 1, 3: 3, MaxVersionPageSize: MaxVersionPageSize, MaxVersionPageSize + 1: MaxVersionPageSize} {
 		if got := clampVersionPageSize(in); got != want {
 			t.Errorf("clampVersionPageSize(%d) = %d, want %d", in, got, want)
 		}

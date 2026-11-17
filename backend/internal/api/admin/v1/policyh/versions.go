@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
@@ -96,17 +97,7 @@ func (h *Handler) ListPolicyVersions(ctx context.Context, resourceName string, p
 	if err != nil {
 		return VersionsPage{}, rpcerr.New(connect.CodeInvalidArgument, err)
 	}
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return VersionsPage{}, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	// A platform layer is checked against the caller's own tenant, as
-	// GetEffectivePolicy checks a backend or bucket name.
-	scope := ref.TenantID
-	if scope == uuid.Nil() {
-		scope = p.TenantID
-	}
-	if err := h.authorizeInspect(ctx, scope, ref.Collection); err != nil {
+	if err := h.authorizeLayer(ctx, ref); err != nil {
 		return VersionsPage{}, err
 	}
 	if ref.TenantID != uuid.Nil() {
@@ -120,14 +111,34 @@ func (h *Handler) ListPolicyVersions(ctx context.Context, resourceName string, p
 		return VersionsPage{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
 	}
 	if err != nil {
+		h.log.Error("policy versions: read failed", zap.String("resource", resourceName), zap.Error(err))
 		return VersionsPage{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	out := VersionsPage{Versions: versions}
-	if int32(len(versions)) > size {
-		out.Versions = versions[:size]
-		out.NextPageToken = strconv.FormatInt(int64(out.Versions[size-1].Version), 10)
+	return pageOf(versions, size), nil
+}
+
+// authorizeLayer gates reading ref's history as GetEffectivePolicy is gated:
+// a platform layer (a backend or a bucket) against the caller's own tenant.
+func (h *Handler) authorizeLayer(ctx context.Context, ref LayerRef) error {
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	return out, nil
+	scope := ref.TenantID
+	if scope == uuid.Nil() {
+		scope = p.TenantID
+	}
+	return h.authorizeInspect(ctx, scope, ref.Collection)
+}
+
+// pageOf is the first size of versions, read one past the page: a version
+// beyond it means another page follows, resuming below the page's oldest.
+func pageOf(versions []Version, size int32) VersionsPage {
+	if int32(len(versions)) <= size {
+		return VersionsPage{Versions: versions}
+	}
+	page := versions[:size]
+	return VersionsPage{Versions: page, NextPageToken: strconv.FormatInt(int64(page[size-1].Version), 10)}
 }
 
 func clampVersionPageSize(n int32) int32 {
@@ -161,9 +172,9 @@ func parseLayerName(name string) (LayerRef, error) {
 		return LayerRef{Layer: LayerBucket, Backend: b.Backend, Bucket: b.Bucket}, nil
 	}
 	if c, err := paladin.ParseCollectionName(name); err == nil {
-		id, err := uuid.Parse(c.Tenant)
+		id, err := tenantIDIn(name, c.Tenant)
 		if err != nil {
-			return LayerRef{}, fmt.Errorf("invalid tenant id in %q: %w", name, err)
+			return LayerRef{}, err
 		}
 		return LayerRef{Layer: LayerCollection, TenantID: id, Collection: c.Collection}, nil
 	}
@@ -171,9 +182,9 @@ func parseLayerName(name string) (LayerRef, error) {
 		return LayerRef{Layer: LayerStorageBackend, Backend: rest}, nil
 	}
 	if rest, ok := strings.CutPrefix(name, tenantsPrefix); ok && !strings.Contains(rest, "/") {
-		id, err := uuid.Parse(rest)
+		id, err := tenantIDIn(name, rest)
 		if err != nil {
-			return LayerRef{}, fmt.Errorf("invalid tenant id in %q: %w", name, err)
+			return LayerRef{}, err
 		}
 		return LayerRef{Layer: LayerTenant, TenantID: id}, nil
 	}
