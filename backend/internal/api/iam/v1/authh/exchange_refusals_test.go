@@ -210,3 +210,55 @@ func TestBestLoginMatch(t *testing.T) {
 		})
 	}
 }
+
+// Switching tenants escalates nothing: the audience is checked against the
+// roles the subject holds in the TARGET tenant, so an admin at home who is a
+// plain user there cannot carry the admin plane across.
+func TestSwitchTenant_AudienceIsTheTargetRowsToGrant(t *testing.T) {
+	caller := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice", Roles: []string{apiutil.RolePlatformAdmin}}
+	targetTenant := uuid.New()
+	target := authstore.User{UserID: uuid.New(), TenantID: targetTenant, Subject: "alice", Roles: []string{apiutil.RoleTenantUser}}
+	users := &fakeUsers{user: caller, global: []authstore.User{caller, target}}
+	refresh, minter := &fakeRefresh{}, &stubMinter{}
+	h := newHandler(users, refresh, minter)
+
+	_, err := h.SwitchTenant(ctxAsUser(caller.UserID), targetTenant, auth.AudienceAdmin)
+	if code(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, want PermissionDenied", code(err))
+	}
+	if refresh.inserts != 0 || minter.calls != 0 {
+		t.Errorf("a refused switch stored %d tokens and minted %d", refresh.inserts, minter.calls)
+	}
+}
+
+// The audience a switch mints for: the one asked for, else the plane the
+// caller is working in, else the data plane.
+func TestSwitchAudience(t *testing.T) {
+	for _, tc := range []struct{ requested, current, want string }{
+		{auth.AudienceAdmin, auth.AudienceData, auth.AudienceAdmin},
+		{"", auth.AudienceAdmin, auth.AudienceAdmin},
+		{"", "", auth.AudienceData},
+	} {
+		if got := switchAudience(tc.requested, tc.current); got != tc.want {
+			t.Errorf("switchAudience(%q, %q) = %q, want %q", tc.requested, tc.current, got, tc.want)
+		}
+	}
+}
+
+// Memberships page: a full page names the position the next one resumes
+// after, and the last page names none.
+func TestListMyMemberships_Pages(t *testing.T) {
+	caller := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice", CreatedAt: time.Unix(1, 0)}
+	second := authstore.User{UserID: uuid.New(), TenantID: uuid.New(), Subject: "alice", CreatedAt: time.Unix(2, 0)}
+	users := &fakeUsers{user: caller, global: []authstore.User{caller, second}}
+	h := newHandler(users, &fakeRefresh{}, &stubMinter{})
+
+	const onePerPage = 1
+	page, next, err := h.ListMyMemberships(ctxAsUser(caller.UserID), ListMembershipsInput{PageSize: onePerPage})
+	if err != nil || len(page) != onePerPage || next != encodeMembershipCursor(caller.CreatedAt, caller.UserID) {
+		t.Fatalf("first page = %d rows, next %q, %v; want 1 row resuming after the caller", len(page), next, err)
+	}
+	if _, _, err := h.ListMyMemberships(ctxAsUser(caller.UserID), ListMembershipsInput{PageToken: "garbage"}); code(err) != connect.CodeInvalidArgument {
+		t.Fatalf("garbage page token: code = %v, want InvalidArgument", code(err))
+	}
+}

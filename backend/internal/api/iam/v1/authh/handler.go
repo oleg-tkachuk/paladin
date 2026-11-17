@@ -613,6 +613,18 @@ func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput
 	return out, next, nil
 }
 
+// switchAudience is the audience a tenant switch mints for: the one asked
+// for, else the plane the caller is working in, else the data plane.
+func switchAudience(requested, current string) string {
+	switch {
+	case requested != "":
+		return requested
+	case current != "":
+		return current
+	}
+	return auth.AudienceData
+}
+
 type SwitchTenantOutput struct {
 	User             authstore.User
 	AccessToken      string
@@ -671,13 +683,7 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 			"user is disabled in the target tenant")
 	}
 
-	audience := requestedAudience
-	if audience == "" {
-		audience = p.Audience // keep the plane the caller was working in
-	}
-	if audience == "" {
-		audience = auth.AudienceData
-	}
+	audience := switchAudience(requestedAudience, p.Audience)
 	if err := h.assertAudienceAllowed(*target, audience); err != nil {
 		return nil, err
 	}
