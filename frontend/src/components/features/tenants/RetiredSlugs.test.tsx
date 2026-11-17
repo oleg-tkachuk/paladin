@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
+import { formatDate } from "@/lib/format/locale";
 import { render, screen, typeToConfirm, waitFor } from "@/test/utils";
 
 const FORMER = "01a1e6cd-2efe-7a61-a78e-5ecad091c778";
@@ -27,12 +28,13 @@ vi.mock("@/components/ui/Notification", () => ({
 
 import { RetiredSlugs } from "./RetiredSlugs";
 
-function retired(slug: string) {
+function retired(slug: string, releaseTime?: Date) {
   return {
     name: `retiredTenantSlugs/${slug}`,
     slug,
     formerTenantId: FORMER,
     retireTime: timestampFromDate(new Date()),
+    releaseTime: releaseTime ? timestampFromDate(releaseTime) : undefined,
   };
 }
 
@@ -54,6 +56,17 @@ describe("RetiredSlugs", () => {
     render(<RetiredSlugs />);
     expect(screen.getByText("acme")).toBeInTheDocument();
     expect(screen.getByText(FORMER)).toBeInTheDocument();
+  });
+
+  it("says when each slug is released, or that it is kept", () => {
+    const release = new Date("2027-02-15T12:00:00Z");
+    h.slugs = [retired("timed", release), retired("kept")];
+    render(<RetiredSlugs />);
+    expect(
+      screen.getByRole("columnheader", { name: "Releases" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(formatDate(release))).toBeInTheDocument();
+    expect(screen.getByText("Until released")).toBeInTheDocument();
   });
 
   it("says when reservation is off", () => {

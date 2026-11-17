@@ -4,7 +4,8 @@
 // policy, a token claim, an audit row or a client's tenants/<slug> path that
 // still names it cannot come to mean a new tenant. While
 // admin.tenants.reserve_slugs is on, a new tenant is refused them until one
-// is released here.
+// is released here, or, with admin.tenants.slug_reservation_period set,
+// until the worker releases it that long after the purge.
 
 import { useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
@@ -27,6 +28,7 @@ import {
 import { errorMessage } from "@/hooks/errorContract";
 import { useRetiredTenantSlugs } from "@/hooks/useRetiredTenantSlugs";
 import { formatDate, formatDateTime } from "@/lib/format/locale";
+import { retiredSlugReleaseDate } from "@/lib/tenant/retiredSlug";
 import { RETIRED_SLUGS_ANCHOR } from "@/lib/tenant/slugHolder";
 import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
@@ -105,6 +107,7 @@ export function RetiredSlugs() {
                 <TableHead>Slug</TableHead>
                 <TableHead>Former tenant</TableHead>
                 <TableHead className="@md:w-40">Retired</TableHead>
+                <TableHead className="@md:w-40">Releases</TableHead>
                 <TableHead className="@md:w-32">
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -115,6 +118,7 @@ export function RetiredSlugs() {
                 const retired = r.retireTime
                   ? timestampDate(r.retireTime)
                   : undefined;
+                const release = retiredSlugReleaseDate(r);
                 return (
                   <TableRow key={r.slug}>
                     <TableCell>
@@ -137,6 +141,18 @@ export function RetiredSlugs() {
                         </span>
                       ) : (
                         <span className={T.hint}>—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {release ? (
+                        <span
+                          className="text-sm tabular-nums"
+                          title={formatDateTime(release)}
+                        >
+                          {formatDate(release)}
+                        </span>
+                      ) : (
+                        <span className={T.hint}>Until released</span>
                       )}
                     </TableCell>
                     <TableCell>
