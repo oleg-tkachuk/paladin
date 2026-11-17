@@ -35,23 +35,27 @@ type Handler struct {
 func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
 
 // subFields names a subscription in a log line.
-func subFields(s admindomain.EventSubscription) []zap.Field {
-	return []zap.Field{
+func subFields(ctx context.Context, s admindomain.EventSubscription) []zap.Field {
+	fields := []zap.Field{
 		zap.String("tenant_id", s.TenantID.String()),
 		zap.String("subscription_id", s.SubscriptionID.String()),
 		zap.String("sink_kind", s.SinkKind),
 	}
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		fields = append(fields, zap.String("actor", p.Subject))
+	}
+	return fields
 }
 
 // failed logs a store failure on s and maps it for the caller: refusals the
 // caller can act on keep their code, and anything internal is an error line.
-func (h *Handler) failed(msg string, s admindomain.EventSubscription, err error) error {
+func (h *Handler) failed(ctx context.Context, msg string, s admindomain.EventSubscription, err error) error {
 	mapped := apiutil.MapError(err)
 	level := zapcore.WarnLevel
 	if connect.CodeOf(mapped) == connect.CodeInternal {
 		level = zapcore.ErrorLevel
 	}
-	h.log.Log(level, msg, append(subFields(s), zap.Error(err))...)
+	h.log.Log(level, msg, append(subFields(ctx, s), zap.Error(err))...)
 	return mapped
 }
 
@@ -67,12 +71,12 @@ func (h *Handler) SetSinkKinds(k SinkKinds) { h.sinks = k }
 // refuseOffKind refuses a subscription that would deliver to a kind switched
 // off: the dispatcher would fail every one of its deliveries. A disabled
 // subscription delivers nothing, so it may name any kind.
-func (h *Handler) refuseOffKind(s admindomain.EventSubscription, kind string, disabled bool) error {
+func (h *Handler) refuseOffKind(ctx context.Context, s admindomain.EventSubscription, kind string, disabled bool) error {
 	if disabled || h.sinks == nil || h.sinks.Enabled(kind) {
 		return nil
 	}
 	h.log.Warn("event subscription refused: sink kind is off",
-		append(subFields(s), zap.String("switch", config.SinkSwitchKey(kind)))...)
+		append(subFields(ctx, s), zap.String("switch", config.SinkSwitchKey(kind)))...)
 	return connect.NewError(connect.CodeFailedPrecondition,
 		fmt.Sprintf("sink kind %s is off by configuration: %s", kind, config.SinkSwitchKey(kind)))
 }
@@ -128,11 +132,11 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	if err := celpkg.Validate(celpkg.EventEnvelopeSchema, s.CELFilter); err != nil {
 		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
-	if err := h.refuseOffKind(s, s.SinkKind, s.Disabled); err != nil {
+	if err := h.refuseOffKind(ctx, s, s.SinkKind, s.Disabled); err != nil {
 		return nil, err
 	}
 	if err := h.repo.Create(ctx, &s); err != nil {
-		return nil, h.failed("event subscription create failed", s, err)
+		return nil, h.failed(ctx, "event subscription create failed", s, err)
 	}
 	// repo.Create stamps the generated SubscriptionID onto s; without
 	// the pointer receiver this Get would look up the caller's zero
@@ -143,7 +147,7 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	if err != nil {
 		return nil, err
 	}
-	h.log.Info("event subscription created", subFields(*got)...)
+	h.log.Info("event subscription created", subFields(ctx, *got)...)
 	return got, nil
 }
 
@@ -152,7 +156,7 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 func (h *Handler) readBack(ctx context.Context, s admindomain.EventSubscription) (*admindomain.EventSubscription, error) {
 	got, err := h.repo.Get(ctx, s.SubscriptionID)
 	if err != nil {
-		h.log.Error("event subscription written but not read back", append(subFields(s), zap.Error(err))...)
+		h.log.Error("event subscription written but not read back", append(subFields(ctx, s), zap.Error(err))...)
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &got, nil
@@ -199,17 +203,17 @@ func (h *Handler) Update(ctx context.Context, tenantID uuid.UUID, s admindomain.
 		}
 	}
 	kind, disabled := sinkAfterUpdate(*current, s, mask)
-	if err := h.refuseOffKind(*current, kind, disabled); err != nil {
+	if err := h.refuseOffKind(ctx, *current, kind, disabled); err != nil {
 		return nil, err
 	}
 	if err := h.repo.Update(ctx, s, expectedVersion, mask); err != nil {
-		return nil, h.failed("event subscription update failed", *current, err)
+		return nil, h.failed(ctx, "event subscription update failed", *current, err)
 	}
 	got, err := h.readBack(ctx, *current)
 	if err != nil {
 		return nil, err
 	}
-	h.log.Info("event subscription updated", subFields(*got)...)
+	h.log.Info("event subscription updated", subFields(ctx, *got)...)
 	return got, nil
 }
 
@@ -241,9 +245,9 @@ func (h *Handler) Delete(ctx context.Context, tenantID, id uuid.UUID, expectedVe
 		return err
 	}
 	if err := h.repo.Delete(ctx, id, expectedVersion); err != nil {
-		return h.failed("event subscription delete failed", *current, err)
+		return h.failed(ctx, "event subscription delete failed", *current, err)
 	}
-	h.log.Info("event subscription deleted", subFields(*current)...)
+	h.log.Info("event subscription deleted", subFields(ctx, *current)...)
 	return nil
 }
 
@@ -288,14 +292,14 @@ func (h *Handler) RedriveFailedDeliveries(ctx context.Context, tenantID, id uuid
 		return 0, err
 	}
 	if sub.Disabled {
-		h.log.Warn("event subscription redrive refused: disabled", subFields(*sub)...)
+		h.log.Warn("event subscription redrive refused: disabled", subFields(ctx, *sub)...)
 		return 0, connect.NewError(connect.CodeFailedPrecondition, errRedriveDisabled.Error()).WithCause(errRedriveDisabled)
 	}
 	n, err := h.repo.RequeueFailedDeliveries(ctx, sub.SubscriptionID)
 	if err != nil {
-		return 0, h.failed("event subscription redrive failed", *sub, err)
+		return 0, h.failed(ctx, "event subscription redrive failed", *sub, err)
 	}
-	h.log.Info("event subscription failed deliveries requeued", append(subFields(*sub), zap.Int64("deliveries", n))...)
+	h.log.Info("event subscription failed deliveries requeued", append(subFields(ctx, *sub), zap.Int64("deliveries", n))...)
 	return n, nil
 }
 
@@ -316,13 +320,13 @@ func (h *Handler) TestSubscription(ctx context.Context, tenantID, id uuid.UUID) 
 	}
 	// A test delivery is a delivery: refused for a kind that is off even
 	// while the subscription itself is disabled.
-	if err := h.refuseOffKind(*sub, sub.SinkKind, false); err != nil {
+	if err := h.refuseOffKind(ctx, *sub, sub.SinkKind, false); err != nil {
 		return err
 	}
 	if err := h.dispatcher.DeliverOne(ctx, *sub, eventtype.SubscriptionTest); err != nil {
-		h.log.Warn("event subscription test delivery failed", append(subFields(*sub), zap.Error(err))...)
+		h.log.Warn("event subscription test delivery failed", append(subFields(ctx, *sub), zap.Error(err))...)
 		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("test delivery failed: %w", err))
 	}
-	h.log.Info("event subscription test delivered", subFields(*sub)...)
+	h.log.Info("event subscription test delivered", subFields(ctx, *sub)...)
 	return nil
 }
