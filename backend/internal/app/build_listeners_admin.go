@@ -408,7 +408,8 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			WithRunRevocation(deps.Capability.Auth.BulkRevocation).
 			WithLeases(deps.Capability.Leases).
 			WithLineage(deps.Capability.Lineage).
-			WithCurrency(deps.Cfg.Capability.Currency)
+			WithCurrency(deps.Cfg.Capability.Currency).
+			WithLogger(l.Named("capabilities"))
 		paladinadminv1connect.RegisterCapabilityServiceHandler(adminServer, capH)
 	} else {
 		// Subsystem disabled — mount the disabled-subsystem stub so

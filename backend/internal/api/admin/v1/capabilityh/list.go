@@ -53,7 +53,7 @@ func (h *Handler) List(ctx context.Context, req *adminv1.CapabilityServiceListRe
 		Limit:         int(req.GetPageSize()),
 	})
 	if err != nil {
-		return nil, auth.AnswerCapabilityError(err, auth.ListExceptions)
+		return nil, h.answer("list", err, auth.ListExceptions)
 	}
 
 	out := make([]*adminv1.Capability, 0, len(page.Items))
