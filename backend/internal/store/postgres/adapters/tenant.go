@@ -138,7 +138,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 	// Bucket name is derived from the tenant id (globally unique per
 	// deployment; an org prefix for cross-account uniqueness is a follow-up).
 	if args.StorageLayout == tenanth.StorageLayoutDedicated {
-		bucketName := "paladin-" + args.TenantID.String()
+		bucketName := tenanth.DedicatedBucketName(args.TenantID)
 		actor := actorFromContext(ctx)
 		if err := qtx.CreateBucketV2(ctx,
 			args.DedicatedBackend, bucketName,

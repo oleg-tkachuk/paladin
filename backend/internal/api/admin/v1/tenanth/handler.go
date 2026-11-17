@@ -820,22 +820,14 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 
 	// Answered here for a clear message; the repository checks again under
 	// its lock, which is what decides a race.
-	targetBackend := targetBackendID
 	prev, err := h.repo.GetStorageMigration(ctx, tenantID)
-	switch {
-	case errors.Is(err, ErrNotFound):
-		// First migration.
-	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	case prev.State != StorageMigrationFailed:
-		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%w (state %q); only a failed migration can be retried", ErrStorageMigrationExists, prev.State))
-	case targetBackend == "":
-		targetBackend = prev.TargetBackendName
-	case targetBackend != prev.TargetBackendName:
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"the failed migration targeted backend %q; a retry finishes it there, not on %q",
-			prev.TargetBackendName, targetBackend)
+	targetBackend, err := retryTarget(prev, err, targetBackendID)
+	if err != nil {
+		if connect.CodeOf(err) == connect.CodeInternal {
+			h.log.Error("storage migration: read the previous migration failed",
+				zap.String("tenant_id", tenantID.String()), zap.Error(err))
+		}
+		return nil, err
 	}
 
 	// Source is where the tenant's objects physically live today — the
@@ -853,28 +845,83 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	if targetBackend == "" {
 		targetBackend = srcBackend
 	}
-	// Retention before the old copies are deleted; default 24h when unset.
-	retention := cleanupRetentionSeconds
-	if retention <= 0 {
-		retention = 86400
-	}
-	args := StartStorageMigrationArgs{
+	return h.startStorageMigration(ctx, StartStorageMigrationArgs{
 		TenantID:                tenantID,
 		SourceBackendName:       srcBackend,
 		SourceBucketName:        srcBucket,
 		TargetBackendName:       targetBackend,
-		TargetBucketName:        "paladin-" + tenantID.String(),
-		CleanupRetentionSeconds: retention,
+		TargetBucketName:        DedicatedBucketName(tenantID),
+		CleanupRetentionSeconds: cleanupRetentionOrDefault(cleanupRetentionSeconds),
+	})
+}
+
+// DefaultMigrationCleanupRetention is how long a storage migration keeps the
+// source copies before deleting them, when the caller names no retention.
+const DefaultMigrationCleanupRetention = 24 * time.Hour
+
+// cleanupRetentionOrDefault is the retention a migration runs with, in
+// seconds: the caller's when positive, DefaultMigrationCleanupRetention
+// otherwise.
+func cleanupRetentionOrDefault(seconds int64) int64 {
+	if seconds > 0 {
+		return seconds
 	}
+	return int64(DefaultMigrationCleanupRetention / time.Second)
+}
+
+// dedicatedBucketPrefix starts the name of a dedicated tenant's bucket.
+const dedicatedBucketPrefix = "paladin-"
+
+// DedicatedBucketName is the bucket a dedicated tenant's objects live in:
+// created dedicated, or migrated to dedicated.
+func DedicatedBucketName(tenantID uuid.UUID) string {
+	return dedicatedBucketPrefix + tenantID.String()
+}
+
+// retryTarget is the backend a migration goes to, given the tenant's latest
+// migration (prev, or prevErr ErrNotFound when it has none) and the backend
+// the caller asked for, "" for none. Only a failed migration may be retried,
+// and only on the backend it targeted.
+func retryTarget(prev StorageMigration, prevErr error, requested string) (string, error) {
+	switch {
+	case errors.Is(prevErr, ErrNotFound):
+		return requested, nil
+	case prevErr != nil:
+		return "", connect.NewError(connect.CodeInternal, prevErr.Error()).WithCause(prevErr)
+	case prev.State != StorageMigrationFailed:
+		return "", rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf(
+			"%w (state %q); only a failed migration can be retried", ErrStorageMigrationExists, prev.State))
+	case requested == "":
+		return prev.TargetBackendName, nil
+	case requested != prev.TargetBackendName:
+		return "", connect.Errorf(connect.CodeFailedPrecondition,
+			"the failed migration targeted backend %q; a retry finishes it there, not on %q",
+			prev.TargetBackendName, requested)
+	}
+	return requested, nil
+}
+
+// startStorageMigration starts the migration args describe, and maps a
+// refusal to a precondition the operator can act on.
+func (h *Handler) startStorageMigration(ctx context.Context, args StartStorageMigrationArgs) (*StorageMigration, error) {
 	m, err := h.repo.StartStorageMigration(ctx, args)
-	if err != nil {
-		if errors.Is(err, ErrStorageMigrationExists) || errors.Is(err, ErrTenantNotShared) ||
-			errors.Is(err, ErrTargetBucketUnusable) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		}
+	switch {
+	case err == nil:
+		h.log.Info("storage migration started",
+			zap.String("tenant_id", args.TenantID.String()),
+			zap.String("target_backend", args.TargetBackendName),
+			zap.String("target_bucket", args.TargetBucketName))
+		return &m, nil
+	case errors.Is(err, ErrStorageMigrationExists) || errors.Is(err, ErrTenantNotShared) ||
+		errors.Is(err, ErrTargetBucketUnusable):
+		h.log.Warn("storage migration refused",
+			zap.String("tenant_id", args.TenantID.String()), zap.Error(err))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
+	default:
+		h.log.Error("storage migration failed to start",
+			zap.String("tenant_id", args.TenantID.String()), zap.Error(err))
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return &m, nil
 }
 
 // rollBackStuck is MigrateTenantStorageLayout's way out for a tenant whose
