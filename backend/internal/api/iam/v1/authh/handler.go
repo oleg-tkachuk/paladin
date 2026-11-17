@@ -205,7 +205,7 @@ func (h *Handler) Login(ctx context.Context, in LoginInput) (*LoginOutput, error
 	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, uuid.Nil(), uuid.Nil())
 	if err != nil {
 		metrics.RecordLoginAttempt(ctx, "error")
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "login", err)
 	}
 	metrics.RecordLoginAttempt(ctx, "ok")
 
@@ -268,47 +268,19 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 	}
 
 	stored, err := h.refresh.Get(ctx, jti)
+	if errors.Is(err, authstore.ErrTokenRevoked) {
+		return h.refreshRevoked(ctx, jti, userID, tenantID, in.RequestedAudience)
+	}
 	if err != nil {
-		// Replay of a rotated (revoked) token → RFC 6819 theft signal: revoke
-		// the whole family and record it before rejecting. UNLESS the token
-		// was superseded moments ago, which is not theft but a sibling that
-		// rotated first — see errRotatedBySibling.
-		if errors.Is(err, authstore.ErrTokenRevoked) {
-			any, gerr := h.refresh.GetAny(ctx, jti)
-			if gerr == nil && issuedToOAuthClient(any) {
-				return nil, errNotAConsoleToken
-			}
-			if gerr == nil && h.withinSupersessionGrace(any) {
-				h.onRefreshRaceLost(ctx, jti, userID)
-				return nil, errRotatedBySibling
-			}
-			// Past the grace, but the successor was never presented: the
-			// holder lost the rotation response rather than replaying a token
-			// someone moved on from. Hand the successor back.
-			if gerr == nil {
-				out, rerr := h.recoverLostRotation(ctx, any, in.RequestedAudience)
-				if rerr != nil || out != nil {
-					return out, rerr
-				}
-			}
-			h.onRefreshReuse(ctx, jti, userID, tenantID)
-			return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
-		}
-		if errors.Is(err, authstore.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
-		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, refreshLookupFailed(ctx, "refresh token", err)
 	}
-	if issuedToOAuthClient(stored) {
-		return nil, errNotAConsoleToken
-	}
-	if h.now().After(stored.ExpiresAt) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token expired")
+	if err := h.usable(stored); err != nil {
+		return nil, err
 	}
 	// Presenting a token is what makes it no longer a lost successor its
 	// parent's holder may collect — see recoverLostRotation.
 	if err := h.refresh.MarkUsed(auth.WithActingTenant(ctx, stored.TenantID), jti); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "refresh token", err)
 	}
 
 	u, audience, err := h.eligibleFor(ctx, userID, tenantID, in.RequestedAudience)
@@ -331,11 +303,11 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 			h.onRefreshRaceLost(ctx, jti, userID)
 			return nil, errRotatedBySibling
 		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "refresh token", err)
 	}
 	access, newRefresh, accessExp, refreshExp, err := h.mintPair(ctx, u, audience, stored.FamilyID, jti)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "refresh token", err)
 	}
 	return &RefreshOutput{
 		AccessToken:      access,
@@ -386,76 +358,118 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
 	stored, err := h.refresh.Get(ctx, jti)
-	if err != nil {
-		if errors.Is(err, authstore.ErrTokenRevoked) {
-			// Superseded a moment ago means the caller is racing its OWN
-			// rotation, not replaying a stolen token: a browser cannot update
-			// its cookie between two requests already in flight, so the token
-			// it sends here is the one its sibling request just traded in.
-			//
-			// This RPC consumes nothing — it mints an access token and leaves
-			// the chain untouched — so honouring it inside a narrow window
-			// costs no rotation guarantee. What it buys is that the console's
-			// BFF no longer has to remember rotations in process memory to
-			// paper over the race, which is the single reason that process
-			// cannot run in more than one replica.
-			//
-			// Only supersession qualifies. A token revoked for cause — logout,
-			// or reuse detection killing the family — has superseded_at NULL
-			// and is refused here exactly as before.
-			//
-			// A token whose successor was never presented is tolerated for
-			// longer, for the same reason RefreshToken recovers it: the holder
-			// lost the rotation response. Refusing it here would fail every
-			// plane's exchange on the page load that is about to recover it.
-			if tok, gerr := h.refresh.GetAny(ctx, jti); gerr == nil &&
-				(h.withinSupersessionGrace(tok) || h.lostRotationRecoverable(ctx, tok)) {
-				stored, err = tok, nil
-			} else {
-				h.onRefreshReplayed(ctx, jti, userID, tenantID)
-				return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
-			}
-		}
+	if errors.Is(err, authstore.ErrTokenRevoked) {
+		stored, err = h.exchangeRevoked(ctx, jti, userID, tenantID)
 	}
 	if err != nil {
-		if errors.Is(err, authstore.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
-		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, refreshLookupFailed(ctx, "exchange audience", err)
 	}
-	if issuedToOAuthClient(stored) {
-		return nil, errNotAConsoleToken
-	}
-	if h.now().After(stored.ExpiresAt) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token expired")
+	if err := h.usable(stored); err != nil {
+		return nil, err
 	}
 	if !stored.Revoked {
 		if err := h.refresh.MarkUsed(auth.WithActingTenant(ctx, stored.TenantID), jti); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+			return nil, internalErr(ctx, "exchange audience", err)
 		}
 	}
 
-	u, err := h.users.GetByID(ctx, userID)
+	// TargetAudience is required above, so eligibleFor never defaults it.
+	u, audience, err := h.eligibleFor(ctx, userID, tenantID, in.TargetAudience)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, "user no longer exists")
-	}
-	if u.Disabled || u.TenantID != tenantID {
-		return nil, connect.NewError(connect.CodePermissionDenied, "user no longer eligible")
-	}
-
-	if err := h.assertAudienceAllowed(u, in.TargetAudience); err != nil {
 		return nil, err
 	}
 
 	// Mint access only — refresh chain stays intact.
-	access, accessExp, err := h.mintAccess(ctx, u, in.TargetAudience)
+	access, accessExp, err := h.mintAccess(ctx, u, audience)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "exchange audience", err)
 	}
 	return &ExchangeAudienceOutput{
 		AccessToken:     access,
 		AccessExpiresAt: accessExp,
 	}, nil
+}
+
+// exchangeRevoked decides a revoked token presented to ExchangeAudience: it
+// is honoured only when its holder is racing its own rotation, and refused —
+// as a replay — otherwise.
+func (h *Handler) exchangeRevoked(ctx context.Context, jti, userID, tenantID uuid.UUID) (authstore.RefreshToken, error) {
+	// Superseded a moment ago means the caller is racing its OWN
+	// rotation, not replaying a stolen token: a browser cannot update
+	// its cookie between two requests already in flight, so the token
+	// it sends here is the one its sibling request just traded in.
+	//
+	// This RPC consumes nothing — it mints an access token and leaves
+	// the chain untouched — so honouring it inside a narrow window
+	// costs no rotation guarantee. What it buys is that the console's
+	// BFF no longer has to remember rotations in process memory to
+	// paper over the race, which is the single reason that process
+	// cannot run in more than one replica.
+	//
+	// Only supersession qualifies. A token revoked for cause — logout,
+	// or reuse detection killing the family — has superseded_at NULL
+	// and is refused here exactly as before.
+	//
+	// A token whose successor was never presented is tolerated for
+	// longer, for the same reason RefreshToken recovers it: the holder
+	// lost the rotation response. Refusing it here would fail every
+	// plane's exchange on the page load that is about to recover it.
+	tok, err := h.refresh.GetAny(ctx, jti)
+	if err == nil && (h.withinSupersessionGrace(tok) || h.lostRotationRecoverable(ctx, tok)) {
+		return tok, nil
+	}
+	h.onRefreshReplayed(ctx, jti, userID, tenantID)
+	return authstore.RefreshToken{}, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
+}
+
+// refreshRevoked decides a revoked token presented to RefreshToken. Replay of
+// a rotated token is an RFC 6819 theft signal: the whole family is revoked
+// and recorded before the refusal. UNLESS the token was superseded moments
+// ago, which is not theft but a sibling that rotated first (see
+// errRotatedBySibling), or its successor was never presented, which is a
+// holder that lost the rotation response: it gets the successor back.
+func (h *Handler) refreshRevoked(ctx context.Context, jti, userID, tenantID uuid.UUID, audience string) (*RefreshOutput, error) {
+	tok, err := h.refresh.GetAny(ctx, jti)
+	if err == nil {
+		if issuedToOAuthClient(tok) {
+			return nil, errNotAConsoleToken
+		}
+		if h.withinSupersessionGrace(tok) {
+			h.onRefreshRaceLost(ctx, jti, userID)
+			return nil, errRotatedBySibling
+		}
+		out, rerr := h.recoverLostRotation(ctx, tok, audience)
+		if rerr != nil || out != nil {
+			return out, rerr
+		}
+	}
+	h.onRefreshReuse(ctx, jti, userID, tenantID)
+	return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
+}
+
+// refreshLookupFailed answers a refresh token the store could not read: one
+// not on record is refused like any rejected token, anything else is the
+// store's failure.
+func refreshLookupFailed(ctx context.Context, op string, err error) error {
+	if errors.Is(err, authstore.ErrNotFound) {
+		return connect.NewError(connect.CodeUnauthenticated, "refresh token rejected")
+	}
+	if _, ok := errors.AsType[*connect.Error](err); ok {
+		return err
+	}
+	return internalErr(ctx, op, err)
+}
+
+// usable refuses a stored refresh token the console may not spend: one the
+// OAuth server issued to a client, or one past its expiry.
+func (h *Handler) usable(t authstore.RefreshToken) error {
+	if issuedToOAuthClient(t) {
+		return errNotAConsoleToken
+	}
+	if h.now().After(t.ExpiresAt) {
+		return connect.NewError(connect.CodeUnauthenticated, "refresh token expired")
+	}
+	return nil
 }
 
 // ─── Revoke ─────────────────────────────────────────────────────────────────
@@ -574,7 +588,7 @@ func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput
 	matches, err := h.users.ListMembershipsBySubject(
 		auth.WithCrossTenantRead(ctx), cur.Subject, afterCreated, afterID, limit+1)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, "", internalErr(ctx, "list my memberships", err)
 	}
 	var next string
 	if len(matches) > int(limit) {
@@ -597,6 +611,18 @@ func (h *Handler) ListMyMemberships(ctx context.Context, in ListMembershipsInput
 		})
 	}
 	return out, next, nil
+}
+
+// switchAudience is the audience a tenant switch mints for: the one asked
+// for, else the plane the caller is working in, else the data plane.
+func switchAudience(requested, current string) string {
+	switch {
+	case requested != "":
+		return requested
+	case current != "":
+		return current
+	}
+	return auth.AudienceData
 }
 
 type SwitchTenantOutput struct {
@@ -644,7 +670,7 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 	case errors.Is(err, authstore.ErrNotFound):
 		// leave target nil — handled by the generic refusal below
 	default:
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "switch tenant", err)
 	}
 	// Same generic phrasing whether the tenant exists or the caller just isn't
 	// a member — don't leak tenant existence.
@@ -657,20 +683,14 @@ func (h *Handler) SwitchTenant(ctx context.Context, targetTenantID uuid.UUID, re
 			"user is disabled in the target tenant")
 	}
 
-	audience := requestedAudience
-	if audience == "" {
-		audience = p.Audience // keep the plane the caller was working in
-	}
-	if audience == "" {
-		audience = auth.AudienceData
-	}
+	audience := switchAudience(requestedAudience, p.Audience)
 	if err := h.assertAudienceAllowed(*target, audience); err != nil {
 		return nil, err
 	}
 
 	access, refresh, accessExp, refreshExp, err := h.mintPair(ctx, *target, audience, uuid.Nil(), uuid.Nil())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "switch tenant", err)
 	}
 	// SwitchTenant stamps last_login_at on the row in the TARGET tenant while
 	// the session is still scoped to the current one — the same shape as the
@@ -751,7 +771,7 @@ func (h *Handler) ChangePassword(ctx context.Context, oldPw, newPw string) error
 	}
 	id, err := uuid.Parse(p.Subject)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return internalErr(ctx, "change password", err)
 	}
 	u, err := h.users.GetByID(ctx, id)
 	if err != nil {
@@ -765,7 +785,7 @@ func (h *Handler) ChangePassword(ctx context.Context, oldPw, newPw string) error
 		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := h.users.UpdatePasswordHash(ctx, id, hash); err != nil {
-		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return internalErr(ctx, "change password", err)
 	}
 	// Defensive: invalidate all refresh tokens on password change. The new
 	// password stands either way; a failure leaves the old sessions live,
@@ -824,19 +844,11 @@ func loginOutcome(err error) string {
 
 func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstore.User, error) {
 	if in.TenantHint != uuid.Nil() {
-		u, err := h.users.GetBySubject(ctx, in.TenantHint, in.Subject)
-		if err != nil {
-			if errors.Is(err, authstore.ErrNotFound) {
-				// Same generic message — do not leak whether subject exists.
-				return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
-			}
-			return authstore.User{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-		return checkLoginRow(u, in.Password)
+		return h.loginInTenant(ctx, in)
 	}
 	matches, err := h.users.FindBySubjectGlobal(ctx, in.Subject)
 	if err != nil {
-		return authstore.User{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return authstore.User{}, internalErr(ctx, "resolve login user", err)
 	}
 	switch len(matches) {
 	case 0:
@@ -846,28 +858,50 @@ func (h *Handler) resolveLoginUser(ctx context.Context, in LoginInput) (authstor
 		// federated) — nothing to disambiguate, so nothing leaks.
 		return checkLoginRow(matches[0], in.Password)
 	}
-	// Multi-tenant subject: the password picks the memberships it actually
-	// opens; the most recently used one wins. Disabled / federated rows are
-	// silently skipped here (unlike the single-row path) — with several
-	// candidates, per-row detail would leak which tenants the subject is in.
-	var best *authstore.User
-	for i := range matches {
-		m := &matches[i]
-		if m.Disabled || len(m.PasswordHash) == 0 {
-			continue
-		}
-		if auth.CheckPassword(m.PasswordHash, in.Password) != nil {
-			continue
-		}
-		if best == nil ||
-			(m.LastLoginAt != nil && (best.LastLoginAt == nil || m.LastLoginAt.After(*best.LastLoginAt))) {
-			best = m
-		}
-	}
+	best := bestLoginMatch(matches, in.Password)
 	if best == nil {
 		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
 	}
 	return *best, nil
+}
+
+// loginInTenant authenticates against the subject's row in the tenant the
+// login names. A subject not there answers as a wrong password does, so the
+// endpoint does not say whether it exists.
+func (h *Handler) loginInTenant(ctx context.Context, in LoginInput) (authstore.User, error) {
+	u, err := h.users.GetBySubject(ctx, in.TenantHint, in.Subject)
+	if errors.Is(err, authstore.ErrNotFound) {
+		return authstore.User{}, connect.NewError(connect.CodeUnauthenticated, "invalid credentials")
+	}
+	if err != nil {
+		return authstore.User{}, internalErr(ctx, "resolve login user", err)
+	}
+	return checkLoginRow(u, in.Password)
+}
+
+// bestLoginMatch is the membership of a multi-tenant subject that login lands
+// in: of those the password opens, the most recently used. Disabled and
+// federated rows are silently skipped (unlike the single-row path) — with
+// several candidates, per-row detail would leak which tenants the subject is
+// in. nil when the password opens none.
+func bestLoginMatch(matches []authstore.User, password string) *authstore.User {
+	var best *authstore.User
+	for i := range matches {
+		m := &matches[i]
+		if m.Disabled || len(m.PasswordHash) == 0 || auth.CheckPassword(m.PasswordHash, password) != nil {
+			continue
+		}
+		if best == nil || usedMoreRecently(*m, *best) {
+			best = m
+		}
+	}
+	return best
+}
+
+// usedMoreRecently reports whether a was logged into after b; a membership
+// never logged into is never the more recent.
+func usedMoreRecently(a, b authstore.User) bool {
+	return a.LastLoginAt != nil && (b.LastLoginAt == nil || a.LastLoginAt.After(*b.LastLoginAt))
 }
 
 // checkLoginRow applies the single-row login checks: disabled, federated
@@ -981,7 +1015,7 @@ func (h *Handler) unusedSuccessorOf(ctx context.Context, parent authstore.Refres
 func (h *Handler) recoverLostRotation(ctx context.Context, parent authstore.RefreshToken, requestedAudience string) (*RefreshOutput, error) {
 	succ, ok, err := h.unusedSuccessorOf(ctx, parent)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "recover lost rotation", err)
 	}
 	if !ok {
 		return nil, nil
@@ -992,7 +1026,7 @@ func (h *Handler) recoverLostRotation(ctx context.Context, parent authstore.Refr
 	}
 	access, accessExp, err := h.mintAccess(ctx, u, audience)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, internalErr(ctx, "recover lost rotation", err)
 	}
 	refresh, refreshExp, err := h.issuer.MintRefresh(issuer.RefreshClaims{
 		Subject:   u.UserID.String(),
@@ -1254,4 +1288,12 @@ func decodeMembershipCursor(tok string) (time.Time, uuid.UUID, error) {
 		return time.Time{}, uuid.Nil(), fmt.Errorf("malformed page_token %q: %w", tok, err)
 	}
 	return time.Unix(0, n).UTC(), id, nil
+}
+
+// internalErr logs why op failed for a reason the caller cannot fix, and
+// answers it as internal. Token values never reach it: err is a store's,
+// a minter's or a hasher's.
+func internalErr(ctx context.Context, op string, err error) error {
+	logger.FromContext(ctx).Error("auth operation failed", zap.String("op", op), zap.Error(err))
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
