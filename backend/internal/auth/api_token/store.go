@@ -2,6 +2,7 @@ package api_token
 
 import (
 	"context"
+	"errors"
 	"time"
 	"uuid"
 )
@@ -64,4 +65,38 @@ type ListByTenantArgs struct {
 	IncludeExpired bool
 	Cursor         string
 	Limit          int32
+}
+
+// Page sizes ListByTenant answers with: DefaultListLimit when none is asked
+// for, never more than MaxListLimit.
+const (
+	DefaultListLimit int32 = 50
+	MaxListLimit     int32 = 500
+)
+
+// ErrInvalidCursor is a page cursor that is not the id of a token, which is
+// the only cursor ListByTenant hands out.
+var ErrInvalidCursor = errors.New("api_token: invalid page cursor")
+
+// ClampListLimit is the page size ListByTenant reads for a requested n.
+func ClampListLimit(n int32) int32 {
+	switch {
+	case n <= 0:
+		return DefaultListLimit
+	case n > MaxListLimit:
+		return MaxListLimit
+	}
+	return n
+}
+
+// CursorID is the token id the page resumes after; nil for the first page.
+func (a ListByTenantArgs) CursorID() (*uuid.UUID, error) {
+	if a.Cursor == "" {
+		return nil, nil
+	}
+	id, err := uuid.Parse(a.Cursor)
+	if err != nil {
+		return nil, ErrInvalidCursor
+	}
+	return &id, nil
 }

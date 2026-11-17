@@ -363,3 +363,18 @@ func assertStrings(t *testing.T, field string, got, want []string) {
 		}
 	}
 }
+
+// A page cursor the store never handed out is refused as such, before any
+// SQL runs: it used to reach Postgres as a ::uuid cast and come back as an
+// internal error.
+func TestAPITokenListRefusesAForeignCursor(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	admin := startPostgres(t)
+	tenant, _ := mkTenant(t, ctx, admin, "shared")
+	store := newTokenStore(t, admin)
+	_, _, err := store.ListByTenant(ctx, api_token.ListByTenantArgs{TenantID: tenant, Cursor: "not-a-token-id"})
+	if !errors.Is(err, api_token.ErrInvalidCursor) {
+		t.Fatalf("err = %v, want ErrInvalidCursor", err)
+	}
+}

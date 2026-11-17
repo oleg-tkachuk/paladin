@@ -204,12 +204,10 @@ func (s *Store) ListByTenant(ctx context.Context, args api_token.ListByTenantArg
 	if args.TenantID == uuid.Nil() {
 		return nil, "", errors.New("api_token/postgres: tenant_id required")
 	}
-	limit := args.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 500 {
-		limit = 500
+	limit := api_token.ClampListLimit(args.Limit)
+	cursor, err := args.CursorID()
+	if err != nil {
+		return nil, "", err
 	}
 
 	whereExtra := ""
@@ -220,8 +218,8 @@ func (s *Store) ListByTenant(ctx context.Context, args api_token.ListByTenantArg
 	if !args.IncludeExpired {
 		whereExtra += " AND expires_at > NOW()"
 	}
-	if args.Cursor != "" {
-		bindArgs = append(bindArgs, args.Cursor)
+	if cursor != nil {
+		bindArgs = append(bindArgs, *cursor)
 		whereExtra += fmt.Sprintf(" AND id > $%d::uuid", len(bindArgs))
 	}
 	bindArgs = append(bindArgs, limit+1) // +1 to detect next page

@@ -120,3 +120,30 @@ func TestRefusedGrantsAreLogged(t *testing.T) {
 		}
 	}
 }
+
+// A page token this list never handed out is the caller's mistake, not an
+// outage; a store that fails is logged.
+func TestListTellsABadPageTokenFromAFailure(t *testing.T) {
+	ctx := ctxAs(apiutil.RolePlatformAdmin)
+	p, _ := auth.PrincipalFromContext(ctx)
+	for _, tc := range []struct {
+		name  string
+		err   error
+		code  connect.Code
+		level zapcore.Level
+	}{
+		{"bad page token", api_token.ErrInvalidCursor, connect.CodeInvalidArgument, zapcore.WarnLevel},
+		{"store down", errors.New("connection reset"), connect.CodeInternal, zapcore.ErrorLevel},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, logs := logged(&stubIssuer{}, &fakeStore{listErr: tc.err})
+			_, err := h.List(ctx, &adminv1.APITokenServiceListRequest{Parent: "tenants/" + p.TenantID.String(), PageToken: "x"})
+			if code(err) != tc.code {
+				t.Fatalf("code = %v, want %v", code(err), tc.code)
+			}
+			if logs.FilterLevelExact(tc.level).Len() != 1 {
+				t.Fatalf("want one %v line, got %v", tc.level, logs.All())
+			}
+		})
+	}
+}

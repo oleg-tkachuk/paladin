@@ -33,6 +33,10 @@ type IssuerConfig struct {
 	MaxTTL time.Duration
 }
 
+// DefaultMaxTTL caps a token's lifetime when IssuerConfig.MaxTTL is unset:
+// a service token should not live forever.
+const DefaultMaxTTL = 365 * 24 * time.Hour
+
 // NewIssuer validates wiring and returns a ready Issuer.
 func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 	if cfg.Store == nil {
@@ -45,7 +49,7 @@ func NewIssuer(cfg IssuerConfig) (*Issuer, error) {
 		cfg.Now = time.Now
 	}
 	if cfg.MaxTTL == 0 {
-		cfg.MaxTTL = 365 * 24 * time.Hour
+		cfg.MaxTTL = DefaultMaxTTL
 	}
 	return &Issuer{
 		store:  cfg.Store,

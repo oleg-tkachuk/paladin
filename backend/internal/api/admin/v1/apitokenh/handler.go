@@ -314,7 +314,14 @@ func (h *Handler) List(ctx context.Context, req *adminv1.APITokenServiceListRequ
 		Cursor:         req.GetPageToken(),
 		Limit:          req.GetPageSize(),
 	})
+	if errors.Is(err, api_token.ErrInvalidCursor) {
+		h.log.Warn("api token list refused: invalid page token",
+			zap.String("tenant_id", tenantID.String()), zap.String("actor", caller.Subject))
+		return nil, connect.NewError(connect.CodeInvalidArgument, "page_token: not a page this list handed out").WithCause(err)
+	}
 	if err != nil {
+		h.log.Error("api token list failed",
+			zap.String("tenant_id", tenantID.String()), zap.String("actor", caller.Subject), zap.Error(err))
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	out := make([]*adminv1.APIToken, 0, len(tokens))
