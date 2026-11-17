@@ -111,6 +111,10 @@ func TestSubscriptionChangesAreLogged(t *testing.T) {
 			if lines[0].ContextMap()["tenant_id"] != tid.String() {
 				t.Errorf("line %q names tenant %v, want %s", lines[0].Message, lines[0].ContextMap()["tenant_id"], tid)
 			}
+			// ctxAs's principal is "tester".
+			if lines[0].ContextMap()["actor"] != "tester" {
+				t.Errorf("line %q names actor %v, want tester", lines[0].Message, lines[0].ContextMap()["actor"])
+			}
 		})
 	}
 }
