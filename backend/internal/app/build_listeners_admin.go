@@ -54,6 +54,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	tenantH := wire.ProvideTenantHandler(repos, polEngine, cfg)
 	collectionH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
 	opH := wire.ProvideOperationHandler(repos, polEngine, cfg)
+	opH.SetLogger(l.Named("operations"))
 	policyH := wire.ProvidePolicyHandler(repos, polEngine, deps.PolStore)
 	backendH := wire.ProvideBackendV2Handler(repos, polEngine, cfg)
 	// TestBackend connectivity probe over the runtime-configured S3 clients.

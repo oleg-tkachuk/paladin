@@ -14,6 +14,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -109,6 +110,18 @@ type Handler struct {
 	// finishedRetention is worker.jobs.housekeeping.operations_ttl: how long
 	// the reaper keeps a finished operation. Zero keeps them indefinitely.
 	finishedRetention time.Duration
+	log               *zap.Logger
+}
+
+// SetLogger sets where a store failure is logged. Unset, nothing is.
+func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
+
+// internal logs a store failure on op for tenantID and answers it as
+// internal.
+func (h *Handler) internal(op string, tenantID uuid.UUID, err error) error {
+	h.log.Error("operation store failed",
+		zap.String("op", op), zap.String("tenant_id", tenantID.String()), zap.Error(err))
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
 
 // SetFinishedRetention sets how long a finished operation is kept before the
@@ -129,7 +142,7 @@ func NewHandler(repo Repository, policy cedar.Authorizer) *Handler {
 	if policy == nil {
 		panic("operation: policy authorizer is required")
 	}
-	return &Handler{cel: celpkg.NewEvaluator(), repo: repo, policy: policy}
+	return &Handler{cel: celpkg.NewEvaluator(), repo: repo, policy: policy, log: zap.NewNop()}
 }
 
 // Each RPC also asserts a capability op, because a capability alone can
@@ -160,8 +173,11 @@ func (h *Handler) GetOperation(ctx context.Context, opID uuid.UUID) (*Operation,
 		return nil, err
 	}
 	op, err := h.repo.Get(ctx, opID, tenantID)
-	if err != nil {
+	switch {
+	case errors.Is(err, ErrOperationNotFound):
 		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+	case err != nil:
+		return nil, h.internal("get", tenantID, err)
 	}
 	op.ExpireAt = expiresAt(op.DoneAt, h.finishedRetention)
 	return &op, nil
@@ -178,8 +194,12 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	if err := h.authorize(ctx, cedar.ActionCancelOperation, tenantID); err != nil {
 		return err
 	}
-	if err := h.repo.Cancel(ctx, opID, tenantID); err != nil {
+	err = h.repo.Cancel(ctx, opID, tenantID)
+	switch {
+	case errors.Is(err, ErrNotCancellable):
 		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("operation not cancellable: %w", err))
+	case err != nil:
+		return h.internal("cancel", tenantID, err)
 	}
 	return nil
 }
@@ -310,7 +330,7 @@ func (h *Handler) Submit(ctx context.Context, opType string, metadata []byte) (u
 		op.InitiatorSubject = p.Subject
 	}
 	if err := h.repo.Create(ctx, op); err != nil {
-		return uuid.Nil(), connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return uuid.Nil(), h.internal("create", tenantID, err)
 	}
 	return op.OperationID, nil
 }
@@ -377,6 +397,10 @@ const msgCrossTenant = "cross-tenant operations denied"
 // terminal state and cannot be cancelled.
 var ErrNotCancellable = errors.New("operation not in cancellable state")
 
+// ErrOperationNotFound is Repository.Get's answer for an operation the
+// tenant has not got.
+var ErrOperationNotFound = errors.New("operation not found")
+
 // ErrOperationFinished is surfaced by UpdateState when the operation is not
 // found or already in a terminal state — cancelled, or reclaimed as lost —
 // so the write was not applied.
@@ -421,7 +445,7 @@ func (h *Handler) DismissOperations(ctx context.Context, ids []uuid.UUID) (int64
 	}
 	n, err := h.repo.Dismiss(ctx, tenantID, subject, ids)
 	if err != nil {
-		return 0, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return 0, h.internal("dismiss", tenantID, err)
 	}
 	return n, nil
 }
