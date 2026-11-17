@@ -248,7 +248,7 @@ export function TenantCreateDialog({
               )
             }
             aside={
-              slug && !slugError ? (
+              slug && !slugError && !slugTaken ? (
                 <span className="text-sm font-medium text-success">valid</span>
               ) : null
             }
