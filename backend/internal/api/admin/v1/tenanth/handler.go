@@ -599,7 +599,7 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 		if e := h.repo.CreateTx(ctx, tx, args); e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, args.TenantID, "paladin.tenant.created",
+		return h.dispatchEventTx(ctx, tx, args.TenantID, eventtype.TenantCreated,
 			fmt.Sprintf("tenants/%s", args.TenantID),
 			map[string]any{
 				"tenant_id":    args.TenantID.String(),
@@ -936,7 +936,7 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, t.TenantID, "paladin.tenant.updated",
+		return h.dispatchEventTx(ctx, tx, t.TenantID, eventtype.TenantUpdated,
 			fmt.Sprintf("tenants/%s", t.TenantID),
 			map[string]any{
 				"tenant_id":        t.TenantID.String(),
@@ -1001,7 +1001,7 @@ func (h *Handler) RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*Tenan
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.tenant.restored",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.TenantRestored,
 			fmt.Sprintf("tenants/%s", tenantID),
 			map[string]any{
 				"tenant_id":    tenantID.String(),

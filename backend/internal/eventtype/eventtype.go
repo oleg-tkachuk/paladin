@@ -3,6 +3,16 @@
 // it apart. A leaf with no imports, so either side can take it.
 package eventtype
 
+// TenantCreated is emitted on the transaction that creates a tenant.
+const TenantCreated = "paladin.tenant.created"
+
+// TenantUpdated is emitted on the transaction that changes a tenant.
+const TenantUpdated = "paladin.tenant.updated"
+
+// TenantRestored is emitted on the transaction that takes a tenant out of the
+// trash.
+const TenantRestored = "paladin.tenant.restored"
+
 // TenantTrashed is emitted when a tenant moves to the trash. The outbox
 // delivers it although the tenant is frozen: it is the event that says so.
 const TenantTrashed = "paladin.tenant.trashed"
