@@ -8,6 +8,7 @@ package systemh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -136,28 +137,23 @@ func (h *Handler) DispatcherStats(ctx context.Context) (stats *worker.DeliverySt
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
 		return nil, false, connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
-	url := h.cfg.Dispatcher.OpsURL
-	if url == "" {
-		return nil, false, nil
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+worker.DispatcherStatsPath, nil)
-	if err != nil {
-		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	res, err := h.httpClient.Do(req)
-	if err != nil {
-		// Unreachable dispatcher = degraded view, not an RPC failure.
-		return nil, false, nil
-	}
-	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusOK {
-		return nil, false, nil
-	}
 	var s worker.DeliveryStats
-	if err := json.NewDecoder(res.Body).Decode(&s); err != nil {
+	err = h.getOps(ctx, h.cfg.Dispatcher.OpsURL, worker.DispatcherStatsPath, &s)
+	switch {
+	case err == nil:
+		return &s, true, nil
+	case errors.Is(err, errOpsBody):
+		// The dispatcher answered, and not with stats: a fault to report,
+		// not a view to degrade.
+		h.log.Error("dispatcher stats: unreadable answer",
+			zap.String("endpoint", worker.DispatcherStatsPath), zap.Error(err))
 		return nil, false, rpcerr.New(connect.CodeInternal, fmt.Errorf("decode dispatcher stats: %w", err))
+	default:
+		// Unconfigured or unreachable dispatcher = degraded view, not an RPC
+		// failure.
+		h.logDegraded("dispatcher stats unavailable", worker.DispatcherStatsPath, err)
+		return nil, false, nil
 	}
-	return &s, true, nil
 }
 
 // ─── Platform stats ─────────────────────────────────────────────────────────
@@ -240,24 +236,9 @@ func (h *Handler) PlatformStats(ctx context.Context, page platformstats.TenantPa
 // available=false. A worker older than the paging parameters answers with
 // its first page and no next token, which reads as the last page.
 func (h *Handler) fetchRLSCensus(ctx context.Context, page platformstats.TenantPage) (*platformstats.RLSCensus, bool) {
-	url := h.cfg.Worker.OpsURL
-	if url == "" {
-		return nil, false
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+platformstats.RLSCensusPath+"?"+page.Query().Encode(), nil)
-	if err != nil {
-		return nil, false
-	}
-	res, err := h.httpClient.Do(req)
-	if err != nil {
-		return nil, false
-	}
-	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusOK {
-		return nil, false
-	}
 	var census platformstats.RLSCensus
-	if err := json.NewDecoder(res.Body).Decode(&census); err != nil {
+	if err := h.getOps(ctx, h.cfg.Worker.OpsURL, platformstats.RLSCensusPath+"?"+page.Query().Encode(), &census); err != nil {
+		h.logDegraded("platform stats: worker census unavailable", platformstats.RLSCensusPath, err)
 		return nil, false
 	}
 	return &census, true
@@ -278,25 +259,11 @@ func (h *Handler) PlatformStatsTenants(ctx context.Context, signal platformstats
 	if rerr := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); rerr != nil {
 		return nil, connect.NewError(connect.CodePermissionDenied, rerr.Error()).WithCause(rerr)
 	}
-	base := h.cfg.Worker.OpsURL
-	if base == "" {
-		return nil, connect.NewError(connect.CodeUnavailable, "worker ops endpoint is not configured")
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		base+platformstats.SignalTenantsPath+"?"+platformstats.SignalQuery(signal, page).Encode(), nil)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	res, err := h.httpClient.Do(req)
-	if err != nil {
-		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
-	}
-	defer func() { _ = res.Body.Close() }()
-	if res.StatusCode != http.StatusOK {
-		return nil, connect.Errorf(connect.CodeUnavailable, "worker census: %s", res.Status)
-	}
 	var tenants platformstats.SignalTenants
-	if err := json.NewDecoder(res.Body).Decode(&tenants); err != nil {
+	if err := h.getOps(ctx, h.cfg.Worker.OpsURL,
+		platformstats.SignalTenantsPath+"?"+platformstats.SignalQuery(signal, page).Encode(), &tenants); err != nil {
+		h.log.Warn("platform stats: signal tenants unavailable",
+			zap.String("endpoint", platformstats.SignalTenantsPath), zap.String("signal", string(signal)), zap.Error(err))
 		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
 	}
 
@@ -323,4 +290,46 @@ func (h *Handler) labelTenants(ctx context.Context, ids []string) (map[string]Te
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return names, nil
+}
+
+// errOpsUnconfigured is getOps's answer when the deployment set no ops URL
+// for the pod: a choice, not a fault.
+var errOpsUnconfigured = errors.New("ops endpoint is not configured")
+
+// errOpsBody wraps getOps's failure to decode an answer the pod gave.
+var errOpsBody = errors.New("ops endpoint answer unreadable")
+
+// getOps GETs path (with its query) from the ops listener at base and decodes
+// the JSON answer into out. The error says which step failed:
+// errOpsUnconfigured with no base, errOpsBody for an answer it cannot read.
+func (h *Handler) getOps(ctx context.Context, base, path string, out any) error {
+	if base == "" {
+		return errOpsUnconfigured
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+path, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	res, err := h.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("reach ops endpoint: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("ops endpoint answered %s", res.Status)
+	}
+	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
+		return fmt.Errorf("%w: %w", errOpsBody, err)
+	}
+	return nil
+}
+
+// logDegraded records why a stats read is shown as unavailable: at debug for
+// an endpoint the deployment left unconfigured, a warning otherwise.
+func (h *Handler) logDegraded(msg, endpoint string, err error) {
+	if errors.Is(err, errOpsUnconfigured) {
+		h.log.Debug(msg, zap.String("endpoint", endpoint), zap.Error(err))
+		return
+	}
+	h.log.Warn(msg, zap.String("endpoint", endpoint), zap.Error(err))
 }
