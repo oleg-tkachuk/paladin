@@ -44,22 +44,22 @@ func (f *fakeSinkSecrets) ResolveSinkSecret(_ context.Context, ns, name, key str
 
 func TestParseSinkSecretRef(t *testing.T) {
 	cases := []struct {
-		ref              string
-		ns, name, key    string
-		wantErrSubstring string
+		ref           string
+		ns, name, key string
+		malformed     bool
 	}{
 		{ref: "k8s:hmac/secret", ns: "", name: "hmac", key: "secret"},
 		{ref: "k8s:prod/hmac/secret", ns: "prod", name: "hmac", key: "secret"},
-		{ref: "k8s:hmac", wantErrSubstring: "malformed"},
-		{ref: "k8s:a/b/c/d", wantErrSubstring: "malformed"},
-		{ref: "k8s:/key", wantErrSubstring: "empty name or key"},
-		{ref: "k8s:name/", wantErrSubstring: "empty name or key"},
+		{ref: "k8s:hmac", malformed: true},
+		{ref: "k8s:a/b/c/d", malformed: true},
+		{ref: "k8s:/key", malformed: true},
+		{ref: "k8s:name/", malformed: true},
 	}
 	for _, c := range cases {
 		ns, name, key, err := parseSinkSecretRef(c.ref)
-		if c.wantErrSubstring != "" {
-			if err == nil || !strings.Contains(err.Error(), c.wantErrSubstring) {
-				t.Errorf("%q: err = %v, want substring %q", c.ref, err, c.wantErrSubstring)
+		if c.malformed {
+			if !errors.Is(err, errSinkSecretRefMalformed) {
+				t.Errorf("%q: err = %v, want errSinkSecretRefMalformed", c.ref, err)
 			}
 			continue
 		}
@@ -197,4 +197,33 @@ func TestResolveSinkValue_ConcurrentFirstUse(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// A field that names a Secret but cannot be resolved fails without quoting
+// the field: its text sits in a credential field (a SASL password, a NATS
+// credentials ref), and the error reaches the TestSubscription response, the
+// admin log and the delivery's recorded failure.
+func TestResolveSinkValue_ErrorsQuoteNoFieldValue(t *testing.T) {
+	const missing = "k8s:prod/kafka-auth/password"
+	for name, tc := range map[string]struct {
+		d     *Dispatcher
+		value string
+		want  error
+	}{
+		"malformed ref": {&Dispatcher{Secrets: &fakeSinkSecrets{}}, "k8s:only-one-part", errSinkSecretRefMalformed},
+		"unresolved":    {&Dispatcher{Secrets: &fakeSinkSecrets{values: map[string]string{}}}, missing, errSinkSecretUnresolved},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := tc.d.resolveSinkValue(context.Background(), tc.value)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+			body := strings.TrimPrefix(tc.value, sinkSecretPrefix)
+			for _, part := range strings.Split(body, "/") {
+				if strings.Contains(err.Error(), part) {
+					t.Fatalf("error %q quotes %q from the field", err, part)
+				}
+			}
+		})
+	}
 }
