@@ -6,7 +6,11 @@ import (
 	"testing"
 	"uuid"
 
+	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
@@ -112,5 +116,37 @@ func TestTenantCreatedEventCarriesTheTenant(t *testing.T) {
 	p := producer.events[0].Payload
 	if p["tenant_id"] != tid.String() || p["slug"] != "acme" || p["display_name"] != "Acme" {
 		t.Fatalf("payload = %v", p)
+	}
+}
+
+// A create that fails for no reason the caller can fix leaves a line saying
+// why: the event that could not be recorded, or the row that could not be
+// read back.
+func TestTenantCreateLogsAnInternalFailure(t *testing.T) {
+	tid := uuid.New()
+	for _, tc := range []struct {
+		name    string
+		repo    *fakeRepo
+		produce *recordingProducer
+		want    string
+	}{
+		{"event not recorded", &fakeRepo{}, &recordingProducer{err: errors.New("outbox full")}, "tenant create failed"},
+		{"row not read back", &fakeRepo{getFn: func(context.Context, uuid.UUID) (Tenant, error) {
+			return Tenant{}, errors.New("connection reset")
+		}}, &recordingProducer{}, "tenant created but not read back"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			core, logs := observer.New(zapcore.ErrorLevel)
+			h := NewHandler(tc.repo, allow())
+			h.SetLogger(zap.New(core))
+			h.SetEventProducer(tc.produce)
+			_, err := h.CreateTenant(adminCtx(tid), CreateTenantArgs{TenantID: tid, Slug: "acme"})
+			if connect.CodeOf(err) != connect.CodeInternal {
+				t.Fatalf("CreateTenant = %v, want internal", err)
+			}
+			if logs.FilterMessage(tc.want).Len() != 1 {
+				t.Fatalf("want one %q line, got %v", tc.want, logs.All())
+			}
+		})
 	}
 }
