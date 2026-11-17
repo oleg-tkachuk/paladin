@@ -55,6 +55,7 @@ type fakeStore struct {
 	get         api_token.Token
 	getErr      error
 	list        []api_token.Token
+	listErr     error
 	revokeCalls int
 }
 
@@ -70,7 +71,7 @@ func (f *fakeStore) TouchLastUsed(context.Context, uuid.UUID, uuid.UUID, time.Ti
 	return nil
 }
 func (f *fakeStore) ListByTenant(context.Context, api_token.ListByTenantArgs) ([]api_token.Token, string, error) {
-	return f.list, "", nil
+	return f.list, "", f.listErr
 }
 func (f *fakeStore) PurgeExpired(context.Context, time.Duration) (int64, error) { return 0, nil }
 
