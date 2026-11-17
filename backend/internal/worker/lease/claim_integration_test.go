@@ -293,3 +293,32 @@ func TestRun_ReleasesSoTheNextHolderDoesNotWaitOutTheTTL(t *testing.T) {
 		t.Fatal("the lease was not released; the next holder must wait out the whole TTL")
 	}
 }
+
+func TestRun_WorkThatFinishesIsNotRunAgain(t *testing.T) {
+	// A job with nothing to do — one switched off by its config — returns at
+	// once with no error. Run used to take that as a lapse and claim again,
+	// running the job in a tight loop that wrote thousands of lines a minute.
+	// Work that returns nil while its context is alive is finished.
+	pool := startPostgres(t)
+	l := leaseWithTiming(t, pool, "run-done-"+uuid.New().String()[:8], uuid.New(),
+		time.Minute, 20*time.Millisecond)
+	runs := 0
+	done := make(chan error, 1)
+	go func() {
+		done <- l.Run(context.Background(), func(context.Context, int64) error {
+			runs++
+			return nil
+		})
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run = %v, want nil once the work finished", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("Run kept going after its work finished; ran it %d times", runs)
+	}
+	if runs != 1 {
+		t.Errorf("work ran %d times, want once", runs)
+	}
+}
