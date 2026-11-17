@@ -53,9 +53,7 @@ describe("RetiredSlugs", () => {
     h.slugs = [retired("acme")];
     render(<RetiredSlugs />);
     expect(screen.getByText("acme")).toBeInTheDocument();
-    expect(
-      screen.getByText(new RegExp(FORMER.slice(0, 8))),
-    ).toBeInTheDocument();
+    expect(screen.getByText(FORMER)).toBeInTheDocument();
   });
 
   it("says when reservation is off", () => {

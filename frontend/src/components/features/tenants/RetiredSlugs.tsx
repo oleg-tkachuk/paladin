@@ -13,7 +13,7 @@ import { LockOpenIcon } from "@heroicons/react/24/outline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { IdentifierCopy } from "@/components/ui/IdentifierCopy";
+import { CopyableId } from "@/components/ui/CopyableId";
 import { useNotification } from "@/components/ui/Notification";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -118,20 +118,13 @@ export function RetiredSlugs() {
                 return (
                   <TableRow key={r.slug}>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <span className={T.code}>{r.slug}</span>
-                        <IdentifierCopy
-                          iconOnly
-                          value={r.slug}
-                          label="Slug"
-                          className="p-1 [&_svg]:size-3"
-                        />
-                      </div>
+                      <CopyableId value={r.slug} label="Slug" />
                     </TableCell>
                     <TableCell>
-                      <IdentifierCopy
+                      <CopyableId
                         value={r.formerTenantId}
                         label="Former tenant ID"
+                        className="text-muted-foreground"
                       />
                     </TableCell>
                     <TableCell>

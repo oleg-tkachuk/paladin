@@ -144,8 +144,11 @@ describe("TenantCreateDialog", () => {
     );
     const link = await screen.findByRole("link", { name: "Retired slugs" });
     expect(link).toHaveAttribute("href", RETIRED_SLUGS_HREF);
+    // A refused slug no longer reads as valid beside its refusal.
+    expect(screen.queryByText("valid")).toBeNull();
     typeSlug("acme-2");
     expect(screen.queryByRole("link", { name: "Retired slugs" })).toBeNull();
+    expect(screen.getByText("valid")).toBeInTheDocument();
   });
 
   // Each of these used to answer a failed read with advice: "none is
