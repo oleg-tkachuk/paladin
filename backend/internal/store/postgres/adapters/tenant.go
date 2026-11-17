@@ -88,7 +88,7 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 
 	storageLayout := args.StorageLayout
 	if storageLayout == "" {
-		storageLayout = "shared"
+		storageLayout = tenanth.StorageLayoutShared
 	}
 	// While slugs are reserved, a slug a trashed tenant still holds or a
 	// purged one held is refused before the insert, in one read so a purge
@@ -137,8 +137,8 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 	// The default binding points at it so the tenant's collections land there.
 	// Bucket name is derived from the tenant id (globally unique per
 	// deployment; an org prefix for cross-account uniqueness is a follow-up).
-	if args.StorageLayout == "dedicated" {
-		bucketName := "paladin-" + args.TenantID.String()
+	if args.StorageLayout == tenanth.StorageLayoutDedicated {
+		bucketName := tenanth.DedicatedBucketName(args.TenantID)
 		actor := actorFromContext(ctx)
 		if err := qtx.CreateBucketV2(ctx,
 			args.DedicatedBackend, bucketName,

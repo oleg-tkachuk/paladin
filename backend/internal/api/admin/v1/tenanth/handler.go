@@ -484,14 +484,18 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, tenantID u
 	return err
 }
 
-func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Tenant, error) {
-	// Creating a tenant is provisioning, not tenant lifecycle: it brings a
-	// consumer's account into existence and takes nothing away. Delete, purge,
-	// restore and rename stay platform.admin-only below, so the provisioner
-	// role can add tenants and never remove one.
-	if err := requireProvisioningAuthority(ctx); err != nil {
-		return nil, err
-	}
+// StorageLayoutShared and StorageLayoutDedicated are a tenant's storage
+// layouts (ADR-0015), as the tenant_storage_layout enum spells them.
+const (
+	StorageLayoutShared    = "shared"
+	StorageLayoutDedicated = "dedicated"
+)
+
+// normalizeCreateArgs checks a create request and fills what it leaves to
+// the server: the tenant id, the display name, the storage layout and, for a
+// dedicated tenant, the backend to provision on. It reads nothing, so every
+// refusal here is the caller's to fix.
+func normalizeCreateArgs(args CreateTenantArgs) (CreateTenantArgs, error) {
 	// tenant_id: client-supplied or server-generated. Zero UUID is
 	// reserved as the in-memory sentinel meaning "no value" — reject
 	// it explicitly so a caller passing all-zeros doesn't silently get
@@ -505,11 +509,11 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	// can land a tenant — matches the user-facing identity model where
 	// tenant_id is a UUID and slug is the human handle.
 	if args.Slug == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
+		return CreateTenantArgs{}, connect.NewError(connect.CodeInvalidArgument,
 			"slug is required")
 	}
 	if err := apiutil.ValidateTenantSlug(args.Slug); err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("slug: %w", err))
+		return CreateTenantArgs{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("slug: %w", err))
 	}
 	// display_name defaults to slug when omitted. Trim before checking
 	// so " " also triggers the default. Length + format are enforced
@@ -518,6 +522,13 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	if args.DisplayName == "" {
 		args.DisplayName = args.Slug
 	}
+	return normalizeCreateStorage(args)
+}
+
+// normalizeCreateStorage checks the storage a create asks for and settles
+// it: the layout, defaulting to shared, and either a shared tenant's default
+// binding or the backend a dedicated tenant's bucket is provisioned on.
+func normalizeCreateStorage(args CreateTenantArgs) (CreateTenantArgs, error) {
 	// Default binding (SHARED layout): (backend_id, bucket_name) must be both
 	// empty or both set. Prevents half-formed bindings where the operator
 	// picked a backend but forgot the bucket (or vice-versa) and ended up with
@@ -526,28 +537,28 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	// validation in the switch arm below.
 	args.DefaultBackendID = strings.TrimSpace(args.DefaultBackendID)
 	args.DefaultBucketName = strings.TrimSpace(args.DefaultBucketName)
-	if args.StorageLayout != "dedicated" &&
+	if args.StorageLayout != StorageLayoutDedicated &&
 		(args.DefaultBackendID == "") != (args.DefaultBucketName == "") {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
+		return CreateTenantArgs{}, connect.NewError(connect.CodeInvalidArgument,
 			"default_binding requires both backend and bucket")
 	}
 	// storage_layout defaults to "shared"; "dedicated" (ADR-0015) is accepted
 	// and persisted here. The dedicated-bucket provisioning is wired in a
 	// follow-up; until then a dedicated tenant behaves like a shared one.
 	switch args.StorageLayout {
-	case "", "shared":
-		args.StorageLayout = "shared"
-	case "dedicated":
+	case "", StorageLayoutShared:
+		args.StorageLayout = StorageLayoutShared
+	case StorageLayoutDedicated:
 		// A dedicated tenant gets its own bucket, and the caller MUST name the
 		// backend to provision it on — there is no default. The backend is
 		// carried in default_binding.backend_id; the bucket name is derived
 		// (paladin-<tenant_uuid>), so a bucket name must NOT be supplied.
 		if args.DefaultBackendID == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
+			return CreateTenantArgs{}, connect.NewError(connect.CodeInvalidArgument,
 				"storage_layout 'dedicated' requires default_binding.backend_id naming the backend to provision on (there is no default backend)")
 		}
 		if args.DefaultBucketName != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
+			return CreateTenantArgs{}, connect.NewError(connect.CodeInvalidArgument,
 				"default_binding.bucket_name cannot be combined with storage_layout 'dedicated' (the bucket name is derived)")
 		}
 		// Consume the caller's backend as the dedicated backend and clear the
@@ -555,8 +566,57 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 		args.DedicatedBackend = args.DefaultBackendID
 		args.DefaultBackendID = ""
 	default:
-		return nil, connect.Errorf(connect.CodeInvalidArgument,
+		return CreateTenantArgs{}, connect.Errorf(connect.CodeInvalidArgument,
 			"storage_layout: must be 'shared' or 'dedicated', got %q", args.StorageLayout)
+	}
+	return args, nil
+}
+
+// createInTx inserts the tenant and records paladin.tenant.created on one
+// transaction, and maps a refusal for the caller.
+func (h *Handler) createInTx(ctx context.Context, args CreateTenantArgs) error {
+	// Create + paladin.tenant.created in one tx (ADR-0003). The event payload
+	// is built from args (== the inserted row), so the row can be enqueued
+	// without a read-back inside the tx; the full row is fetched post-commit
+	// for the response.
+	err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.CreateTx(ctx, tx, args); e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, args.TenantID, eventtype.TenantCreated,
+			fmt.Sprintf("tenants/%s", args.TenantID),
+			map[string]any{
+				"tenant_id":    args.TenantID.String(),
+				"slug":         args.Slug,
+				"display_name": args.DisplayName,
+			})
+	})
+	if err == nil {
+		return nil
+	}
+	mapped := apiutil.MapError(fmt.Errorf("create tenant: %w", err))
+	switch {
+	case errors.Is(err, ErrSlugHeldInTrash) || errors.Is(err, ErrSlugRetired):
+		h.log.Warn("tenant create refused: the slug is reserved",
+			zap.String("slug", args.Slug), zap.Error(err))
+	case connect.CodeOf(mapped) == connect.CodeInternal:
+		h.log.Error("tenant create failed",
+			zap.String("tenant_id", args.TenantID.String()), zap.String("slug", args.Slug), zap.Error(err))
+	}
+	return mapped
+}
+
+func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Tenant, error) {
+	// Creating a tenant is provisioning, not tenant lifecycle: it brings a
+	// consumer's account into existence and takes nothing away. Delete, purge,
+	// restore and rename stay platform.admin-only below, so the provisioner
+	// role can add tenants and never remove one.
+	if err := requireProvisioningAuthority(ctx); err != nil {
+		return nil, err
+	}
+	args, err := normalizeCreateArgs(args)
+	if err != nil {
+		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
@@ -591,33 +651,16 @@ func (h *Handler) CreateTenant(ctx context.Context, args CreateTenantArgs) (*Ten
 	// happened above, and every row written here is keyed to args.TenantID.
 	ctx = auth.WithActingTenant(ctx, args.TenantID)
 	args.AllowSlugReuse = h.allowSlugReuse
-	// Create + paladin.tenant.created in one tx (ADR-0003). The event payload
-	// is built from args (== the inserted row), so the row can be enqueued
-	// without a read-back inside the tx; the full row is fetched post-commit
-	// for the response.
-	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		if e := h.repo.CreateTx(ctx, tx, args); e != nil {
-			return e
-		}
-		return h.dispatchEventTx(ctx, tx, args.TenantID, "paladin.tenant.created",
-			fmt.Sprintf("tenants/%s", args.TenantID),
-			map[string]any{
-				"tenant_id":    args.TenantID.String(),
-				"slug":         args.Slug,
-				"display_name": args.DisplayName,
-			})
-	}); err != nil {
-		if errors.Is(err, ErrSlugHeldInTrash) || errors.Is(err, ErrSlugRetired) {
-			h.log.Warn("tenant create refused: the slug is reserved",
-				zap.String("slug", args.Slug), zap.Error(err))
-		}
-		return nil, apiutil.MapError(fmt.Errorf("create tenant: %w", err))
+	if err := h.createInTx(ctx, args); err != nil {
+		return nil, err
 	}
 	// The request carries the id (or none), not a name; the audit row needs
 	// the name to file the creation in the new tenant's trail.
 	apiutil.StashResource(ctx, apiutil.TenantNamePrefix+args.TenantID.String())
 	t, err := h.repo.Get(ctx, args.TenantID)
 	if err != nil {
+		h.log.Error("tenant created but not read back",
+			zap.String("tenant_id", args.TenantID.String()), zap.Error(err))
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("create tenant: read back: %w", err))
 	}
 	return &t, nil
@@ -701,16 +744,21 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 	if lookupErr != nil {
 		return nil, connect.NewError(connect.CodeNotFound, lookupErr.Error()).WithCause(lookupErr)
 	}
-	if callerTenant != t.TenantID {
-		// The lookup ran in the caller's scope, which hides another tenant's
-		// default binding; read the row again as the tenant, now authorized.
-		scoped, err := h.repo.Get(auth.WithActingTenant(ctx, t.TenantID), t.TenantID)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-		}
-		t = scoped
+	return h.readAsTenant(ctx, t, callerTenant)
+}
+
+// readAsTenant is t as its own tenant reads it. The slug lookup ran in the
+// caller's scope, which hides another tenant's default binding, so a caller
+// from elsewhere — authorized by now — gets the row read again as t's tenant.
+func (h *Handler) readAsTenant(ctx context.Context, t Tenant, callerTenant uuid.UUID) (*Tenant, error) {
+	if callerTenant == t.TenantID {
+		return &t, nil
 	}
-	return &t, nil
+	scoped, err := h.repo.Get(auth.WithActingTenant(ctx, t.TenantID), t.TenantID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+	}
+	return &scoped, nil
 }
 
 // MigrateTenantStorageLayout starts a shared->dedicated migration (ADR-0015
@@ -763,36 +811,20 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	// act as the tenant authorised above, as SetTenantDefaultBinding does.
 	ctx = auth.WithActingTenant(ctx, tenantID)
 
-	t, err := h.repo.Get(ctx, tenantID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
-	if t.StorageLayout != "shared" {
-		if m, ok, err := h.rollBackStuck(ctx, tenantID, t.StorageLayout); ok || err != nil {
-			return m, err
-		}
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout)
+	if m, done, err := h.unlessShared(ctx, tenantID); done || err != nil {
+		return m, err
 	}
 
 	// Answered here for a clear message; the repository checks again under
 	// its lock, which is what decides a race.
-	targetBackend := targetBackendID
 	prev, err := h.repo.GetStorageMigration(ctx, tenantID)
-	switch {
-	case errors.Is(err, ErrNotFound):
-		// First migration.
-	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	case prev.State != StorageMigrationFailed:
-		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf(
-			"%w (state %q); only a failed migration can be retried", ErrStorageMigrationExists, prev.State))
-	case targetBackend == "":
-		targetBackend = prev.TargetBackendName
-	case targetBackend != prev.TargetBackendName:
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"the failed migration targeted backend %q; a retry finishes it there, not on %q",
-			prev.TargetBackendName, targetBackend)
+	targetBackend, err := retryTarget(prev, err, targetBackendID)
+	if err != nil {
+		if connect.CodeOf(err) == connect.CodeInternal {
+			h.log.Error("storage migration: read the previous migration failed",
+				zap.String("tenant_id", tenantID.String()), zap.Error(err))
+		}
+		return nil, err
 	}
 
 	// Source is where the tenant's objects physically live today — the
@@ -810,28 +842,101 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	if targetBackend == "" {
 		targetBackend = srcBackend
 	}
-	// Retention before the old copies are deleted; default 24h when unset.
-	retention := cleanupRetentionSeconds
-	if retention <= 0 {
-		retention = 86400
-	}
-	args := StartStorageMigrationArgs{
+	return h.startStorageMigration(ctx, StartStorageMigrationArgs{
 		TenantID:                tenantID,
 		SourceBackendName:       srcBackend,
 		SourceBucketName:        srcBucket,
 		TargetBackendName:       targetBackend,
-		TargetBucketName:        "paladin-" + tenantID.String(),
-		CleanupRetentionSeconds: retention,
-	}
-	m, err := h.repo.StartStorageMigration(ctx, args)
+		TargetBucketName:        DedicatedBucketName(tenantID),
+		CleanupRetentionSeconds: cleanupRetentionOrDefault(cleanupRetentionSeconds),
+	})
+}
+
+// unlessShared answers a migration request for a tenant that is not shared:
+// it starts the rollback of a stuck dedicated tenant (done), or refuses. A
+// shared tenant goes on to migrate (not done, no error).
+func (h *Handler) unlessShared(ctx context.Context, tenantID uuid.UUID) (*StorageMigration, bool, error) {
+	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
-		if errors.Is(err, ErrStorageMigrationExists) || errors.Is(err, ErrTenantNotShared) ||
-			errors.Is(err, ErrTargetBucketUnusable) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		}
+		return nil, false, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+	}
+	if t.StorageLayout == StorageLayoutShared {
+		return nil, false, nil
+	}
+	if m, ok, err := h.rollBackStuck(ctx, tenantID, t.StorageLayout); ok || err != nil {
+		return m, ok, err
+	}
+	return nil, false, connect.Errorf(connect.CodeFailedPrecondition,
+		"tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout)
+}
+
+// DefaultMigrationCleanupRetention is how long a storage migration keeps the
+// source copies before deleting them, when the caller names no retention.
+const DefaultMigrationCleanupRetention = 24 * time.Hour
+
+// cleanupRetentionOrDefault is the retention a migration runs with, in
+// seconds: the caller's when positive, DefaultMigrationCleanupRetention
+// otherwise.
+func cleanupRetentionOrDefault(seconds int64) int64 {
+	if seconds > 0 {
+		return seconds
+	}
+	return int64(DefaultMigrationCleanupRetention / time.Second)
+}
+
+// dedicatedBucketPrefix starts the name of a dedicated tenant's bucket.
+const dedicatedBucketPrefix = "paladin-"
+
+// DedicatedBucketName is the bucket a dedicated tenant's objects live in:
+// created dedicated, or migrated to dedicated.
+func DedicatedBucketName(tenantID uuid.UUID) string {
+	return dedicatedBucketPrefix + tenantID.String()
+}
+
+// retryTarget is the backend a migration goes to, given the tenant's latest
+// migration (prev, or prevErr ErrNotFound when it has none) and the backend
+// the caller asked for, "" for none. Only a failed migration may be retried,
+// and only on the backend it targeted.
+func retryTarget(prev StorageMigration, prevErr error, requested string) (string, error) {
+	switch {
+	case errors.Is(prevErr, ErrNotFound):
+		return requested, nil
+	case prevErr != nil:
+		return "", connect.NewError(connect.CodeInternal, prevErr.Error()).WithCause(prevErr)
+	case prev.State != StorageMigrationFailed:
+		return "", rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf(
+			"%w (state %q); only a failed migration can be retried", ErrStorageMigrationExists, prev.State))
+	case requested == "":
+		return prev.TargetBackendName, nil
+	case requested != prev.TargetBackendName:
+		return "", connect.Errorf(connect.CodeFailedPrecondition,
+			"the failed migration targeted backend %q; a retry finishes it there, not on %q",
+			prev.TargetBackendName, requested)
+	}
+	return requested, nil
+}
+
+// startStorageMigration starts the migration args describe, and maps a
+// refusal to a precondition the operator can act on.
+func (h *Handler) startStorageMigration(ctx context.Context, args StartStorageMigrationArgs) (*StorageMigration, error) {
+	m, err := h.repo.StartStorageMigration(ctx, args)
+	switch {
+	case err == nil:
+		h.log.Info("storage migration started",
+			zap.String("tenant_id", args.TenantID.String()),
+			zap.String("target_backend", args.TargetBackendName),
+			zap.String("target_bucket", args.TargetBucketName))
+		return &m, nil
+	case errors.Is(err, ErrStorageMigrationExists) || errors.Is(err, ErrTenantNotShared) ||
+		errors.Is(err, ErrTargetBucketUnusable):
+		h.log.Warn("storage migration refused",
+			zap.String("tenant_id", args.TenantID.String()), zap.Error(err))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
+	default:
+		h.log.Error("storage migration failed to start",
+			zap.String("tenant_id", args.TenantID.String()), zap.Error(err))
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return &m, nil
 }
 
 // rollBackStuck is MigrateTenantStorageLayout's way out for a tenant whose
@@ -852,7 +957,7 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 // re-checks under the tenant lock, which decides a race. ctx already acts as
 // tenantID (MigrateTenantStorageLayout set it after authorising).
 func (h *Handler) rollBackStuck(ctx context.Context, tenantID uuid.UUID, layout string) (*StorageMigration, bool, error) {
-	if layout != "dedicated" {
+	if layout != StorageLayoutDedicated {
 		return nil, false, nil
 	}
 	prev, err := h.repo.GetStorageMigration(ctx, tenantID)
@@ -890,6 +995,35 @@ func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.U
 	return &m, nil
 }
 
+// requireUpdateAuthority admits a platform admin to any update, and a tenant
+// provisioner to one that sets the inherited policy and nothing else. The
+// refusal is the platform-admin one either way.
+func requireUpdateAuthority(ctx context.Context, args UpdateTenantArgs) error {
+	adminErr := requirePlatformAdmin(ctx)
+	if adminErr == nil {
+		return nil
+	}
+	policyOnly := args.InheritedCedarPolicy != nil && args.DisplayName == nil && args.Labels == nil
+	if !policyOnly || apiutil.RequireRole(ctx, apiutil.RoleTenantProvisioner) != nil {
+		return adminErr
+	}
+	return nil
+}
+
+// trimmedDisplayName is an edited display name trimmed, or nil when the
+// update leaves it alone. An edit to nothing is refused: the column CHECK
+// would refuse it, less clearly.
+func trimmedDisplayName(name *string) (*string, error) {
+	if name == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*name)
+	if trimmed == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "display_name must not be empty")
+	}
+	return &trimmed, nil
+}
+
 func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Tenant, error) {
 	// SetInheritedPolicy lands here, and it is the one edit a provisioner must
 	// make: a freshly created tenant is unusable until its policy admits the
@@ -898,15 +1032,8 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 	// than on the RPC that produced it. A provisioner that tried to rename a
 	// tenant while setting its policy is refused outright rather than having
 	// the extra field quietly dropped.
-	if err := requirePlatformAdmin(ctx); err != nil {
-		policyOnly := args.InheritedCedarPolicy != nil &&
-			args.DisplayName == nil && args.Labels == nil
-		if !policyOnly {
-			return nil, err
-		}
-		if provErr := apiutil.RequireRole(ctx, apiutil.RoleTenantProvisioner); provErr != nil {
-			return nil, err
-		}
+	if err := requireUpdateAuthority(ctx, args); err != nil {
+		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
@@ -916,14 +1043,11 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 	// nullable args, but the API path passes a *string so empty means
 	// "set to empty"). The DB CHECK would reject it; surface a clearer
 	// error before the round-trip.
-	if args.DisplayName != nil {
-		trimmed := strings.TrimSpace(*args.DisplayName)
-		if trimmed == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				"display_name must not be empty")
-		}
-		args.DisplayName = &trimmed
+	displayName, err := trimmedDisplayName(args.DisplayName)
+	if err != nil {
+		return nil, err
 	}
+	args.DisplayName = displayName
 	// Update + paladin.tenant.updated in one tx (ADR-0003). The event needs the
 	// post-update row (resource_version), so UpdateTx reads it back on the
 	// same tx. Snapshot semantics: subscribers diff against their cached
@@ -936,7 +1060,7 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, t.TenantID, "paladin.tenant.updated",
+		return h.dispatchEventTx(ctx, tx, t.TenantID, eventtype.TenantUpdated,
 			fmt.Sprintf("tenants/%s", t.TenantID),
 			map[string]any{
 				"tenant_id":        t.TenantID.String(),
@@ -1001,7 +1125,7 @@ func (h *Handler) RestoreTenant(ctx context.Context, tenantID uuid.UUID) (*Tenan
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.tenant.restored",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.TenantRestored,
 			fmt.Sprintf("tenants/%s", tenantID),
 			map[string]any{
 				"tenant_id":    tenantID.String(),
