@@ -1091,6 +1091,10 @@ func (r *OutboxRunner) PendingCount(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
+// DispatcherStatsPath is the dispatcher ops endpoint serving DeliveryStats,
+// which the admin pod proxies behind its platform-admin gate.
+const DispatcherStatsPath = "/system/dispatcher-stats.json"
+
 // DeliveryStats is the dispatcher's operator view: global queue depth plus a
 // per-subscription breakdown of what's stuck and why. Served by the pod's
 // ops listener (/system/dispatcher-stats.json) and proxied to the console by

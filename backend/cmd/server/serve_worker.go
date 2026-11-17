@@ -277,7 +277,7 @@ func workerOpsMux(cfg config.Runtime, deps *app.SharedDeps, l *zap.Logger) (http
 	// platform-admin gate; the ops listener itself stays cluster-internal,
 	// same trust posture as /system/health.json. Mirrors the dispatcher's
 	// /system/dispatcher-stats.json.
-	mux.HandleFunc("GET /system/rls-census.json", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+platformstats.RLSCensusPath, func(w http.ResponseWriter, r *http.Request) {
 		// No BYPASSRLS pool means the deployment never set migrate_dsn /
 		// reaper_dsn. Answering off deps.Pool would return zero rows (no
 		// tenant GUC) and read as "the fleet is empty" — a 503 makes the

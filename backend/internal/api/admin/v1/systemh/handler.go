@@ -131,7 +131,7 @@ func (h *Handler) DispatcherStats(ctx context.Context) (stats *worker.DeliverySt
 	if url == "" {
 		return nil, false, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/system/dispatcher-stats.json", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+worker.DispatcherStatsPath, nil)
 	if err != nil {
 		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -236,7 +236,7 @@ func (h *Handler) fetchRLSCensus(ctx context.Context, page platformstats.TenantP
 	if url == "" {
 		return nil, false
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/system/rls-census.json?"+page.Query().Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+platformstats.RLSCensusPath+"?"+page.Query().Encode(), nil)
 	if err != nil {
 		return nil, false
 	}
