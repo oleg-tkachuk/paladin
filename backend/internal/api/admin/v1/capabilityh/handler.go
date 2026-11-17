@@ -218,52 +218,12 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		return nil, err
 	}
 
-	subj, err := protoToPrincipal(req.GetSubject())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
-	}
-
-	// Issuing FOR another tenant is a platform operation.
-	//
-	// The subject's tenant is chosen by the caller and Cedar authorises
-	// IssueCapability against the CALLER's own tenant policy, which says
-	// nothing about the tenant named in the subject. So without this check any
-	// tenant granted IssueCapability in its own policy could mint a capability for any
-	// other tenant — and since ADR-0010 a capability authenticates as its
-	// subject's tenant, that is a full cross-tenant escalation, not merely an
-	// extra restriction on an existing caller.
-	if subj.TenantID != caller.TenantID && !spansTenants(caller) {
-		// platform.capability-issuer is the narrow grant for exactly this: a
-		// consumer serving many tenants mints a short-lived capability per
-		// tenant. It carries no other authority — it cannot create or delete a
-		// tenant, and it cannot mint an API token — so handing it out is a much
-		// smaller decision than handing out platform.admin.
-		return nil, connect.NewError(connect.CodePermissionDenied, "issuing a capability for another tenant requires platform.admin or platform.capability-issuer")
-	}
-
-	// A top-level capability has no parent whose ceilings it could keep.
-	if err := requireCeilings(req.GetCaveats()); err != nil {
-		return nil, err
-	}
-	caveats, err := protoToCaveats(req.GetCaveats(), nil, h.currency)
+	terms, err := issuanceTerms(req, caller, h.currency)
 	if err != nil {
 		return nil, err
 	}
+	subj := terms.subject
 
-	ttl := time.Duration(req.GetTtlSeconds()) * time.Second
-	var nbf time.Time
-	if t := req.GetNotBefore(); t.IsValid() {
-		nbf = t.AsTime()
-	}
-
-	if req.GetRequireBiscuit() {
-		if err := requireBiscuit(req.GetConfirmationJkt(), nbf); err != nil {
-			return nil, err
-		}
-	}
-
-	// The row lands under the subject's tenant, so the connection has to be
-	// scoped there — the cross-tenant gate above is what makes this safe.
 	ctx = auth.WithActingTenant(ctx, subj.TenantID)
 	res, err := h.issuer.Issue(ctx, limes.IssueRequest{
 		Subject: subj,
@@ -276,9 +236,9 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 			Type:     limes.PrincipalTypeUser,
 		},
 		Audience:        req.GetAudience(),
-		Caveats:         caveats,
-		TTL:             ttl,
-		NotBefore:       nbf,
+		Caveats:         terms.caveats,
+		TTL:             time.Duration(req.GetTtlSeconds()) * time.Second,
+		NotBefore:       terms.notBefore,
 		ConfirmationJKT: req.GetConfirmationJkt(),
 		ClientID:        clientID(caller),
 	})
@@ -689,6 +649,43 @@ func protoToCaveats(c *adminv1.CapabilityCaveats, parent *limes.Caveats, currenc
 		out.Ops = append(out.Ops, limes.Op(op))
 	}
 	return out, nil
+}
+
+// issuance is what an Issue request asks for, checked against its caller.
+type issuance struct {
+	subject   limes.Principal
+	caveats   limes.Caveats
+	notBefore time.Time
+}
+
+// issuanceTerms reads and checks an Issue request: a subject in the caller's
+// tenant unless the caller spans tenants, the ceilings every issue must set,
+// the caveats, and a Biscuit only when one can be sealed.
+func issuanceTerms(req *adminv1.CapabilityServiceIssueRequest, caller *auth.Principal, currency string) (issuance, error) {
+	subj, err := protoToPrincipal(req.GetSubject())
+	if err != nil {
+		return issuance{}, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	if subj.TenantID != caller.TenantID && !spansTenants(caller) {
+		return issuance{}, connect.NewError(connect.CodePermissionDenied, "issuing a capability for another tenant requires platform.admin or platform.capability-issuer")
+	}
+	if err := requireCeilings(req.GetCaveats()); err != nil {
+		return issuance{}, err
+	}
+	caveats, err := protoToCaveats(req.GetCaveats(), nil, currency)
+	if err != nil {
+		return issuance{}, err
+	}
+	var nbf time.Time
+	if t := req.GetNotBefore(); t.IsValid() {
+		nbf = t.AsTime()
+	}
+	if req.GetRequireBiscuit() {
+		if err := requireBiscuit(req.GetConfirmationJkt(), nbf); err != nil {
+			return issuance{}, err
+		}
+	}
+	return issuance{subject: subj, caveats: caveats, notBefore: nbf}, nil
 }
 
 // presentedParent is the capability a Delegate narrows: the one the caller

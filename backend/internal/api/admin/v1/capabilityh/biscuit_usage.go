@@ -3,6 +3,7 @@ package capabilityh
 import (
 	"context"
 	"fmt"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
@@ -52,35 +53,11 @@ func (h *Handler) GetBiscuitUsage(ctx context.Context, req *adminv1.CapabilitySe
 	}
 
 	copies := c.Copies()
-	byID := map[string]meter.CopyUsage{}
-	if len(copies) > 0 {
-		ids := make([][]byte, 0, len(copies))
-		for _, l := range copies {
-			ids = append(ids, l.RevocationID)
-		}
-		counted, err := h.copyUsage.CopyUsage(ctx, meter.CopyUsageRequest{CapabilityID: c.CapabilityID(), RevocationIDs: ids})
-		if err != nil {
-			return nil, h.answer("get biscuit usage", err, nil)
-		}
-		for _, u := range counted.Copies {
-			byID[string(u.RevocationID)] = u
-		}
+	byID, err := h.copyUsageByID(ctx, c.CapabilityID(), copies)
+	if err != nil {
+		return nil, err
 	}
-
-	// A copy's amounts are in its capability's unit.
-	unit := record.Capability.Caveats.Budget.UnitCode
-	out := make([]*adminv1.CapabilityBiscuitCopyUsage, 0, len(copies))
-	for _, l := range copies {
-		u := byID[string(l.RevocationID)] // a copy never used counts zero
-		out = append(out, &adminv1.CapabilityBiscuitCopyUsage{
-			RevocationId: l.RevocationID,
-			MaxRequests:  copyRequestLimit(l),
-			MaxBudget:    copyBudgetLimit(l, unit),
-			RequestCount: u.RequestCount,
-			Spent:        apiutil.MoneyOf(unit, u.SpentAmount),
-			Reserved:     apiutil.MoneyOf(unit, u.ReservedAmount),
-		})
-	}
+	out := copyUsageRows(copies, byID, record.Capability.Caveats.Budget.UnitCode)
 	return &adminv1.CapabilityServiceGetBiscuitUsageResponse{
 		CapabilityId: c.CapabilityID().String(),
 		Copies:       out,
@@ -104,4 +81,42 @@ func copyBudgetLimit(c limes.CopyCeiling, unit string) *money.Money {
 		return nil
 	}
 	return apiutil.MoneyOf(unit, c.Budget.Max)
+}
+
+// copyUsageByID reads what each copy has used, keyed by its revocation id.
+func (h *Handler) copyUsageByID(ctx context.Context, capabilityID uuid.UUID, copies []limes.CopyCeiling) (map[string]meter.CopyUsage, error) {
+	byID := map[string]meter.CopyUsage{}
+	if len(copies) == 0 {
+		return byID, nil
+	}
+	ids := make([][]byte, 0, len(copies))
+	for _, l := range copies {
+		ids = append(ids, l.RevocationID)
+	}
+	counted, err := h.copyUsage.CopyUsage(ctx, meter.CopyUsageRequest{CapabilityID: capabilityID, RevocationIDs: ids})
+	if err != nil {
+		return nil, h.answer("get biscuit usage", err, nil)
+	}
+	for _, u := range counted.Copies {
+		byID[string(u.RevocationID)] = u
+	}
+	return byID, nil
+}
+
+// copyUsageRows is each copy with its limits and what it has used, in unit;
+// a copy never used counts zero.
+func copyUsageRows(copies []limes.CopyCeiling, byID map[string]meter.CopyUsage, unit string) []*adminv1.CapabilityBiscuitCopyUsage {
+	out := make([]*adminv1.CapabilityBiscuitCopyUsage, 0, len(copies))
+	for _, l := range copies {
+		u := byID[string(l.RevocationID)]
+		out = append(out, &adminv1.CapabilityBiscuitCopyUsage{
+			RevocationId: l.RevocationID,
+			MaxRequests:  copyRequestLimit(l),
+			MaxBudget:    copyBudgetLimit(l, unit),
+			RequestCount: u.RequestCount,
+			Spent:        apiutil.MoneyOf(unit, u.SpentAmount),
+			Reserved:     apiutil.MoneyOf(unit, u.ReservedAmount),
+		})
+	}
+	return out
 }
