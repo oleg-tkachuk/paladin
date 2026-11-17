@@ -744,16 +744,21 @@ func (h *Handler) GetTenantBySlug(ctx context.Context, slug string) (*Tenant, er
 	if lookupErr != nil {
 		return nil, connect.NewError(connect.CodeNotFound, lookupErr.Error()).WithCause(lookupErr)
 	}
-	if callerTenant != t.TenantID {
-		// The lookup ran in the caller's scope, which hides another tenant's
-		// default binding; read the row again as the tenant, now authorized.
-		scoped, err := h.repo.Get(auth.WithActingTenant(ctx, t.TenantID), t.TenantID)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-		}
-		t = scoped
+	return h.readAsTenant(ctx, t, callerTenant)
+}
+
+// readAsTenant is t as its own tenant reads it. The slug lookup ran in the
+// caller's scope, which hides another tenant's default binding, so a caller
+// from elsewhere — authorized by now — gets the row read again as t's tenant.
+func (h *Handler) readAsTenant(ctx context.Context, t Tenant, callerTenant uuid.UUID) (*Tenant, error) {
+	if callerTenant == t.TenantID {
+		return &t, nil
 	}
-	return &t, nil
+	scoped, err := h.repo.Get(auth.WithActingTenant(ctx, t.TenantID), t.TenantID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+	}
+	return &scoped, nil
 }
 
 // MigrateTenantStorageLayout starts a shared->dedicated migration (ADR-0015
@@ -806,16 +811,8 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	// act as the tenant authorised above, as SetTenantDefaultBinding does.
 	ctx = auth.WithActingTenant(ctx, tenantID)
 
-	t, err := h.repo.Get(ctx, tenantID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
-	if t.StorageLayout != StorageLayoutShared {
-		if m, ok, err := h.rollBackStuck(ctx, tenantID, t.StorageLayout); ok || err != nil {
-			return m, err
-		}
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout)
+	if m, done, err := h.unlessShared(ctx, tenantID); done || err != nil {
+		return m, err
 	}
 
 	// Answered here for a clear message; the repository checks again under
@@ -853,6 +850,24 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 		TargetBucketName:        DedicatedBucketName(tenantID),
 		CleanupRetentionSeconds: cleanupRetentionOrDefault(cleanupRetentionSeconds),
 	})
+}
+
+// unlessShared answers a migration request for a tenant that is not shared:
+// it starts the rollback of a stuck dedicated tenant (done), or refuses. A
+// shared tenant goes on to migrate (not done, no error).
+func (h *Handler) unlessShared(ctx context.Context, tenantID uuid.UUID) (*StorageMigration, bool, error) {
+	t, err := h.repo.Get(ctx, tenantID)
+	if err != nil {
+		return nil, false, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+	}
+	if t.StorageLayout == StorageLayoutShared {
+		return nil, false, nil
+	}
+	if m, ok, err := h.rollBackStuck(ctx, tenantID, t.StorageLayout); ok || err != nil {
+		return m, ok, err
+	}
+	return nil, false, connect.Errorf(connect.CodeFailedPrecondition,
+		"tenant is %q, not 'shared'; only shared tenants can migrate to dedicated", t.StorageLayout)
 }
 
 // DefaultMigrationCleanupRetention is how long a storage migration keeps the
@@ -980,6 +995,35 @@ func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.U
 	return &m, nil
 }
 
+// requireUpdateAuthority admits a platform admin to any update, and a tenant
+// provisioner to one that sets the inherited policy and nothing else. The
+// refusal is the platform-admin one either way.
+func requireUpdateAuthority(ctx context.Context, args UpdateTenantArgs) error {
+	adminErr := requirePlatformAdmin(ctx)
+	if adminErr == nil {
+		return nil
+	}
+	policyOnly := args.InheritedCedarPolicy != nil && args.DisplayName == nil && args.Labels == nil
+	if !policyOnly || apiutil.RequireRole(ctx, apiutil.RoleTenantProvisioner) != nil {
+		return adminErr
+	}
+	return nil
+}
+
+// trimmedDisplayName is an edited display name trimmed, or nil when the
+// update leaves it alone. An edit to nothing is refused: the column CHECK
+// would refuse it, less clearly.
+func trimmedDisplayName(name *string) (*string, error) {
+	if name == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*name)
+	if trimmed == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "display_name must not be empty")
+	}
+	return &trimmed, nil
+}
+
 func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Tenant, error) {
 	// SetInheritedPolicy lands here, and it is the one edit a provisioner must
 	// make: a freshly created tenant is unusable until its policy admits the
@@ -988,15 +1032,8 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 	// than on the RPC that produced it. A provisioner that tried to rename a
 	// tenant while setting its policy is refused outright rather than having
 	// the extra field quietly dropped.
-	if err := requirePlatformAdmin(ctx); err != nil {
-		policyOnly := args.InheritedCedarPolicy != nil &&
-			args.DisplayName == nil && args.Labels == nil
-		if !policyOnly {
-			return nil, err
-		}
-		if provErr := apiutil.RequireRole(ctx, apiutil.RoleTenantProvisioner); provErr != nil {
-			return nil, err
-		}
+	if err := requireUpdateAuthority(ctx, args); err != nil {
+		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageTenant, args.TenantID); err != nil {
 		return nil, err
@@ -1006,14 +1043,11 @@ func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Ten
 	// nullable args, but the API path passes a *string so empty means
 	// "set to empty"). The DB CHECK would reject it; surface a clearer
 	// error before the round-trip.
-	if args.DisplayName != nil {
-		trimmed := strings.TrimSpace(*args.DisplayName)
-		if trimmed == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				"display_name must not be empty")
-		}
-		args.DisplayName = &trimmed
+	displayName, err := trimmedDisplayName(args.DisplayName)
+	if err != nil {
+		return nil, err
 	}
+	args.DisplayName = displayName
 	// Update + paladin.tenant.updated in one tx (ADR-0003). The event needs the
 	// post-update row (resource_version), so UpdateTx reads it back on the
 	// same tx. Snapshot semantics: subscribers diff against their cached
