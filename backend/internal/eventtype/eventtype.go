@@ -13,6 +13,10 @@ const TenantUpdated = "paladin.tenant.updated"
 // trash.
 const TenantRestored = "paladin.tenant.restored"
 
+// SubscriptionTest is the synthetic event TestSubscription delivers to check
+// a sink is reachable and verifies signatures.
+const SubscriptionTest = "paladin.test"
+
 // TenantTrashed is emitted when a tenant moves to the trash. The outbox
 // delivers it although the tenant is frozen: it is the event that says so.
 const TenantTrashed = "paladin.tenant.trashed"

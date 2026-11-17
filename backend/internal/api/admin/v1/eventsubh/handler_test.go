@@ -47,6 +47,11 @@ type fakeRepo struct {
 	// updateCalls counts Update calls, so a refused update can be shown
 	// not to have reached the store.
 	updateCalls int
+	// getFailsFrom makes the nth Get call and every later one return
+	// getErrLate: a read that works before a write and fails after it.
+	getFailsFrom int
+	getErrLate   error
+	getCalls     int
 }
 
 func (f *fakeRepo) Create(_ context.Context, s *admindomain.EventSubscription) error {
@@ -60,6 +65,10 @@ func (f *fakeRepo) Create(_ context.Context, s *admindomain.EventSubscription) e
 	return nil
 }
 func (f *fakeRepo) Get(context.Context, uuid.UUID) (admindomain.EventSubscription, error) {
+	f.getCalls++
+	if f.getFailsFrom > 0 && f.getCalls >= f.getFailsFrom {
+		return admindomain.EventSubscription{}, f.getErrLate
+	}
 	return f.sub, f.getErr
 }
 func (f *fakeRepo) List(_ context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
