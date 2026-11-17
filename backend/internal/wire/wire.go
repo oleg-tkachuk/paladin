@@ -131,6 +131,7 @@ func ProvideTenantHandler(repos Repos, pe *policy.Engine, cfg config.Config) *te
 	h := tenanth.NewHandler(repos.Tenant, pe)
 	h.SetTrashRetention(cfg.Admin.Tenants.TrashRetention)
 	h.SetSlugReuse(!cfg.Admin.Tenants.ReserveSlugs)
+	h.SetSlugReservationPeriod(cfg.Admin.Tenants.SlugReservationPeriod)
 	return h
 }
 

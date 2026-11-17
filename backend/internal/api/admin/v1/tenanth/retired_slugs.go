@@ -42,6 +42,9 @@ func (h *Handler) ListRetiredTenantSlugs(ctx context.Context, pageSize int32, pa
 		h.log.Error("list retired tenant slugs failed", zap.Error(err))
 		return RetiredSlugPage{}, apiutil.MapError(err)
 	}
+	for i := range slugs {
+		slugs[i] = slugs[i].withReleaseAt(h.slugReservationPeriod)
+	}
 	return RetiredSlugPage{Slugs: slugs, NextToken: next, Enforced: !h.allowSlugReuse}, nil
 }
 

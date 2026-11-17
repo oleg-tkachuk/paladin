@@ -115,6 +115,31 @@ func TestListRetiredTenantSlugs(t *testing.T) {
 		}
 	})
 
+	t.Run("when each is released, by the configured period", func(t *testing.T) {
+		const period = 90 * 24 * time.Hour
+		repo := &fakeRepo{listRetiredFn: func(context.Context, string, int32) ([]RetiredSlug, string, error) {
+			return retired, "", nil
+		}}
+		h := NewHandler(repo, allow())
+		page, err := h.ListRetiredTenantSlugs(adminCtx(tid), 0, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if page.Slugs[0].ReleaseAt != nil {
+			t.Fatalf("ReleaseAt = %v with no period, want none", *page.Slugs[0].ReleaseAt)
+		}
+		p := period
+		h.SetSlugReservationPeriod(&p)
+		page, err = h.ListRetiredTenantSlugs(adminCtx(tid), 0, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := retired[0].RetiredAt.Add(period)
+		if got := page.Slugs[0].ReleaseAt; got == nil || !got.Equal(want) {
+			t.Fatalf("ReleaseAt = %v, want %v", got, want)
+		}
+	})
+
 	t.Run("a store failure is logged and internal", func(t *testing.T) {
 		repo := &fakeRepo{listRetiredFn: func(context.Context, string, int32) ([]RetiredSlug, string, error) {
 			return nil, "", errors.New("boom")

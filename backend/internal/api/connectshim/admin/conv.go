@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/sinkkind"
@@ -597,7 +598,16 @@ func retiredSlugPageToProto(p tenanth.RetiredSlugPage) *pb.ListRetiredTenantSlug
 			Slug:           r.Slug,
 			FormerTenantId: r.FormerTenantID.String(),
 			RetireTime:     timestamppb.New(r.RetiredAt),
+			ReleaseTime:    optionalTimestamp(r.ReleaseAt),
 		})
 	}
 	return out
+}
+
+// optionalTimestamp is t on the wire, or no field when t is nil.
+func optionalTimestamp(t *time.Time) *timestamppb.Timestamp {
+	if t == nil {
+		return nil
+	}
+	return timestamppb.New(*t)
 }

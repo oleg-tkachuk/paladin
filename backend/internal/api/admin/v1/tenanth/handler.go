@@ -340,6 +340,9 @@ type Handler struct {
 	// trashRetention is admin.tenants.trash_retention, which the derived
 	// purge_eligible filter field reads; zero leaves every tenant ineligible.
 	trashRetention time.Duration
+	// slugReservationPeriod is admin.tenants.slug_reservation_period; nil
+	// keeps retired slugs until released.
+	slugReservationPeriod *time.Duration
 	// now is the clock purge_eligible is judged by. Nil: time.Now.
 	now func() time.Time
 }
@@ -347,6 +350,10 @@ type Handler struct {
 // SetSlugReuse sets whether a slug a trashed or purged tenant held may go to
 // a new tenant (admin.tenants.reserve_slugs false). Off by default.
 func (h *Handler) SetSlugReuse(allowed bool) { h.allowSlugReuse = allowed }
+
+// SetSlugReservationPeriod is admin.tenants.slug_reservation_period, from
+// which a retired slug's release time is derived; nil keeps it unset.
+func (h *Handler) SetSlugReservationPeriod(p *time.Duration) { h.slugReservationPeriod = p }
 
 // SetTrashRetention sets how long a trashed tenant waits before
 // purge_eligible holds for it.
@@ -1212,6 +1219,22 @@ type RetiredSlug struct {
 	Slug           string
 	FormerTenantID uuid.UUID
 	RetiredAt      time.Time
+	// ReleaseAt is when the worker releases it: RetiredAt plus
+	// admin.tenants.slug_reservation_period. nil while that period is unset,
+	// which keeps the slug until an operator releases it.
+	ReleaseAt *time.Time
+}
+
+// withReleaseAt is r with ReleaseAt set from period; a nil period leaves it
+// unset.
+func (r RetiredSlug) withReleaseAt(period *time.Duration) RetiredSlug {
+	if period == nil {
+		r.ReleaseAt = nil
+		return r
+	}
+	at := r.RetiredAt.Add(*period)
+	r.ReleaseAt = &at
+	return r
 }
 
 // ErrSlugNotRetired — Repository.ReleaseSlug returns this for a slug no purge
