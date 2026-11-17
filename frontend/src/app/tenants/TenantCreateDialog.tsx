@@ -29,6 +29,11 @@ import { cn } from "@/lib/utils";
 import { T } from "@/lib/ui/typography";
 import type { Tenant } from "@/gen/paladin/admin/v1/types_pb";
 import { errorMessage } from "@/hooks/errorContract";
+import {
+  type SlugHolder,
+  slugTakenBy,
+  slugTakenHint,
+} from "@/lib/tenant/slugHolder";
 
 // SLUG_RE mirrors backend/internal/api/apiutil/slug.go ValidateTenantSlug.
 const SLUG_RE = /^[a-z]([a-z0-9-]{1,61}[a-z0-9])?$/;
@@ -97,6 +102,9 @@ export function TenantCreateDialog({
   const [bucketId, setBucketId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // What holds the slug the last create was refused, until the slug changes.
+  const [slugTaken, setSlugTaken] = useState<SlugHolder | null>(null);
+  const takenHint = slugTaken ? slugTakenHint(slugTaken) : null;
 
   // A dedicated tenant gets its own provisioned bucket on the chosen backend
   // (name derived server-side), so only the backend is picked — no bucket.
@@ -161,6 +169,7 @@ export function TenantCreateDialog({
     setBucketId("");
     setLayout("shared");
     setSubmitError(null);
+    setSlugTaken(null);
   };
 
   const handleCreate = async () => {
@@ -190,6 +199,7 @@ export function TenantCreateDialog({
     } catch (err) {
       console.error(err);
       setSubmitError(errorMessage(err));
+      setSlugTaken(slugTakenBy(err));
     } finally {
       setSubmitting(false);
     }
@@ -217,7 +227,26 @@ export function TenantCreateDialog({
             label="Slug"
             required
             error={slugError}
-            hint="Used in URLs and Cedar policies. Cannot be changed later."
+            hint={
+              takenHint ? (
+                <span className="text-warning">
+                  {takenHint.text}
+                  {takenHint.href && (
+                    <>
+                      {" "}
+                      <Link
+                        href={takenHint.href}
+                        className="text-primary underline"
+                      >
+                        {takenHint.linkLabel}
+                      </Link>
+                    </>
+                  )}
+                </span>
+              ) : (
+                "Used in URLs and Cedar policies. Cannot be changed later."
+              )
+            }
             aside={
               slug && !slugError ? (
                 <span className="text-sm font-medium text-success">valid</span>
@@ -230,7 +259,10 @@ export function TenantCreateDialog({
                 autoFocus
                 placeholder="acme-prod"
                 value={slug}
-                onChange={(e) => setSlug(e.target.value)}
+                onChange={(e) => {
+                  setSlug(e.target.value);
+                  setSlugTaken(null);
+                }}
               />
             )}
           </FormField>

@@ -529,6 +529,8 @@ type Querier interface {
 	// The tenant's event subscriptions a purge would remove, in creation order,
 	// up to the preview's limit.
 	ListPurgeEventSubscriptions(ctx context.Context, tenantID pgtype.UUID, maxRows int32) ([]ListPurgeEventSubscriptionsRow, error)
+	// A page of retired slugs by slug, after the last one of the previous page.
+	ListRetiredTenantSlugs(ctx context.Context, afterSlug string, pageLimit int32) ([]RetiredTenantSlug, error)
 	// Sessions whose client never Completed/Aborted, past the cooling-off
 	// window. Joins objects + collections to materialise everything
 	// AbortMultipart needs (backend, bucket, tenant, storage upload id, key) so
@@ -750,6 +752,9 @@ type Querier interface {
 	// Undoes a claim whose handling failed, so the broker's redelivery is
 	// handled rather than skipped as a duplicate.
 	ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error
+	// Forgets a retired slug and says whose it was; no row when it was not
+	// retired.
+	ReleaseTenantSlug(ctx context.Context, slug string) (pgtype.UUID, error)
 	// Records a RUNNING operation's latest {processed, total} snapshot. Its own
 	// column, so the arguments in metadata survive the whole run — the stale
 	// reclaimer used to fail an operation whose metadata had been overwritten by
@@ -968,7 +973,8 @@ type Querier interface {
 	// refusal is a clear answer rather than a failed write.
 	TenantMayBindBucket(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (bool, error)
 	// Who holds a slug, in one statement so a purge committing between two reads
-	// cannot hide it: 'live', 'trashed', 'retired', or '' when it is free.
+	// cannot hide it: 'live', 'trashed', 'retired', or '' when it is free. The
+	// values are tenanth.SlugHolder's.
 	TenantSlugHolder(ctx context.Context, slug string) (string, error)
 	// Heartbeat for a RUNNING operation. Bumps updated_at and nothing else — in
 	// particular it must not touch progress, which an executor may be writing

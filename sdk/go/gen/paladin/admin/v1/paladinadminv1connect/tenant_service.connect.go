@@ -58,6 +58,12 @@ const (
 	// TenantServiceSetTenantDefaultBindingProcedure is the procedure name of the TenantService's
 	// SetTenantDefaultBinding RPC.
 	TenantServiceSetTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/SetTenantDefaultBinding"
+	// TenantServiceListRetiredTenantSlugsProcedure is the procedure name of the TenantService's
+	// ListRetiredTenantSlugs RPC.
+	TenantServiceListRetiredTenantSlugsProcedure = "/paladin.admin.v1.TenantService/ListRetiredTenantSlugs"
+	// TenantServiceReleaseTenantSlugProcedure is the procedure name of the TenantService's
+	// ReleaseTenantSlug RPC.
+	TenantServiceReleaseTenantSlugProcedure = "/paladin.admin.v1.TenantService/ReleaseTenantSlug"
 	// TenantServiceClearTenantDefaultBindingProcedure is the procedure name of the TenantService's
 	// ClearTenantDefaultBinding RPC.
 	TenantServiceClearTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/ClearTenantDefaultBinding"
@@ -165,6 +171,22 @@ var (
 			IdempotencyLevel: connect.IdempotencyIdempotent,
 		}
 	})
+	tenantServiceListRetiredTenantSlugsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("ListRetiredTenantSlugs"),
+			Procedure:        TenantServiceListRetiredTenantSlugsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	tenantServiceReleaseTenantSlugSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("ReleaseTenantSlug"),
+			Procedure:        TenantServiceReleaseTenantSlugProcedure,
+			IdempotencyLevel: connect.IdempotencyIdempotent,
+		}
+	})
 	tenantServiceClearTenantDefaultBindingSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType:       connect.StreamTypeUnary,
@@ -179,8 +201,10 @@ var (
 type TenantServiceClient interface {
 	// CreateTenant provisions a tenant and, unless the request opts out, its
 	// default storage binding. storage_layout="dedicated" also provisions a
-	// physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
-	// slug is taken.
+	// physical bucket owned by the tenant (ADR-0015). AlreadyExists, reason
+	// SLUG_TAKEN, when the slug is taken: by a live tenant always, and, while
+	// admin.tenants.reserve_slugs is on, by a trashed tenant or a purged one
+	// (see ListRetiredTenantSlugs).
 	CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.Tenant, error)
 	// GetTenant accepts either the UUID or the slug in the resource name.
 	// Soft-deleted tenants are returned — check deleted_at — so the trash view
@@ -205,10 +229,10 @@ type TenantServiceClient interface {
 	SetInheritedPolicy(context.Context, *v1.SetInheritedPolicyRequest) (*v1.Tenant, error)
 	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
 	// it to the active set. Slug + display_name are unique among live
-	// tenants (`001_initial_schema.sql`), and a trashed row keeps both —
-	// if a new tenant claimed the slug while this one was
-	// trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
-	// the other tenant has to be purged before this one comes back.
+	// tenants (`001_initial_schema.sql`). While admin.tenants.reserve_slugs is
+	// on, no new tenant can take a trashed tenant's slug; with it off, one
+	// can, and restore then fails with ALREADY_EXISTS: a slug never changes,
+	// so the other tenant has to be purged before this one comes back.
 	RestoreTenant(context.Context, *v1.RestoreTenantRequest) (*v1.Tenant, error)
 	// PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
 	// an active tenant (operators have to soft-delete first) so the
@@ -237,6 +261,15 @@ type TenantServiceClient interface {
 	// SetTenantDefaultBinding upserts the tenant's default route. The
 	// (backend, bucket) MUST reference an existing bucket.
 	SetTenantDefaultBinding(context.Context, *v1.SetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error)
+	// ListRetiredTenantSlugs lists the slugs of purged tenants, by slug. Each
+	// is recorded by the purge, whatever admin.tenants.reserve_slugs says;
+	// while it is on, CreateTenant refuses them.
+	ListRetiredTenantSlugs(context.Context, *v1.ListRetiredTenantSlugsRequest) (*v1.ListRetiredTenantSlugsResponse, error)
+	// ReleaseTenantSlug forgets a retired slug, so a new tenant can take it.
+	// Whatever still names it — a Cedar policy, a token claim, an audit row,
+	// a client's tenants/<slug> path — then names that new tenant. Idempotent
+	// on a slug not retired.
+	ReleaseTenantSlug(context.Context, *v1.ReleaseTenantSlugRequest) (*v1.ReleaseTenantSlugResponse, error)
 	// ClearTenantDefaultBinding removes the tenant's default route; bare
 	// collection names for that tenant then fail with FAILED_PRECONDITION.
 	ClearTenantDefaultBinding(context.Context, *v1.ClearTenantDefaultBindingRequest) (*v1.ClearTenantDefaultBindingResponse, error)
@@ -252,8 +285,10 @@ func NewTenantServiceClient(client *connect.Client) TenantServiceClient {
 type TenantServiceHandler interface {
 	// CreateTenant provisions a tenant and, unless the request opts out, its
 	// default storage binding. storage_layout="dedicated" also provisions a
-	// physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
-	// slug is taken.
+	// physical bucket owned by the tenant (ADR-0015). AlreadyExists, reason
+	// SLUG_TAKEN, when the slug is taken: by a live tenant always, and, while
+	// admin.tenants.reserve_slugs is on, by a trashed tenant or a purged one
+	// (see ListRetiredTenantSlugs).
 	CreateTenant(context.Context, *v1.CreateTenantRequest) (*v1.Tenant, error)
 	// GetTenant accepts either the UUID or the slug in the resource name.
 	// Soft-deleted tenants are returned — check deleted_at — so the trash view
@@ -278,10 +313,10 @@ type TenantServiceHandler interface {
 	SetInheritedPolicy(context.Context, *v1.SetInheritedPolicyRequest) (*v1.Tenant, error)
 	// RestoreTenant clears `deleted_at` on a soft-deleted row, returning
 	// it to the active set. Slug + display_name are unique among live
-	// tenants (`001_initial_schema.sql`), and a trashed row keeps both —
-	// if a new tenant claimed the slug while this one was
-	// trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
-	// the other tenant has to be purged before this one comes back.
+	// tenants (`001_initial_schema.sql`). While admin.tenants.reserve_slugs is
+	// on, no new tenant can take a trashed tenant's slug; with it off, one
+	// can, and restore then fails with ALREADY_EXISTS: a slug never changes,
+	// so the other tenant has to be purged before this one comes back.
 	RestoreTenant(context.Context, *v1.RestoreTenantRequest) (*v1.Tenant, error)
 	// PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
 	// an active tenant (operators have to soft-delete first) so the
@@ -310,6 +345,15 @@ type TenantServiceHandler interface {
 	// SetTenantDefaultBinding upserts the tenant's default route. The
 	// (backend, bucket) MUST reference an existing bucket.
 	SetTenantDefaultBinding(context.Context, *v1.SetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error)
+	// ListRetiredTenantSlugs lists the slugs of purged tenants, by slug. Each
+	// is recorded by the purge, whatever admin.tenants.reserve_slugs says;
+	// while it is on, CreateTenant refuses them.
+	ListRetiredTenantSlugs(context.Context, *v1.ListRetiredTenantSlugsRequest) (*v1.ListRetiredTenantSlugsResponse, error)
+	// ReleaseTenantSlug forgets a retired slug, so a new tenant can take it.
+	// Whatever still names it — a Cedar policy, a token claim, an audit row,
+	// a client's tenants/<slug> path — then names that new tenant. Idempotent
+	// on a slug not retired.
+	ReleaseTenantSlug(context.Context, *v1.ReleaseTenantSlugRequest) (*v1.ReleaseTenantSlugResponse, error)
 	// ClearTenantDefaultBinding removes the tenant's default route; bare
 	// collection names for that tenant then fail with FAILED_PRECONDITION.
 	ClearTenantDefaultBinding(context.Context, *v1.ClearTenantDefaultBindingRequest) (*v1.ClearTenantDefaultBindingResponse, error)
@@ -333,6 +377,8 @@ func RegisterTenantServiceHandler(server *connect.Server, svc TenantServiceHandl
 		connect.Method{Spec: tenantServiceGetTenantStorageMigrationSpec(), Handler: adapter.getTenantStorageMigration},
 		connect.Method{Spec: tenantServiceGetTenantDefaultBindingSpec(), Handler: adapter.getTenantDefaultBinding},
 		connect.Method{Spec: tenantServiceSetTenantDefaultBindingSpec(), Handler: adapter.setTenantDefaultBinding},
+		connect.Method{Spec: tenantServiceListRetiredTenantSlugsSpec(), Handler: adapter.listRetiredTenantSlugs},
+		connect.Method{Spec: tenantServiceReleaseTenantSlugSpec(), Handler: adapter.releaseTenantSlug},
 		connect.Method{Spec: tenantServiceClearTenantDefaultBindingSpec(), Handler: adapter.clearTenantDefaultBinding},
 	)
 }
@@ -390,6 +436,14 @@ func (UnimplementedTenantServiceHandler) GetTenantDefaultBinding(context.Context
 
 func (UnimplementedTenantServiceHandler) SetTenantDefaultBinding(context.Context, *v1.SetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.SetTenantDefaultBinding is not implemented")
+}
+
+func (UnimplementedTenantServiceHandler) ListRetiredTenantSlugs(context.Context, *v1.ListRetiredTenantSlugsRequest) (*v1.ListRetiredTenantSlugsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.ListRetiredTenantSlugs is not implemented")
+}
+
+func (UnimplementedTenantServiceHandler) ReleaseTenantSlug(context.Context, *v1.ReleaseTenantSlugRequest) (*v1.ReleaseTenantSlugResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.ReleaseTenantSlug is not implemented")
 }
 
 func (UnimplementedTenantServiceHandler) ClearTenantDefaultBinding(context.Context, *v1.ClearTenantDefaultBindingRequest) (*v1.ClearTenantDefaultBindingResponse, error) {
@@ -499,6 +553,22 @@ func (c *tenantServiceClient) GetTenantDefaultBinding(ctx context.Context, req *
 func (c *tenantServiceClient) SetTenantDefaultBinding(ctx context.Context, req *v1.SetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error) {
 	var res v1.TenantDefaultBinding
 	if err := c.client.CallUnary(ctx, tenantServiceSetTenantDefaultBindingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) ListRetiredTenantSlugs(ctx context.Context, req *v1.ListRetiredTenantSlugsRequest) (*v1.ListRetiredTenantSlugsResponse, error) {
+	var res v1.ListRetiredTenantSlugsResponse
+	if err := c.client.CallUnary(ctx, tenantServiceListRetiredTenantSlugsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) ReleaseTenantSlug(ctx context.Context, req *v1.ReleaseTenantSlugRequest) (*v1.ReleaseTenantSlugResponse, error) {
+	var res v1.ReleaseTenantSlugResponse
+	if err := c.client.CallUnary(ctx, tenantServiceReleaseTenantSlugSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -664,6 +734,30 @@ func (h tenantServiceHandler) setTenantDefaultBinding(ctx context.Context, _ con
 		return err
 	}
 	res, err := h.svc.SetTenantDefaultBinding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) listRetiredTenantSlugs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListRetiredTenantSlugsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListRetiredTenantSlugs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) releaseTenantSlug(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReleaseTenantSlugRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReleaseTenantSlug(ctx, &req)
 	if err != nil {
 		return err
 	}

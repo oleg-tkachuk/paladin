@@ -104,6 +104,10 @@ export enum ErrorReason {
   POLICY_UNPARSEABLE = 12,
 
   /**
+   * The tenant slug is taken. ErrorInfo.metadata "holder" says by what:
+   * "live" (a tenant using it), "trashed" (a tenant in the trash) or
+   * "retired" (a purged tenant; see TenantService.ListRetiredTenantSlugs).
+   *
    * @generated from enum value: ERROR_REASON_SLUG_TAKEN = 13;
    */
   SLUG_TAKEN = 13,

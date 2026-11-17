@@ -263,6 +263,24 @@ func (s *TenantServer) PreviewPurgeTenant(ctx context.Context, req *pb.PreviewPu
 	return purgePreviewToProto(tid, p), nil
 }
 
+// ListRetiredTenantSlugs — the slugs purges recorded, and whether they are
+// refused to a new tenant.
+func (s *TenantServer) ListRetiredTenantSlugs(ctx context.Context, req *pb.ListRetiredTenantSlugsRequest) (*pb.ListRetiredTenantSlugsResponse, error) {
+	page, err := s.H.ListRetiredTenantSlugs(ctx, req.GetPage().GetPageSize(), req.GetPage().GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	return retiredSlugPageToProto(page), nil
+}
+
+// ReleaseTenantSlug — forget a retired slug so a new tenant can take it.
+func (s *TenantServer) ReleaseTenantSlug(ctx context.Context, req *pb.ReleaseTenantSlugRequest) (*pb.ReleaseTenantSlugResponse, error) {
+	if err := s.H.ReleaseTenantSlug(ctx, req.GetName()); err != nil {
+		return nil, err
+	}
+	return &pb.ReleaseTenantSlugResponse{}, nil
+}
+
 func (s *TenantServer) ListTenants(ctx context.Context, req *pb.ListTenantsRequest) (*pb.ListTenantsResponse, error) {
 	m := req
 	args := tenanth.ListTenantsArgs{

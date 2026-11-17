@@ -173,6 +173,12 @@ type Repository interface {
 	// subscriptions by name, every one of them counted, and its capabilities
 	// counted — and what would refuse it.
 	PreviewPurge(ctx context.Context, tenantID uuid.UUID, names int) (PurgePreview, error)
+	// ListRetiredSlugs is a page of the slugs purges recorded, by slug, after
+	// afterSlug; the next token is the page's last slug when the page is full.
+	ListRetiredSlugs(ctx context.Context, afterSlug string, pageSize int32) ([]RetiredSlug, string, error)
+	// ReleaseSlug forgets a retired slug and returns the tenant that held it.
+	// ErrSlugNotRetired when it was not retired.
+	ReleaseSlug(ctx context.Context, slug string) (formerTenantID uuid.UUID, err error)
 
 	// StartStorageMigration provisions the tenant's dedicated bucket
 	// (provision_state='pending', owned by the tenant) and inserts the
@@ -1167,19 +1173,64 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // unambiguous "missing", not a version conflict).
 var ErrNotFound = errors.New("tenant not found")
 
+// SlugHolder is what holds a tenant slug a create was refused, as the
+// SLUG_TAKEN ErrorInfo names it under SlugHolderMetadataKey. The values are
+// the reason's contract (common/v1/error_reason.proto) and what the
+// TenantSlugHolder query returns.
+type SlugHolder string
+
+const (
+	// SlugHolderLive is a tenant using the slug.
+	SlugHolderLive SlugHolder = "live"
+	// SlugHolderTrashed is a tenant in the trash.
+	SlugHolderTrashed SlugHolder = "trashed"
+	// SlugHolderRetired is a purged tenant, recorded in retired_tenant_slugs.
+	SlugHolderRetired SlugHolder = "retired"
+)
+
+// SlugHolderMetadataKey is the SLUG_TAKEN ErrorInfo metadata key naming the
+// holder.
+const SlugHolderMetadataKey = "holder"
+
+// slugTakenError is a refused slug and what holds it. Comparable, so each
+// value below is a sentinel errors.Is matches and the registry keys on.
+type slugTakenError struct {
+	holder SlugHolder
+	msg    string
+}
+
+func (e slugTakenError) Error() string { return e.msg }
+
+// ErrorMetadata names the holder, for a client to say where the slug is.
+func (e slugTakenError) ErrorMetadata() map[string]string {
+	return map[string]string{SlugHolderMetadataKey: string(e.holder)}
+}
+
+// RetiredSlug is the slug of a purged tenant, kept so that it cannot come to
+// name another.
+type RetiredSlug struct {
+	Slug           string
+	FormerTenantID uuid.UUID
+	RetiredAt      time.Time
+}
+
+// ErrSlugNotRetired — Repository.ReleaseSlug returns this for a slug no purge
+// recorded, or one already released.
+var ErrSlugNotRetired = errors.New("tenant slug is not retired")
+
 // ErrSlugConflict — Repository.Create returns this when the
 // requested slug is already in use by another tenant.
-var ErrSlugConflict = errors.New("tenant slug already in use")
+var ErrSlugConflict error = slugTakenError{SlugHolderLive, "tenant slug already in use"}
 
 // ErrSlugHeldInTrash — Repository.Create returns this, while slugs are
 // reserved, for a slug a trashed tenant still holds: it may be restored, and
 // until it is purged its slug names it in every policy and token.
-var ErrSlugHeldInTrash = errors.New("tenant slug is held by a tenant in the trash")
+var ErrSlugHeldInTrash error = slugTakenError{SlugHolderTrashed, "tenant slug is held by a tenant in the trash"}
 
 // ErrSlugRetired — Repository.Create returns this, while slugs are reserved,
 // for a slug a purged tenant held: policies, tokens and clients may still
-// name it, and would name the new tenant instead.
-var ErrSlugRetired = errors.New("tenant slug belonged to a purged tenant and is reserved")
+// name it, and would name the new tenant instead. ReleaseTenantSlug frees it.
+var ErrSlugRetired error = slugTakenError{SlugHolderRetired, "tenant slug belonged to a purged tenant and is reserved"}
 
 // ErrTenantIDConflict — Repository.Create returns this when the
 // caller-supplied tenant_id (UUID) collides with an existing row.

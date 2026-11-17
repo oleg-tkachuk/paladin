@@ -59,6 +59,8 @@ type fakeRepo struct {
 	softDeleteTxFn   func(context.Context, pgx.Tx, uuid.UUID, int64) error
 	purgeFn          func(context.Context, PurgeTenantArgs) error
 	previewPurgeFn   func(context.Context, uuid.UUID, int) (PurgePreview, error)
+	listRetiredFn    func(ctx context.Context, afterSlug string, pageSize int32) ([]RetiredSlug, string, error)
+	releaseSlugFn    func(ctx context.Context, slug string) (uuid.UUID, error)
 	restoreTxFn      func(context.Context, pgx.Tx, uuid.UUID) (Tenant, error)
 	startMigrationFn func(context.Context, StartStorageMigrationArgs) (StorageMigration, error)
 	getMigrationFn   func(context.Context, uuid.UUID) (StorageMigration, error)
@@ -191,6 +193,20 @@ func (f *fakeRepo) PreviewPurge(ctx context.Context, id uuid.UUID, names int) (P
 		return f.previewPurgeFn(ctx, id, names)
 	}
 	return PurgePreview{}, nil
+}
+
+func (f *fakeRepo) ListRetiredSlugs(ctx context.Context, afterSlug string, pageSize int32) ([]RetiredSlug, string, error) {
+	if f.listRetiredFn != nil {
+		return f.listRetiredFn(ctx, afterSlug, pageSize)
+	}
+	return nil, "", nil
+}
+
+func (f *fakeRepo) ReleaseSlug(ctx context.Context, slug string) (uuid.UUID, error) {
+	if f.releaseSlugFn != nil {
+		return f.releaseSlugFn(ctx, slug)
+	}
+	return uuid.Nil(), ErrSlugNotRetired
 }
 
 func (f *fakeRepo) RestoreTx(ctx context.Context, tx pgx.Tx, id uuid.UUID) (Tenant, error) {

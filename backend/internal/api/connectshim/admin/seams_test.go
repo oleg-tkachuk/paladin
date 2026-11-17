@@ -300,6 +300,12 @@ func (failingTenant) PurgeTenant(context.Context, uuid.UUID) error {
 func (failingTenant) PreviewPurgeTenant(context.Context, uuid.UUID) (*tenanth.PurgePreview, error) {
 	return nil, errBoom
 }
+func (failingTenant) ListRetiredTenantSlugs(context.Context, int32, string) (tenanth.RetiredSlugPage, error) {
+	return tenanth.RetiredSlugPage{}, errBoom
+}
+func (failingTenant) ReleaseTenantSlug(context.Context, string) error {
+	return errBoom
+}
 func (failingTenant) RestoreTenant(context.Context, uuid.UUID) (*tenanth.Tenant, error) {
 	return nil, errBoom
 }
@@ -708,6 +714,14 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 		}},
 		{"Tenant.PreviewPurgeTenant", func() error {
 			_, err := tenantSrv.PreviewPurgeTenant(ctx, &pb.PreviewPurgeTenantRequest{Name: tenantName})
+			return err
+		}},
+		{"Tenant.ListRetiredTenantSlugs", func() error {
+			_, err := tenantSrv.ListRetiredTenantSlugs(ctx, &pb.ListRetiredTenantSlugsRequest{})
+			return err
+		}},
+		{"Tenant.ReleaseTenantSlug", func() error {
+			_, err := tenantSrv.ReleaseTenantSlug(ctx, &pb.ReleaseTenantSlugRequest{Name: "retiredTenantSlugs/acme"})
 			return err
 		}},
 		{"Tenant.SetInheritedPolicy", func() error {

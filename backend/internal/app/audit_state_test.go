@@ -34,6 +34,7 @@ var noStateReader = map[string]string{
 	adminconnect.CapabilityServiceSettleLeaseProcedure:                    "the answer is the lease as it ended",
 	adminconnect.EventSubscriptionServiceRedriveFailedDeliveriesProcedure: "acts on deliveries, not on the subscription",
 	adminconnect.EventSubscriptionServiceTestSubscriptionProcedure:        "sends a test event; the subscription is unchanged",
+	adminconnect.TenantServiceReleaseTenantSlugProcedure:                  "a retired slug has no Get to read it by; the request names the slug released",
 	adminconnect.OAuthClientServiceDeleteOAuthClientProcedure:             "a client has no Get to read it by; the request names the client removed",
 	adminconnect.PlatformOperationServiceCancelOperationProcedure:         "an operation's own record is its history",
 	adminconnect.PlatformOperationServiceDismissOperationsProcedure:       "an operation's own record is its history",

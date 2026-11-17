@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { create } from "@bufbuild/protobuf";
+
+import { ErrorInfoSchema } from "@/gen/google/rpc/error_details_pb";
+import { PALADIN_ERROR_DOMAIN } from "@/hooks/errorContract";
+import {
+  RETIRED_SLUGS_HREF,
+  SLUG_HOLDER_KEY,
+  SlugHolder,
+} from "@/lib/tenant/slugHolder";
 
 const h = vi.hoisted(() => ({
   backends: [{ backendId: "primary", displayName: "" }] as Array<
@@ -108,6 +118,34 @@ describe("TenantCreateDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "slug already taken",
     );
+  });
+
+  // A slug a purged tenant held is refused with its holder named, and the
+  // field points at where it can be released; typing another slug clears it.
+  it("points a retired slug at the retired list", async () => {
+    h.buckets = [{ backendId: "primary", bucketId: "shared-1" }];
+    const info = create(ErrorInfoSchema, {
+      domain: PALADIN_ERROR_DOMAIN,
+      reason: "ERROR_REASON_SLUG_TAKEN",
+      metadata: { [SLUG_HOLDER_KEY]: SlugHolder.Retired },
+    });
+    open(
+      vi
+        .fn()
+        .mockRejectedValue(
+          new ConnectError("reserved", Code.AlreadyExists, undefined, [
+            { desc: ErrorInfoSchema, value: info },
+          ]),
+        ),
+    );
+    typeSlug("acme");
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Create tenant" }).closest("form")!,
+    );
+    const link = await screen.findByRole("link", { name: "Retired slugs" });
+    expect(link).toHaveAttribute("href", RETIRED_SLUGS_HREF);
+    typeSlug("acme-2");
+    expect(screen.queryByRole("link", { name: "Retired slugs" })).toBeNull();
   });
 
   // Each of these used to answer a failed read with advice: "none is

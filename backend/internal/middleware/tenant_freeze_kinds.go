@@ -193,6 +193,8 @@ var procedureKinds = map[string]Kind{
 	admin.TenantServiceRestoreTenantProcedure:              Lifecycle,
 	admin.TenantServicePurgeTenantProcedure:                Lifecycle,
 	admin.TenantServicePreviewPurgeTenantProcedure:         Lifecycle,
+	admin.TenantServiceListRetiredTenantSlugsProcedure:     Reads,
+	admin.TenantServiceReleaseTenantSlugProcedure:          Lifecycle,
 	admin.TenantServiceMigrateTenantStorageLayoutProcedure: Changes,
 	admin.TenantServiceGetTenantStorageMigrationProcedure:  Reads,
 	admin.TenantServiceGetTenantDefaultBindingProcedure:    Reads,

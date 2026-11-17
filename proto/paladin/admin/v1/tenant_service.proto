@@ -15,8 +15,10 @@ import "google/api/field_behavior.proto";
 service TenantService {
   // CreateTenant provisions a tenant and, unless the request opts out, its
   // default storage binding. storage_layout="dedicated" also provisions a
-  // physical bucket owned by the tenant (ADR-0015). AlreadyExists when the
-  // slug is taken.
+  // physical bucket owned by the tenant (ADR-0015). AlreadyExists, reason
+  // SLUG_TAKEN, when the slug is taken: by a live tenant always, and, while
+  // admin.tenants.reserve_slugs is on, by a trashed tenant or a purged one
+  // (see ListRetiredTenantSlugs).
   rpc CreateTenant(CreateTenantRequest) returns (Tenant);
   // GetTenant accepts either the UUID or the slug in the resource name.
   // Soft-deleted tenants are returned — check deleted_at — so the trash view
@@ -53,10 +55,10 @@ service TenantService {
 
   // RestoreTenant clears `deleted_at` on a soft-deleted row, returning
   // it to the active set. Slug + display_name are unique among live
-  // tenants (`001_initial_schema.sql`), and a trashed row keeps both —
-  // if a new tenant claimed the slug while this one was
-  // trashed, restore fails with ALREADY_EXISTS: a slug never changes, so
-  // the other tenant has to be purged before this one comes back.
+  // tenants (`001_initial_schema.sql`). While admin.tenants.reserve_slugs is
+  // on, no new tenant can take a trashed tenant's slug; with it off, one
+  // can, and restore then fails with ALREADY_EXISTS: a slug never changes,
+  // so the other tenant has to be purged before this one comes back.
   rpc RestoreTenant(RestoreTenantRequest) returns (Tenant);
 
   // PurgeTenant hard-deletes a soft-deleted row. Refuses to operate on
@@ -99,6 +101,21 @@ service TenantService {
   // SetTenantDefaultBinding upserts the tenant's default route. The
   // (backend, bucket) MUST reference an existing bucket.
   rpc SetTenantDefaultBinding(SetTenantDefaultBindingRequest) returns (TenantDefaultBinding) {
+    option idempotency_level = IDEMPOTENT;
+  }
+
+  // ListRetiredTenantSlugs lists the slugs of purged tenants, by slug. Each
+  // is recorded by the purge, whatever admin.tenants.reserve_slugs says;
+  // while it is on, CreateTenant refuses them.
+  rpc ListRetiredTenantSlugs(ListRetiredTenantSlugsRequest) returns (ListRetiredTenantSlugsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ReleaseTenantSlug forgets a retired slug, so a new tenant can take it.
+  // Whatever still names it — a Cedar policy, a token claim, an audit row,
+  // a client's tenants/<slug> path — then names that new tenant. Idempotent
+  // on a slug not retired.
+  rpc ReleaseTenantSlug(ReleaseTenantSlugRequest) returns (ReleaseTenantSlugResponse) {
     option idempotency_level = IDEMPOTENT;
   }
 
@@ -338,3 +355,33 @@ message ClearTenantDefaultBindingRequest {
 }
 
 message ClearTenantDefaultBindingResponse {}
+
+// The slug of a purged tenant, kept so that it cannot come to name another.
+message RetiredTenantSlug {
+  // Resource name: "retiredTenantSlugs/{slug}".
+  string name = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+  string slug = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+  // The tenant that held it, now purged.
+  string former_tenant_id = 3 [(google.api.field_behavior) = OUTPUT_ONLY];
+  google.protobuf.Timestamp retire_time = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+message ListRetiredTenantSlugsRequest {
+  // Ordered by slug; page_token is the last slug of the previous page.
+  paladin.common.v1.PageRequest page = 1;
+}
+
+message ListRetiredTenantSlugsResponse {
+  repeated RetiredTenantSlug retired_slugs = 1;
+  paladin.common.v1.PageResponse page = 2;
+  // Whether CreateTenant refuses these slugs: admin.tenants.reserve_slugs.
+  // When false they are recorded and nothing else.
+  bool reservation_enforced = 3;
+}
+
+message ReleaseTenantSlugRequest {
+  // name — "retiredTenantSlugs/{slug}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ReleaseTenantSlugResponse {}

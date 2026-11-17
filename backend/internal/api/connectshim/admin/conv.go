@@ -583,3 +583,21 @@ func purgePreviewToProto(tenant uuid.UUID, p *tenanth.PurgePreview) *pb.PreviewP
 	}
 	return out
 }
+
+// retiredSlugPageToProto is a page of retired slugs on the wire.
+func retiredSlugPageToProto(p tenanth.RetiredSlugPage) *pb.ListRetiredTenantSlugsResponse {
+	out := &pb.ListRetiredTenantSlugsResponse{
+		RetiredSlugs:        make([]*pb.RetiredTenantSlug, 0, len(p.Slugs)),
+		Page:                &commonpb.PageResponse{NextPageToken: p.NextToken},
+		ReservationEnforced: p.Enforced,
+	}
+	for _, r := range p.Slugs {
+		out.RetiredSlugs = append(out.RetiredSlugs, &pb.RetiredTenantSlug{
+			Name:           tenanth.RetiredSlugNamePrefix + r.Slug,
+			Slug:           r.Slug,
+			FormerTenantId: r.FormerTenantID.String(),
+			RetireTime:     timestamppb.New(r.RetiredAt),
+		})
+	}
+	return out
+}

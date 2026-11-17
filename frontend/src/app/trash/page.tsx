@@ -8,9 +8,13 @@
 //
 // Restore semantics:
 //   - clears deleted_at, tenant returns to the active set
-//   - slug/display_name UNIQUE still applies across both sets;
-//     ALREADY_EXISTS surfaces a clear "rename the claimer first"
-//     message
+//   - slug/display_name are unique among live tenants; while slugs are
+//     reserved no new tenant can take a trashed one's slug, and with
+//     reservation off a restore whose slug was taken meanwhile is refused
+//     with ALREADY_EXISTS
+//
+// Below the trashed tenants, the slugs purged tenants held (RetiredSlugs),
+// each kept from a new tenant until it is released there.
 //
 // Purge semantics:
 //   - hard-deletes the trashed row (FAILED_PRECONDITION if active)
@@ -125,6 +129,7 @@ import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/hooks/errorContract";
 import { TableScope } from "@/components/ui/TableScope";
+import { RetiredSlugs } from "@/components/features/tenants/RetiredSlugs";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "trash";
@@ -471,7 +476,7 @@ export default function TrashPage() {
               returns to the active tenants and leaves the trash.
             </p>
           }
-          warning="If another tenant has taken this slug since, the restore is refused: rename one of them first."
+          warning="If another tenant has taken this slug since, the restore is refused: a slug never changes, so that tenant has to be purged first."
           confirmText="Restore tenant"
         />
 
@@ -519,6 +524,8 @@ export default function TrashPage() {
           }
           confirmText="Purge permanently"
         />
+
+        <RetiredSlugs />
       </div>
     </TableScope>
   );

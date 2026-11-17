@@ -60,12 +60,6 @@ func (r *TenantRepo) RunInTx(ctx context.Context, fn func(ctx context.Context, t
 	return nil
 }
 
-// What TenantSlugHolder answers: who holds a slug a create asks for.
-const (
-	slugHolderTrashed = "trashed"
-	slugHolderRetired = "retired"
-)
-
 func (r *TenantRepo) Create(ctx context.Context, args tenanth.CreateTenantArgs) (tenanth.Tenant, error) {
 	// The tenant insert + the optional default-binding insert already need
 	// one tx; RunInTx provides it. A binding FK violation rolls the tenant
@@ -105,10 +99,10 @@ func (r *TenantRepo) CreateTx(ctx context.Context, tx pgx.Tx, args tenanth.Creat
 		if err != nil {
 			return fmt.Errorf("create tenant: slug holder: %w", err)
 		}
-		switch holder {
-		case slugHolderTrashed:
+		switch tenanth.SlugHolder(holder) {
+		case tenanth.SlugHolderTrashed:
 			return tenanth.ErrSlugHeldInTrash
-		case slugHolderRetired:
+		case tenanth.SlugHolderRetired:
 			return tenanth.ErrSlugRetired
 		}
 	}
@@ -589,6 +583,40 @@ func (r *TenantRepo) List(ctx context.Context, args tenanth.ListTenantsArgs) ([]
 		next = out[len(out)-1].TenantID.String()
 	}
 	return out, next, nil
+}
+
+// ListRetiredSlugs is a page of retired_tenant_slugs by slug.
+func (r *TenantRepo) ListRetiredSlugs(ctx context.Context, afterSlug string, pageSize int32) ([]tenanth.RetiredSlug, string, error) {
+	limit := pageSizeOrDefault(pageSize)
+	rows, err := r.q.ListRetiredTenantSlugs(ctx, afterSlug, limit)
+	if err != nil {
+		return nil, "", fmt.Errorf("list retired tenant slugs: %w", err)
+	}
+	out := make([]tenanth.RetiredSlug, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, tenanth.RetiredSlug{
+			Slug:           row.Slug,
+			FormerTenantID: uuidFrom(row.FormerTenantID),
+			RetiredAt:      row.RetiredAt.Time,
+		})
+	}
+	var next string
+	if len(out) == int(limit) {
+		next = out[len(out)-1].Slug
+	}
+	return out, next, nil
+}
+
+// ReleaseSlug deletes a retired slug's row and returns whose it was.
+func (r *TenantRepo) ReleaseSlug(ctx context.Context, slug string) (uuid.UUID, error) {
+	former, err := r.q.ReleaseTenantSlug(ctx, slug)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil(), tenanth.ErrSlugNotRetired
+	}
+	if err != nil {
+		return uuid.Nil(), fmt.Errorf("release tenant slug: %w", err)
+	}
+	return uuidFrom(former), nil
 }
 
 // listBranch is one page of ListTenants narrowed by one pushdown branch.
