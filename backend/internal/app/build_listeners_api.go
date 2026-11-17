@@ -463,6 +463,7 @@ func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, share
 		repos.IAMUser,
 		polEngine,
 	)
+	userSettingsH.SetLogger(l.Named("user-settings"))
 	verifierIAM, err := BuildVerifier(ctx, cfg.Auth, keys, auth.AudienceIAM, l)
 	if err != nil {
 		return nil, err
