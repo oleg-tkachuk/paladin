@@ -205,6 +205,9 @@ func (c *Config) Validate() error {
 	if c.Admin.Tenants.TrashRetention <= 0 {
 		return fmt.Errorf("admin.tenants.trash_retention must be positive")
 	}
+	if err := validateSlugReservationPeriod(c.Admin.Tenants.SlugReservationPeriod, c.Auth); err != nil {
+		return err
+	}
 	if c.Admin.Health.Timeout <= 0 {
 		return fmt.Errorf("admin.health.timeout must be positive")
 	}

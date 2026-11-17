@@ -142,7 +142,10 @@ changes. The unique index covers live tenants only; with
 `admin.tenants.reserve_slugs` on (the default), creation also refuses a slug
 a trashed tenant holds or a purged tenant held. A purge always records the
 slug in `retired_tenant_slugs`, so a policy, token or audit row naming it
-cannot come to mean a different tenant.
+cannot come to mean a different tenant. A slug purged again after reuse is
+retired anew, for the tenant purged last. With
+`admin.tenants.slug_reservation_period` set, the worker releases a slug once
+that long has passed since its purge; unset, it stays until released.
 
 **Identity** — `users`, `user_settings`, `refresh_tokens`, `api_tokens`,
 `oauth_clients`, `oauth_authorization_codes`.

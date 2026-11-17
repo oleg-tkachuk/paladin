@@ -228,6 +228,13 @@ WHERE slug > sqlc.arg('after_slug')::text
 ORDER BY slug
 LIMIT sqlc.arg('page_limit')::int;
 
+-- name: ExpireRetiredTenantSlugs :many
+-- Releases every slug retired at or before retired_before: its reservation
+-- period has run. Says which, so each release is logged.
+DELETE FROM retired_tenant_slugs
+WHERE retired_at <= sqlc.arg('retired_before')::timestamptz
+RETURNING slug, former_tenant_id, retired_at;
+
 -- name: ReleaseTenantSlug :one
 -- Forgets a retired slug and says whose it was; no row when it was not
 -- retired.

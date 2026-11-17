@@ -408,6 +408,7 @@ var unsetKnobAllowlist = map[string]string{
 	"worker.jobs.housekeeping.hard_delete_batch_size": "unused while hard_delete_after is 0",
 	"dispatcher.charge_events_enabled":                "opt-in billing signal",
 	"dispatcher.audit_mirror_enabled":                 "set per deploy; the chart's overlay turns it on",
+	"admin.tenants.slug_reservation_period":           "absent (nil) keeps a retired slug until an operator releases it",
 
 	// Whole blocks already recorded as schema gaps by schemaGapAllowlist.
 	// Repeating every leaf here would say the same thing 30 times.

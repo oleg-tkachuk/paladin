@@ -25,6 +25,7 @@ admin.server.trusted_proxies
 admin.server.write_timeout
 admin.tenants
 admin.tenants.reserve_slugs
+admin.tenants.slug_reservation_period
 admin.tenants.trash_retention
 api
 api.server

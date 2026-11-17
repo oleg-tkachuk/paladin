@@ -186,6 +186,9 @@ type Querier interface {
 	// violation, which aborts the transaction (25P02). Whether an existing row
 	// may be used is StorageMigrationTargetBucket's question.
 	EnsureStorageMigrationTargetBucket(ctx context.Context, bucketName string, ownerTenantID pgtype.UUID, backendName string) error
+	// Releases every slug retired at or before retired_before: its reservation
+	// period has run. Says which, so each release is logged.
+	ExpireRetiredTenantSlugs(ctx context.Context, retiredBefore pgtype.Timestamptz) ([]RetiredTenantSlug, error)
 	// RegenerateUploadUrl hands a PENDING object a new PUT URL; the reaper's
 	// deadline moves with it, or the row is failed under a client still holding
 	// a valid URL. GREATEST, so a shorter regenerated URL never pulls the

@@ -901,6 +901,11 @@ config:
       # retention" (Tenant.purge_eligible_at). Surfaced only — nothing purges
       # a tenant on its own. Must be positive.
       trash_retention: 720h
+      # A purged tenant's slug stays reserved until an operator releases it.
+      # Set a period to have the worker release it once that long has
+      # passed; no shorter than auth.access_token_ttl and
+      # auth.scoped_token_max_ttl.
+      # slug_reservation_period: 2160h
     # The roles SystemService.GetPlatformHealth reads for the console's health
     # page. Empty lets the chart list every enabled role at its Service; with
     # internalTLS on, ca_path is set to the mounted CA.

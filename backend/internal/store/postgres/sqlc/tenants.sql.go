@@ -101,6 +101,34 @@ func (q *Queries) CreateTenant(ctx context.Context, iD pgtype.UUID, slug string,
 	return err
 }
 
+const expireRetiredTenantSlugs = `-- name: ExpireRetiredTenantSlugs :many
+DELETE FROM retired_tenant_slugs
+WHERE retired_at <= $1::timestamptz
+RETURNING slug, former_tenant_id, retired_at
+`
+
+// Releases every slug retired at or before retired_before: its reservation
+// period has run. Says which, so each release is logged.
+func (q *Queries) ExpireRetiredTenantSlugs(ctx context.Context, retiredBefore pgtype.Timestamptz) ([]RetiredTenantSlug, error) {
+	rows, err := q.db.Query(ctx, expireRetiredTenantSlugs, retiredBefore)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RetiredTenantSlug
+	for rows.Next() {
+		var i RetiredTenantSlug
+		if err := rows.Scan(&i.Slug, &i.FormerTenantID, &i.RetiredAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTenant = `-- name: GetTenant :one
 SELECT tenants.id, tenants.slug, tenants.display_name, tenants.labels, tenants.inherited_cedar_policy, tenants.inherited_policy_hash, tenants.storage_layout, tenants.resource_version, tenants.created_at, tenants.updated_at, tenants.deleted_at,
        COALESCE(sb.name, '') AS backend_name,

@@ -23,6 +23,7 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `idempotency_purger` | deletes expired idempotency keys | `housekeeping.interval` | `1h` |
 | `rate_limit_bucket_sweeper` | drops elapsed tenant and token rate-limit windows from `rate_limit_buckets` | `housekeeping.interval` | `1h` |
 | `trash_retention_gauge` | publishes `paladin.tenants.past_trash_retention`, the trashed tenants past `admin.tenants.trash_retention`; purges nothing | `housekeeping.interval`, `admin.tenants.trash_retention` | `1h`, `720h` |
+| `slug_reservation_expirer` | releases a purged tenant's slug from `retired_tenant_slugs` once `admin.tenants.slug_reservation_period` has passed since its purge, logging each; always registered, idle (and says so at start) while the period is unset | `housekeeping.interval`, `admin.tenants.slug_reservation_period` | `1h`, unset (kept until released) |
 | `refresh_token_reaper` | deletes expired refresh tokens | `refresh_token_reap.interval` | `1h` |
 | `api_token_purger` | deletes API tokens expired for longer than the grace | `api_token.interval`, `.expired_for` | `1h`, `168h` |
 | `oauth_client_reaper` | deletes self-registered OAuth clients older than `max_age` that hold no live grant and no redeemable code, and authorization codes expired for longer than `expired_codes_for`; seeded clients are never removed; runs only on the reaper pool | `oauth_client_reap.interval`, `.max_age`, `.expired_codes_for` | `1h`, `168h`, `24h` |

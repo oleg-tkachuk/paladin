@@ -14,6 +14,7 @@ import (
 	tenanth "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // A slug names its tenant in Cedar, in policies, in tokens and in every
@@ -185,6 +186,45 @@ func TestTenantSlugReservation(t *testing.T) {
 		}
 		if len(second) == 0 || second[0].Slug != "page-c" {
 			t.Fatalf("second page = %+v", second)
+		}
+	})
+
+	// The worker, as the reaper role, releases what was retired a full
+	// period ago and nothing younger.
+	t.Run("an expired reservation is released, a current one kept", func(t *testing.T) {
+		const period = 90 * 24 * time.Hour
+		now := time.Now()
+		old, young := uuid.New(), uuid.New()
+		for _, r := range []struct {
+			slug    string
+			former  uuid.UUID
+			retired time.Time
+		}{
+			{"expiry-old", old, now.Add(-period - time.Hour)},
+			{"expiry-young", young, now.Add(-period + time.Hour)},
+		} {
+			if _, err := pool.Exec(ctx, `INSERT INTO retired_tenant_slugs (slug, former_tenant_id, retired_at) VALUES ($1, $2, $3)`,
+				r.slug, r.former, r.retired); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var expired []worker.ExpiredSlug
+		asRole(t, ctx, pool, reaperRole, nil, func(tx pgx.Tx) {
+			var err error
+			expired, err = adapters.NewRetiredSlugExpirer(sqlc.New(tx)).ExpireRetiredSlugs(ctx, now.Add(-period))
+			if err != nil {
+				t.Fatalf("expire as %s: %v", reaperRole, err)
+			}
+		})
+		if len(expired) != 1 || expired[0].Slug != "expiry-old" || expired[0].FormerTenantID != old.String() {
+			t.Fatalf("expired = %+v, want only expiry-old of %s", expired, old)
+		}
+		page, _, err := repo.ListRetiredSlugs(ctx, "expiry-", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasRetired(page, "expiry-old", old) || !hasRetired(page, "expiry-young", young) {
+			t.Fatalf("after expiry = %+v, want only expiry-young", page)
 		}
 	})
 
