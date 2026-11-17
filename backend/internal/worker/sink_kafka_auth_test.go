@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -209,5 +210,32 @@ func TestKafkaWriterKey_FormattingOmitsCredentials(t *testing.T) {
 		if got := fmt.Sprintf(verb, key); strings.Contains(got, secret) {
 			t.Errorf("%s prints the credential: %q", verb, got)
 		}
+	}
+}
+
+// A SCRAM credential SASLprep refuses must not put any of it in the error:
+// the error reaches the TestSubscription response, the admin log and the
+// delivery's recorded failure. The SASLprep library names the offending rune.
+func TestBuildKafkaTransport_SCRAMRefusalNamesNoCredential(t *testing.T) {
+	const prohibited = '\u0007' // BEL: a control character SASLprep refuses
+	password := "pa" + string(prohibited) + "ss"
+	for _, mech := range []string{"scram-sha-256", "scram-sha-512"} {
+		t.Run(mech, func(t *testing.T) {
+			_, err := buildKafkaTransport(kafkaSinkConfig{
+				Brokers: "b:9092", Topic: "t", SASLMechanism: mech,
+				SASLUsername: "svc", SASLPassword: password,
+			})
+			if err == nil {
+				t.Fatal("a password SASLprep refuses was accepted")
+			}
+			if !errors.Is(err, errSASLCredentialRejected) {
+				t.Errorf("err = %v, want errSASLCredentialRejected", err)
+			}
+			for _, leak := range []string{password, fmt.Sprintf("%04x", prohibited), "rune"} {
+				if strings.Contains(err.Error(), leak) {
+					t.Fatalf("error %q carries %q from the credential", err, leak)
+				}
+			}
+		})
 	}
 }

@@ -109,6 +109,12 @@ func (p *KafkaWriterPool) get(key kafkaWriterKey, brokers []string, topic string
 	return w
 }
 
+// errSASLCredentialRejected is a SCRAM username or password SASLprep refuses.
+// It stands in for the SCRAM library's own error, which quotes the credential
+// in full — and the error reaches the TestSubscription response, the admin
+// log and the delivery's recorded failure.
+var errSASLCredentialRejected = errors.New("kafka sink: SASL username or password holds a character SASLprep refuses")
+
 // buildKafkaTransport turns the sink's auth config into a *kafka.Transport, or
 // (nil, nil) for a plaintext sink. Returns an error for an unsupported SASL
 // mechanism or a bad mTLS keypair, so a misconfigured sink fails the delivery
@@ -123,13 +129,15 @@ func buildKafkaTransport(cfg kafkaSinkConfig) (*kafka.Transport, error) {
 	case "scram-sha-256":
 		m, err := scram.Mechanism(scram.SHA256, cfg.SASLUsername, cfg.SASLPassword)
 		if err != nil {
-			return nil, fmt.Errorf("kafka sink: scram-sha-256: %w", err)
+			// Not wrapped: SASLprep's error quotes the whole credential.
+			return nil, errSASLCredentialRejected
 		}
 		mech = m
 	case "scram-sha-512":
 		m, err := scram.Mechanism(scram.SHA512, cfg.SASLUsername, cfg.SASLPassword)
 		if err != nil {
-			return nil, fmt.Errorf("kafka sink: scram-sha-512: %w", err)
+			// Not wrapped: SASLprep's error quotes the whole credential.
+			return nil, errSASLCredentialRejected
 		}
 		mech = m
 	default:
