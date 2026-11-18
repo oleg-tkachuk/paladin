@@ -34,6 +34,12 @@ func TestStoreFailuresAreInternal(t *testing.T) {
 		{"cancel: store down", &fakeRepo{cancelFn: func(context.Context, uuid.UUID, uuid.UUID) error {
 			return boom
 		}}, func(h *Handler) error { return h.CancelOperation(authedCtx(tid), opID) }, connect.CodeInternal},
+		{"cancel: not there", &fakeRepo{cancelFn: func(context.Context, uuid.UUID, uuid.UUID) error {
+			return fmt.Errorf("op: %w", ErrOperationNotFound)
+		}}, func(h *Handler) error { return h.CancelOperation(authedCtx(tid), opID) }, connect.CodeNotFound},
+		{"cancel: already finished", &fakeRepo{cancelFn: func(context.Context, uuid.UUID, uuid.UUID) error {
+			return ErrNotCancellable
+		}}, func(h *Handler) error { return h.CancelOperation(authedCtx(tid), opID) }, connect.CodeFailedPrecondition},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			core, logs := observer.New(zapcore.ErrorLevel)

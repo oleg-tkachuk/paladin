@@ -76,6 +76,9 @@ type Repository interface {
 	// ReportProgress records a RUNNING operation's latest progress snapshot;
 	// ErrOperationFinished once it is no longer RUNNING.
 	ReportProgress(ctx context.Context, opID uuid.UUID, progress []byte) error
+	// Cancel moves a PENDING or RUNNING operation to CANCELLED;
+	// ErrOperationNotFound when the tenant has no such operation,
+	// ErrNotCancellable when it has already finished.
 	Cancel(ctx context.Context, opID, tenantID uuid.UUID) error
 	// filter is the caller's CEL expression. The repo pushes its
 	// SQL-expressible conjuncts into the query; ListOperations still
@@ -196,6 +199,8 @@ func (h *Handler) CancelOperation(ctx context.Context, opID uuid.UUID) error {
 	}
 	err = h.repo.Cancel(ctx, opID, tenantID)
 	switch {
+	case errors.Is(err, ErrOperationNotFound):
+		return rpcerr.New(connect.CodeNotFound, fmt.Errorf("operation not found: %w", err))
 	case errors.Is(err, ErrNotCancellable):
 		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("operation not cancellable: %w", err))
 	case err != nil:
@@ -397,8 +402,8 @@ const msgCrossTenant = "cross-tenant operations denied"
 // terminal state and cannot be cancelled.
 var ErrNotCancellable = errors.New("operation not in cancellable state")
 
-// ErrOperationNotFound is Repository.Get's answer for an operation the
-// tenant has not got.
+// ErrOperationNotFound is Repository.Get's and Repository.Cancel's answer for
+// an operation the tenant has not got.
 var ErrOperationNotFound = errors.New("operation not found")
 
 // ErrOperationFinished is surfaced by UpdateState when the operation is not
