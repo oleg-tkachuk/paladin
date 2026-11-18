@@ -11,6 +11,9 @@ import (
 )
 
 type Querier interface {
+	// Reached before authentication: the api_tokens permissive SELECT policy
+	// admits it with no tenant set.
+	APITokenByDigest(ctx context.Context, tokenHmac []byte) (APITokenByDigestRow, error)
 	// Hands a PENDING row from the operation that created it to another, and
 	// pushes its presign deadline out so the reaper does not clear it mid-copy.
 	// Compare-and-set on the creator: of two reissues racing for one row, one
@@ -233,6 +236,7 @@ type Querier interface {
 	// The verify error stays, and attempts too: the failure was counted when the
 	// rollback started.
 	FinishStorageMigrationRollback(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	GetAPIToken(ctx context.Context, id pgtype.UUID) (GetAPITokenRow, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
 	GetBucketQuota(ctx context.Context, backend string, bucket string) (GetBucketQuotaRow, error)
@@ -349,6 +353,7 @@ type Querier interface {
 	// an older stamp, and the roll's next tick would otherwise zero what this day
 	// had already admitted.
 	IncrementQuotaUsage(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
+	InsertAPIToken(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, name string, prefix string, tokenHmac []byte, scopes []string, roles []string, audience []string, expiresAt pgtype.Timestamptz, rateLimitRpm *int32, createdBy string, createdAt pgtype.Timestamptz) error
 	InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, requestJson []byte, errorMessage *string, capabilityID pgtype.UUID, resourceTenantID pgtype.UUID, relayedBy *string, userAgent *string, stateBeforeJson []byte, stateAfterJson []byte) error
 	// ObjectVersion queries — immutable history rows. Populated by the
 	// promotion path when the parent bucket has versioning_enabled = true.
@@ -368,6 +373,9 @@ type Querier interface {
 	// ListObjects filter sees.
 	IterateObjectsForLifecycle(ctx context.Context, tenantID pgtype.UUID, name string, column3 pgtype.UUID, limit int32) ([]IterateObjectsForLifecycleRow, error)
 	LatestStorageMigration(ctx context.Context, tenantID pgtype.UUID) (LatestStorageMigrationRow, error)
+	// One page of a tenant's tokens by id, after after_id when it is set.
+	// Revoked and expired tokens are left out unless asked for.
+	ListAPITokensByTenant(ctx context.Context, tenantID pgtype.UUID, includeRevoked bool, includeExpired bool, afterID pgtype.UUID, pageLimit int32) ([]ListAPITokensByTenantRow, error)
 	// The buckets a tenant may bind a collection to: the ones it owns and the
 	// ones it holds a grant on (ADR-0032).
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
@@ -684,6 +692,8 @@ type Querier interface {
 	// cutoff it shares: a tombstone serves a reissue of an operation, and is kept
 	// exactly as long as that operation is.
 	PurgeErasedObjects(ctx context.Context, erasedAt pgtype.Timestamptz) (int64, error)
+	// Deletes tokens expired for longer than expired_for_us microseconds.
+	PurgeExpiredAPITokens(ctx context.Context, expiredForUs int64) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0.
 	PurgeExpiredIdempotencyKeys(ctx context.Context) (int64, error)
 	// Bounded batch (10k). Worker loops until result is 0.
@@ -807,6 +817,8 @@ type Querier interface {
 	// still 'failed' — the compare-and-set that, behind the tenant lock, lets
 	// exactly one of two concurrent retries through.
 	RetryFailedStorageMigration(ctx context.Context, cleanupRetentionSeconds int64, iD pgtype.UUID, sourceBackendName string, sourceBucketName string, targetBackendName string, targetBucketName string) (TenantStorageMigration, error)
+	// Idempotent: a token already revoked keeps its revoked_at.
+	RevokeAPIToken(ctx context.Context, id pgtype.UUID) error
 	// Removes a grant unless the tenant still has a collection in the bucket: the
 	// grant is what lets those collections stay, and the binding trigger checks it
 	// only when a collection is written. Zero rows: no such grant, or collections
@@ -905,6 +917,12 @@ type Querier interface {
 	// Replaces an object's taint signals. An empty array clears it. Bumps the
 	// resource version: whether a capability may read the object just changed.
 	SetObjectTaint(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, taint []string) ([]string, error)
+	// API tokens (internal/auth/api_token/postgres). The plaintext is never
+	// stored: prefix for display, token_hmac for the O(1) lookup.
+	// Scopes the transaction to the token's tenant, which the api_tokens
+	// tenant_isolation policy checks: a platform admin minting for another
+	// tenant, or the verifier stamping last_used_at before any principal exists.
+	SetSessionTenantForAPIToken(ctx context.Context, tenantID string) error
 	// Flip the enable/disable state. OCC via resource_version (the
 	// trg_storage_backends_bump_rv BEFORE UPDATE trigger bumps the version).
 	// enabled is intentionally NOT part of UpsertStorageBackendV2 — bootstrap
@@ -984,6 +1002,7 @@ type Querier interface {
 	// cannot hide it: 'live', 'trashed', 'retired', or '' when it is free. The
 	// values are tenanth.SlugHolder's.
 	TenantSlugHolder(ctx context.Context, slug string) (string, error)
+	TouchAPITokenLastUsed(ctx context.Context, lastUsedAt pgtype.Timestamptz, iD pgtype.UUID) error
 	// Heartbeat for a RUNNING operation. Bumps updated_at and nothing else — in
 	// particular it must not touch progress, which an executor may be writing
 	// concurrently.
