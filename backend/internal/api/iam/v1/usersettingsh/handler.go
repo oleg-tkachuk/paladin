@@ -26,6 +26,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -58,9 +59,9 @@ func DefaultsFor(userID, tenantID uuid.UUID) Settings {
 	return Settings{
 		UserID:      userID,
 		TenantID:    tenantID,
-		Timezone:    "UTC",
-		Locale:      "en-US",
-		Theme:       "system",
+		Timezone:    DefaultTimezone,
+		Locale:      DefaultLocale,
+		Theme:       DefaultTheme,
 		Preferences: []byte("{}"),
 	}
 }
@@ -82,10 +83,64 @@ var ErrNotFound = errors.New("user_settings not found")
 // runaway tab can't pin-point-of-truth a giant blob into a hot row.
 const preferencesCap = 16 * 1024
 
+// The settings a user has until they change them.
+const (
+	DefaultTimezone = "UTC"
+	DefaultLocale   = "en-US"
+	DefaultTheme    = "system"
+)
+
+// The update_mask paths UpdateMine accepts.
+const (
+	FieldTimezone    = "timezone"
+	FieldLocale      = "locale"
+	FieldTheme       = "theme"
+	FieldPreferences = "preferences"
+)
+
+// Page sizes ListByTenant answers with: DefaultListPageSize when none, or
+// one past MaxListPageSize, is asked for.
+const (
+	DefaultListPageSize int32 = 100
+	MaxListPageSize     int32 = 500
+)
+
+// clampPageSize is the page ListByTenant reads for a requested n.
+func clampPageSize(n int32) int32 {
+	if n <= 0 || n > MaxListPageSize {
+		return DefaultListPageSize
+	}
+	return n
+}
+
 type Handler struct {
 	repo   Repository
 	users  authstore.UserRepository
 	policy cedar.Authorizer
+	log    *zap.Logger
+}
+
+// SetLogger sets where each change and each store failure is recorded.
+// Unset, nothing is.
+func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
+
+// internal logs a store failure and answers it as internal.
+func (h *Handler) internal(op string, userID uuid.UUID, err error) error {
+	h.log.Error("user settings store failed", zap.String("op", op), zap.String("user_id", userID.String()), zap.Error(err))
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+}
+
+// targetUser reads the user an admin call names: one not there is NotFound,
+// a store that fails is internal.
+func (h *Handler) targetUser(ctx context.Context, op string, userID uuid.UUID) (authstore.User, error) {
+	u, err := h.users.GetByID(ctx, userID)
+	switch {
+	case errors.Is(err, authstore.ErrNotFound):
+		return authstore.User{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+	case err != nil:
+		return authstore.User{}, h.internal(op, userID, err)
+	}
+	return u, nil
 }
 
 func NewHandler(repo Repository, users authstore.UserRepository, policy cedar.Authorizer) *Handler {
@@ -95,7 +150,7 @@ func NewHandler(repo Repository, users authstore.UserRepository, policy cedar.Au
 	if policy == nil {
 		panic("usersettingsh: policy authorizer is required")
 	}
-	return &Handler{repo: repo, users: users, policy: policy}
+	return &Handler{repo: repo, users: users, policy: policy, log: zap.NewNop()}
 }
 
 // GetMine returns the calling user's settings, or defaults when none have
@@ -116,7 +171,7 @@ func (h *Handler) GetMine(ctx context.Context) (*Settings, error) {
 			d := DefaultsFor(uid, p.TenantID)
 			return &d, nil
 		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, h.internal("get mine", uid, err)
 	}
 	return &s, nil
 }
@@ -146,7 +201,7 @@ func (h *Handler) UpdateMine(ctx context.Context, in UpdateMineInput) (*Settings
 	current, err := h.repo.Get(ctx, uid)
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+			return nil, h.internal("update mine", uid, err)
 		}
 		current = DefaultsFor(uid, p.TenantID)
 	}
@@ -158,8 +213,9 @@ func (h *Handler) UpdateMine(ctx context.Context, in UpdateMineInput) (*Settings
 	}
 	saved, err := h.repo.Upsert(ctx, current)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, h.internal("update mine", uid, err)
 	}
+	h.log.Info("user settings updated", zap.String("user_id", uid.String()), zap.Strings("fields", in.UpdateMask))
 	return &saved, nil
 }
 
@@ -170,9 +226,9 @@ func (h *Handler) GetForUser(ctx context.Context, userID uuid.UUID) (*Settings, 
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	target, err := h.users.GetByID(ctx, userID)
+	target, err := h.targetUser(ctx, "get for user", userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, err
 	}
 	// Same-tenant boundary, even for platform admins (they can override via
 	// Cedar policy, but the default keeps tenants isolated).
@@ -188,7 +244,7 @@ func (h *Handler) GetForUser(ctx context.Context, userID uuid.UUID) (*Settings, 
 			d := DefaultsFor(userID, target.TenantID)
 			return &d, nil
 		}
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, h.internal("get for user", userID, err)
 	}
 	return &s, nil
 }
@@ -207,10 +263,12 @@ func (h *Handler) ListByTenant(ctx context.Context, tenantID uuid.UUID, pageSize
 	if err := h.authorizeTenant(ctx, p, cedar.ActionReadUserSettings, tenantID); err != nil {
 		return nil, err
 	}
-	if pageSize <= 0 || pageSize > 500 {
-		pageSize = 100
+	list, err := h.repo.ListByTenant(auth.WithActingTenant(ctx, tenantID), tenantID, clampPageSize(pageSize))
+	if err != nil {
+		h.log.Error("user settings store failed", zap.String("op", "list"), zap.String("tenant_id", tenantID.String()), zap.Error(err))
+		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	return h.repo.ListByTenant(auth.WithActingTenant(ctx, tenantID), tenantID, pageSize)
+	return list, nil
 }
 
 // DeleteForUser drops a user's persisted settings row. The user reverts to
@@ -221,9 +279,9 @@ func (h *Handler) DeleteForUser(ctx context.Context, userID uuid.UUID) error {
 	if err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	target, err := h.users.GetByID(ctx, userID)
+	target, err := h.targetUser(ctx, "delete for user", userID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return err
 	}
 	if !hasPlatformAdmin(p) && target.TenantID != p.TenantID {
 		return connect.NewError(connect.CodeNotFound, "user not found")
@@ -232,8 +290,10 @@ func (h *Handler) DeleteForUser(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 	if err := h.repo.Delete(auth.WithActingTenant(ctx, target.TenantID), userID); err != nil {
-		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return h.internal("delete for user", userID, err)
 	}
+	h.log.Info("user settings deleted", zap.String("user_id", userID.String()),
+		zap.String("tenant_id", target.TenantID.String()), zap.String("actor", p.Subject))
 	return nil
 }
 
@@ -258,8 +318,12 @@ func (h *Handler) subjectToUserID(ctx context.Context, p *auth.Principal) (uuid.
 		}
 	}
 	u, err := h.users.GetBySubject(ctx, p.TenantID, p.Subject)
-	if err != nil {
+	switch {
+	case errors.Is(err, authstore.ErrNotFound):
 		return uuid.Nil(), rpcerr.New(connect.CodeUnauthenticated, fmt.Errorf("resolve user: %w", err))
+	case err != nil:
+		h.log.Error("user settings: resolve caller failed", zap.String("tenant_id", p.TenantID.String()), zap.Error(err))
+		return uuid.Nil(), connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return u.UserID, nil
 }
@@ -291,13 +355,13 @@ func applyMask(s *Settings, in UpdateMineInput) error {
 	}
 	for _, field := range in.UpdateMask {
 		switch field {
-		case "timezone":
+		case FieldTimezone:
 			s.Timezone = in.Timezone
-		case "locale":
+		case FieldLocale:
 			s.Locale = in.Locale
-		case "theme":
+		case FieldTheme:
 			s.Theme = in.Theme
-		case "preferences":
+		case FieldPreferences:
 			s.Preferences = in.Preferences
 		default:
 			return connect.Errorf(connect.CodeInvalidArgument,
@@ -333,5 +397,5 @@ func validate(s Settings) error {
 }
 
 func hasPlatformAdmin(p *auth.Principal) bool {
-	return p != nil && p.HasRole("platform.admin")
+	return p != nil && p.HasRole(apiutil.RolePlatformAdmin)
 }
