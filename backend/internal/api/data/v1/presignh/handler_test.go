@@ -220,7 +220,7 @@ func TestPresignGet(t *testing.T) {
 
 	t.Run("repo lookup error → not found", func(t *testing.T) {
 		repo := &fakeRepo{lookupObjectFn: func(context.Context, uuid.UUID, string, uuid.UUID) (ObjectRef, error) {
-			return ObjectRef{}, errors.New("no such object")
+			return ObjectRef{}, fmt.Errorf("no such object: %w", ErrObjectNotFound)
 		}}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
 		_, _, _, err := h.PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", false)

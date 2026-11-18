@@ -15,6 +15,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
+	"go.uber.org/zap"
 
 	"connectrpc.com/connect/v2"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
 
@@ -63,6 +65,10 @@ type ObjectRef struct {
 // deleted, and a new upload URL for it would be wrong.
 var ErrNotPending = errors.New("object is no longer pending")
 
+// ErrObjectNotFound is Repository.LookupObject's answer for an object not in
+// the collection named: no such id, or one in another collection.
+var ErrObjectNotFound = errors.New("object not found")
+
 type Repository interface {
 	LookupObject(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (ObjectRef, error)
 	// LookupBucketMeta returns the physical (backend, bucket) bound to a
@@ -81,10 +87,15 @@ type Handler struct {
 	storage Storage
 	policy  cedar.Authorizer
 	cfg     Config
+	log     *zap.Logger
 }
 
+// SetLogger sets where each presign says how it ended. Unset, it says
+// nothing. No line carries a presigned URL.
+func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
+
 func NewHandler(repo Repository, storage Storage, policy cedar.Authorizer, cfg Config) *Handler {
-	return &Handler{repo: repo, storage: storage, policy: policy, cfg: cfg}
+	return &Handler{repo: repo, storage: storage, policy: policy, cfg: cfg, log: zap.NewNop()}
 }
 
 // PresignGet issues a download URL. requireETagMatch binds it to the
@@ -102,63 +113,49 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	start := time.Now()
 	defer func() {
 		metrics.RecordPresign(ctx, metrics.PresignOpGet, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		h.logOutcome(ctx, opPresignGet, collection, err)
 	}()
 
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if collection == "" || objectIDStr == "" {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
-	}
-	objectID, err := uuid.Parse(objectIDStr)
-	if err != nil {
-		return "", nil, time.Time{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
-	}
 	disposition, err = objecth.NormalizeContentDisposition(disposition)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	obj, err := h.repo.LookupObject(ctx, tenantID, collection, objectID)
+	_, obj, err := h.lookupObject(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return "", nil, time.Time{}, err
 	}
 	collection, key, state := obj.Collection, obj.Key, obj.State
-	if state != "AVAILABLE" {
+	if state != string(statemachine.StateAvailable) {
 		return "", nil, time.Time{}, connect.Errorf(connect.CodeFailedPrecondition,
 			"object state %s does not allow GET", state)
 	}
+	// A presigned URL grants its op on the object: the capability must
+	// allow both OpPresign (issuing the URL) and that op.
 	objectURI := paladin.ObjectResource(tenantID.String(), collection, key)
-	// Presigned GET URL grants OpGet on the underlying object; gate
-	// on both OpPresign (the act of issuing a URL) and OpGet (the op
-	// the URL ultimately authorises).
 	if err := auth.AssertCapabilityOp(ctx, auth.OpPresign, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, presignGet.capOp, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
-	// scoped read PAT enforces here; the same resolution routes PresignGet.
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, false) // presign GET (read)
-	if err != nil {
-		return "", nil, time.Time{}, objecth.MapResolveErr(err)
-	}
-	backendID, bucket := meta.BackendID, meta.BucketName
-	ttl, err = h.cfg.TTL.ResolveWithin(presignttl.OpGet, ttl,
-		uploadpolicy.For(h.cfg.Limits, meta.Constraints).GetTTLCeiling())
+	meta, ttl, err := h.resolve(ctx, tenantID, collection, presignGet, ttl)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if err := h.authorize(ctx, p, tenantID, collection, key, backendID, bucket, cedar.ActionPresignGet); err != nil {
+	if err := h.authorize(ctx, p, tenantID, collection, key, meta.BackendID, meta.BucketName, presignGet.action); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	// Capability budget burn — gates issuance for over-budget callers
-	// before we hand them a usable presigned URL. No-op when the
-	// caller is JWT-authenticated or ChargePerRequest is 0.
+	// Capability budget burn — gates issuance for an over-budget caller
+	// before a usable URL is handed over (a no-op for a JWT caller or a zero
+	// ChargePerRequest).
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
+	backendID, bucket := meta.BackendID, meta.BucketName
 	args := objecth.PresignGetArgs{
 		BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: collection, Key: key,
 		TTL: ttl, ContentDisposition: disposition,
@@ -170,7 +167,11 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 		}
 		args.IfMatch = obj.ETag
 	}
-	return h.storage.PresignGet(ctx, args)
+	url, hdrs, exp, err = h.storage.PresignGet(ctx, args)
+	if err != nil {
+		return "", nil, time.Time{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign GET: %w", err))
+	}
+	return url, hdrs, exp, nil
 }
 
 // UploadURL is a regenerated PUT URL and how the upload completes.
@@ -198,28 +199,22 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 	start := time.Now()
 	defer func() {
 		metrics.RecordPresign(ctx, metrics.PresignOpPut, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		h.logOutcome(ctx, opPresignPut, collection, err)
 	}()
 
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return UploadURL{}, err
 	}
-	if collection == "" || objectIDStr == "" {
-		return UploadURL{}, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
-	}
-	objectID, err := uuid.Parse(objectIDStr)
+	objectID, obj, err := h.lookupObject(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
-		return UploadURL{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
-	}
-	obj, err := h.repo.LookupObject(ctx, tenantID, collection, objectID)
-	if err != nil {
-		return UploadURL{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return UploadURL{}, err
 	}
 	collection, key := obj.Collection, obj.Key
 	// Only PENDING objects may receive a fresh upload URL. AVAILABLE objects
 	// would silently overwrite committed data; FAILED/DELETED rows are
 	// terminal and presigning a PUT against them is meaningless.
-	if obj.State != "PENDING" {
+	if obj.State != string(statemachine.StatePending) {
 		return UploadURL{}, connect.Errorf(connect.CodeFailedPrecondition,
 			"object state %s does not allow PUT", obj.State)
 	}
@@ -230,25 +225,20 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 		return UploadURL{}, connect.NewError(connect.CodeFailedPrecondition,
 			"object was registered without a size and checksum; start a new upload")
 	}
+	// A presigned URL grants its op on the object: the capability must
+	// allow both OpPresign (issuing the URL) and that op.
 	objectURI := paladin.ObjectResource(tenantID.String(), collection, key)
 	if err := auth.AssertCapabilityOp(ctx, auth.OpPresign, objectURI); err != nil {
 		return UploadURL{}, err
 	}
-	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
+	if err := auth.AssertCapabilityOp(ctx, presignPut.capOp, objectURI); err != nil {
 		return UploadURL{}, err
 	}
-	// Resolve the (backend, bucket) BEFORE authz so a bucket:/collection:-
-	// scoped write PAT enforces here; the same resolution routes the PUT.
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, true) // presign PUT (mutation)
-	if err != nil {
-		return UploadURL{}, objecth.MapResolveErr(err)
-	}
-	ttl, err = h.cfg.TTL.ResolveWithin(presignttl.OpPut, ttl,
-		uploadpolicy.For(h.cfg.Limits, meta.Constraints).PutTTLCeiling())
+	meta, ttl, err := h.resolve(ctx, tenantID, collection, presignPut, ttl)
 	if err != nil {
 		return UploadURL{}, err
 	}
-	if err := h.authorize(ctx, p, tenantID, collection, key, meta.BackendID, meta.BucketName, cedar.ActionPresignPut); err != nil {
+	if err := h.authorize(ctx, p, tenantID, collection, key, meta.BackendID, meta.BucketName, presignPut.action); err != nil {
 		return UploadURL{}, err
 	}
 	if err := auth.ChargeRequest(ctx); err != nil {
@@ -287,4 +277,81 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 	return apiutil.Decide(ctx, h.policy, apiutil.CedarPrincipal(p), action,
 		&cedar.Resource{TenantID: tenantID, Collection: collection, Key: key, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{})
+}
+
+// Operation names presign logs under.
+const (
+	opPresignGet = "presign get"
+	opPresignPut = "presign put"
+)
+
+// lookupObject parses the object id and reads the object the request names.
+// An object not in the collection answers NotFound; a store that fails is
+// internal, never read as an absent object.
+func (h *Handler) lookupObject(ctx context.Context, tenantID uuid.UUID, collection, objectIDStr string) (uuid.UUID, ObjectRef, error) {
+	if collection == "" || objectIDStr == "" {
+		return uuid.Nil(), ObjectRef{}, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
+	}
+	objectID, err := uuid.Parse(objectIDStr)
+	if err != nil {
+		return uuid.Nil(), ObjectRef{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+	}
+	obj, err := h.repo.LookupObject(ctx, tenantID, collection, objectID)
+	switch {
+	case errors.Is(err, ErrObjectNotFound):
+		return uuid.Nil(), ObjectRef{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+	case err != nil:
+		return uuid.Nil(), ObjectRef{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("look up object: %w", err))
+	}
+	return objectID, obj, nil
+}
+
+// logOutcome records how a presign ended: issued at debug, refused at warn,
+// failed at error. The URL is never logged; it is a bearer credential.
+func (h *Handler) logOutcome(ctx context.Context, op, collection string, err error) {
+	fields := []zap.Field{zap.String("op", op), zap.String("collection", collection)}
+	if tenant, terr := auth.EffectiveTenant(ctx); terr == nil {
+		fields = append(fields, zap.String("tenant_id", tenant.String()))
+	}
+	switch code := connect.CodeOf(err); {
+	case err == nil:
+		h.log.Debug("presigned URL issued", fields...)
+	case code == connect.CodeInternal || code == connect.CodeUnknown || code == connect.CodeUnavailable:
+		h.log.Error("presign failed", append(fields, zap.Error(err))...)
+	default:
+		h.log.Warn("presign refused", append(fields, zap.String("code", code.String()), zap.Error(err))...)
+	}
+}
+
+// presignKind is what a presign of one direction checks: the capability op
+// the URL grants, the Cedar action, whether it writes, and the TTL ceiling.
+type presignKind struct {
+	capOp   limes.Op
+	ttlOp   presignttl.Op
+	action  cedar.Action
+	write   bool
+	ceiling func(uploadpolicy.Policy) time.Duration
+}
+
+var (
+	presignGet = presignKind{capOp: limes.OpGet, ttlOp: presignttl.OpGet, action: cedar.ActionPresignGet,
+		ceiling: uploadpolicy.Policy.GetTTLCeiling}
+	presignPut = presignKind{capOp: limes.OpPut, ttlOp: presignttl.OpPut, action: cedar.ActionPresignPut, write: true,
+		ceiling: uploadpolicy.Policy.PutTTLCeiling}
+)
+
+// resolve finds the (backend, bucket) the object lives in and the TTL a URL
+// of kind gets there. It runs BEFORE authorization, so a bucket- or
+// collection-scoped credential is enforced against the resolved bucket; the
+// same resolution routes the presign.
+func (h *Handler) resolve(ctx context.Context, tenantID uuid.UUID, collection string, kind presignKind, ttl time.Duration) (objecth.BucketMeta, time.Duration, error) {
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, kind.write)
+	if err != nil {
+		return objecth.BucketMeta{}, 0, objecth.MapResolveErr(err)
+	}
+	ttl, err = h.cfg.TTL.ResolveWithin(kind.ttlOp, ttl, kind.ceiling(uploadpolicy.For(h.cfg.Limits, meta.Constraints)))
+	if err != nil {
+		return objecth.BucketMeta{}, 0, err
+	}
+	return meta, ttl, nil
 }

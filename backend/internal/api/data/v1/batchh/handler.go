@@ -12,6 +12,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -90,10 +91,14 @@ type Handler struct {
 	policy    cedar.Authorizer
 	buckets   BucketResolver
 	objects   ObjectFinder
+	log       *zap.Logger
 }
 
+// SetLogger sets where each submitted batch is recorded. Unset, nothing is.
+func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
+
 func NewHandler(submitter Submitter, policy cedar.Authorizer, buckets BucketResolver, objects ObjectFinder) *Handler {
-	return &Handler{submitter: submitter, policy: policy, buckets: buckets, objects: objects}
+	return &Handler{submitter: submitter, policy: policy, buckets: buckets, objects: objects, log: zap.NewNop()}
 }
 
 // BatchDelete validates and enqueues an async delete across up to 10k objects.
@@ -339,7 +344,18 @@ func (h *Handler) chargeAndSubmit(ctx context.Context, opType string, md []byte)
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return uuid.Nil(), err
 	}
-	return h.submitter.Submit(ctx, opType, md)
+	id, err := h.submitter.Submit(ctx, opType, md)
+	if err != nil {
+		// The submitter logs its own store failure; this is the batch's.
+		h.log.Warn("batch not submitted", zap.String("op_type", opType), zap.Error(err))
+		return uuid.Nil(), err
+	}
+	fields := []zap.Field{zap.String("op_type", opType), zap.String("operation_id", id.String())}
+	if tenant, terr := auth.EffectiveTenant(ctx); terr == nil {
+		fields = append(fields, zap.String("tenant_id", tenant.String()))
+	}
+	h.log.Info("batch submitted", fields...)
+	return id, nil
 }
 
 // maxBatchSize caps the number of objects per BatchXxx call.

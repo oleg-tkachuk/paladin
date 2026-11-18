@@ -3,6 +3,7 @@ package operationh
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"uuid"
 
@@ -184,7 +185,7 @@ func TestGetOperation(t *testing.T) {
 
 	t.Run("repo error → not found", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{getFn: func(context.Context, uuid.UUID, uuid.UUID) (Operation, error) {
-			return Operation{}, errors.New("missing")
+			return Operation{}, fmt.Errorf("missing: %w", ErrOperationNotFound)
 		}}, allowAuthorizer())
 		_, err := h.GetOperation(authedCtx(tid), opID)
 		wantCode(t, err, connect.CodeNotFound)

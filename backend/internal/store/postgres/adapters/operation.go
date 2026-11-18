@@ -119,8 +119,11 @@ func (r *OperationRepo) Create(ctx context.Context, op operationh.Operation) err
 
 func (r *OperationRepo) Get(ctx context.Context, opID, tenantID uuid.UUID) (operationh.Operation, error) {
 	row, err := r.q.GetOperation(ctx, pgUUID(opID), pgUUID(tenantID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return operationh.Operation{}, fmt.Errorf("operation %s: %w", opID, operationh.ErrOperationNotFound)
+	}
 	if err != nil {
-		return operationh.Operation{}, err
+		return operationh.Operation{}, fmt.Errorf("get operation %s: %w", opID, err)
 	}
 	return operationFromSQLC(row.Operation), nil
 }
