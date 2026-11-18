@@ -1,4 +1,4 @@
-## Unreleased — roles wait for Postgres at start
+## release/v0.4.0 — roles wait for Postgres at start
 
 - A role that finds Postgres down at start retries, logging each refusal,
   for `datastores.postgres.timeouts.startup_wait` (90s by default) before it

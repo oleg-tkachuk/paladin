@@ -1,4 +1,4 @@
-## Unreleased — a purged tenant's slug can be released after a period
+## release/v0.4.0 — a purged tenant's slug can be released after a period
 
 - **`admin.tenants.slug_reservation_period`** (optional): how long a purged
   tenant's slug stays reserved. Set, the worker releases each slug once that

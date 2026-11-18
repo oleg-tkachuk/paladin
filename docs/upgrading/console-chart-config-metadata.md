@@ -1,4 +1,4 @@
-## Unreleased — the console chart drops `config` and `metadata`
+## release/v0.4.0 — the console chart drops `config` and `metadata`
 
 - The console chart no longer takes `config` or `metadata`, and renders no
   `paladin-console-config` ConfigMap. Nothing read either since the console

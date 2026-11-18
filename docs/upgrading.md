@@ -89,7 +89,7 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
-## Unreleased — a purged tenant's slug can be released after a period
+## release/v0.4.0 — a purged tenant's slug can be released after a period
 
 - **`admin.tenants.slug_reservation_period`** (optional): how long a purged
   tenant's slug stays reserved. Set, the worker releases each slug once that
@@ -102,7 +102,7 @@ here.
   now records the tenant purged last and that purge's time; it used to keep
   the first tenant and the first purge.
 
-## sdk/python/v0.148.0, sdk/go/v0.148.0 — retired tenant slugs can be listed and released
+## release/v0.4.0, sdk/python/v0.148.0, sdk/go/v0.148.0 — retired tenant slugs can be listed and released
 
 - **`TenantService.ListRetiredTenantSlugs` and `ReleaseTenantSlug`**: list the
   slugs purged tenants held, and forget one so a new tenant can take it.
@@ -110,7 +110,7 @@ here.
 - **`SLUG_TAKEN` errors carry ErrorInfo metadata `holder`**: `live`,
   `trashed` or `retired`. Additive.
 
-## Unreleased — a tenant's slug stays reserved after trash and purge
+## release/v0.4.0 — a tenant's slug stays reserved after trash and purge
 
 - **Creating a tenant refuses a slug a trashed tenant holds, or a purged
   tenant held**, with `AlreadyExists` and reason `SLUG_TAKEN`. Before, a
@@ -123,7 +123,7 @@ here.
 - **The slug can no longer be updated in the database, not even with
   `paladin.allow_slug_rename`**; the trigger ignores that setting now.
 
-## sdk/python/v0.147.0, sdk/go/v0.147.0 — a tenant's slug never changes
+## release/v0.4.0, sdk/python/v0.147.0, sdk/go/v0.147.0 — a tenant's slug never changes
 
 - `TenantService.RenameTenantSlug` and `TenantService.ResolveRenamedSlug` are
   removed, from the API and from both SDKs. A slug is set when the tenant is
@@ -136,7 +136,7 @@ here.
 - A tenant restored from the trash whose slug another tenant took meanwhile
   can no longer be renamed out of the way: purge the other tenant first.
 
-## Unreleased — the console chart drops `config` and `metadata`
+## release/v0.4.0 — the console chart drops `config` and `metadata`
 
 - The console chart no longer takes `config` or `metadata`, and renders no
   `paladin-console-config` ConfigMap. Nothing read either since the console
@@ -146,7 +146,7 @@ here.
 - An overlay that replaced `volumes` or `volumeMounts` and kept the `config`
   volume must drop it too: it names the ConfigMap that is no longer rendered.
 
-## Unreleased — roles wait for Postgres at start
+## release/v0.4.0 — roles wait for Postgres at start
 
 - A role that finds Postgres down at start retries, logging each refusal,
   for `datastores.postgres.timeouts.startup_wait` (90s by default) before it
