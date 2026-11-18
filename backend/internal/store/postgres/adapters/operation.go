@@ -167,15 +167,21 @@ func (r *OperationRepo) IsLive(ctx context.Context, opID uuid.UUID) (bool, error
 	return live, nil
 }
 
+// Cancel implements operationh.Repository. A cancel that changes no row is
+// either an operation that is not there (ErrOperationNotFound) or one that has
+// already finished (ErrNotCancellable); the follow-up read tells them apart.
 func (r *OperationRepo) Cancel(ctx context.Context, opID, tenantID uuid.UUID) error {
 	rows, err := r.q.CancelOperation(ctx, pgUUID(opID), pgUUID(tenantID))
 	if err != nil {
 		return fmt.Errorf("cancel operation: %w", err)
 	}
-	if rows == 0 {
-		return operationh.ErrNotCancellable
+	if rows > 0 {
+		return nil
 	}
-	return nil
+	if _, err := r.Get(ctx, opID, tenantID); err != nil {
+		return err
+	}
+	return operationh.ErrNotCancellable
 }
 
 // Dismiss implements operationh.Repository.
