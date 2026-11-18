@@ -1,4 +1,4 @@
-## Unreleased — a tenant's slug stays reserved after trash and purge
+## release/v0.4.0 — a tenant's slug stays reserved after trash and purge
 
 - **Creating a tenant refuses a slug a trashed tenant holds, or a purged
   tenant held**, with `AlreadyExists` and reason `SLUG_TAKEN`. Before, a
