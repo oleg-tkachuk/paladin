@@ -29,6 +29,19 @@ export type BudgetCeiling =
 export type BudgetCeilingRead =
   BudgetCeiling | { case: "budgetUnreadable"; value: BudgetUnreadable };
 
+/** What a ceiling read says of the budget. */
+export const BudgetState = {
+  /** A cap, which may be zero. */
+  Limited: "limited",
+  /** Explicitly no cap. */
+  Unlimited: "unlimited",
+  /** No budget is configured. */
+  None: "none",
+  /** The budget could not be read; whether there is a cap is unknown. */
+  Unreadable: "unreadable",
+} as const;
+export type BudgetState = (typeof BudgetState)[keyof typeof BudgetState];
+
 /**
  * The ceiling to send: unlimited in `unit`, or a limit of `limit`, which
  * carries its own unit.
@@ -46,16 +59,25 @@ export function budgetCeiling(
     : { case: "maxBudget", value: limit };
 }
 
+/** What `c` says of the budget; nothing read is no budget. */
+export function budgetState(c: BudgetCeilingRead | undefined): BudgetState {
+  switch (c?.case) {
+    case "maxBudget":
+      return BudgetState.Limited;
+    case "unlimitedBudget":
+      return BudgetState.Unlimited;
+    case "budgetUnreadable":
+      return BudgetState.Unreadable;
+    default:
+      return BudgetState.None;
+  }
+}
+
 /** The limit, or undefined when there is none or nothing is known. */
 export function budgetLimit(
   c: BudgetCeilingRead | undefined,
 ): Money | undefined {
   return c?.case === "maxBudget" ? c.value : undefined;
-}
-
-/** Whether the ceiling is explicitly unlimited. */
-export function budgetUnlimited(c: BudgetCeilingRead | undefined): boolean {
-  return c?.case === "unlimitedBudget";
 }
 
 /** The unit charges are in, limited or not; undefined when unknown. */
