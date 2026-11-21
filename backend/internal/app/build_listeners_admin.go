@@ -106,7 +106,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	collectionH.SetEventProducer(events)
 	collectionH.SetLogger(l.Named("collection-events"))
 	quotaH.SetEventProducer(events)
-	quotaH.SetLogger(l.Named("quota-events"))
+	quotaH.SetLogger(l.Named("quotas"))
 	backendH.SetEventProducer(events)
 	backendH.SetLogger(l.Named("backend-events"))
 
