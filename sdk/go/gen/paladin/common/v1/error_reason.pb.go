@@ -172,6 +172,10 @@ const (
 	// share of the replay cache holds. Not permanent: the share frees as proofs
 	// age out.
 	ErrorReason_ERROR_REASON_CAPABILITY_PROOF_QUOTA_EXCEEDED ErrorReason = 63
+	// A write to a bucket its storage backend does not hold yet: the bucket is
+	// registered and still being created there. Not permanent: retry once it
+	// has been created.
+	ErrorReason_ERROR_REASON_BUCKET_PROVISIONING ErrorReason = 64
 )
 
 // Enum value maps for ErrorReason.
@@ -241,6 +245,7 @@ var (
 		61: "ERROR_REASON_CAPABILITY_REVOCATION_UNAVAILABLE",
 		62: "ERROR_REASON_CAPABILITY_UNRECORDED",
 		63: "ERROR_REASON_CAPABILITY_PROOF_QUOTA_EXCEEDED",
+		64: "ERROR_REASON_BUCKET_PROVISIONING",
 	}
 	ErrorReason_value = map[string]int32{
 		"ERROR_REASON_UNSPECIFIED":                         0,
@@ -307,6 +312,7 @@ var (
 		"ERROR_REASON_CAPABILITY_REVOCATION_UNAVAILABLE":   61,
 		"ERROR_REASON_CAPABILITY_UNRECORDED":               62,
 		"ERROR_REASON_CAPABILITY_PROOF_QUOTA_EXCEEDED":     63,
+		"ERROR_REASON_BUCKET_PROVISIONING":                 64,
 	}
 )
 
@@ -341,7 +347,7 @@ var File_paladin_common_v1_error_reason_proto protoreflect.FileDescriptor
 
 const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	"\n" +
-	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\xe8\x14\n" +
+	"$paladin/common/v1/error_reason.proto\x12\x11paladin.common.v1*\x8e\x15\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ERROR_REASON_NOT_FOUND\x10\x01\x12!\n" +
@@ -407,7 +413,8 @@ const file_paladin_common_v1_error_reason_proto_rawDesc = "" +
 	" ERROR_REASON_BUCKET_GRANT_IN_USE\x10<\x122\n" +
 	".ERROR_REASON_CAPABILITY_REVOCATION_UNAVAILABLE\x10=\x12&\n" +
 	"\"ERROR_REASON_CAPABILITY_UNRECORDED\x10>\x120\n" +
-	",ERROR_REASON_CAPABILITY_PROOF_QUOTA_EXCEEDED\x10?BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
+	",ERROR_REASON_CAPABILITY_PROOF_QUOTA_EXCEEDED\x10?\x12$\n" +
+	" ERROR_REASON_BUCKET_PROVISIONING\x10@BNZLgithub.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1;paladincommonv1b\x06proto3"
 
 var (
 	file_paladin_common_v1_error_reason_proto_rawDescOnce sync.Once
