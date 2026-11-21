@@ -217,61 +217,28 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 	if err != nil {
 		return nil, err
 	}
-	// Resource-owner tenant: by default it's the caller's tenant. A
-	// platform.admin can explicitly target a different tenant by
-	// supplying `args.TenantID` (the connectshim parses this from
-	// `parent: "tenants/{id}"` in the request). Without the
-	// platform.admin gate the override is silently ignored so a
-	// non-admin can't write into someone else's namespace.
-	if args.TenantID == uuid.Nil() {
-		args.TenantID = callerTenantID
-	} else if args.TenantID != callerTenantID {
-		// platform.tenant-provisioner too: creating another tenant's object
-		// keys IS provisioning, and it is the step that makes a freshly created
-		// tenant usable. Its authority stops there — the role carries no
-		// data-plane action, so it can name the namespace and never read or
-		// write an object in it.
-		if !principal.HasRole(apiutil.RolePlatformAdmin) &&
-			!principal.HasRole(apiutil.RoleTenantProvisioner) {
-			return nil, connect.NewError(connect.CodePermissionDenied,
-				"cross-tenant CreateCollection requires platform.admin or platform.tenant-provisioner")
-		}
+	if args.TenantID, err = createTenant(args.TenantID, callerTenantID, principal); err != nil {
+		return nil, err
 	}
 	// A backend must be named explicitly — there is no default. The connectshim
 	// resolves it from the named bucket or the tenant's default binding before
 	// we get here; an empty id at this point means neither was supplied.
 	if args.BackendID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"backend_id is required (name a bucket or set a tenant default binding; there is no default backend)")
+		return nil, h.answer(opCreate, args.TenantID, args.Collection, connect.NewError(connect.CodeInvalidArgument,
+			"backend_id is required (name a bucket or set a tenant default binding; there is no default backend)"))
 	}
 	if err := h.authorizeFull(ctx, principal, args.TenantID, args.Collection, args.BackendID, args.BucketName, cedar.ActionManageCollection); err != nil {
 		return nil, err
 	}
 	if err := h.admitVisibility(ctx, principal, &args); err != nil {
-		return nil, err
+		return nil, h.answer(opCreate, args.TenantID, args.Collection, err)
 	}
 	// Scope the connection's RLS tenant to the row's owner, now that Cedar
 	// has allowed this caller to act on it. Without this a platform admin
 	// creating for another tenant writes a row WITH CHECK rejects.
 	ctx = auth.WithActingTenant(ctx, args.TenantID)
-	// Create + paladin.collection.created in one tx (ADR-0003).
-	var b Collection
-	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		var e error
-		b, e = h.repo.CreateTx(ctx, tx, args)
-		if e != nil {
-			return e
-		}
-		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.collection.created",
-			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection),
-			map[string]any{
-				"tenant_id":    b.TenantID.String(),
-				"collection":   b.Collection,
-				"display_name": b.DisplayName,
-				"backend_id":   b.BackendID,
-				"bucket_name":  b.BucketName,
-			})
-	}); err != nil {
+	b, err := h.createRow(ctx, args)
+	if err != nil {
 		// MapError, not a hardcoded CodeInternal. The repository classifies
 		// what it can — a duplicate name is ErrCollectionExists — and forcing
 		// Internal here threw that away, so the mapping below the handler was
@@ -287,6 +254,50 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 	// writes into the slot the audit mw installed
 	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection))
 	return &b, nil
+}
+
+// createTenant is the tenant a new collection belongs to. By default it's the
+// caller's tenant. A platform.admin can explicitly target a different tenant
+// by supplying one (the connectshim parses it from `parent: "tenants/{id}"`
+// in the request); anyone else is refused, so a non-admin can't write into
+// someone else's namespace.
+//
+// platform.tenant-provisioner too: creating another tenant's object keys IS
+// provisioning, and it is the step that makes a freshly created tenant usable.
+// Its authority stops there — the role carries no data-plane action, so it can
+// name the namespace and never read or write an object in it.
+func createTenant(requested, caller uuid.UUID, principal *auth.Principal) (uuid.UUID, error) {
+	if requested == uuid.Nil() || requested == caller {
+		return caller, nil
+	}
+	if !principal.HasRole(apiutil.RolePlatformAdmin) && !principal.HasRole(apiutil.RoleTenantProvisioner) {
+		return uuid.Nil(), connect.NewError(connect.CodePermissionDenied,
+			"cross-tenant CreateCollection requires platform.admin or platform.tenant-provisioner")
+	}
+	return requested, nil
+}
+
+// createRow writes the collection args names and paladin.collection.created
+// in one tx (ADR-0003), and returns the stored row.
+func (h *Handler) createRow(ctx context.Context, args CreateCollectionArgs) (Collection, error) {
+	var b Collection
+	err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var e error
+		b, e = h.repo.CreateTx(ctx, tx, args)
+		if e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, b.TenantID, EventCollectionCreated,
+			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection),
+			map[string]any{
+				"tenant_id":    b.TenantID.String(),
+				"collection":   b.Collection,
+				"display_name": b.DisplayName,
+				"backend_id":   b.BackendID,
+				"bucket_name":  b.BucketName,
+			})
+	})
+	return b, err
 }
 
 // EnsureCollection idempotently binds an object-key to (backend, bucket) under
@@ -309,47 +320,17 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 	// Self-scope: the operation is ALWAYS the caller's own tenant. Never trust
 	// a tenant id from the request.
 	args.TenantID = callerTenantID
-	if args.Collection == "" {
-		return false, connect.NewError(connect.CodeInvalidArgument,
-			"collection is required")
-	}
-	if args.BackendID == "" || args.BucketName == "" {
-		return false, connect.NewError(connect.CodeInvalidArgument,
-			"backend_id and bucket_name are required")
-	}
-	// Self-service carries no ConfigurePublicRead check, so it never
-	// publishes (ADR-0027).
-	if args.PublicRead || args.CacheControl != "" {
-		return false, apiutil.MapError(publicread.Rulef("a public collection is created through CreateCollection only"))
+	if err := validateEnsure(args); err != nil {
+		return false, h.answer(opEnsure, args.TenantID, args.Collection, err)
 	}
 	// Fast idempotent path: an existing key is a success no-op.
 	switch _, gerr := h.repo.Get(ctx, args.TenantID, args.Collection); {
 	case gerr == nil:
 		return false, nil
-	case errors.Is(gerr, ErrCollectionNotFound):
-		// fall through to create
-	default:
+	case !errors.Is(gerr, ErrCollectionNotFound):
 		return false, h.answer(opEnsure, args.TenantID, args.Collection, gerr)
 	}
-	// Create + paladin.collection.created in one tx (ADR-0003), mirroring
-	// CreateCollection.
-	var b Collection
-	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		var e error
-		b, e = h.repo.CreateTx(ctx, tx, args)
-		if e != nil {
-			return e
-		}
-		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.collection.created",
-			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection),
-			map[string]any{
-				"tenant_id":    b.TenantID.String(),
-				"collection":   b.Collection,
-				"display_name": b.DisplayName,
-				"backend_id":   b.BackendID,
-				"bucket_name":  b.BucketName,
-			})
-	}); err != nil {
+	if _, err := h.createRow(ctx, args); err != nil {
 		// Lost a race to a concurrent create: the key now exists, so honour
 		// idempotency and report it existing rather than surfacing the
 		// unique-violation.
@@ -362,6 +343,22 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 		return false, h.answer(opEnsure, args.TenantID, args.Collection, fmt.Errorf("ensure collection: %w", err))
 	}
 	return true, nil
+}
+
+// validateEnsure refuses a self-provisioned collection that names no
+// collection or binding, or that would be public: self-service carries no
+// ConfigurePublicRead check, so it never publishes (ADR-0027).
+func validateEnsure(args CreateCollectionArgs) error {
+	if args.Collection == "" {
+		return connect.NewError(connect.CodeInvalidArgument, "collection is required")
+	}
+	if args.BackendID == "" || args.BucketName == "" {
+		return connect.NewError(connect.CodeInvalidArgument, "backend_id and bucket_name are required")
+	}
+	if args.PublicRead || args.CacheControl != "" {
+		return publicread.Rulef("a public collection is created through CreateCollection only")
+	}
+	return nil
 }
 
 // GetCollection reads one Collection under tenantID. tenantID comes from the
@@ -469,7 +466,7 @@ func (h *Handler) UpdateCollection(ctx context.Context, args UpdateCollectionArg
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, b.TenantID, "paladin.collection.updated",
+		return h.dispatchEventTx(ctx, tx, b.TenantID, EventCollectionUpdated,
 			CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection),
 			map[string]any{
 				"tenant_id":        b.TenantID.String(),
@@ -516,7 +513,7 @@ func (h *Handler) DeleteCollection(
 		if e := h.repo.DeleteTx(ctx, tx, tenantID, collection, expectedVersion); e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.collection.deleted",
+		return h.dispatchEventTx(ctx, tx, tenantID, EventCollectionDeleted,
 			resourceName,
 			map[string]any{
 				"tenant_id":        tenantID.String(),
@@ -538,26 +535,8 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	if err != nil {
 		return nil, "", err
 	}
-	// An empty parent lists across tenants for a platform admin — every
-	// collection, or with a (backend, bucket) filter every one bound to that
-	// bucket. Anyone else asking without a tenant gets their own tenant's:
-	// without that pin any tenant could enumerate sibling tenants' collections.
-	if args.TenantID == uuid.Nil() {
-		byBucket := args.BackendID != "" && args.BucketName != ""
-		switch {
-		case principal.HasRole(apiutil.RolePlatformAdmin):
-			// Stays uuid.Nil: across tenants.
-		case byBucket:
-			return nil, "", connect.NewError(connect.CodePermissionDenied,
-				"cross-tenant ListCollections requires platform.admin")
-		default:
-			args.TenantID = callerTenantID
-		}
-	} else if args.TenantID != callerTenantID {
-		if !principal.HasRole(apiutil.RolePlatformAdmin) {
-			return nil, "", connect.NewError(connect.CodePermissionDenied,
-				"cross-tenant ListCollections requires platform.admin")
-		}
+	if args.TenantID, err = listTenant(args, callerTenantID, principal); err != nil {
+		return nil, "", err
 	}
 	// One tenant-scoped Cedar check up front; per-row filtering would
 	// dominate pagination cost so we don't repeat it for every collection.
@@ -565,7 +544,7 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	// (the principal-tenant invariant the Cedar engine encodes).
 	crossTenant := args.TenantID == uuid.Nil()
 	authzTenant := args.TenantID
-	if authzTenant == uuid.Nil() {
+	if crossTenant {
 		authzTenant = callerTenantID
 	}
 	if err := h.authorize(ctx, principal, authzTenant, "", cedar.ActionManageCollection); err != nil {
@@ -580,16 +559,47 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	} else {
 		ctx = auth.WithActingTenant(ctx, authzTenant)
 	}
-	page, next, err := h.repo.List(ctx, args)
+	page, next, err := h.listPage(ctx, args)
 	if err != nil {
 		return nil, "", h.answer(opList, authzTenant, "", err)
+	}
+	return page, next, nil
+}
+
+// listTenant is the tenant a listing reads, uuid.Nil for every tenant. An
+// empty parent lists across tenants for a platform admin — every collection,
+// or with a (backend, bucket) filter every one bound to that bucket. Anyone
+// else asking without a tenant gets their own tenant's: without that pin any
+// tenant could enumerate sibling tenants' collections. Naming another tenant
+// is a platform admin's.
+func listTenant(args ListCollectionsArgs, caller uuid.UUID, principal *auth.Principal) (uuid.UUID, error) {
+	admin := principal.HasRole(apiutil.RolePlatformAdmin)
+	byBucket := args.BackendID != "" && args.BucketName != ""
+	switch {
+	case admin:
+		return args.TenantID, nil
+	case args.TenantID == uuid.Nil() && !byBucket:
+		return caller, nil
+	case args.TenantID == caller:
+		return caller, nil
+	}
+	return uuid.Nil(), connect.NewError(connect.CodePermissionDenied,
+		"cross-tenant ListCollections requires platform.admin")
+}
+
+// listPage is one page of the listing args asks for: the store's page with
+// the filter applied, and each collection's usage.
+func (h *Handler) listPage(ctx context.Context, args ListCollectionsArgs) ([]Collection, string, error) {
+	page, next, err := h.repo.List(ctx, args)
+	if err != nil {
+		return nil, "", err
 	}
 	page, err = celpkg.FilterPage(h.cel, celpkg.CollectionSchema, args.Filter, page, collectionRow)
 	if err != nil {
-		return nil, "", h.answer(opList, authzTenant, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err)))
+		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
 	}
 	if err := h.withUsage(ctx, page); err != nil {
-		return nil, "", h.answer(opList, authzTenant, "", err)
+		return nil, "", err
 	}
 	return page, next, nil
 }
@@ -786,6 +796,13 @@ func (h *Handler) notEmpty(ctx context.Context, tenantID uuid.UUID, collection s
 	}
 	return &CollectionNotEmptyError{Holding: holding}
 }
+
+// The lifecycle events the collection RPCs record.
+const (
+	EventCollectionCreated = "paladin.collection.created"
+	EventCollectionUpdated = "paladin.collection.updated"
+	EventCollectionDeleted = "paladin.collection.deleted"
+)
 
 // The op each log line of the collection RPCs names.
 const (
