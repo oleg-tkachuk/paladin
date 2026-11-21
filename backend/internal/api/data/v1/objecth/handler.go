@@ -94,7 +94,7 @@ type Storage interface {
 // ErrStoredObjectNotFound is Storage.Head's answer when the backend was
 // reached and holds nothing at the key. An unreachable or refusing backend is
 // a different error: only this one may decide anything terminal.
-var ErrStoredObjectNotFound = errors.New("storage: object not found")
+var ErrStoredObjectNotFound = errors.New("object not found in storage")
 
 // ErrObjectBytesMissing refuses to restore an object whose bytes are gone
 // from its bucket: restored, it would be listed and fail every download.

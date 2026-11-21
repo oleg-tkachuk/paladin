@@ -68,7 +68,7 @@ func LookupAction(name string) (Action, bool) {
 }
 
 // ErrUndeclaredAction is returned for the zero Action.
-var ErrUndeclaredAction = errors.New("cedar: undeclared action")
+var ErrUndeclaredAction = errors.New("undeclared action")
 
 // Action identifiers mirror the Cedar schema (policies/schema.cedarschema).
 var (
@@ -1201,7 +1201,7 @@ func evaluatedLayer(name, stored string, repair Action) EvaluatedLayer {
 // on the entity — including the delete that would remove it — fails until a
 // human replaces it. Registered to FailedPrecondition so the answer names a
 // state the caller can fix rather than an outage they cannot.
-var ErrPolicyUnparseable = errors.New("cedar: stored policy does not compile")
+var ErrPolicyUnparseable = errors.New("stored policy does not compile")
 
 // degradeUnparseableLayers joins the built-in layer with the tenant-authored
 // ones, replacing any layer that does not parse with a freeze over the scope

@@ -47,8 +47,8 @@ var (
 	expectedBearer       = refusal{code: connect.CodeUnauthenticated, message: "expected Bearer token"}
 	jwtMalformed         = refusal{code: connect.CodeUnauthenticated, message: "jwt: malformed token"}
 	jwtExpired           = refusal{code: connect.CodeUnauthenticated, message: "jwt: token expired"}
-	apiTokenNotFound     = refusal{code: connect.CodeUnauthenticated, message: "api_token: token not found"}
-	apiTokenRevoked      = refusal{code: connect.CodeUnauthenticated, message: "api_token: token revoked"}
+	apiTokenNotFound     = refusal{code: connect.CodeUnauthenticated, message: "API token not found"}
+	apiTokenRevoked      = refusal{code: connect.CodeUnauthenticated, message: "API token revoked"}
 	// A capability the fake did not issue goes to the verifier, as on the
 	// server, which cannot read "not-issued" as a Biscuit.
 	capabilityNotIssued = refusal{connect.CodeUnauthenticated, "The access token is invalid",

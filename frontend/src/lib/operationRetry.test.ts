@@ -32,9 +32,7 @@ const batch = (type: string, failures: object[], permanent = false) =>
 
 describe("retryRequest", () => {
   it("deletes again the objects a delete could not, as it was asked", () => {
-    const failures = [
-      { object_id: FAILED, reason: "statemachine: version conflict" },
-    ];
+    const failures = [{ object_id: FAILED, reason: "object version conflict" }];
     expect(retryRequest(batch("BatchDelete", failures, true))).toEqual({
       kind: "delete",
       parent: COLLECTION,
