@@ -181,6 +181,23 @@ func (h *Handler) answer(op string, tenantID uuid.UUID, collection string, err e
 	return mapped
 }
 
+// changed logs that op changed collection c: which collection of which
+// tenant, where it is bound, at which version, and who changed it.
+func (h *Handler) changed(ctx context.Context, op string, c Collection) {
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	h.log.Info("collection changed",
+		zap.String("op", op),
+		zap.String("tenant_id", c.TenantID.String()),
+		zap.String("collection", c.Collection),
+		zap.String("backend_id", c.BackendID),
+		zap.String("bucket_name", c.BucketName),
+		zap.Int64("resource_version", c.ResourceVersion),
+		zap.String("actor", actor))
+}
+
 // dispatchEventTx records the event on the caller's tx so it commits
 // atomically with the collection mutation (ADR-0003). Returns the
 // error (caller rolls back); nil-safe.
@@ -251,6 +268,7 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 		// "create collection: create collection: ERROR: …".
 		return nil, h.answer(opCreate, args.TenantID, args.Collection, err)
 	}
+	h.changed(ctx, opCreate, b)
 	// writes into the slot the audit mw installed
 	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection))
 	return &b, nil
@@ -330,7 +348,8 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 	case !errors.Is(gerr, ErrCollectionNotFound):
 		return false, h.answer(opEnsure, args.TenantID, args.Collection, gerr)
 	}
-	if _, err := h.createRow(ctx, args); err != nil {
+	b, err := h.createRow(ctx, args)
+	if err != nil {
 		// Lost a race to a concurrent create: the key now exists, so honour
 		// idempotency and report it existing rather than surfacing the
 		// unique-violation.
@@ -342,6 +361,7 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 		// Internal.
 		return false, h.answer(opEnsure, args.TenantID, args.Collection, fmt.Errorf("ensure collection: %w", err))
 	}
+	h.changed(ctx, opEnsure, b)
 	return true, nil
 }
 
@@ -478,6 +498,7 @@ func (h *Handler) UpdateCollection(ctx context.Context, args UpdateCollectionArg
 	}); err != nil {
 		return nil, h.answer(opUpdate, tenantID, args.Collection, err)
 	}
+	h.changed(ctx, opUpdate, b)
 	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection))
 	return &b, nil
 }
@@ -526,6 +547,10 @@ func (h *Handler) DeleteCollection(
 		}
 		return h.answer(opDelete, tenantID, collection, err)
 	}
+	// The pre-read's row, at the version the delete was asked for; the
+	// collection's own name and tenant when the pre-read found none.
+	pre.TenantID, pre.Collection, pre.ResourceVersion = tenantID, collection, expectedVersion
+	h.changed(ctx, opDelete, pre)
 	apiutil.StashResource(ctx, resourceName)
 	return nil
 }
@@ -659,6 +684,7 @@ func (h *Handler) BindCollectionToBucket(
 	if err != nil {
 		return nil, h.answer(opBind, tenantID, collection, fmt.Errorf("read back: %w", err))
 	}
+	h.changed(ctx, opBind, updated)
 	return &updated, nil
 }
 

@@ -259,7 +259,7 @@ func assembleDataMux(ctx context.Context, deps *SharedDeps, shared planeShared) 
 	bucketBootstrapH.SetLogger(l.Named("buckets"))
 	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
 	collectionBootstrapH.SetEventProducer(apiEvents)
-	collectionBootstrapH.SetLogger(l.Named("collection-events"))
+	collectionBootstrapH.SetLogger(l.Named("collections"))
 	storageBootstrapH := storagebootstraph.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
 
 	// The session key is in memory only where IAM is co-hosted; otherwise

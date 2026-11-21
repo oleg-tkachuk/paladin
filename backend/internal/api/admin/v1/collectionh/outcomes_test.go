@@ -102,6 +102,64 @@ func TestStoreFailuresAnswerInternal(t *testing.T) {
 	}
 }
 
+// Every change to a collection is logged once at info: what changed, which
+// collection of which tenant, and who changed it.
+func TestChangesAreLogged(t *testing.T) {
+	tid := uuid.New()
+	stored := func(_ context.Context, tenant uuid.UUID, key string) (Collection, error) {
+		return fullKey(tenant, key), nil
+	}
+	created := func(_ context.Context, args CreateCollectionArgs) (Collection, error) {
+		return fullKey(args.TenantID, args.Collection), nil
+	}
+	for _, tc := range []struct {
+		op   string
+		repo *fakeRepo
+		call func(*Handler) error
+	}{
+		{opCreate, &fakeRepo{createTxFn: created}, func(h *Handler) error {
+			_, err := h.CreateCollection(authedCtx(tid), CreateCollectionArgs{Collection: "k", BackendID: "b", BucketName: "n"})
+			return err
+		}},
+		{opEnsure, &fakeRepo{createTxFn: created, getFn: func(context.Context, uuid.UUID, string) (Collection, error) {
+			return Collection{}, ErrCollectionNotFound
+		}}, func(h *Handler) error {
+			_, err := h.EnsureCollection(authedCtx(tid), CreateCollectionArgs{Collection: "k", BackendID: "b", BucketName: "n"})
+			return err
+		}},
+		{opUpdate, &fakeRepo{updateTxFn: func(_ context.Context, args UpdateCollectionArgs) (Collection, error) {
+			return fullKey(args.TenantID, args.Collection), nil
+		}}, func(h *Handler) error {
+			_, err := h.UpdateCollection(authedCtx(tid), UpdateCollectionArgs{Collection: "k"})
+			return err
+		}},
+		{opDelete, &fakeRepo{getFn: stored}, func(h *Handler) error {
+			return h.DeleteCollection(authedCtx(tid), uuid.Nil(), "k", 1)
+		}},
+		{opBind, &fakeRepo{getFn: stored}, func(h *Handler) error {
+			_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil(), "k", "storageBackends/aws-eu/buckets/paladin-prod", 1)
+			return err
+		}},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			h, logs := observed(tc.repo, zapcore.InfoLevel)
+			if err := tc.call(h); err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			all := logs.All()
+			if len(all) != 1 || all[0].Level != zapcore.InfoLevel {
+				t.Fatalf("want one info line, got %v", all)
+			}
+			got := all[0].ContextMap()
+			for k, v := range map[string]any{"op": tc.op, "tenant_id": tid.String(), "collection": "k", "actor": "u1"} {
+				if got[k] != v {
+					t.Errorf("%s = %v, want %v", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
 // A self-provisioned collection naming a bucket that is not registered is a
 // missing resource, as it is for CreateCollection; it used to answer internal.
 func TestEnsureCollectionOnAnUnknownBucket(t *testing.T) {
