@@ -337,6 +337,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		if deps.Capability != nil {
 			billingHandler = billingh.NewHandler(deps.Capability.Ledger, usageStore, polEngine).
 				WithCurrency(deps.Cfg.Capability.Currency)
+			billingHandler.SetLogger(l.Named("billing"))
 		}
 		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool)))
 	}

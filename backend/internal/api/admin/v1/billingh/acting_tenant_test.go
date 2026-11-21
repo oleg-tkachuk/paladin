@@ -6,13 +6,8 @@ import (
 	"testing"
 	"uuid"
 
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
-
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
-	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // An allowed request acts on the tenant it names, not the caller's own:
@@ -45,30 +40,27 @@ func (b budgetReader) GetTenantBudget(context.Context, uuid.UUID) (meter.TenantB
 	return b.budget, b.err
 }
 
-// A budget the summary cannot read is logged, naming the tenant; a tenant
-// with no budget is not an error and logs nothing.
-func TestTenantBudgetLogsAnUnreadableBudget(t *testing.T) {
+// A budget the store cannot read is an error, answered by its limes code; a
+// tenant with no budget, or no store to read one from, is no budget.
+func TestTenantBudget(t *testing.T) {
+	boom := errors.New("connection reset")
 	cases := map[string]struct {
-		err     error
+		usage   meter.UsageStore
 		wantOK  bool
-		wantLog bool
+		wantErr error
 	}{
-		"read":         {nil, true, false},
-		"no budget":    {meter.ErrTenantBudgetNotFound, false, false},
-		"store failed": {errors.New("connection reset"), false, true},
+		"read":         {budgetReader{}, true, nil},
+		"no budget":    {budgetReader{err: meter.ErrTenantBudgetNotFound}, false, nil},
+		"no store":     {nil, false, nil},
+		"store failed": {budgetReader{err: boom}, false, boom},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			core, logs := observer.New(zapcore.WarnLevel)
-			ctx := logger.WithContext(context.Background(), zap.New(core))
 			tenant := uuid.New()
-			h := NewHandler(nil, budgetReader{budget: meter.TenantBudget{TenantID: tenant}, err: c.err}, allowAuthorizer{})
-			if _, ok := h.tenantBudget(ctx, tenant); ok != c.wantOK {
-				t.Errorf("ok = %v, want %v", ok, c.wantOK)
-			}
-			got := logs.FilterField(zap.String("tenant_id", tenant.String())).Len()
-			if (got > 0) != c.wantLog {
-				t.Errorf("%d warnings naming the tenant, want logged = %v", got, c.wantLog)
+			h := NewHandler(nil, c.usage, allowAuthorizer{})
+			_, ok, err := h.tenantBudget(context.Background(), tenant)
+			if ok != c.wantOK || !errors.Is(err, c.wantErr) || (err == nil) != (c.wantErr == nil) {
+				t.Errorf("ok = %v, err = %v; want %v, %v", ok, err, c.wantOK, c.wantErr)
 			}
 		})
 	}
