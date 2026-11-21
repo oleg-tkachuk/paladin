@@ -146,15 +146,8 @@ func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (_
 			append(objectFields(in.Collection, in.ObjectID), zap.String("mode", in.Mode),
 				zap.Bool("bypass_governance", in.BypassGovernance))...)
 	}()
-	if in.Mode != LockModeGovernance && in.Mode != LockModeCompliance {
-		return ObjectLock{}, connect.Errorf(connect.CodeInvalidArgument,
-			"mode must be %s or %s, got %q", LockModeGovernance, LockModeCompliance, in.Mode)
-	}
-	if !in.RetainUntil.After(time.Now()) {
-		// A window that has already closed asserts nothing but leaves a row
-		// implying it does. Refusing is clearer than storing a no-op.
-		return ObjectLock{}, connect.NewError(connect.CodeInvalidArgument,
-			"retain_until must be in the future")
+	if err := checkRetention(in); err != nil {
+		return ObjectLock{}, err
 	}
 
 	res, err := h.resolve(ctx, in.Collection, in.ObjectID, cedar.ActionSetObjectRetention)
@@ -172,6 +165,28 @@ func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (_
 		return ObjectLock{}, connect.NewError(connect.CodePermissionDenied, msgBypassNeedsRole)
 	}
 
+	return h.writeRetention(ctx, res, in)
+}
+
+// checkRetention refuses a retention that is not GOVERNANCE or COMPLIANCE,
+// or whose window has already closed: such a window asserts nothing but
+// leaves a row implying it does, and refusing is clearer than storing a
+// no-op.
+func checkRetention(in SetRetentionInput) error {
+	if in.Mode != LockModeGovernance && in.Mode != LockModeCompliance {
+		return connect.Errorf(connect.CodeInvalidArgument,
+			"mode must be %s or %s, got %q", LockModeGovernance, LockModeCompliance, in.Mode)
+	}
+	if !in.RetainUntil.After(time.Now()) {
+		return connect.NewError(connect.CodeInvalidArgument,
+			"retain_until must be in the future")
+	}
+	return nil
+}
+
+// writeRetention stores an authorized retention on the resolved version and
+// counts how it went.
+func (h *LockHandler) writeRetention(ctx context.Context, res resolved, in SetRetentionInput) (ObjectLock, error) {
 	lock, err := h.locks.SetRetention(ctx, SetRetentionArgs{
 		TenantID:         res.tenantID,
 		VersionID:        res.versionID,
@@ -179,11 +194,11 @@ func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (_
 		RetainUntil:      in.RetainUntil,
 		BypassGovernance: in.BypassGovernance,
 	})
+	if errors.Is(err, ErrRetentionWeakened) {
+		metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, lockOutcomeRefusedWeakening)
+		return ObjectLock{}, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
+	}
 	if err != nil {
-		if errors.Is(err, ErrRetentionWeakened) {
-			metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, lockOutcomeRefusedWeakening)
-			return ObjectLock{}, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		}
 		metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, lockOutcomeError)
 		return ObjectLock{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -264,9 +279,8 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 	if err != nil {
 		return out, err
 	}
-	if collection == "" || objectID == "" {
-		return out, connect.NewError(connect.CodeInvalidArgument,
-			"collection and object_id are required")
+	if err := requireObjectName(collection, objectID); err != nil {
+		return out, err
 	}
 	obj, err := h.objects.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
@@ -283,18 +297,10 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 		return out, err
 	}
 
-	versionID, err := h.versions.CurrentVersionID(ctx, obj.ObjectID)
+	versionID, err := h.lockedVersion(ctx, obj.ObjectID)
 	if err != nil {
-		return out, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return out, err
 	}
-	if versionID == uuid.Nil() {
-		// Every promoted object gets a version row, so this is either an
-		// object still PENDING or one written before versioning existed.
-		// Either way there is nothing to attach retention to, and silently
-		// succeeding would report a lock that protects nothing.
-		return out, connect.NewError(connect.CodeFailedPrecondition, ErrNoCurrentVersion.Error()).WithCause(ErrNoCurrentVersion)
-	}
-
 	out = resolved{
 		tenantID:  tenantID,
 		principal: principal,
@@ -303,6 +309,22 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 		versionID: versionID,
 	}
 	return out, nil
+}
+
+// lockedVersion is the version a lock on the object attaches to: its current
+// one. Every promoted object gets a version row, so an object without one is
+// still PENDING or was written before versioning existed. Either way there
+// is nothing to attach a lock to, and silently succeeding would report a lock
+// that protects nothing.
+func (h *LockHandler) lockedVersion(ctx context.Context, objectID uuid.UUID) (uuid.UUID, error) {
+	versionID, err := h.versions.CurrentVersionID(ctx, objectID)
+	if err != nil {
+		return uuid.Nil(), connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	if versionID == uuid.Nil() {
+		return uuid.Nil(), connect.NewError(connect.CodeFailedPrecondition, ErrNoCurrentVersion.Error()).WithCause(ErrNoCurrentVersion)
+	}
+	return versionID, nil
 }
 
 func (h *LockHandler) authorizeLock(

@@ -331,28 +331,44 @@ func facetCountsOf(t ObjectTally, f ObjectFacets) *ObjectFacetCounts {
 		Categories: map[ContentCategory]int64{},
 		Exact:      t.Exact,
 	}
-	statesAdmit := func(s statemachine.State) bool { return len(f.States) == 0 || slices.Contains(f.States, s) }
-	categoriesAdmit := func(c ContentCategory) bool { return len(f.Categories) == 0 || slices.Contains(f.Categories, c) }
 	for k, n := range t.Counts {
 		if len(f.Tags) > 0 && !k.Tagged {
 			continue
 		}
 		category := CategoryOf(k.ContentType)
-		if categoriesAdmit(category) {
+		if f.admitsCategory(category) {
 			out.States[k.State] += n
 		}
-		if statesAdmit(k.State) {
+		if f.admitsState(k.State) {
 			out.Categories[category] += n
 		}
 	}
+	out.Tags, out.TagsTruncated = topTagCounts(tagCountsOf(t, f), distinctTagValueLimit)
+	return out
+}
+
+// tagCountsOf counts each tag over the objects the chosen states and
+// categories admit.
+func tagCountsOf(t ObjectTally, f ObjectFacets) map[Tag]int64 {
 	tags := map[Tag]int64{}
 	for k, n := range t.TagCounts {
-		if statesAdmit(k.State) && categoriesAdmit(CategoryOf(k.ContentType)) {
+		if f.admitsState(k.State) && f.admitsCategory(CategoryOf(k.ContentType)) {
 			tags[k.Tag] += n
 		}
 	}
-	out.Tags, out.TagsTruncated = topTagCounts(tags, distinctTagValueLimit)
-	return out
+	return tags
+}
+
+// admitsState reports whether the chosen states admit s; none chosen admits
+// every state.
+func (f ObjectFacets) admitsState(s statemachine.State) bool {
+	return len(f.States) == 0 || slices.Contains(f.States, s)
+}
+
+// admitsCategory reports whether the chosen categories admit c; none chosen
+// admits every category.
+func (f ObjectFacets) admitsCategory(c ContentCategory) bool {
+	return len(f.Categories) == 0 || slices.Contains(f.Categories, c)
 }
 
 // topTagCounts lists counts by key, each key's values the most frequent

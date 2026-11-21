@@ -94,9 +94,8 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 	if err != nil {
 		return nil, err
 	}
-	if collection == "" || objectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"collection and object_id are required")
+	if err := requireObjectName(collection, objectID); err != nil {
+		return nil, err
 	}
 	obj, err := h.objects.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
@@ -126,11 +125,8 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 		}
 	}
 	stored, err := h.taints.SetTaint(ctx, tenantID, obj.ObjectID, signals)
-	if errors.Is(err, ErrObjectNotFound) {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, objectLookupError(err)
 	}
 	obj.Taint = stored
 	return &obj, nil

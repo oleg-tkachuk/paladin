@@ -46,19 +46,8 @@ func NormalizeContentDisposition(raw string) (string, error) {
 	if err != nil {
 		return "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("content_disposition: %w", err))
 	}
-	if dtype != dispositionInline && dtype != dispositionAttachment {
-		return "", connect.Errorf(connect.CodeInvalidArgument,
-			"content_disposition type %q: want %s or %s", dtype, dispositionInline, dispositionAttachment)
-	}
-	for k := range params {
-		if k != dispositionFilename {
-			return "", connect.Errorf(connect.CodeInvalidArgument,
-				"content_disposition parameter %q: only %s is accepted", k, dispositionFilename)
-		}
-	}
-	if name, ok := params[dispositionFilename]; ok && strings.ContainsAny(name, "/\\") {
-		return "", connect.NewError(connect.CodeInvalidArgument,
-			"content_disposition filename must not contain a path separator")
+	if err := checkDisposition(dtype, params); err != nil {
+		return "", err
 	}
 	out := mime.FormatMediaType(dtype, params)
 	if out == "" {
@@ -66,3 +55,26 @@ func NormalizeContentDisposition(raw string) (string, error) {
 	}
 	return out, nil
 }
+
+// checkDisposition refuses a disposition other than inline or attachment, a
+// parameter other than filename, and a filename carrying a path separator.
+func checkDisposition(dtype string, params map[string]string) error {
+	if dtype != dispositionInline && dtype != dispositionAttachment {
+		return connect.Errorf(connect.CodeInvalidArgument,
+			"content_disposition type %q: want %s or %s", dtype, dispositionInline, dispositionAttachment)
+	}
+	for k := range params {
+		if k != dispositionFilename {
+			return connect.Errorf(connect.CodeInvalidArgument,
+				"content_disposition parameter %q: only %s is accepted", k, dispositionFilename)
+		}
+	}
+	if name, ok := params[dispositionFilename]; ok && strings.ContainsAny(name, pathSeparators) {
+		return connect.NewError(connect.CodeInvalidArgument,
+			"content_disposition filename must not contain a path separator")
+	}
+	return nil
+}
+
+// pathSeparators are the characters a download filename may not carry.
+const pathSeparators = "/\\"

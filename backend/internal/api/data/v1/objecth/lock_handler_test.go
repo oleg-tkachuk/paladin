@@ -33,6 +33,7 @@ type lockRepoStub struct {
 		mode      string
 		retention time.Duration
 	}
+	defaultErr error
 }
 
 func (s *lockRepoStub) SetRetention(_ context.Context, args SetRetentionArgs) (ObjectLock, error) {
@@ -54,7 +55,7 @@ func (s *lockRepoStub) ApplyBucketDefault(_ context.Context, _, _ uuid.UUID, mod
 		mode      string
 		retention time.Duration
 	}{mode, retention})
-	return nil
+	return s.defaultErr
 }
 
 // lockVersionStub supplies the current version the lock attaches to.

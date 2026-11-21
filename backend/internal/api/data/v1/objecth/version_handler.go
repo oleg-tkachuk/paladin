@@ -200,12 +200,9 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (_ *Object
 	if err := h.authorizeParent(ctx, tenantID, principal, parent, limes.OpGet, cedar.ActionGetObject); err != nil {
 		return nil, err
 	}
-	v, err := h.versions.Get(ctx, parsed.versionID)
+	v, err := h.versionOf(ctx, parsed.versionID, parent)
 	if err != nil {
-		return nil, apiutil.MapError(err)
-	}
-	if v.ObjectID != parent.ObjectID {
-		return nil, connect.NewError(connect.CodeNotFound, "version does not belong to the named object")
+		return nil, err
 	}
 	current, _ := h.versions.CurrentVersionID(ctx, parent.ObjectID)
 	if v.VersionID == current {
@@ -230,13 +227,9 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 	// Shape of the request first: this needs no identity and no lookup, and
 	// checking it here rather than trusting protovalidate means callers that
 	// reach the handler by another route get the same guarantee.
-	if resourceVersion == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"resource_version is required")
-	}
-	expected, err := parseInt64(resourceVersion)
+	expected, err := requiredResourceVersion(resourceVersion)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
+		return nil, err
 	}
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
@@ -258,21 +251,40 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 			"resource_version mismatch: expected %d, current %d",
 			expected, parent.ResourceVersion)
 	}
-	v, err := h.versions.Get(ctx, parsed.versionID)
+	v, err := h.versionOf(ctx, parsed.versionID, parent)
 	if err != nil {
-		return nil, apiutil.MapError(err)
-	}
-	if v.ObjectID != parent.ObjectID {
-		return nil, connect.NewError(connect.CodeNotFound, "version does not belong to the named object")
+		return nil, err
 	}
 	if v.IsDeleteMarker {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
 			"cannot restore a delete marker; use RestoreObject")
 	}
-	if err := h.versions.SetCurrentVersionID(ctx, parent.ObjectID, v.VersionID); err != nil {
+	return h.makeCurrent(ctx, tenantID, parsed, v)
+}
+
+// msgVersionNotOfObject refuses a version name whose version belongs to
+// another object than the one it names.
+const msgVersionNotOfObject = "version does not belong to the named object"
+
+// versionOf reads the version versionID of parent; NotFound when there is
+// none, or it is another object's.
+func (h *VersionHandler) versionOf(ctx context.Context, versionID uuid.UUID, parent Object) (ObjectVersion, error) {
+	v, err := h.versions.Get(ctx, versionID)
+	if err != nil {
+		return ObjectVersion{}, apiutil.MapError(err)
+	}
+	if v.ObjectID != parent.ObjectID {
+		return ObjectVersion{}, connect.NewError(connect.CodeNotFound, msgVersionNotOfObject)
+	}
+	return v, nil
+}
+
+// makeCurrent repoints the object at v and reads it back, so callers see
+// authoritative state.
+func (h *VersionHandler) makeCurrent(ctx context.Context, tenantID uuid.UUID, parsed versionNameParts, v ObjectVersion) (*Object, error) {
+	if err := h.versions.SetCurrentVersionID(ctx, v.ObjectID, v.VersionID); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	// Refresh the parent Object envelope so callers see authoritative state.
 	fresh, err := h.objects.FindByName(ctx, tenantID, parsed.collection, parsed.objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -299,13 +311,19 @@ func (h *VersionHandler) RecordPromotion(ctx context.Context, v ObjectVersion) e
 	return h.versions.SetCurrentVersionID(ctx, v.ObjectID, v.VersionID)
 }
 
+// wired reports whether the version hooks have what they need; a deployment
+// without versioning builds none.
+func (h *VersionHandler) wired() bool {
+	return h != nil && h.objects != nil && h.versions != nil
+}
+
 // OnPromote is the hook the object handler calls after a successful state
 // transition to AVAILABLE. Looks up the parent bucket's versioning flag via
 // the shared object Repository; when enabled, records a new version row +
 // flips the current pointer. No-op when versioning is off — keeps callers
 // free of the policy decision.
 func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
-	if h == nil || h.objects == nil || h.versions == nil {
+	if !h.wired() {
 		return nil
 	}
 	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
@@ -343,11 +361,18 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 	// already AVAILABLE in storage and in the objects row by the time this
 	// runs, and refusing to acknowledge that would be a lie. The caller logs
 	// what comes back.
-	if h.locks != nil && meta.ObjectLockEnabled && meta.ObjectLockDefaultMode != "" {
-		if err := h.locks.ApplyBucketDefault(ctx, obj.TenantID, versionID,
-			meta.ObjectLockDefaultMode, meta.ObjectLockDefaultRetention); err != nil {
-			return fmt.Errorf("apply bucket default lock: %w", err)
-		}
+	return h.applyDefaultLock(ctx, obj.TenantID, versionID, meta)
+}
+
+// applyDefaultLock puts a new version under its bucket's default retention,
+// where the bucket has one and this deployment does object lock.
+func (h *VersionHandler) applyDefaultLock(ctx context.Context, tenantID, versionID uuid.UUID, meta BucketMeta) error {
+	if h.locks == nil || !meta.ObjectLockEnabled || meta.ObjectLockDefaultMode == "" {
+		return nil
+	}
+	if err := h.locks.ApplyBucketDefault(ctx, tenantID, versionID,
+		meta.ObjectLockDefaultMode, meta.ObjectLockDefaultRetention); err != nil {
+		return fmt.Errorf("apply bucket default lock: %w", err)
 	}
 	return nil
 }
@@ -357,7 +382,7 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 // non-marker version. No-op when versioning is off, history is empty, or
 // the current pointer already points at a regular version.
 func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Object) error {
-	if h == nil || h.objects == nil || h.versions == nil {
+	if !h.wired() {
 		return nil
 	}
 	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
@@ -370,43 +395,57 @@ func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Objec
 	if !meta.VersioningEnabled {
 		return nil
 	}
-	curID, err := h.versions.CurrentVersionID(ctx, obj.ObjectID)
-	if err != nil || curID == uuid.Nil() {
-		return nil
-	}
-	cur, err := h.versions.Get(ctx, curID)
-	if err != nil {
-		return nil
-	}
-	if !cur.IsDeleteMarker {
+	markerID, ok := h.currentDeleteMarker(ctx, obj.ObjectID)
+	if !ok {
 		return nil
 	}
 	// Walk history (newest first, skip the marker) and pick the first
-	// non-marker entry. Hard cap at 100 to avoid unbounded scans on a
+	// non-marker entry, scanning at most markerScanLimit versions on a
 	// pathological object with many delete markers.
-	page, _, err := h.versions.List(ctx, obj.ObjectID, 100, "")
+	page, _, err := h.versions.List(ctx, obj.ObjectID, markerScanLimit, "")
 	if err != nil {
 		return err
 	}
-	for _, v := range page {
-		if v.VersionID == curID {
-			continue
-		}
-		if v.IsDeleteMarker {
-			continue
-		}
-		return h.versions.SetCurrentVersionID(ctx, obj.ObjectID, v.VersionID)
-	}
-	// No non-marker history found in the first page — clear pointer. The
+	// No non-marker history found in the first page clears the pointer: the
 	// object becomes AVAILABLE but with no current version (legacy shape).
-	return h.versions.SetCurrentVersionID(ctx, obj.ObjectID, uuid.Nil())
+	return h.versions.SetCurrentVersionID(ctx, obj.ObjectID, latestNonMarker(page, markerID))
+}
+
+// markerScanLimit is the most versions a restore scans for one that is not a
+// delete marker.
+const markerScanLimit = 100
+
+// currentDeleteMarker is the object's current version when that is a delete
+// marker. A pointer that cannot be read is treated as no marker: restore
+// does not block on it, the state machine still flips the row visible.
+func (h *VersionHandler) currentDeleteMarker(ctx context.Context, objectID uuid.UUID) (uuid.UUID, bool) {
+	curID, err := h.versions.CurrentVersionID(ctx, objectID)
+	if err != nil || curID == uuid.Nil() {
+		return uuid.Nil(), false
+	}
+	cur, err := h.versions.Get(ctx, curID)
+	if err != nil || !cur.IsDeleteMarker {
+		return uuid.Nil(), false
+	}
+	return curID, true
+}
+
+// latestNonMarker is the newest version of page, newest first, that is
+// neither markerID nor a delete marker; uuid.Nil when there is none.
+func latestNonMarker(page []ObjectVersion, markerID uuid.UUID) uuid.UUID {
+	for _, v := range page {
+		if v.VersionID != markerID && !v.IsDeleteMarker {
+			return v.VersionID
+		}
+	}
+	return uuid.Nil()
 }
 
 // OnSoftDelete records a delete-marker version when the parent bucket has
 // versioning enabled. Combined with the soft-delete state transition, this
 // preserves the AVAILABLE history while hiding the object from default reads.
 func (h *VersionHandler) OnSoftDelete(ctx context.Context, obj Object) error {
-	if h == nil || h.objects == nil || h.versions == nil {
+	if !h.wired() {
 		return nil
 	}
 	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
