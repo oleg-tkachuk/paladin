@@ -66,7 +66,7 @@ func (h *Handler) isReserved(bucket string) bool {
 // a reserved one, an existing one to provision, or a missing one to adopt.
 func (h *Handler) checkOwnership(ctx context.Context, backendID, bucket string, provision bool) error {
 	if h.isReserved(bucket) {
-		return apiutil.MapError(fmt.Errorf("%w: %q on backend %q", ErrBucketReserved, bucket, backendID))
+		return fmt.Errorf("%w: %q on backend %q", ErrBucketReserved, bucket, backendID)
 	}
 	if h.provisioner == nil {
 		return connect.NewError(connect.CodeUnavailable, "backend provisioning not wired")
@@ -77,11 +77,11 @@ func (h *Handler) checkOwnership(ctx context.Context, backendID, bucket string, 
 	}
 	switch {
 	case provision && exists:
-		return apiutil.MapError(fmt.Errorf(
+		return fmt.Errorf(
 			"%w: %q; to manage an existing bucket, register it with provision_on_backend false",
-			ErrBucketExistsOnBackend, bucket))
+			ErrBucketExistsOnBackend, bucket)
 	case !provision && !exists:
-		return apiutil.MapError(fmt.Errorf("%w: %q", ErrBucketNotOnBackend, bucket))
+		return fmt.Errorf("%w: %q", ErrBucketNotOnBackend, bucket)
 	}
 	return nil
 }

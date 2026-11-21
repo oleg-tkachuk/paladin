@@ -23,6 +23,7 @@ type fakeGrants struct {
 	txGrants  []uuid.UUID
 	revokeErr error
 	revokeCtx context.Context
+	listErr   error
 }
 
 func (f *fakeGrants) Grant(_ context.Context, _, _ string, tenant uuid.UUID, by string) (admindomain.BucketGrant, error) {
@@ -48,6 +49,9 @@ func (f *fakeGrants) RevokeGrant(ctx context.Context, _, _ string, tenant uuid.U
 }
 
 func (f *fakeGrants) ListGrants(context.Context, string, string) ([]admindomain.BucketGrant, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	out := []admindomain.BucketGrant{}
 	for t := range f.granted {
 		out = append(out, admindomain.BucketGrant{TenantID: t})
@@ -157,6 +161,33 @@ func TestRevokeBucketGrant(t *testing.T) {
 	wantReason(t, err, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BUCKET_GRANT_IN_USE)
 	if !auth.CrossTenantRead(grants.revokeCtx) {
 		t.Fatal("the revoke did not read across tenants")
+	}
+}
+
+// A bucket's grants are read by a bucket admin, against the stored owner; a
+// tenant admin may not read them, and a store that fails is internal.
+func TestListBucketGrants(t *testing.T) {
+	stored := validBucket()
+	grantee := uuid.New()
+	authz := &ownerAuthorizer{}
+	h := grantsHandler(&fakeRepo{getBucket: stored}, &fakeGrants{granted: map[uuid.UUID]bool{grantee: true}}, authz)
+	got, err := h.ListBucketGrants(ctxAs(apiutil.RoleBucketAdmin), stored.BackendID, stored.BucketName)
+	if err != nil || len(got) != 1 || got[0].TenantID != grantee {
+		t.Fatalf("grants = %v, %v; want the one to %s", got, err, grantee)
+	}
+	if len(authz.owners) != 1 || authz.owners[0] != stored.OwnerTenantID {
+		t.Errorf("authorized against owners %v, want the stored %s", authz.owners, stored.OwnerTenantID)
+	}
+	if _, err := h.ListBucketGrants(ctxAs(apiutil.RoleTenantAdmin), stored.BackendID, stored.BucketName); code(err) != connect.CodePermissionDenied {
+		t.Errorf("tenant admin: err = %v, want permission denied", err)
+	}
+	failing := grantsHandler(&fakeRepo{getBucket: stored}, &fakeGrants{listErr: errStore}, allowAuthorizer{})
+	if _, err := failing.ListBucketGrants(ctxAs(apiutil.RoleBucketAdmin), stored.BackendID, stored.BucketName); code(err) != connect.CodeInternal {
+		t.Errorf("failing store: err = %v, want internal", err)
+	}
+	unwired := NewHandler(&fakeRepo{getBucket: stored}, okProvisioner{}, allowAuthorizer{})
+	if _, err := unwired.ListBucketGrants(ctxAs(apiutil.RoleBucketAdmin), stored.BackendID, stored.BucketName); code(err) != connect.CodeUnavailable {
+		t.Errorf("no grant repository: err = %v, want unavailable", err)
 	}
 }
 

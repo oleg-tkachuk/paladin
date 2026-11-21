@@ -32,17 +32,17 @@ var (
 // tenant holding a grant keeps it, with its first granter and time. Granting
 // the owner is refused: it binds already, and a grant would outlive a move.
 func (h *Handler) GrantBucket(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) (admindomain.BucketGrant, error) {
-	stored, err := h.grantable(ctx, backendID, bucketName, cedar.ActionManageBucket, grantRoles)
+	stored, err := h.grantable(ctx, opGrant, backendID, bucketName, cedar.ActionManageBucket, grantRoles)
 	if err != nil {
 		return admindomain.BucketGrant{}, err
 	}
 	if tenantID == stored.OwnerTenantID {
-		return admindomain.BucketGrant{}, connect.NewError(connect.CodeInvalidArgument,
-			"the tenant owns the bucket; a grant is for another tenant")
+		return admindomain.BucketGrant{}, h.answer(opGrant, backendID, bucketName, connect.NewError(connect.CodeInvalidArgument,
+			"the tenant owns the bucket; a grant is for another tenant"))
 	}
 	g, err := h.grants.Grant(ctx, backendID, bucketName, tenantID, grantedBy(ctx))
 	if err != nil {
-		return admindomain.BucketGrant{}, apiutil.MapError(err)
+		return admindomain.BucketGrant{}, h.answer(opGrant, backendID, bucketName, err)
 	}
 	return g, nil
 }
@@ -50,47 +50,41 @@ func (h *Handler) GrantBucket(ctx context.Context, backendID, bucketName string,
 // RevokeBucketGrant takes tenantID's grant back. Refused with
 // ErrBucketGrantInUse while that tenant still has collections in the bucket.
 func (h *Handler) RevokeBucketGrant(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error {
-	if _, err := h.grantable(ctx, backendID, bucketName, cedar.ActionManageBucket, manageRoles); err != nil {
+	if _, err := h.grantable(ctx, opRevokeGrant, backendID, bucketName, cedar.ActionManageBucket, manageRoles); err != nil {
 		return err
 	}
 	// Whether the tenant still has collections there is a question about
 	// rows under row-level security; asked across tenants, or it would see
 	// none and revoke a grant they still stand on.
 	if err := h.grants.RevokeGrant(auth.WithCrossTenantRead(ctx), backendID, bucketName, tenantID); err != nil {
-		return apiutil.MapError(err)
+		return h.answer(opRevokeGrant, backendID, bucketName, err)
 	}
 	return nil
 }
 
 // ListBucketGrants returns the bucket's grants, oldest first.
 func (h *Handler) ListBucketGrants(ctx context.Context, backendID, bucketName string) ([]admindomain.BucketGrant, error) {
-	if _, err := h.grantable(ctx, backendID, bucketName, cedar.ActionReadBucket, manageRoles); err != nil {
+	if _, err := h.grantable(ctx, opListGrants, backendID, bucketName, cedar.ActionReadBucket, manageRoles); err != nil {
 		return nil, err
 	}
 	grants, err := h.grants.ListGrants(ctx, backendID, bucketName)
 	if err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opListGrants, backendID, bucketName, err)
 	}
 	return grants, nil
 }
 
-// grantable gates a grant operation: one of roles, the bucket as stored, and
+// grantable gates grant operation op: one of roles, the bucket as stored, and
 // action on it with its owner.
-func (h *Handler) grantable(ctx context.Context, backendID, bucketName string, action cedar.Action, roles []string) (admindomain.Bucket, error) {
+func (h *Handler) grantable(ctx context.Context, op, backendID, bucketName string, action cedar.Action, roles []string) (admindomain.Bucket, error) {
 	if err := apiutil.RequireAnyRole(ctx, roles...); err != nil {
 		return admindomain.Bucket{}, err
 	}
 	if h.grants == nil {
-		return admindomain.Bucket{}, connect.NewError(connect.CodeUnavailable, "bucket grants not wired")
+		return admindomain.Bucket{}, h.answer(op, backendID, bucketName,
+			connect.NewError(connect.CodeUnavailable, "bucket grants not wired"))
 	}
-	stored, err := h.repo.Get(ctx, backendID, bucketName)
-	if err != nil {
-		return admindomain.Bucket{}, apiutil.MapError(err)
-	}
-	if err := h.authorize(ctx, action, backendID, bucketName, stored.OwnerTenantID); err != nil {
-		return admindomain.Bucket{}, err
-	}
-	return stored, nil
+	return h.authorizeStored(ctx, op, action, backendID, bucketName)
 }
 
 // grantedBy is who a grant is recorded as made by: the caller's subject.

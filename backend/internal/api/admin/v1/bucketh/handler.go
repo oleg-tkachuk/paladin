@@ -220,79 +220,112 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 		apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantProvisioner); err != nil {
 		return nil, err
 	}
-	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"backend_id and bucket_name required")
+	b := in.Bucket
+	if err := validateNew(b); err != nil {
+		return nil, h.answer(opCreate, b.BackendID, b.BucketName, err)
+	}
+	if err := h.authorize(ctx, cedar.ActionManageBucket, b.BackendID, b.BucketName, b.OwnerTenantID); err != nil {
+		return nil, err
+	}
+	if err := h.admitCreate(ctx, in); err != nil {
+		return nil, h.answer(opCreate, b.BackendID, b.BucketName, err)
+	}
+	got, err := h.createRow(ctx, provisioned(b, in.ProvisionOnBackend))
+	if err != nil {
+		// The repo types what it can: a duplicate is ErrAlreadyExists, an
+		// unregistered backend or a live reference is ErrConflict. The central
+		// registry (ADR-0002) turns those into AlreadyExists and
+		// FailedPrecondition respectively.
+		return nil, h.answer(opCreate, b.BackendID, b.BucketName, err)
+	}
+	return &got, nil
+}
+
+// validateNew refuses a new bucket with no backend, name or owner, or with
+// constraints no upload could satisfy.
+func validateNew(b admindomain.Bucket) error {
+	if b.BackendID == "" || b.BucketName == "" {
+		return connect.NewError(connect.CodeInvalidArgument, "backend_id and bucket_name required")
 	}
 	// Every bucket has an owner (ADR-0032); a pool for many tenants is the
 	// platform tenant's, and they reach it through grants.
-	if in.Bucket.OwnerTenantID == uuid.Nil() {
-		return nil, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
+	if b.OwnerTenantID == uuid.Nil() {
+		return admindomain.ErrBucketOwnerRequired
 	}
 	// The data plane enforces these on every upload; constraints no upload
 	// could satisfy are refused here rather than discovered there.
-	if err := in.Bucket.Constraints.Validate(); err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
+	if err := b.Constraints.Validate(); err != nil {
+		return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
 	}
-	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
-		return nil, err
-	}
+	return nil
+}
+
+// admitCreate refuses a bucket CreateBucket may not write: public settings
+// the backend cannot serve, a backend that is unusable or undeclared, or a
+// bucket Paladin should not take.
+func (h *Handler) admitCreate(ctx context.Context, in CreateBucketInput) error {
 	if err := h.checkPublicBucket(ctx, in); err != nil {
-		return nil, err
+		return err
 	}
-	// Refuse binding a bucket to a disabled backend (feature 002). The
-	// object-path resolver gate covers reads/writes; this is the one
-	// admin-plane op that does not go through that resolver, so it gets
-	// its own pre-check before the row is persisted.
-	switch enabled, err := h.repo.BackendEnabled(ctx, in.Bucket.BackendID); {
-	case errors.Is(err, admindomain.ErrNotFound):
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"backend %q does not exist", in.Bucket.BackendID)
-	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	case !enabled:
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"backend %q is disabled", in.Bucket.BackendID)
+	if err := h.usableBackend(ctx, in.Bucket.BackendID); err != nil {
+		return err
 	}
 	if h.configured != nil && !h.configured[in.Bucket.BackendID] {
-		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf(
+		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf(
 			"backend %q is not declared in storage.backends; the data plane and the worker "+
 				"build their storage clients from the configuration only, so a bucket on it "+
 				"could not be provisioned or reached — declare the backend there first", in.Bucket.BackendID))
 	}
-	if err := h.checkOwnership(ctx, in.Bucket.BackendID, in.Bucket.BucketName, in.ProvisionOnBackend); err != nil {
-		return nil, err
+	return h.checkOwnership(ctx, in.Bucket.BackendID, in.Bucket.BucketName, in.ProvisionOnBackend)
+}
+
+// usableBackend refuses binding a bucket to an unknown or disabled backend
+// (feature 002). The object-path resolver gate covers reads/writes; creating
+// a bucket is the one admin-plane op that does not go through that resolver,
+// so it gets its own check before the row is persisted.
+func (h *Handler) usableBackend(ctx context.Context, backendID string) error {
+	switch enabled, err := h.repo.BackendEnabled(ctx, backendID); {
+	case errors.Is(err, admindomain.ErrNotFound):
+		return connect.Errorf(connect.CodeFailedPrecondition, "backend %q does not exist", backendID)
+	case err != nil:
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	case !enabled:
+		return connect.Errorf(connect.CodeFailedPrecondition, "backend %q is disabled", backendID)
 	}
-	// Outbox model: the DB row is the source of truth. When the caller
-	// asked us to create the physical bucket too, we mark the row
-	// 'pending' and let the reconciler worker drive the backend
-	// CreateBucket — that way a DB-write failure can never leave an
-	// orphan in S3, and a backend-side failure is observable on the row
-	// instead of being lost to a 5xx that never made it to the client.
-	// Paladin creates a bucket it provisions — checkOwnership saw the backend
-	// without it — so that bucket is Paladin's to delete there.
-	in.Bucket.CreatedOnBackend = in.ProvisionOnBackend
-	if in.ProvisionOnBackend {
-		if h.provisioner == nil {
-			return nil, connect.NewError(connect.CodeUnavailable,
-				"backend provisioning not wired")
-		}
-		in.Bucket.ProvisionState = admindomain.BucketProvisionStatePending
-	} else {
-		// Operator opted out of backend provisioning (e.g. binding a
-		// pre-existing bucket). Row is immediately authoritative.
-		in.Bucket.ProvisionState = admindomain.BucketProvisionStateReady
+	return nil
+}
+
+// provisioned is b as it is written. Outbox model: the DB row is the source
+// of truth. When the caller asked us to create the physical bucket too, the
+// row is 'pending' and the reconciler worker drives the backend CreateBucket
+// — that way a DB-write failure can never leave an orphan in S3, and a
+// backend-side failure is observable on the row instead of being lost to a
+// 5xx that never made it to the client. A bucket the operator adopts (binding
+// a pre-existing one) is immediately authoritative: 'ready'.
+//
+// Paladin creates a bucket it provisions — checkOwnership saw the backend
+// without it — so that bucket is Paladin's to delete there. checkOwnership
+// also refused before here when no provisioner is wired.
+func provisioned(b admindomain.Bucket, provision bool) admindomain.Bucket {
+	b.CreatedOnBackend = provision
+	b.ProvisionState = admindomain.BucketProvisionStateReady
+	if provision {
+		b.ProvisionState = admindomain.BucketProvisionStatePending
 	}
-	// Create + paladin.bucket.created in one tx (ADR-0003). The event needs the
-	// stored row (owner tenant_id, provision_state), so GetTx reads it back
-	// on the same tx; `got` is reused for the response.
+	return b
+}
+
+// createRow writes b and paladin.bucket.created in one tx (ADR-0003). The
+// event needs the stored row (owner tenant_id, provision_state), so GetTx
+// reads it back on the same tx; that row is the answer.
+func (h *Handler) createRow(ctx context.Context, b admindomain.Bucket) (admindomain.Bucket, error) {
 	var got admindomain.Bucket
-	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		if e := h.repo.CreateTx(ctx, tx, in.Bucket); e != nil {
+	err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.CreateTx(ctx, tx, b); e != nil {
 			return e
 		}
 		var e error
-		got, e = h.repo.GetTx(ctx, tx, in.Bucket.BackendID, in.Bucket.BucketName)
+		got, e = h.repo.GetTx(ctx, tx, b.BackendID, b.BucketName)
 		if e != nil {
 			return e
 		}
@@ -305,14 +338,8 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 				"region":          got.Region,
 				"provision_state": string(got.ProvisionState),
 			})
-	}); err != nil {
-		// The repo types what it can: a duplicate is ErrAlreadyExists, an
-		// unregistered backend or a live reference is ErrConflict. The central
-		// registry (ADR-0002) turns those into AlreadyExists and
-		// FailedPrecondition respectively.
-		return nil, apiutil.MapError(err)
-	}
-	return &got, nil
+	})
+	return got, err
 }
 
 // EnsureBucket idempotently ensures a bucket row exists for a caller that a
@@ -333,102 +360,76 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 	if _, err := auth.PrincipalFromContext(ctx); err != nil {
 		return nil, false, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if in.Bucket.BackendID == "" || in.Bucket.BucketName == "" {
-		return nil, false, connect.NewError(connect.CodeInvalidArgument,
-			"backend_id and bucket_name required")
-	}
-	if in.Bucket.OwnerTenantID == uuid.Nil() {
-		return nil, false, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
-	}
-	if err := in.Bucket.Constraints.Validate(); err != nil {
-		return nil, false, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("constraints: %w", err))
-	}
-	// Self-service carries no ConfigurePublicRead check, so it never publishes
-	// (ADR-0027).
-	if in.Bucket.PublicRead || in.Bucket.PublicBaseURL != "" {
-		return nil, false, apiutil.MapError(publicread.Rulef("a public bucket is created through CreateBucket only"))
+	b := in.Bucket
+	if err := validateEnsure(b); err != nil {
+		return nil, false, h.answer(opEnsure, b.BackendID, b.BucketName, err)
 	}
 	// Fast idempotent path: an existing row the tenant may bind to is a success
 	// no-op. This also keeps the common "already provisioned" startup call off
 	// the write path. One it may not bind to is refused here, by name, rather
 	// than by the binding trigger on the collection that follows.
-	switch existing, err := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName); {
-	case err == nil:
-		if err := h.mayBind(ctx, existing, in.Bucket.OwnerTenantID); err != nil {
-			return nil, false, err
-		}
-		return &existing, false, nil
-	case errors.Is(err, admindomain.ErrNotFound):
-		// fall through to create
-	default:
-		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	existing, err := h.repo.Get(ctx, b.BackendID, b.BucketName)
+	if !errors.Is(err, admindomain.ErrNotFound) {
+		return h.ensured(ctx, b, existing, err)
 	}
 	// Refuse binding to an unknown/disabled backend — same guard CreateBucket
-	// uses (feature 002); a tenant must not create backends.
-	switch enabled, err := h.repo.BackendEnabled(ctx, in.Bucket.BackendID); {
-	case errors.Is(err, admindomain.ErrNotFound):
-		return nil, false, connect.Errorf(connect.CodeFailedPrecondition,
-			"backend %q does not exist", in.Bucket.BackendID)
-	case err != nil:
-		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	case !enabled:
-		return nil, false, connect.Errorf(connect.CodeFailedPrecondition,
-			"backend %q is disabled", in.Bucket.BackendID)
+	// uses (feature 002); a tenant must not create backends. A tenant creates
+	// its shared bucket; it never takes one that exists — that would hand it a
+	// bucket it does not own — nor Paladin's own.
+	if err := h.admitEnsure(ctx, in); err != nil {
+		return nil, false, h.answer(opEnsure, b.BackendID, b.BucketName, err)
 	}
-	// A tenant creates its shared bucket; it never takes one that exists —
-	// that would hand it a bucket it does not own — nor Paladin's own.
-	if err := h.checkOwnership(ctx, in.Bucket.BackendID, in.Bucket.BucketName, in.ProvisionOnBackend); err != nil {
-		return nil, false, err
+	got, err := h.createRow(ctx, provisioned(b, in.ProvisionOnBackend))
+	if err == nil {
+		return &got, true, nil
 	}
-	in.Bucket.CreatedOnBackend = in.ProvisionOnBackend
-	if in.ProvisionOnBackend {
-		if h.provisioner == nil {
-			return nil, false, connect.NewError(connect.CodeUnavailable,
-				"backend provisioning not wired")
+	// Lost a race to a concurrent create (unique violation →
+	// ErrAlreadyExists): the bucket now exists, so honour idempotency and
+	// report it existing.
+	//
+	// This sentinel moved when the duplicate stopped being ErrConflict.
+	// Matching the old one here would have kept compiling and quietly
+	// broken the race path — the branch that exists precisely because it
+	// is hard to reach on purpose.
+	if errors.Is(err, admindomain.ErrAlreadyExists) {
+		if existing, gerr := h.repo.Get(ctx, b.BackendID, b.BucketName); gerr == nil {
+			return h.ensured(ctx, b, existing, nil)
 		}
-		in.Bucket.ProvisionState = admindomain.BucketProvisionStatePending
-	} else {
-		in.Bucket.ProvisionState = admindomain.BucketProvisionStateReady
 	}
-	var got admindomain.Bucket
-	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		if e := h.repo.CreateTx(ctx, tx, in.Bucket); e != nil {
-			return e
-		}
-		var e error
-		got, e = h.repo.GetTx(ctx, tx, in.Bucket.BackendID, in.Bucket.BucketName)
-		if e != nil {
-			return e
-		}
-		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, EventBucketCreated,
-			bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
-			map[string]any{
-				"tenant_id":       got.OwnerTenantID.String(),
-				"backend_id":      got.BackendID,
-				"bucket_name":     got.BucketName,
-				"region":          got.Region,
-				"provision_state": string(got.ProvisionState),
-			})
-	}); err != nil {
-		// Lost a race to a concurrent create (unique violation →
-		// ErrAlreadyExists): the bucket now exists, so honour idempotency and
-		// report it existing.
-		//
-		// This sentinel moved when the duplicate stopped being ErrConflict.
-		// Matching the old one here would have kept compiling and quietly
-		// broken the race path — the branch that exists precisely because it
-		// is hard to reach on purpose.
-		if errors.Is(err, admindomain.ErrAlreadyExists) {
-			if existing, gerr := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName); gerr == nil {
-				if err := h.mayBind(ctx, existing, in.Bucket.OwnerTenantID); err != nil {
-					return nil, false, err
-				}
-				return &existing, false, nil
-			}
-		}
-		return nil, false, apiutil.MapError(err)
+	return nil, false, h.answer(opEnsure, b.BackendID, b.BucketName, err)
+}
+
+// validateEnsure is validateNew for a self-provisioned bucket, which is never
+// public: self-service carries no ConfigurePublicRead check (ADR-0027).
+func validateEnsure(b admindomain.Bucket) error {
+	if err := validateNew(b); err != nil {
+		return err
 	}
-	return &got, true, nil
+	if b.PublicRead || b.PublicBaseURL != "" {
+		return publicread.Rulef("a public bucket is created through CreateBucket only")
+	}
+	return nil
+}
+
+// admitEnsure refuses a bucket EnsureBucket may not write: one on an
+// unusable backend, or one Paladin should not take.
+func (h *Handler) admitEnsure(ctx context.Context, in CreateBucketInput) error {
+	if err := h.usableBackend(ctx, in.Bucket.BackendID); err != nil {
+		return err
+	}
+	return h.checkOwnership(ctx, in.Bucket.BackendID, in.Bucket.BucketName, in.ProvisionOnBackend)
+}
+
+// ensured answers EnsureBucket for want with the bucket that exists —
+// readErr is how reading it went — when want's owner may bind to it.
+func (h *Handler) ensured(ctx context.Context, want, existing admindomain.Bucket, readErr error) (*admindomain.Bucket, bool, error) {
+	if readErr == nil {
+		readErr = h.mayBind(ctx, existing, want.OwnerTenantID)
+	}
+	if readErr != nil {
+		return nil, false, h.answer(opEnsure, want.BackendID, want.BucketName, readErr)
+	}
+	return &existing, false, nil
 }
 
 // mayBind refuses a tenant that neither owns the bucket nor holds a grant.
@@ -437,14 +438,14 @@ func (h *Handler) mayBind(ctx context.Context, b admindomain.Bucket, tenant uuid
 		return nil
 	}
 	if h.grants == nil {
-		return apiutil.MapError(admindomain.ErrBucketNotGranted)
+		return admindomain.ErrBucketNotGranted
 	}
 	ok, err := h.grants.MayBind(ctx, b.BackendID, b.BucketName, tenant)
 	if err != nil {
-		return apiutil.MapError(err)
+		return err
 	}
 	if !ok {
-		return apiutil.MapError(admindomain.ErrBucketNotGranted)
+		return admindomain.ErrBucketNotGranted
 	}
 	return nil
 }
@@ -507,7 +508,7 @@ func (h *Handler) ListBuckets(ctx context.Context, args admindomain.ListBucketsA
 	}
 	page, err = celpkg.FilterPage(h.cel, celpkg.PhysicalBucketSchema, args.Filter, page, bucketRow)
 	if err != nil {
-		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+		return nil, "", h.answer(opList, args.BackendID, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err)))
 	}
 	return page, next, nil
 }
@@ -574,23 +575,43 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	if err != nil {
 		return nil, err
 	}
-	ownerMoves := slices.Contains(in.UpdateMask, MaskOwnerTenantID)
-	if ownerMoves {
-		if in.Bucket.OwnerTenantID == uuid.Nil() {
-			return nil, apiutil.MapError(admindomain.ErrBucketOwnerRequired)
-		}
-		if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
-			return nil, err
-		}
-		ownerMoves = in.Bucket.OwnerTenantID != stored.OwnerTenantID
+	ownerMoves, err := h.ownerMoves(ctx, in, stored)
+	if err != nil {
+		return nil, h.answer(opUpdate, in.Bucket.BackendID, in.Bucket.BucketName, err)
 	}
-	if ownerMoves && h.grants == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "bucket grants not wired")
+	got, err := h.updateRow(ctx, in, stored, ownerMoves)
+	if err != nil {
+		return nil, h.answer(opUpdate, in.Bucket.BackendID, in.Bucket.BucketName, err)
 	}
-	// Update + paladin.bucket.updated in one tx (ADR-0003). GetTx reads the
-	// post-update row back on the same tx (resource_version, owner).
+	return &got, nil
+}
+
+// ownerMoves reports whether in moves the stored bucket to another owner,
+// refusing a move to no owner, one the new owner's policy denies, and one the
+// handler cannot record a grant for.
+func (h *Handler) ownerMoves(ctx context.Context, in UpdateBucketInput, stored admindomain.Bucket) (bool, error) {
+	if !slices.Contains(in.UpdateMask, MaskOwnerTenantID) {
+		return false, nil
+	}
+	if in.Bucket.OwnerTenantID == uuid.Nil() {
+		return false, admindomain.ErrBucketOwnerRequired
+	}
+	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, in.Bucket.OwnerTenantID); err != nil {
+		return false, err
+	}
+	moves := in.Bucket.OwnerTenantID != stored.OwnerTenantID
+	if moves && h.grants == nil {
+		return false, connect.NewError(connect.CodeUnavailable, "bucket grants not wired")
+	}
+	return moves, nil
+}
+
+// updateRow writes in and paladin.bucket.updated in one tx (ADR-0003). GetTx
+// reads the post-update row back on the same tx (resource_version, owner);
+// that row is the answer.
+func (h *Handler) updateRow(ctx context.Context, in UpdateBucketInput, stored admindomain.Bucket, ownerMoves bool) (admindomain.Bucket, error) {
 	var got admindomain.Bucket
-	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+	err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		if e := h.repo.UpdateBasicTx(ctx, tx, in.Bucket, in.ExpectedVersion, in.UpdateMask); e != nil {
 			return e
 		}
@@ -618,10 +639,8 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 				// concern and downstream consumers can diff against their
 				// cached snapshot if they care which scalar moved.
 			})
-	}); err != nil {
-		return nil, h.answer(opUpdate, in.Bucket.BackendID, in.Bucket.BucketName, err)
-	}
-	return &got, nil
+	})
+	return got, err
 }
 
 // ─── Single-purpose setters ─────────────────────────────────────────────────
@@ -652,24 +671,29 @@ func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName s
 	if err != nil {
 		return nil, err
 	}
-	// Validate every rule's CEL match upfront so a typo is rejected at
-	// write time, not silently swallowed by the lifecycle worker hours
-	// later. Empty match = "always match" (worker contract).
-	for i, r := range rules {
-		if err := celpkg.Validate(celpkg.ObjectSchema, r.Match); err != nil {
-			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, err))
-		}
-		if r.Transition != nil {
-			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, ErrLifecycleTransition))
-		}
-	}
-	if err := refuseLifecycleOnPublic(stored, rules); err != nil {
+	if err := validateLifecycle(stored, rules); err != nil {
 		return nil, h.answer(opSetLifecycle, backendID, bucketName, err)
 	}
 	if err := h.repo.SetLifecycle(ctx, backendID, bucketName, rules, expectedVersion); err != nil {
 		return nil, h.answer(opSetLifecycle, backendID, bucketName, err)
 	}
 	return h.readBack(ctx, opSetLifecycle, backendID, bucketName)
+}
+
+// validateLifecycle refuses rules the lifecycle worker could not apply to
+// the stored bucket. Every rule's CEL match is validated upfront so a typo is
+// rejected at write time, not silently swallowed by the lifecycle worker hours
+// later. Empty match = "always match" (worker contract).
+func validateLifecycle(stored admindomain.Bucket, rules []admindomain.LifecycleRule) error {
+	for i, r := range rules {
+		if err := celpkg.Validate(celpkg.ObjectSchema, r.Match); err != nil {
+			return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, err))
+		}
+		if r.Transition != nil {
+			return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, ErrLifecycleTransition))
+		}
+	}
+	return refuseLifecycleOnPublic(stored, rules)
 }
 
 func (h *Handler) SetObjectLock(ctx context.Context, backendID, bucketName string, lock admindomain.ObjectLockConfig, expectedVersion int64) (*admindomain.Bucket, error) {

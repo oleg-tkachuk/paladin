@@ -43,44 +43,61 @@ func (h *Handler) checkPublicBucket(ctx context.Context, in CreateBucketInput) e
 	b := in.Bucket
 	if !b.PublicRead {
 		if b.PublicBaseURL != "" {
-			return apiutil.MapError(publicread.Rulef("public_base_url is for a public bucket"))
+			return publicread.Rulef("public_base_url is for a public bucket")
 		}
 		return nil
 	}
-	if !in.ProvisionOnBackend {
-		return apiutil.MapError(publicread.Rulef(
-			"a public bucket must be created with provision_on_backend: Paladin sets the policy that makes it public"))
-	}
-	if err := publicread.CheckAllowedTypes(b.Constraints.AllowedContentTypes); err != nil {
-		return apiutil.MapError(err)
-	}
-	if err := checkPublicBaseURL(b.PublicBaseURL); err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	if err := checkPublicRequest(in); err != nil {
+		return err
 	}
 	if err := h.authorize(ctx, cedar.ActionConfigurePublicRead, b.BackendID, b.BucketName, b.OwnerTenantID); err != nil {
 		return err
 	}
-	if h.backends == nil {
-		return apiutil.MapError(fmt.Errorf("%w: the backend's features cannot be read here", features.ErrUnsupported))
+	return h.checkPublicBackend(ctx, b.BackendID)
+}
+
+// checkPublicRequest admits what a request for a public bucket says of it:
+// Paladin provisions it, it lists only passive content types, and its CDN
+// address is one a prefix of every object's URL can be.
+func checkPublicRequest(in CreateBucketInput) error {
+	if !in.ProvisionOnBackend {
+		return publicread.Rulef(
+			"a public bucket must be created with provision_on_backend: Paladin sets the policy that makes it public")
 	}
-	backend, err := h.backends.Get(ctx, b.BackendID)
+	if err := publicread.CheckAllowedTypes(in.Bucket.Constraints.AllowedContentTypes); err != nil {
+		return err
+	}
+	if err := checkPublicBaseURL(in.Bucket.PublicBaseURL); err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	return nil
+}
+
+// checkPublicBackend admits a backend that can serve a public bucket: one
+// whose probe found anonymous reads enforced, and that does not encrypt with
+// SSE-KMS.
+func (h *Handler) checkPublicBackend(ctx context.Context, backendID string) error {
+	if h.backends == nil {
+		return fmt.Errorf("%w: the backend's features cannot be read here", features.ErrUnsupported)
+	}
+	backend, err := h.backends.Get(ctx, backendID)
 	switch {
 	case errors.Is(err, admindomain.ErrNotFound):
-		return connect.Errorf(connect.CodeFailedPrecondition, "backend %q does not exist", b.BackendID)
+		return connect.Errorf(connect.CodeFailedPrecondition, "backend %q does not exist", backendID)
 	case err != nil:
-		return apiutil.MapError(err)
+		return err
 	}
 	if got := features.SupportOf(backend.Features, features.AnonymousReadPolicy); got != features.Supported {
-		return apiutil.MapError(fmt.Errorf(
+		return fmt.Errorf(
 			"%w: backend %q: %s is %s; a public bucket needs it supported — run TestBackend to probe it",
-			features.ErrUnsupported, b.BackendID, features.AnonymousReadPolicy, got))
+			features.ErrUnsupported, backendID, features.AnonymousReadPolicy, got)
 	}
 	// An unsigned GET cannot read an SSE-KMS object: the store needs the
 	// caller's kms:Decrypt.
 	if backend.SSE.Type == admindomain.SSETypeKMS {
-		return apiutil.MapError(fmt.Errorf(
+		return fmt.Errorf(
 			"%w: backend %q encrypts with SSE-KMS, and an unsigned GET cannot decrypt",
-			features.ErrUnsupported, b.BackendID))
+			features.ErrUnsupported, backendID)
 	}
 	return nil
 }
