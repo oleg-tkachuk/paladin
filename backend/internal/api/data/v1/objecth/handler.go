@@ -1567,12 +1567,9 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	if err != nil {
 		return nil, err
 	}
-	if in.Collection == "" || in.ObjectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
-	}
-	objectID, err := uuid.Parse(in.ObjectID)
+	objectID, err := objectRef(in.Collection, in.ObjectID)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+		return nil, err
 	}
 	// Authorize against the object itself, so a policy on its key, tags or
 	// content type applies to an update the same way it does to a delete.
@@ -1598,12 +1595,41 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 	}, cedar.ActionUpdateObject, cur.SizeBytes, cur.ContentType); err != nil {
 		return nil, err
 	}
-	// Update + paladin.object.updated fan-out in one tx (ADR-0003): a dispatch
-	// failure rolls back the metadata change, so the client's at-least-once
-	// retry re-applies both rather than silently dropping the event.
+	// Only an AVAILABLE object takes an update. Asking the store anyway matched
+	// no row and came back as a version conflict, which told the caller to
+	// reload and retry an update that could never land.
+	if cur.State != statemachine.StateAvailable {
+		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+			"object state %s takes no metadata update", cur.State)
+	}
+	obj, err := h.writeMetadata(ctx, tenantID, objectID, in)
+	if err != nil {
+		return nil, apiutil.MapError(err)
+	}
+	return &obj, nil
+}
+
+// objectRef validates the (collection, object_id) pair a request names and
+// parses the id.
+func objectRef(collection, objectID string) (uuid.UUID, error) {
+	if collection == "" || objectID == "" {
+		return uuid.Nil(), connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
+	}
+	id, err := uuid.Parse(objectID)
+	if err != nil {
+		return uuid.Nil(), rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+	}
+	return id, nil
+}
+
+// writeMetadata applies UpdateObject's change and fans out
+// paladin.object.updated in one tx (ADR-0003): a dispatch failure rolls back
+// the metadata change, so the client's at-least-once retry re-applies both
+// rather than silently dropping the event.
+func (h *Handler) writeMetadata(ctx context.Context, tenantID, objectID uuid.UUID, in UpdateObjectInput) (Object, error) {
 	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.Collection)
 	var obj Object
-	err = h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+	err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var uerr error
 		obj, uerr = h.repo.UpdateMetadataTx(ctx, tx, UpdateMetadataArgs{
 			TenantID:        tenantID,
@@ -1628,10 +1654,7 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Obje
 				"updated_fields": in.UpdatedFields,
 			})
 	})
-	if err != nil {
-		return nil, apiutil.MapError(err)
-	}
-	return &obj, nil
+	return obj, err
 }
 
 // ─── DeleteObject (soft + hard) ─────────────────────────────────────────────
