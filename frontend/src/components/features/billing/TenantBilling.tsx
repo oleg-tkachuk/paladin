@@ -16,9 +16,10 @@ import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
 import { billingClient } from "@/lib/connect/client";
 import { normalizeError } from "@/lib/connect/error";
 import {
+  BudgetState,
   budgetLimit,
+  budgetState,
   budgetUnit,
-  budgetUnlimited,
 } from "@/lib/format/budgetCeiling";
 import {
   ABSTRACT_UNIT_CODE,
@@ -48,6 +49,32 @@ const SPEND_DIGITS = 4;
 const BUDGET_WARN_PERCENT = 70;
 const BUDGET_CRITICAL_PERCENT = 90;
 const FULL_PERCENT = 100;
+// By what the summary knows of the budget: what the Spend tile says when it
+// has no percentage of one, the Budget tile's value and qualifier, and its
+// link.
+type UncappedState = Exclude<BudgetState, typeof BudgetState.Limited>;
+const BUDGET_SPEND_NOTE: Record<UncappedState, string> = {
+  [BudgetState.Unlimited]: "unlimited budget",
+  [BudgetState.None]: "no budget configured",
+  [BudgetState.Unreadable]: "budget temporarily unavailable",
+};
+const BUDGET_VALUE: Record<UncappedState, string> = {
+  [BudgetState.Unlimited]: "Unlimited",
+  [BudgetState.None]: "None",
+  [BudgetState.Unreadable]: "Unavailable",
+};
+const BUDGET_QUALIFIER: Record<BudgetState, string | undefined> = {
+  [BudgetState.Limited]: "left",
+  [BudgetState.Unlimited]: undefined,
+  [BudgetState.None]: undefined,
+  [BudgetState.Unreadable]: "could not be read; try again shortly",
+};
+const BUDGET_ACTION: Record<BudgetState, string> = {
+  [BudgetState.Limited]: "Change the budget",
+  [BudgetState.Unlimited]: "Change the budget",
+  [BudgetState.None]: "Set a budget",
+  [BudgetState.Unreadable]: "Open the budget",
+};
 // The period the empty state offers when the chosen one held no charge.
 const WIDER_PRESET = "90d";
 
@@ -123,9 +150,9 @@ export function TenantBilling({
     platformCurrency ||
     ABSTRACT_UNIT_CODE;
   // Unset with no budget row; a cap of zero is a cap.
+  const budget = budgetState(summary?.budgetCeiling);
   const max = budgetLimit(summary?.budgetCeiling);
-  const capped = max !== undefined;
-  const unlimited = budgetUnlimited(summary?.budgetCeiling);
+  const capped = budget === BudgetState.Limited;
   const chargeCount = summary ? Number(summary.chargeCount) : 0;
   const totalNanos = moneyToNanos(total);
   const remainingNanos = moneyToNanos(max) - totalNanos;
@@ -191,11 +218,9 @@ export function TenantBilling({
                 label="Spend"
                 value={money(total)}
                 helper={[
-                  capped
+                  budget === BudgetState.Limited
                     ? `${pctOfBudget.toFixed(1)}% of budget`
-                    : unlimited
-                      ? "unlimited budget"
-                      : "no budget configured",
+                    : BUDGET_SPEND_NOTE[budget],
                   refundedNote(summary.refunded, {
                     fallbackUnit: unit,
                     fractionDigits: SPEND_DIGITS,
@@ -212,21 +237,21 @@ export function TenantBilling({
               <KPITile
                 label="Budget"
                 value={
-                  capped ? (
+                  budget === BudgetState.Limited ? (
                     money(remaining)
-                  ) : unlimited ? (
-                    "Unlimited"
+                  ) : budget === BudgetState.Unlimited ? (
+                    BUDGET_VALUE[budget]
                   ) : (
-                    <span className={T.helper}>None</span>
+                    <span className={T.helper}>{BUDGET_VALUE[budget]}</span>
                   )
                 }
-                helper={capped ? "left" : undefined}
+                helper={BUDGET_QUALIFIER[budget]}
                 action={
                   <Link
                     href={tenantBudgetHref(tenantHandle)}
                     className="text-xs text-primary hover:underline"
                   >
-                    {capped || unlimited ? "Change the budget" : "Set a budget"}
+                    {BUDGET_ACTION[budget]}
                   </Link>
                 }
                 footer={

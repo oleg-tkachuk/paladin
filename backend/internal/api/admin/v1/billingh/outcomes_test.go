@@ -170,39 +170,61 @@ func TestMalformedBillingRequestsWarn(t *testing.T) {
 	}
 }
 
-// A budget that cannot be read fails the summary: a summary without its
-// ceiling reads as a tenant with no cap, which is not what the store said.
-// A tenant with no budget has none to show.
-func TestSummaryOfAnUnreadableBudgetFails(t *testing.T) {
+// A budget that cannot be read leaves the summary standing: the spend comes
+// from the ledger, which answered, and the budget is said to be unreadable
+// rather than absent — absent reads as a tenant with no cap. The failure is
+// logged at Error, naming the read and the tenant. A tenant with no budget,
+// or no store to read one from, has none, quietly.
+func TestSummaryOfAnUnreadableBudget(t *testing.T) {
+	spent := func(meter.SumChargesRequest) []meter.ChargeSum {
+		return []meter.ChargeSum{{UnitCode: usd, Charged: units(3), Charges: 2}}
+	}
 	for _, tc := range []struct {
-		name    string
-		err     error
-		fails   bool
-		want    connect.Code
-		ceiling bool
+		name  string
+		usage meter.UsageStore
+		want  BudgetState
 	}{
-		{name: "read", ceiling: true},
-		{name: "no budget", err: meter.ErrTenantBudgetNotFound},
-		{name: "store down", err: limes.ErrStoreUnavailable, fails: true, want: connect.CodeUnavailable},
-		{name: "store failed", err: errors.New("connection reset"), fails: true, want: connect.CodeInternal},
+		{name: "read", usage: budgetReader{budget: meter.TenantBudget{Ceiling: limes.BudgetCeiling{UnitCode: usd}}}, want: BudgetRead},
+		{name: "no budget", usage: budgetReader{err: meter.ErrTenantBudgetNotFound}, want: BudgetNone},
+		{name: "no store", want: BudgetNone},
+		{name: "store down", usage: budgetReader{err: limes.ErrStoreUnavailable}, want: BudgetUnreadable},
+		{name: "store failed", usage: budgetReader{err: errors.New("connection reset")}, want: BudgetUnreadable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			usage := budgetReader{budget: meter.TenantBudget{Ceiling: limes.BudgetCeiling{UnitCode: usd}}, err: tc.err}
-			h, logs := logged(NewHandler(&fakeLedger{sums: noSums}, usage, allowAuthorizer{}), zapcore.ErrorLevel)
-			sum, err := h.GetTenantSummary(ctxWithAdmin(t), uuid.New(), time.Time{}, time.Time{})
-			if (err != nil) != tc.fails {
-				t.Fatalf("err = %v, want failed = %v", err, tc.fails)
+			h, logs := logged(NewHandler(&fakeLedger{sums: spent}, tc.usage, allowAuthorizer{}), zapcore.WarnLevel)
+			tenant := uuid.New()
+			sum, err := h.GetTenantSummary(ctxWithAdmin(t), tenant, time.Time{}, time.Time{})
+			if err != nil {
+				t.Fatalf("err = %v, want the summary", err)
 			}
-			if tc.fails {
-				if connect.CodeOf(err) != tc.want || !errors.Is(err, tc.err) || logs.Len() != 1 {
-					t.Fatalf("err = %v (%v), %d error lines; want %v from the store's, logged once", err, connect.CodeOf(err), logs.Len(), tc.want)
+			if sum.TotalAmount != units(3) || sum.ChargeCount != 2 || sum.UnitCode != usd {
+				t.Errorf("spend = %v in %q over %d charges, want 3 USD over 2", sum.TotalAmount, sum.UnitCode, sum.ChargeCount)
+			}
+			if sum.Budget != tc.want || (sum.Ceiling != nil) != (tc.want == BudgetRead) {
+				t.Errorf("budget = %v, ceiling = %v; want %v", sum.Budget, sum.Ceiling, tc.want)
+			}
+			if tc.want != BudgetUnreadable {
+				if logs.Len() != 0 {
+					t.Errorf("logged %v, want nothing", logs.All())
 				}
 				return
 			}
-			if (sum.Ceiling != nil) != tc.ceiling {
-				t.Errorf("ceiling = %v, want shown = %v", sum.Ceiling, tc.ceiling)
+			lines := logs.FilterLevelExact(zapcore.ErrorLevel).
+				FilterField(zap.String("op", opGetTenantSummary)).
+				FilterField(tenantField(tenant))
+			if lines.Len() != 1 || logs.Len() != 1 {
+				t.Errorf("want one Error line naming %s and the tenant, got %v", opGetTenantSummary, logs.All())
 			}
 		})
+	}
+}
+
+// A ledger that fails still fails the summary, whatever the budget.
+func TestSummaryOfAFailedLedgerFails(t *testing.T) {
+	usage := budgetReader{err: limes.ErrStoreUnavailable}
+	h := NewHandler(&fakeLedger{err: limes.ErrStoreUnavailable}, usage, allowAuthorizer{})
+	if _, err := h.GetTenantSummary(ctxWithAdmin(t), uuid.New(), time.Time{}, time.Time{}); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("code = %v (%v), want Unavailable", connect.CodeOf(err), err)
 	}
 }
 

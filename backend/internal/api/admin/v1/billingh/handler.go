@@ -196,6 +196,20 @@ func resolvePeriod(start, end time.Time) (time.Time, time.Time, error) {
 	return start, end, nil
 }
 
+// BudgetState is what a summary knows of its tenant's budget.
+type BudgetState int
+
+const (
+	// BudgetNone is a tenant with no budget row, or a deployment with no
+	// store to read one from.
+	BudgetNone BudgetState = iota
+	// BudgetRead is a budget read: Summary.Ceiling holds its cap.
+	BudgetRead
+	// BudgetUnreadable is a budget the store could not read: whether the
+	// tenant has a cap is unknown.
+	BudgetUnreadable
+)
+
 // Summary is the in-memory shape returned by GetTenantSummary.
 type Summary struct {
 	TotalAmount limes.Nanos
@@ -203,8 +217,10 @@ type Summary struct {
 	// is net of it.
 	Refunded limes.Nanos
 	UnitCode string
-	// Ceiling is the tenant's budget cap, in CeilingUnit; nil when the
-	// tenant has no budget row.
+	// Budget is what is known of the tenant's budget.
+	Budget BudgetState
+	// Ceiling is the tenant's budget cap, in CeilingUnit; nil unless Budget
+	// is BudgetRead.
 	Ceiling         *limes.BudgetCeiling
 	CeilingUnit     string
 	ChargeCount     int64
@@ -228,8 +244,8 @@ type TopEntry struct {
 // availability); no ledger then short-circuits to Unavailable (capability
 // subsystem disabled in this deployment).
 //
-// A budget that cannot be read fails the summary: without its ceiling the
-// summary reads as a tenant with no cap configured.
+// A budget that cannot be read leaves the spend standing, with the budget
+// marked unreadable (see joinBudget); a ledger failure is the summary's.
 func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, periodStart, periodEnd time.Time) (*Summary, error) {
 	tenant := tenantField(tenantID)
 	acting, err := h.authorize(ctx, tenantID)
@@ -247,22 +263,35 @@ func (h *Handler) GetTenantSummary(ctx context.Context, tenantID uuid.UUID, peri
 	if err != nil {
 		return nil, h.failed(ctx, opGetTenantSummary, err, tenant)
 	}
-	tb, ok, err := h.tenantBudget(acting, tenantID)
-	if err != nil {
-		return nil, h.failed(ctx, opGetTenantSummary, err, tenant)
-	}
-	if ok {
-		ceiling := tb.Ceiling
-		out.Ceiling, out.CeilingUnit = &ceiling, tb.Ceiling.UnitCode
-		if out.UnitCode == "" {
-			out.UnitCode = tb.Ceiling.UnitCode
-		}
-	}
+	h.joinBudget(acting, out, tenantID)
 	if out.UnitCode == "" {
 		out.UnitCode = h.currency
 	}
 	h.served(ctx, opGetTenantSummary, tenant)
 	return out, nil
+}
+
+// joinBudget adds tenantID's budget to out, and its unit when the period had
+// no charge to take one from. A budget the store cannot read is logged at
+// Error and marked BudgetUnreadable rather than failing the summary: the
+// spend is the ledger's and stands without it, while an unset ceiling would
+// read as a tenant with no cap.
+func (h *Handler) joinBudget(ctx context.Context, out *Summary, tenantID uuid.UUID) {
+	tb, ok, err := h.tenantBudget(ctx, tenantID)
+	switch {
+	case err != nil:
+		out.Budget = BudgetUnreadable
+		h.log.Error("billing: tenant budget unreadable; the summary says so",
+			fields(ctx, opGetTenantSummary, tenantField(tenantID), zap.Stringer("code", connect.CodeOf(err)), zap.Error(err))...)
+		return
+	case !ok:
+		return
+	}
+	ceiling := tb.Ceiling
+	out.Budget, out.Ceiling, out.CeilingUnit = BudgetRead, &ceiling, tb.Ceiling.UnitCode
+	if out.UnitCode == "" {
+		out.UnitCode = tb.Ceiling.UnitCode
+	}
 }
 
 // summarize is the ledger's half of a summary over period: the dominant

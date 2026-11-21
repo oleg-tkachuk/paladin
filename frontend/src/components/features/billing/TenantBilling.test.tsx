@@ -156,6 +156,7 @@ describe("TenantBilling", () => {
     ],
     [{ case: "maxBudget", value: usd(0n) }, "100.0% of budget"],
     [{ case: "maxBudget", value: usd(4_000_000_000n) }, "25.0% of budget"],
+    [{ case: "budgetUnreadable", value: {} }, "budget temporarily unavailable"],
   ])("describes the budget %o as %s", async (budgetCeiling, helper) => {
     h.summary.mockResolvedValue({
       ...emptySummary,
@@ -165,6 +166,31 @@ describe("TenantBilling", () => {
     });
     render(<Harness />);
     expect(await screen.findByText(helper)).toBeInTheDocument();
+  });
+
+  it("shows the spend beside a budget that could not be read, not as none", async () => {
+    h.summary.mockResolvedValue({
+      ...emptySummary,
+      total: usd(1_000_000_000n),
+      budgetCeiling: { case: "budgetUnreadable", value: {} },
+      chargeCount: 1n,
+    });
+    render(<Harness />);
+    const tile = await screen.findByRole("group", { name: "Budget" });
+    expect(within(tile).getByText("Unavailable")).toBeInTheDocument();
+    expect(
+      within(tile).getByText("could not be read; try again shortly"),
+    ).toBeInTheDocument();
+    expect(within(tile).queryByRole("progressbar")).toBeNull();
+    expect(within(tile).queryByText("None")).toBeNull();
+    expect(
+      within(tile).getByRole("link", { name: "Open the budget" }),
+    ).toHaveAttribute("href", "/tenants/globex/budget");
+    expect(screen.queryByRole("link", { name: "Set a budget" })).toBeNull();
+    expect(screen.queryByText("no budget configured")).toBeNull();
+    expect(screen.queryByText("Billing is unavailable")).toBeNull();
+    const spend = screen.getByRole("group", { name: "Spend" });
+    expect(spend).toHaveTextContent("US$1.0000");
   });
 
   it("says what was refunded beside the spend", async () => {
