@@ -275,10 +275,14 @@ var errUserNotFound = errors.New("user not found")
 // tenant's as not found: no user exists at that name. The tenant in the name
 // is what the tenant freeze judges a call by, so a name pairing a live tenant
 // with another tenant's user would otherwise act on a trashed tenant's user
-// past the freeze. A user the store has not got is authstore.ErrNotFound;
-// any other store error is returned as it is, for answer to call internal.
+// past the freeze. A user the store has not got is answered "user not found",
+// not the store's own text; any other store error is returned as it is, for
+// answer to call internal.
 func (h *Handler) load(ctx context.Context, ref UserRef) (authstore.User, error) {
 	u, err := h.users.GetByID(readCtx(ctx), ref.UserID)
+	if errors.Is(err, authstore.ErrNotFound) {
+		return authstore.User{}, connect.NewError(connect.CodeNotFound, errUserNotFound.Error()).WithCause(errors.Join(errUserNotFound, err))
+	}
 	if err != nil {
 		return authstore.User{}, err
 	}

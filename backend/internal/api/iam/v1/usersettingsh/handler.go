@@ -130,13 +130,17 @@ func (h *Handler) internal(op string, userID uuid.UUID, err error) error {
 	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 }
 
+// errUserNotFound answers a user an admin call names that is not there, or
+// is another tenant's.
+var errUserNotFound = errors.New("user not found")
+
 // targetUser reads the user an admin call names: one not there is NotFound,
 // a store that fails is internal.
 func (h *Handler) targetUser(ctx context.Context, op string, userID uuid.UUID) (authstore.User, error) {
 	u, err := h.users.GetByID(ctx, userID)
 	switch {
 	case errors.Is(err, authstore.ErrNotFound):
-		return authstore.User{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return authstore.User{}, connect.NewError(connect.CodeNotFound, errUserNotFound.Error()).WithCause(errors.Join(errUserNotFound, err))
 	case err != nil:
 		return authstore.User{}, h.internal(op, userID, err)
 	}
@@ -233,7 +237,7 @@ func (h *Handler) GetForUser(ctx context.Context, userID uuid.UUID) (*Settings, 
 	// Same-tenant boundary, even for platform admins (they can override via
 	// Cedar policy, but the default keeps tenants isolated).
 	if !hasPlatformAdmin(p) && target.TenantID != p.TenantID {
-		return nil, connect.NewError(connect.CodeNotFound, "user not found")
+		return nil, connect.NewError(connect.CodeNotFound, errUserNotFound.Error())
 	}
 	if err := h.authorize(ctx, p, cedar.ActionReadUserSettings, target); err != nil {
 		return nil, err
@@ -284,7 +288,7 @@ func (h *Handler) DeleteForUser(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 	if !hasPlatformAdmin(p) && target.TenantID != p.TenantID {
-		return connect.NewError(connect.CodeNotFound, "user not found")
+		return connect.NewError(connect.CodeNotFound, errUserNotFound.Error())
 	}
 	if err := h.authorize(ctx, p, cedar.ActionManageUserSettings, target); err != nil {
 		return err

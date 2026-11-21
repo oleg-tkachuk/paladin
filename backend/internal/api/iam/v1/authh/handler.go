@@ -530,7 +530,7 @@ func (h *Handler) WhoAmI(ctx context.Context, routePageToken string) (*WhoAmIOut
 	}
 	u, err := h.users.GetByID(ctx, id)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, callerUserErr(ctx, "who am i", err)
 	}
 	out := &WhoAmIOutput{User: u, Audience: p.Audience}
 	// Route table is best-effort: WhoAmI's primary job is identity, so a
@@ -726,7 +726,7 @@ func (h *Handler) callerUser(ctx context.Context) (authstore.User, error) {
 	}
 	u, err := h.users.GetByID(ctx, id)
 	if err != nil {
-		return authstore.User{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return authstore.User{}, callerUserErr(ctx, "load caller", err)
 	}
 	return u, nil
 }
@@ -775,7 +775,7 @@ func (h *Handler) ChangePassword(ctx context.Context, oldPw, newPw string) error
 	}
 	u, err := h.users.GetByID(ctx, id)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return callerUserErr(ctx, "change password", err)
 	}
 	if err := auth.CheckPassword(u.PasswordHash, oldPw); err != nil {
 		return connect.NewError(connect.CodeUnauthenticated, "invalid old password")
@@ -1288,6 +1288,18 @@ func decodeMembershipCursor(tok string) (time.Time, uuid.UUID, error) {
 		return time.Time{}, uuid.Nil(), fmt.Errorf("malformed page_token %q: %w", tok, err)
 	}
 	return time.Unix(0, n).UTC(), id, nil
+}
+
+// errCallerUserGone answers a caller whose own user is no longer there.
+var errCallerUserGone = errors.New("user not found")
+
+// callerUserErr answers a failure to load the caller's own user: one that is
+// gone is NotFound in the product's words, a store that failed is internal.
+func callerUserErr(ctx context.Context, op string, err error) error {
+	if errors.Is(err, authstore.ErrNotFound) {
+		return connect.NewError(connect.CodeNotFound, errCallerUserGone.Error()).WithCause(errors.Join(errCallerUserGone, err))
+	}
+	return internalErr(ctx, op, err)
 }
 
 // internalErr logs why op failed for a reason the caller cannot fix, and

@@ -3,6 +3,7 @@ package usersettingsh
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -189,6 +190,10 @@ func TestGetForUser_UserNotFound(t *testing.T) {
 	_, err := h.GetForUser(ctxAsUser(uuid.New(), uuid.New(), apiutil.RolePlatformAdmin), uuid.New())
 	if code(err) != connect.CodeNotFound {
 		t.Fatalf("code = %v, want NotFound", code(err))
+	}
+	// The caller reads the product's words, not the store package's.
+	if cerr := new(connect.Error); !errors.As(err, &cerr) || cerr.Message() != errUserNotFound.Error() {
+		t.Errorf("message = %q, want %q", cerr.Message(), errUserNotFound.Error())
 	}
 }
 
