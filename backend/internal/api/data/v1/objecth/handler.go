@@ -787,12 +787,8 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	// itself. It was counted only there, so the metric saw a sliver of the
 	// uploads and a panel on it read as an idle store.
 	start := time.Now()
-	presignOp := metrics.PresignOpPut
-	if in.TransportPOST {
-		presignOp = metrics.PresignOpPost
-	}
 	defer func() {
-		metrics.RecordPresign(ctx, presignOp, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		metrics.RecordPresign(ctx, uploadPresignOp(in.TransportPOST), metrics.PresignOutcome(err), time.Since(start).Seconds())
 		logOutcome(ctx, h.log, opUpload, zapcore.InfoLevel, err, zap.String(fieldCollection, in.Collection))
 	}()
 
@@ -821,13 +817,8 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	//    is impossible. It runs before authz: the lookup is tenant-RLS-scoped,
 	//    so it only reveals the caller's own tenant's object-key existence
 	//    (which MapResolveErr already surfaced pre-scoping).
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.Collection, true) // upload (mutation)
+	meta, err := h.uploadTarget(ctx, tenantID, &in)
 	if err != nil {
-		return nil, MapResolveErr(err)
-	}
-	// A public collection names the object; the capability check below is of
-	// the object that will exist.
-	if err := AdmitPublicUpload(meta, &in.Key, in.ContentType); err != nil {
 		return nil, err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, in.Key)
@@ -847,11 +838,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	//    the resource a Collection entity → "does not have the attribute key"
 	//    eval error → fail-closed deny. A client-omitted key authorizes the
 	//    generated object id, which CreateObject persists below (same value).
-	objectID := uuid.NewV7()
-	key := in.Key
-	if key == "" {
-		key = objectID.String()
-	}
+	key := uploadKey(in.Key)
 
 	// 3. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
@@ -872,13 +859,52 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	); err != nil {
 		return nil, err
 	}
+	return h.registerUpload(ctx, tenantID, in, meta, policy, key)
+}
 
-	completion := CompletionModeExplicit
-	if meta.EventsEnabled {
-		completion = CompletionModeImplicit
+// uploadPresignOp is the presign metric's op for an upload by PUT or POST.
+func uploadPresignOp(post bool) string {
+	if post {
+		return metrics.PresignOpPost
 	}
-	bucket := meta.BucketName
+	return metrics.PresignOpPut
+}
 
+// uploadTarget resolves the bucket an upload to in.Collection lands in and
+// admits it there: a public collection names the object itself, which is
+// what the capability check that follows is of.
+func (h *Handler) uploadTarget(ctx context.Context, tenantID uuid.UUID, in *UploadObjectInput) (BucketMeta, error) {
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.Collection, true) // upload (mutation)
+	if err != nil {
+		return BucketMeta{}, MapResolveErr(err)
+	}
+	if err := AdmitPublicUpload(meta, &in.Key, in.ContentType); err != nil {
+		return BucketMeta{}, err
+	}
+	return meta, nil
+}
+
+// uploadKey is the key an upload is stored under: the caller's, or a fresh
+// object id when the caller named none.
+func uploadKey(key string) string {
+	if key == "" {
+		return uuid.NewV7().String()
+	}
+	return key
+}
+
+// completionMode is how an upload to a bucket completes: by the backend's
+// event where it sends them, else by an explicit CompleteObject.
+func completionMode(meta BucketMeta) CompletionMode {
+	if meta.EventsEnabled {
+		return CompletionModeImplicit
+	}
+	return CompletionModeExplicit
+}
+
+// registerUpload inserts the admitted upload's PENDING row, signs its URL and
+// charges the capability budget.
+func (h *Handler) registerUpload(ctx context.Context, tenantID uuid.UUID, in UploadObjectInput, meta BucketMeta, policy uploadpolicy.Policy, key string) (*UploadObjectOutput, error) {
 	// 4. Insert PENDING row with presign expiry. key was derived before authz
 	//    (step 2) so the authorized resource IS the object created.
 	ttl, err := h.presign.TTL.ResolveWithin(presignttl.OpPut, 0, policy.PutTTLCeiling())
@@ -911,9 +937,26 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	// 5. Generate presign. PUT or POST depending on client preference.
 	out := &UploadObjectOutput{
 		Object:         obj,
-		CompletionMode: completion,
+		CompletionMode: completionMode(meta),
 		Method:         http.MethodPut,
 	}
+	if err := h.presignUpload(ctx, tenantID, in, meta, key, ttl, out); err != nil {
+		return nil, err
+	}
+	// Capability budget — burns AFTER the row + URL exist so the
+	// caller's response is meaningful when charge succeeds. If the
+	// charge fails the row is PENDING and the reaper will GC it
+	// once presign expires.
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// presignUpload signs the upload's URL into out: a POST form when the caller
+// asked for one, else a PUT.
+func (h *Handler) presignUpload(ctx context.Context, tenantID uuid.UUID, in UploadObjectInput, meta BucketMeta, key string, ttl time.Duration, out *UploadObjectOutput) error {
+	bucket := meta.BucketName
 	if in.TransportPOST {
 		action, fields, exp, err := h.storage.PresignPost(ctx, PresignPostArgs{
 			BackendID:     meta.BackendID,
@@ -929,7 +972,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			CacheControl:  meta.CacheControl,
 		})
 		if err != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign POST: %w", err))
+			return rpcerr.New(connect.CodeInternal, fmt.Errorf("presign POST: %w", err))
 		}
 		out.Method = http.MethodPost
 		out.PostAction = action
@@ -950,21 +993,13 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			CacheControl:  meta.CacheControl,
 		})
 		if err != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
+			return rpcerr.New(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
 		}
 		out.URL = url
 		out.Headers = headers
 		out.ExpiresAt = exp
 	}
-
-	// Capability budget — burns AFTER the row + URL exist so the
-	// caller's response is meaningful when charge succeeds. If the
-	// charge fails the row is PENDING and the reaper will GC it
-	// once presign expires.
-	if err := auth.ChargeRequest(ctx); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return nil
 }
 
 // ─── Exemplar RPC: CompleteObject ────────────────────────────────────────────
@@ -987,9 +1022,8 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-
-	if in.Collection == "" || in.ObjectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
+	if err := requireObjectName(in.Collection, in.ObjectID); err != nil {
+		return nil, err
 	}
 
 	obj, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
@@ -1027,71 +1061,130 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 		return nil, connect.Errorf(connect.CodeFailedPrecondition,
 			"cannot complete in state %s", obj.State)
 	}
+	return h.completeUpload(ctx, tenantID, in, obj)
+}
 
+// msgObjectNameRequired refuses a request that does not name its object.
+const msgObjectNameRequired = "collection and object_id are required"
+
+// requireObjectName refuses a request that names no collection or no object.
+func requireObjectName(collection, objectID string) error {
+	if collection == "" || objectID == "" {
+		return connect.NewError(connect.CodeInvalidArgument, msgObjectNameRequired)
+	}
+	return nil
+}
+
+// parseObjectName is requireObjectName that also parses the object's id.
+func parseObjectName(collection, objectID string) (uuid.UUID, error) {
+	if err := requireObjectName(collection, objectID); err != nil {
+		return uuid.Nil(), err
+	}
+	id, err := uuid.Parse(objectID)
+	if err != nil {
+		return uuid.Nil(), rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+	}
+	return id, nil
+}
+
+// storedBytes is what the backend holds for an object, as a HEAD or a copy
+// reports it.
+type storedBytes struct {
+	etag      string
+	size      int64
+	checksum  string
+	sequencer string
+}
+
+// completeUpload promotes a PENDING upload to what the backend holds for it,
+// once the caller's claims about those bytes check out.
+func (h *Handler) completeUpload(ctx context.Context, tenantID uuid.UUID, in CompleteObjectInput, obj Object) (*Object, error) {
 	// Materialize authoritative values via HEAD against the object's bucket.
 	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, true) // complete/promote (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-	etag, size, checksum, seq, err := h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
+	var b storedBytes
+	b.etag, b.size, b.checksum, b.sequencer, err = h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
 	if err != nil {
 		return nil, headFailure(err)
 	}
-	if in.ETag != "" && etag != in.ETag {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			"etag mismatch")
+	if err := checkUploadClaims(in, obj, b.etag); err != nil {
+		return nil, err
 	}
-	// The caller's own checksum must be the one the object was registered
-	// with — the one its URL was signed for. A different one means the
-	// caller believes it uploaded something it did not.
+	changed, err := h.promoteUploaded(ctx, obj.ObjectID, Location{
+		BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key,
+	}, b, map[string]any{
+		payloadSizeBytes:   b.size,
+		payloadETag:        b.etag,
+		payloadContentType: obj.ContentType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return h.promotedObject(ctx, tenantID, in.Collection, in.ObjectID, changed)
+}
+
+// checkUploadClaims refuses a completion whose caller claims bytes other than
+// the ones stored: an ETag the backend does not report, or a checksum other
+// than the one the object was registered with — the one its URL was signed
+// for. Either means the caller believes it uploaded something it did not.
+func checkUploadClaims(in CompleteObjectInput, obj Object, storedETag string) error {
+	if in.ETag != "" && storedETag != in.ETag {
+		return connect.NewError(connect.CodeFailedPrecondition, "etag mismatch")
+	}
 	if in.Checksum != "" && obj.Checksum != "" && in.Checksum != obj.Checksum {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
+		return connect.NewError(connect.CodeFailedPrecondition,
 			"checksum_value differs from the checksum the object was registered with")
 	}
+	return nil
+}
 
-	// Promote + event record run in ONE transaction (ADR-0003): the
-	// `paladin.object.uploaded` rows are written atomically with the
-	// PENDING→AVAILABLE flip, so a crash can no longer leave the object
-	// AVAILABLE with the event lost (the only notification channel for
-	// implicit-mode buckets). The dispatch runs inside onPromoted, which
-	// fires only on the real transition; a dispatch error rolls the
-	// promote back so the client's at-least-once retry re-promotes and
-	// re-emits — consistent, never half-done. Payload is built from the
-	// pre-promote read + the authoritative inputs (which are exactly the
-	// post-promote etag/size), so no in-tx re-read is needed.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, obj.Collection)
-	changed, err := h.sm.PromoteToAvailableInTx(ctx, obj.ObjectID, etag, size, checksum, seq, statemachine.SourceRPC,
+// promoteUploaded promotes the PENDING object objectID at loc to the bytes b
+// with paladin.object.uploaded in ONE transaction (ADR-0003): the event rows
+// are written atomically with the PENDING→AVAILABLE flip, so a crash can no
+// longer leave the object AVAILABLE with the event lost (the only
+// notification channel for implicit-mode buckets). The dispatch runs inside
+// onPromoted, which fires only on the real transition; a dispatch error rolls
+// the promote back so the client's at-least-once retry re-promotes and
+// re-emits — consistent, never half-done. The payload is the object plus
+// extra, built from what the caller already knows, so no in-tx re-read is
+// needed. Bytes that break the object's registration are discarded. It
+// reports whether the promotion was this call's.
+func (h *Handler) promoteUploaded(ctx context.Context, objectID uuid.UUID, loc Location, b storedBytes, extra map[string]any) (bool, error) {
+	okPrefix := h.canonicalObjectPrefix(ctx, loc.TenantID, loc.Collection)
+	changed, err := h.sm.PromoteToAvailableInTx(ctx, objectID, b.etag, b.size, b.checksum, b.sequencer, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
-			return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectUploaded,
-				objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-				objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
-					payloadSizeBytes:   size,
-					payloadETag:        etag,
-					payloadContentType: obj.ContentType,
-				}))
+			return h.dispatchEventTx(ctx, tx, loc.TenantID, eventtype.ObjectUploaded,
+				objectResourceNameFrom(okPrefix, loc.TenantID, loc.Collection, loc.Key),
+				objectEventPayload(loc.TenantID, loc.Collection, loc.Key, objectID, extra))
 		})
 	if errors.Is(err, statemachine.ErrContentMismatch) {
-		return nil, h.discardMismatched(ctx, obj.ObjectID, Location{
-			BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key,
-		}, err)
+		return false, h.discardMismatched(ctx, objectID, loc, err)
 	}
+	if err != nil {
+		return false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return changed, nil
+}
+
+// promotedObject reads back an object just promoted. Version history, quota
+// and the capability charge fire only on the real transition (changed), so
+// an at-least-once retry neither re-records a version nor double-charges.
+// They run after the commit: a version or quota hiccup must not roll back a
+// delivered event.
+func (h *Handler) promotedObject(ctx context.Context, tenantID uuid.UUID, collection, objectID string, changed bool) (*Object, error) {
+	fresh, err := h.repo.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	if !changed {
+		return &fresh, nil
 	}
-	// Version history + quota + capability charge fire only on the real
-	// transition (retries land changed=false). These remain post-commit:
-	// they're separate concerns from the event-atomicity guarantee and a
-	// version/quota hiccup must not roll back a delivered event.
-	if changed {
-		LogSideEffect(ctx, EffectVersion, fresh.ObjectID, h.versions.OnPromote(ctx, fresh))
-		h.touchQuota(ctx, fresh)
-		if err := auth.ChargeRequest(ctx); err != nil {
-			return nil, err
-		}
+	LogSideEffect(ctx, EffectVersion, fresh.ObjectID, h.versions.OnPromote(ctx, fresh))
+	h.touchQuota(ctx, fresh)
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return nil, err
 	}
 	return &fresh, nil
 }
@@ -2164,40 +2257,16 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (out *Obje
 	if err != nil {
 		return nil, err
 	}
-	if in.SourceCollection == "" || in.SourceObjectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"source_collection and source_object_id are required")
-	}
-	if in.DestCollection == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"dest_collection is required")
-	}
-	src, err := h.repo.FindByName(ctx, tenantID, in.SourceCollection, in.SourceObjectID)
-	if err != nil {
-		return nil, objectLookupError(err)
-	}
-	if src.State != statemachine.StateAvailable {
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"cannot copy from state %s", src.State)
-	}
-	// Resolve the DESTINATION (backend, bucket) BEFORE the Cedar check so a
-	// bucket:/collection:-scoped write PAT enforces on the copy target — the
-	// authz Resource below is the destination (ActionCopyObject is checked
-	// against the dest). The same resolution is reused as the copy-dest
-	// Location; the source is resolved after authz as before.
-	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
-	if err != nil {
-		return nil, MapResolveErr(err)
-	}
-	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
-	// A public destination names the copy itself; elsewhere an empty key
-	// keeps the source's.
-	destKey := in.DestKey
-	if err := AdmitPublicUpload(dstMeta, &destKey, src.ContentType); err != nil {
+	if err := checkCopyInput(in); err != nil {
 		return nil, err
 	}
-	if destKey == "" {
-		destKey = src.Key
+	src, err := h.copySource(ctx, tenantID, in)
+	if err != nil {
+		return nil, err
+	}
+	dstMeta, destKey, err := h.copyDestination(ctx, tenantID, in, src)
+	if err != nil {
+		return nil, err
 	}
 	// Copy = Put on the destination URI (semantically a write of new
 	// content) — gated by OpPut. The source must already be readable
@@ -2218,12 +2287,67 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (out *Obje
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: in.DestCollection, Key: destKey,
-		BackendID: dstBackendID, BucketName: dstBucket,
+		BackendID: dstMeta.BackendID, BucketName: dstMeta.BucketName,
 		ContentType: src.ContentType, SizeBytes: src.SizeBytes, Tags: in.Tags,
 	}, cedar.ActionCopyObject, src.SizeBytes, src.ContentType); err != nil {
 		return nil, err
 	}
+	return h.copyBytes(ctx, tenantID, in, src, dstMeta, destKey)
+}
 
+// checkCopyInput refuses a copy that does not name its source object and
+// its destination collection.
+func checkCopyInput(in CopyObjectInput) error {
+	if in.SourceCollection == "" || in.SourceObjectID == "" {
+		return connect.NewError(connect.CodeInvalidArgument,
+			"source_collection and source_object_id are required")
+	}
+	if in.DestCollection == "" {
+		return connect.NewError(connect.CodeInvalidArgument,
+			"dest_collection is required")
+	}
+	return nil
+}
+
+// copySource reads the object a copy is of; only an AVAILABLE one has bytes
+// to copy.
+func (h *Handler) copySource(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput) (Object, error) {
+	src, err := h.repo.FindByName(ctx, tenantID, in.SourceCollection, in.SourceObjectID)
+	if err != nil {
+		return Object{}, objectLookupError(err)
+	}
+	if src.State != statemachine.StateAvailable {
+		return Object{}, connect.Errorf(connect.CodeFailedPrecondition,
+			"cannot copy from state %s", src.State)
+	}
+	return src, nil
+}
+
+// copyDestination resolves where a copy lands, BEFORE the Cedar check, so a
+// bucket:/collection:-scoped write PAT enforces on the copy target — the
+// authz Resource is the destination (ActionCopyObject is checked against the
+// dest). The same resolution is reused as the copy-dest Location; the source
+// is resolved after authz. A public destination names the copy itself;
+// elsewhere an empty key keeps the source's.
+func (h *Handler) copyDestination(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput, src Object) (BucketMeta, string, error) {
+	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
+	if err != nil {
+		return BucketMeta{}, "", MapResolveErr(err)
+	}
+	destKey := in.DestKey
+	if err := AdmitPublicUpload(dstMeta, &destKey, src.ContentType); err != nil {
+		return BucketMeta{}, "", err
+	}
+	if destKey == "" {
+		destKey = src.Key
+	}
+	return dstMeta, destKey, nil
+}
+
+// copyBytes carries out an authorized copy: the destination row, the
+// storage copy, and the promotion with its event.
+func (h *Handler) copyBytes(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput, src Object, dstMeta BucketMeta, destKey string) (*Object, error) {
+	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
 	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceCollection, false) // copy source (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
@@ -2257,64 +2381,42 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (out *Obje
 		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
 		CacheControl: dstMeta.CacheControl, ContentType: src.ContentType,
 	}); err != nil {
-		// Compensate: the destination row was created PENDING. Without this
-		// transition the row would linger forever, since the reconciler only
-		// promotes via HEAD against an object that the failed copy never wrote.
-		if mfErr := h.sm.DiscardFailed(ctx, dst.ObjectID, statemachine.FailedStorageCopy); mfErr != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr))
-		}
-		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))
+		return nil, h.copyFailed(ctx, dst.ObjectID, err)
 	}
 	// Promote + paladin.object.uploaded fan-out in one tx (ADR-0003): the
 	// copy materialises a brand-new object, so subscribers see the same
 	// `paladin.object.uploaded` they'd get from a normal CompleteObject path.
 	// The payload's `source` discriminator lets a consumer that cares
-	// about origin route copies vs direct uploads. Built from the known
-	// inputs (== the post-promote row) so the event can be enqueued inside
-	// the promote tx without a read. A dispatch error rolls the promote
-	// back; the client's at-least-once retry re-runs both.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.DestCollection)
-	changed, err := h.sm.PromoteToAvailableInTx(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
-		src.Checksum, "", statemachine.SourceRPC,
-		func(ctx context.Context, tx pgx.Tx) error {
-			return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectUploaded,
-				objectResourceNameFrom(okPrefix, tenantID, in.DestCollection, destKey),
-				objectEventPayload(tenantID, in.DestCollection, destKey, dst.ObjectID, map[string]any{
-					payloadSizeBytes:        src.SizeBytes,
-					payloadETag:             src.ETag,
-					payloadContentType:      src.ContentType,
-					payloadSource:           uploadSourceCopy,
-					payloadSourceCollection: in.SourceCollection,
-					payloadSourceObjectID:   in.SourceObjectID,
-				}))
-		})
-	if errors.Is(err, statemachine.ErrContentMismatch) {
-		return nil, h.discardMismatched(ctx, dst.ObjectID, Location{
-			BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
-		}, err)
-	}
+	// about origin route copies vs direct uploads.
+	changed, err := h.promoteUploaded(ctx, dst.ObjectID, Location{
+		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
+	}, storedBytes{etag: src.ETag, size: src.SizeBytes, checksum: src.Checksum}, map[string]any{
+		payloadSizeBytes:        src.SizeBytes,
+		payloadETag:             src.ETag,
+		payloadContentType:      src.ContentType,
+		payloadSource:           uploadSourceCopy,
+		payloadSourceCollection: in.SourceCollection,
+		payloadSourceObjectID:   in.SourceObjectID,
+	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, err
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, in.DestCollection, dst.ObjectID.String())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	// Same tail as CompleteObject, and for the same reason: these fire only
-	// on the real transition, so an at-least-once retry neither re-records a
-	// version nor double-charges. The capability charge belongs here too — a
+	// Same tail as CompleteObject. The capability charge belongs here too — a
 	// copy is gated by OpPut and materialises a new stored object, so a
 	// budgeted principal that could copy for free would be able to consume
-	// storage without spending anything, which is the one OpPut path where
-	// that was true.
-	if changed {
-		LogSideEffect(ctx, EffectVersion, fresh.ObjectID, h.versions.OnPromote(ctx, fresh))
-		h.touchQuota(ctx, fresh)
-		if err := auth.ChargeRequest(ctx); err != nil {
-			return nil, err
-		}
+	// storage without spending anything.
+	return h.promotedObject(ctx, tenantID, in.DestCollection, dst.ObjectID.String(), changed)
+}
+
+// copyFailed compensates a storage copy that failed: the destination row was
+// created PENDING, and without this transition it would linger forever,
+// since the reconciler only promotes via HEAD against an object that the
+// failed copy never wrote.
+func (h *Handler) copyFailed(ctx context.Context, dstID uuid.UUID, err error) error {
+	if mfErr := h.sm.DiscardFailed(ctx, dstID, statemachine.FailedStorageCopy); mfErr != nil {
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr))
 	}
-	return &fresh, nil
+	return rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))
 }
 
 // ─── shared internals ──────────────────────────────────────────────────────
