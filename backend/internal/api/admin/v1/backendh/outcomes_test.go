@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 )
@@ -51,6 +52,10 @@ func (r scriptedRepo) Update(context.Context, admindomain.StorageBackend, int64,
 }
 
 func (r scriptedRepo) Delete(context.Context, string, int64) error { return r.writeErr }
+
+func (r scriptedRepo) RotateCredentialsTx(context.Context, pgx.Tx, string, string, int64) error {
+	return r.writeErr
+}
 
 func scripted(r scriptedRepo) scriptedRepo {
 	r.getCalls = new(int)
@@ -93,6 +98,10 @@ func TestStoreFailuresAnswerInternal(t *testing.T) {
 		}},
 		{"update read back", scripted(scriptedRepo{getErr: errStore, failGetFrom: 1}), func(h *Handler) error {
 			_, err := h.UpdateBackend(platformAdmin(), admindomain.StorageBackend{BackendID: "primary"}, 1, nil)
+			return err
+		}},
+		{"rotate", scripted(scriptedRepo{writeErr: errStore}), func(h *Handler) error {
+			_, err := h.RotateCredentials(platformAdmin(), "primary", secretRef, 0)
 			return err
 		}},
 		{"delete", scripted(scriptedRepo{writeErr: errStore}), func(h *Handler) error {
