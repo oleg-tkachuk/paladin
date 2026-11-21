@@ -21,6 +21,21 @@ func TestCollectionRowCoversEverySchemaField(t *testing.T) {
 	}
 }
 
+// A filter sees where a collection is bound as the console shows it:
+// "backend/bucket", or the backend alone when no bucket is named.
+func TestCollectionRowStorageBackend(t *testing.T) {
+	for _, tc := range []struct {
+		backend, bucket, want string
+	}{
+		{"aws-eu", "paladin-prod", "aws-eu/paladin-prod"},
+		{"aws-eu", "", "aws-eu"},
+	} {
+		if got := collectionRow(Collection{BackendID: tc.backend, BucketName: tc.bucket})["storage_backend"]; got != tc.want {
+			t.Errorf("storage_backend of %s/%s = %v, want %q", tc.backend, tc.bucket, got, tc.want)
+		}
+	}
+}
+
 // The milder direction: a projected key the schema does not declare is dead
 // weight no filter can reference, and usually means one side was updated alone.
 func TestCollectionRowProjectsNothingUndeclared(t *testing.T) {
