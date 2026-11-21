@@ -239,6 +239,11 @@ type QuotaUpdater interface {
 // other GetSession error is the store failing.
 var ErrUploadNotFound = errors.New("upload not found")
 
+// ErrNotPending is RecordCompositeChecksum's answer when the upload's object
+// is no longer PENDING, so nothing was recorded: a storage event or an
+// earlier completion promoted it, or it has moved on since.
+var ErrNotPending = errors.New("upload's object is no longer pending")
+
 // The RPCs as the outcome log names them.
 const (
 	opInitiate    = "initiate"
@@ -441,10 +446,33 @@ func (h *Handler) recordComposite(ctx context.Context, sess Session, parts []Par
 	if err != nil {
 		return "", connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
-	if err := h.repo.RecordCompositeChecksum(ctx, sess.ObjectID, composite, sess.PartSizeBytes); err != nil {
+	err = h.repo.RecordCompositeChecksum(ctx, sess.ObjectID, composite, sess.PartSizeBytes)
+	if errors.Is(err, ErrNotPending) {
+		return composite, h.notPending(ctx, sess, composite)
+	}
+	if err != nil {
 		return "", rpcerr.New(connect.CodeInternal, fmt.Errorf("record composite checksum: %w", err))
 	}
 	return composite, nil
+}
+
+// notPending decides a completion whose object recorded no composite because
+// it is past PENDING. The same completion retried after its object was
+// promoted — AVAILABLE, holding this composite — goes on, and the promote
+// that follows is a no-op. Anything else is refused before the store
+// assembles parts no PENDING object is waiting for.
+func (h *Handler) notPending(ctx context.Context, sess Session, composite string) error {
+	obj, err := h.repo.Object(ctx, sess.TenantID, sess.ObjectID)
+	if err != nil {
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("read object past pending: %w", err))
+	}
+	if obj.State != statemachine.StateAvailable || obj.Checksum != composite {
+		return connect.Errorf(connect.CodeFailedPrecondition,
+			"object state %s is not waiting for these parts", obj.State)
+	}
+	logger.FromContext(ctx).Info("multipart completion retried after its object was promoted",
+		zap.String("upload_id", sess.UploadID), zap.String("object_id", sess.ObjectID.String()))
+	return nil
 }
 
 // assembled is what the store made of the parts, and whether promoting it was

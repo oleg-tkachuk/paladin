@@ -65,9 +65,10 @@ func (h *VersionHandler) SetAuthorizer(pe cedar.Authorizer) { h.policy = pe }
 // authorizeParent applies the object RPCs' double gate to a version call on
 // parent: the caller's capability (if any) must allow op on the object, and
 // Cedar must allow action on it. Reading a version is reading the object;
-// restoring one rewrites what the object is.
+// restoring one rewrites what the object is. rpc names the call in a warning.
 func (h *VersionHandler) authorizeParent(
 	ctx context.Context,
+	rpc string,
 	tenantID uuid.UUID,
 	principal *auth.Principal,
 	parent Object,
@@ -83,7 +84,7 @@ func (h *VersionHandler) authorizeParent(
 	write := action != cedar.ActionGetObject
 	// Best-effort, as in GetObject: an unbound collection emits no bucket
 	// scope key, which leaves scoped principals fail-closed.
-	backendID, bucket, _ := h.objects.LookupBucket(ctx, tenantID, parent.Collection, write)
+	backendID, bucket := scopeBucket(ctx, h.log, h.objects, rpc, tenantID, parent.Collection, write)
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(principal),
 		action,
@@ -170,7 +171,7 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 	if err != nil {
 		return nil, "", objectLookupError(err)
 	}
-	if err := h.authorizeParent(ctx, tenantID, principal, parent, limes.OpGet, cedar.ActionGetObject); err != nil {
+	if err := h.authorizeParent(ctx, opListVersions, tenantID, principal, parent, limes.OpGet, cedar.ActionGetObject); err != nil {
 		return nil, "", err
 	}
 	out, next, err := h.versions.List(ctx, objectID, in.PageSize, in.PageToken)
@@ -197,14 +198,18 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (_ *Object
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	if err := h.authorizeParent(ctx, tenantID, principal, parent, limes.OpGet, cedar.ActionGetObject); err != nil {
+	if err := h.authorizeParent(ctx, opGetVersion, tenantID, principal, parent, limes.OpGet, cedar.ActionGetObject); err != nil {
 		return nil, err
 	}
 	v, err := h.versionOf(ctx, parsed.versionID, parent)
 	if err != nil {
 		return nil, err
 	}
-	current, _ := h.versions.CurrentVersionID(ctx, parent.ObjectID)
+	// Not best-effort: an unread pointer would answer is_current wrongly.
+	current, err := h.versions.CurrentVersionID(ctx, parent.ObjectID)
+	if err != nil {
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("read current version: %w", err))
+	}
 	if v.VersionID == current {
 		v.IsCurrent = true
 	}
@@ -243,7 +248,7 @@ func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersi
 	if err != nil {
 		return nil, objectLookupError(err)
 	}
-	if err := h.authorizeParent(ctx, tenantID, principal, parent, limes.OpPut, cedar.ActionPutObject); err != nil {
+	if err := h.authorizeParent(ctx, opRestoreVersion, tenantID, principal, parent, limes.OpPut, cedar.ActionPutObject); err != nil {
 		return nil, err
 	}
 	if expected != parent.ResourceVersion {
@@ -385,19 +390,19 @@ func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Objec
 	if !h.wired() {
 		return nil
 	}
+	// None of these reads is best-effort: a restore that went on without one
+	// would leave a visible object whose current version is its delete
+	// marker, and nothing moves the pointer back later.
 	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
 	if err != nil {
-		// Don't block restore on a meta lookup failure — the state machine
-		// will still flip the row visible. Surfaces as a Warning at the call
-		// site if needed.
-		return nil
+		return fmt.Errorf("read versioning config: %w", err)
 	}
 	if !meta.VersioningEnabled {
 		return nil
 	}
-	markerID, ok := h.currentDeleteMarker(ctx, obj.ObjectID)
-	if !ok {
-		return nil
+	markerID, ok, err := h.currentDeleteMarker(ctx, obj.ObjectID)
+	if err != nil || !ok {
+		return err
 	}
 	// Walk history (newest first, skip the marker) and pick the first
 	// non-marker entry, scanning at most markerScanLimit versions on a
@@ -416,18 +421,24 @@ func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Objec
 const markerScanLimit = 100
 
 // currentDeleteMarker is the object's current version when that is a delete
-// marker. A pointer that cannot be read is treated as no marker: restore
-// does not block on it, the state machine still flips the row visible.
-func (h *VersionHandler) currentDeleteMarker(ctx context.Context, objectID uuid.UUID) (uuid.UUID, bool) {
+// marker. No pointer, or one naming a version that is not there, is no
+// marker; a read that fails is the error.
+func (h *VersionHandler) currentDeleteMarker(ctx context.Context, objectID uuid.UUID) (uuid.UUID, bool, error) {
 	curID, err := h.versions.CurrentVersionID(ctx, objectID)
-	if err != nil || curID == uuid.Nil() {
-		return uuid.Nil(), false
+	if err != nil {
+		return uuid.Nil(), false, fmt.Errorf("read current version: %w", err)
+	}
+	if curID == uuid.Nil() {
+		return uuid.Nil(), false, nil
 	}
 	cur, err := h.versions.Get(ctx, curID)
-	if err != nil || !cur.IsDeleteMarker {
-		return uuid.Nil(), false
+	switch {
+	case errors.Is(err, ErrVersionNotFound):
+		return uuid.Nil(), false, nil
+	case err != nil:
+		return uuid.Nil(), false, fmt.Errorf("read current version %s: %w", curID, err)
 	}
-	return curID, true
+	return curID, cur.IsDeleteMarker, nil
 }
 
 // latestNonMarker is the newest version of page, newest first, that is

@@ -228,15 +228,10 @@ func (w *PurgeDrainer) emitPurged(ctx context.Context, tx pgx.Tx, tenantID uuid.
 		TenantID: tenantID.String(),
 		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
 			r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path),
-		Payload: map[string]any{
-			"tenant_id":  tenantID.String(),
-			"collection": r.CollectionName,
-			"key":        r.Path,
-			"object_id":  objectID.String(),
-			"backend_id": r.BackendName,
-			"bucket":     r.BucketName,
-			"reclaimed":  true,
-		},
+		Payload: objectPurgedPayload(purgedObject{
+			TenantID: tenantID, ObjectID: objectID, Collection: r.CollectionName,
+			Key: r.Path, Backend: r.BackendName, Bucket: r.BucketName,
+		}),
 	})
 	return err
 }

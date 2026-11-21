@@ -85,3 +85,26 @@ func TestUpdateObjectOutcomes(t *testing.T) {
 		})
 	}
 }
+
+// A batch tag update refuses an object UpdateObject would refuse, in the same
+// words, so a caller reads one reason whichever path it took.
+func TestMetadataUpdateRefusalMatchesUpdateObject(t *testing.T) {
+	tenantID := uuid.New()
+	for _, state := range []statemachine.State{statemachine.StateDeleted, statemachine.StatePending} {
+		t.Run(string(state), func(t *testing.T) {
+			refusal := MetadataUpdateRefusal(state)
+			if got := connect.CodeOf(refusal); got != connect.CodeFailedPrecondition {
+				t.Errorf("code = %v, want FailedPrecondition", got)
+			}
+			obj := Object{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "a.txt", State: state}
+			h := &Handler{repo: &statefulUpdateRepo{updateRepo: updateRepo{obj: obj}}, policy: &recordingAuthorizer{}}
+			ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
+			_, err := h.UpdateObject(ctx, UpdateObjectInput{
+				Collection: "docs", ObjectID: obj.ObjectID.String(), UpdatedFields: []string{"tags"},
+			})
+			if err == nil || err.Error() != refusal.Error() {
+				t.Errorf("UpdateObject = %v, want %v", err, refusal)
+			}
+		})
+	}
+}

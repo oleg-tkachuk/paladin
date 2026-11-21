@@ -17,9 +17,11 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -66,6 +68,45 @@ func TestHardDelete_FullSweep(t *testing.T) {
 	}
 	if n := pendingPurges(t, h.PoolMigrate, objectID); n != 0 {
 		t.Errorf("pending_purges rows = %d, want 0 once the bytes are gone", n)
+	}
+}
+
+// purgedEvents records the events a sweep emits, without an outbox.
+type purgedEvents struct{ got []worker.Event }
+
+func (p *purgedEvents) RecordTx(_ context.Context, _ pgx.Tx, _ string, evt worker.Event) error {
+	p.got = append(p.got, evt)
+	return nil
+}
+
+// TestHardDelete_PurgedEventNamesTheBackendAsEveryProducerDoes: the
+// lifecycle's paladin.object.purged names the backend under the key the
+// object handler and the purge drainer use. It used to say "backend", so a
+// subscriber reading backend_id found nothing on a lifecycle purge.
+func TestHardDelete_PurgedEventNamesTheBackendAsEveryProducerDoes(t *testing.T) {
+	h := pgharness.Setup(t)
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "hd-purged-key")
+	mustCreateCollection(t, h.PoolMigrate, tenantID, "docs")
+	objectID := mustInsertAvailableObject(t, h.PoolMigrate, tenantID, "docs", "keyed")
+	mustSoftDeleteWithBackdate(t, h.PoolMigrate, objectID, 24*time.Hour)
+
+	events := &purgedEvents{}
+	w := &worker.LifecycleHardDeleter{
+		Q: sqlc.New(h.PoolMigrate), Pool: h.PoolMigrate, Storage: &recordingStorage{},
+		Events: events, TTL: time.Hour, BatchSize: 100,
+	}
+	if err := w.Sweep(context.Background()); err != nil {
+		t.Fatalf("Sweep = %v", err)
+	}
+	if len(events.got) != 1 || events.got[0].Type != eventtype.ObjectPurged {
+		t.Fatalf("events = %+v, want one %s", events.got, eventtype.ObjectPurged)
+	}
+	p := events.got[0].Payload
+	if got := p[eventtype.PayloadBackendID]; got != "primary" {
+		t.Errorf("payload[%s] = %v, want the row's backend; payload %v", eventtype.PayloadBackendID, got, p)
+	}
+	if _, stale := p["backend"]; stale {
+		t.Errorf("payload still carries the old key %q: %v", "backend", p)
 	}
 }
 

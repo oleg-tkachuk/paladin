@@ -321,7 +321,7 @@ func TestBatchUpdateTagsLogsItsOutcome(t *testing.T) {
 	known, ghost := uuid.New(), uuid.New()
 	log, logs := observedLogger()
 	e := &BatchUpdateTagsExecutor{
-		Objects: &tagsRepo{lookupRepo{objs: []objecth.Object{{ObjectID: known, Collection: "k"}}}},
+		Objects: &tagsRepo{lookupRepo{objs: []objecth.Object{available(known, 0)}}},
 		Logger:  log,
 	}
 	if _, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchUpdateTagsArgs{

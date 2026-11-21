@@ -517,41 +517,35 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### Best-effort reads in objecth fail silently
+### UpdateObject's best-effort bucket lookup fails silently
 
 - **Status:** Deferred.
-- **Reason:** the object handler resolves a collection's bucket before
-  authorizing (`x, y, _ := h.repo.LookupBucket(..., false)` in about eight
-  RPCs), and `canonicalObjectPrefix`, `GetVersion`'s current-version read and
-  `UnsetDeleteMarkerCurrent` swallow their errors the same way. The
-  best-effort design is deliberate, but a store failure there turns into a
-  scoped token's PermissionDenied or a missing pointer with no log line.
-- **Definition of Done:** each swallowed error is logged at Warn with the op,
-  tenant and collection through one shared helper, with a test; the codes the
-  caller sees stay as they are.
+- **Reason:** the scope-only bucket lookups and the canonical event prefix
+  in `objecth` now warn through `scopeBucket` / `warnBestEffort`, except the
+  lookup in `UpdateObject` (`updBackendID, updBucket, _ :=
+  h.repo.LookupBucket(...)`), left alone while that function was being split
+  in a parallel change. A store failure there still turns into a scoped
+  token's PermissionDenied with no line.
+- **Definition of Done:** the lookup goes through
+  `scopeBucket(ctx, h.log, h.repo, opUpdate, ...)`, and `opUpdate` joins
+  the table in `TestBestEffortBucketLookupsWarnWhenTheStoreFails`.
 - **Blockers:** none.
 
-### A composite checksum recorded on no row goes unnoticed
+### RestoreVersion's scope lookup reads a draining backend as a failure
 
 - **Status:** Deferred.
-- **Reason:** `MultipartRepo.RecordCompositeChecksum` discards its row count,
-  so a completion whose object is no longer PENDING (promoted by a storage
-  event, or discarded) records nothing and goes on to assemble the parts.
-  Whether that should be a refusal or a no-op is a design question.
-- **Definition of Done:** a zero-row write is told apart — a sentinel the
-  handler maps, or a logged no-op — with a test of each case.
-- **Blockers:** deciding what a retried completion of a promoted object
-  should answer.
-
-### paladin.object.purged names the backend under two keys
-
-- **Status:** Deferred.
-- **Reason:** the object handler's purge event carries `backend_id`; the
-  purge drainer and the lifecycle hard delete carry `backend`. Renaming
-  either is a change subscribers see.
-- **Definition of Done:** one key in every producer, shared as a constant,
-  with an upgrading note for the one that changes.
-- **Blockers:** choosing which spelling stays.
+- **Reason:** `VersionHandler.authorizeParent` resolves the bucket with
+  `write=true` for RestoreVersion, so a read-only (draining) or provisioning
+  bucket answers a gate error. That lookup is scope-only: the error is now
+  warned about as a failed read, a scoped token is denied, and an unscoped
+  caller restores anyway. RestoreObject resolves with `write=false` because
+  a restore is a row flip; RestoreVersion repoints the current version, and
+  whether a draining backend should allow that is not decided.
+- **Definition of Done:** either RestoreVersion resolves with `write=false`
+  like RestoreObject, or the gate errors refuse it with FailedPrecondition
+  through `MapResolveErr`; a test covers a read-only backend.
+- **Blockers:** deciding whether repointing a version is a write to the
+  backend.
 
 ## Database
 
@@ -702,30 +696,6 @@ the same commit. Treat this file like a runtime invariant.
   a sentinel in `CollectionRepo.Rebind` (a missing target bucket's NOT NULL
   violation to `ErrBucketNotFound`, as create does); the catch-all becomes
   `apiutil.MapError`, so anything else is Internal; tests cover each.
-- **Blockers:** none.
-
-### Setting a default binding for a missing tenant reads as bucket-not-granted
-
-- **Status:** Deferred.
-- **Reason:** `TenantRepo.SetDefaultBinding` asks `TenantMayBindBucket`
-  first, and a tenant that does not exist neither owns nor holds a grant on
-  any bucket, so it is refused as `ErrBucketNotGranted` rather than
-  `ErrNotFound`. Found while auditing zero-row outcomes; it is not one.
-- **Definition of Done:** a missing tenant answers NOT_FOUND, with an
-  integration test beside the existing bucket-missing one.
-- **Blockers:** none.
-
-### Batch tag updates retry a trashed object as a version conflict
-
-- **Status:** Deferred.
-- **Reason:** `UpdateMetadata` matches only AVAILABLE rows, so the
-  BatchUpdateTags executor reads a trashed or pending object's zero-row write
-  as a conflict, re-reads it `conflictAttempts` times, and reports
-  "resource_version mismatch". UpdateObject now refuses such an object up
-  front; the executor does not.
-- **Definition of Done:** the executor skips a non-AVAILABLE object with a
-  reason naming its state and no retry, as batch delete does with
-  `objecth.SoftDeleteRefusal`; a test covers a trashed id in a batch.
 - **Blockers:** none.
 
 ## Configuration

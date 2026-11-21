@@ -645,22 +645,23 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 }
 
 // The keys of an object lifecycle event's payload, and the values that tell
-// its variants apart: subscribers read them by name.
+// its variants apart: subscribers read them by name. The keys the purge
+// workers emit too come from eventtype, so every producer spells them alike.
 const (
-	payloadTenantID         = "tenant_id"
-	payloadCollection       = "collection"
-	payloadKey              = "key"
-	payloadObjectID         = "object_id"
+	payloadTenantID         = eventtype.PayloadTenantID
+	payloadCollection       = eventtype.PayloadCollection
+	payloadKey              = eventtype.PayloadKey
+	payloadObjectID         = eventtype.PayloadObjectID
 	payloadSizeBytes        = "size_bytes"
 	payloadETag             = "etag"
 	payloadContentType      = "content_type"
 	payloadUpdatedFields    = "updated_fields"
 	payloadMode             = "mode"
 	payloadBypassGovernance = "bypass_governance"
-	payloadBackendID        = "backend_id"
-	payloadBucket           = "bucket"
-	payloadReclaimed        = "reclaimed"
-	payloadSource           = "source"
+	payloadBackendID        = eventtype.PayloadBackendID
+	payloadBucket           = eventtype.PayloadBucket
+	payloadReclaimed        = eventtype.PayloadReclaimed
+	payloadSource           = eventtype.PayloadSource
 	payloadSourceCollection = "source_collection"
 	payloadSourceObjectID   = "source_object_id"
 
@@ -696,9 +697,13 @@ func objectResourceName(tenantID uuid.UUID, collection, key string) string {
 // mutation tx and pass it into the dispatch — never a pool read inside an open
 // tx. On a lookup miss it returns "" and the caller falls back to the C-shape
 // name; a transient resolve blip must never block the event.
-func (h *Handler) canonicalObjectPrefix(ctx context.Context, tenantID uuid.UUID, collection string) string {
+func (h *Handler) canonicalObjectPrefix(ctx context.Context, op string, tenantID uuid.UUID, collection string) string {
 	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, false) // naming read
-	if err != nil || meta.BackendID == "" || meta.BucketName == "" {
+	if err != nil {
+		warnBestEffort(ctx, h.log, op, readCanonicalPrefix, tenantID, collection, err)
+		return ""
+	}
+	if meta.BackendID == "" || meta.BucketName == "" {
 		return ""
 	}
 	return fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s",
@@ -1044,7 +1049,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 	// unaffected because the scope-enforcement forbid never fires for them).
 	// The PENDING promote path below still resolves with write=true, keeping
 	// the disabled/read-only-backend gate exactly where it was.
-	authBackendID, authBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false)
+	authBackendID, authBucket := scopeBucket(ctx, h.log, h.repo, opComplete, tenantID, obj.Collection, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: authBackendID, BucketName: authBucket,
@@ -1112,7 +1117,7 @@ func (h *Handler) completeUpload(ctx context.Context, tenantID uuid.UUID, in Com
 	if err := checkUploadClaims(in, obj, b.etag); err != nil {
 		return nil, err
 	}
-	changed, err := h.promoteUploaded(ctx, obj.ObjectID, Location{
+	changed, err := h.promoteUploaded(ctx, opComplete, obj.ObjectID, Location{
 		BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key,
 	}, b, map[string]any{
 		payloadSizeBytes:   b.size,
@@ -1151,8 +1156,8 @@ func checkUploadClaims(in CompleteObjectInput, obj Object, storedETag string) er
 // extra, built from what the caller already knows, so no in-tx re-read is
 // needed. Bytes that break the object's registration are discarded. It
 // reports whether the promotion was this call's.
-func (h *Handler) promoteUploaded(ctx context.Context, objectID uuid.UUID, loc Location, b storedBytes, extra map[string]any) (bool, error) {
-	okPrefix := h.canonicalObjectPrefix(ctx, loc.TenantID, loc.Collection)
+func (h *Handler) promoteUploaded(ctx context.Context, op string, objectID uuid.UUID, loc Location, b storedBytes, extra map[string]any) (bool, error) {
+	okPrefix := h.canonicalObjectPrefix(ctx, op, loc.TenantID, loc.Collection)
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, objectID, b.etag, b.size, b.checksum, b.sequencer, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, loc.TenantID, eventtype.ObjectUploaded,
@@ -1256,7 +1261,7 @@ func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) (
 	if err := auth.AssertCapabilityOp(ctx, limes.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
 		return nil, false, err
 	}
-	backendID, bucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // list (read)
+	backendID, bucket := scopeBucket(ctx, h.log, h.repo, opListFolders, tenantID, in.Collection, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: in.Collection,
 		BackendID: backendID, BucketName: bucket,
@@ -1314,7 +1319,7 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) (_ []Obj
 	// scope-enforcement forbid never fires for them) and scoped principals
 	// stay fail-closed. Resolved ONCE here and reused by the per-row loop
 	// below (the collection→bucket binding is constant across the page).
-	listBackendID, listBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // list (read)
+	listBackendID, listBucket := scopeBucket(ctx, h.log, h.repo, opList, tenantID, in.Collection, false)
 	// One tenant+collection-scoped Cedar check up front; per-row Cedar would
 	// dominate pagination cost.
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
@@ -1467,7 +1472,7 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (_ *Co
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on count; best-effort + read-only (see ListObjects).
-	countBackendID, countBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // count (read)
+	countBackendID, countBucket := scopeBucket(ctx, h.log, h.repo, opCount, tenantID, in.Collection, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: in.Collection,
 		BackendID: countBackendID, BucketName: countBucket,
@@ -1533,7 +1538,7 @@ func (h *Handler) ListDistinctTags(
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on the tag facet; best-effort + read-only (see ListObjects).
-	tagsBackendID, tagsBucket, _ := h.repo.LookupBucket(ctx, tenantID, collection, false) // list distinct tags (read)
+	tagsBackendID, tagsBucket := scopeBucket(ctx, h.log, h.repo, opListTags, tenantID, collection, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: collection,
 		BackendID: tagsBackendID, BucketName: tagsBucket,
@@ -1585,7 +1590,7 @@ func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (_
 	// Resolve the collection→bucket binding (obj carries no bucket — the find
 	// query does not JOIN collections) so bucket:/collection: PAT scopes
 	// enforce on read; best-effort + read-only (see ListObjects).
-	getBackendID, getBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // get (read)
+	getBackendID, getBucket := scopeBucket(ctx, h.log, h.repo, opGet, tenantID, obj.Collection, false)
 	getRes := &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: getBackendID, BucketName: getBucket,
@@ -1642,7 +1647,7 @@ func (h *Handler) LookupObject(ctx context.Context, collection, key string) (out
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on lookup; best-effort + read-only (see ListObjects).
-	lkBackendID, lkBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // lookup (read)
+	lkBackendID, lkBucket := scopeBucket(ctx, h.log, h.repo, opLookup, tenantID, obj.Collection, false)
 	lkRes := &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: lkBackendID, BucketName: lkBucket,
@@ -1882,7 +1887,7 @@ func objectRef(collection, objectID string) (uuid.UUID, error) {
 // the metadata change, so the client's at-least-once retry re-applies both
 // rather than silently dropping the event.
 func (h *Handler) writeMetadata(ctx context.Context, tenantID, objectID uuid.UUID, in UpdateObjectInput) (Object, error) {
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.Collection)
+	okPrefix := h.canonicalObjectPrefix(ctx, opUpdate, tenantID, in.Collection)
 	var obj Object
 	err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var uerr error
@@ -1943,7 +1948,7 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	// fail-closed as before, unscoped principals are unaffected). The
 	// permanent path below still resolves with write=true, keeping the
 	// disabled/read-only-backend gate exactly where it was.
-	authBackendID, authBucket, _ := h.repo.LookupBucket(ctx, tenantID, collection, false)
+	authBackendID, authBucket := scopeBucket(ctx, h.log, h.repo, opDelete, tenantID, collection, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: collection, Key: obj.Key,
 		BackendID: authBackendID, BucketName: authBucket,
@@ -1970,7 +1975,7 @@ const msgPublicHasNoTrash = "a public object is deleted with permanent=true; it 
 // softDelete moves an authorized object to the trash with
 // paladin.object.deleted on the same transaction (ADR-0003).
 func (h *Handler) softDelete(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID, rv int64, obj Object) error {
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
+	okPrefix := h.canonicalObjectPrefix(ctx, opDelete, tenantID, collection)
 	if obj.PublicURL != "" {
 		// A public collection has no trash: a soft delete would leave the
 		// bytes served at the URL (ADR-0027).
@@ -2017,6 +2022,15 @@ func SoftDeleteRefusal(state statemachine.State) error {
 	}
 	return connect.Errorf(connect.CodeFailedPrecondition,
 		"object state %s cannot move to the trash", state)
+}
+
+// MetadataUpdateRefusal says why an object in state takes no metadata or tag
+// write: the store matches only an AVAILABLE row, so asking it anyway comes
+// back as a version conflict, which reads as worth a retry and never is.
+// Batch tag updates report it per object.
+func MetadataUpdateRefusal(state statemachine.State) error {
+	return connect.Errorf(connect.CodeFailedPrecondition,
+		"object state %s takes no metadata update", state)
 }
 
 // assertBypassAllowed gates the governance-retention override. It lives on
@@ -2074,7 +2088,7 @@ func (h *Handler) PermanentDelete(
 ) error {
 	objectID := obj.ObjectID
 	collection := obj.Collection
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
+	okPrefix := h.canonicalObjectPrefix(ctx, opDelete, tenantID, collection)
 
 	// Permanent delete. Ordering matters: drop the DB row FIRST, then
 	// the storage bytes. The old order (S3 then DB) could delete the
@@ -2253,7 +2267,7 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	// enforce on restore; best-effort + read-only: restore is a DB-only state
 	// flip that historically resolved no bucket, so a resolution failure must
 	// NOT newly fail an unscoped restore (scoped principals stay fail-closed).
-	rsBackendID, rsBucket, _ := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // restore (read-only; authz scope only)
+	rsBackendID, rsBucket := scopeBucket(ctx, h.log, h.repo, opRestore, tenantID, obj.Collection, false)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: rsBackendID, BucketName: rsBucket,
@@ -2321,7 +2335,7 @@ func (h *Handler) restoreTrashed(ctx context.Context, tenantID uuid.UUID, collec
 	// Restore + paladin.object.restored fan-out in one tx (ADR-0003). Resource
 	// identity (collection/key/object_id) is unchanged by restore, so the
 	// payload is built from the pre-restore `obj`.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
+	okPrefix := h.canonicalObjectPrefix(ctx, opRestore, tenantID, collection)
 	if err := h.sm.RestoreInTx(ctx, objectID, func(ctx context.Context, tx pgx.Tx) error {
 		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectRestored,
 			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
@@ -2493,7 +2507,7 @@ func (h *Handler) copyBytes(ctx context.Context, tenantID uuid.UUID, in CopyObje
 	// `paladin.object.uploaded` they'd get from a normal CompleteObject path.
 	// The payload's `source` discriminator lets a consumer that cares
 	// about origin route copies vs direct uploads.
-	changed, err := h.promoteUploaded(ctx, dst.ObjectID, Location{
+	changed, err := h.promoteUploaded(ctx, opCopy, dst.ObjectID, Location{
 		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
 	}, storedBytes{etag: src.ETag, size: src.SizeBytes, checksum: src.Checksum}, map[string]any{
 		payloadSizeBytes:        src.SizeBytes,

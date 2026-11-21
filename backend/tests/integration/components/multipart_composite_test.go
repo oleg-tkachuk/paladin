@@ -4,6 +4,7 @@ package components
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"uuid"
 
@@ -14,7 +15,8 @@ import (
 
 // A multipart object's composite checksum and part size are written to the
 // PENDING row and read back with the object; a row past PENDING is not
-// rewritten, so a late or repeated completion cannot replace what was read.
+// rewritten, so a late or repeated completion cannot replace what was read,
+// and the write says it recorded nothing.
 func TestMultipartCompositeChecksumRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -52,8 +54,10 @@ func TestMultipartCompositeChecksumRoundTrip(t *testing.T) {
 	}
 
 	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, objectID)
-	if err := repo.RecordCompositeChecksum(ctx, objectID, later, partSize); err != nil {
-		t.Fatalf("RecordCompositeChecksum on an available row: %v", err)
+	// Nothing is written, and the caller is told so: a completion that went
+	// on as if it had been recorded assembled parts nothing was waiting for.
+	if err := repo.RecordCompositeChecksum(ctx, objectID, later, partSize); !errors.Is(err, multiparth.ErrNotPending) {
+		t.Fatalf("RecordCompositeChecksum on an available row = %v, want ErrNotPending", err)
 	}
 	if obj, err = repo.Object(ctx, f.tenantID, objectID); err != nil || obj.Checksum != composite {
 		t.Fatalf("an available row's checksum became %q (err %v), want it kept as %q", obj.Checksum, err, composite)

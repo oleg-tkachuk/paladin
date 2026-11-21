@@ -198,10 +198,17 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 // MultipartAbortDrainer discharges it. Without the flag this path would file a
 // debt against an upload it has just aborted.
 // RecordCompositeChecksum writes a PENDING object's composite checksum and
-// its part size.
+// its part size. A row past PENDING is not rewritten, and the zero-row write
+// is multiparth.ErrNotPending, for the handler to decide.
 func (r *MultipartRepo) RecordCompositeChecksum(ctx context.Context, objectID uuid.UUID, composite string, partSizeBytes int64) error {
-	_, err := r.q.RecordCompositeChecksum(ctx, &composite, &partSizeBytes, pgUUID(objectID))
-	return err
+	n, err := r.q.RecordCompositeChecksum(ctx, &composite, &partSizeBytes, pgUUID(objectID))
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("record composite checksum of %s: %w", objectID, multiparth.ErrNotPending)
+	}
+	return nil
 }
 
 func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) error {
