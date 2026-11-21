@@ -28,6 +28,8 @@ package eventingest
 import (
 	"errors"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 )
 
 // EventType is the normalised internal type taxonomy. Source adapters
@@ -39,12 +41,12 @@ const (
 	// EventTypeUploaded fires when a new object body has been
 	// committed to the storage backend. Maps to the Paladin transition
 	// PENDING → AVAILABLE.
-	EventTypeUploaded EventType = "paladin.object.uploaded"
+	EventTypeUploaded EventType = eventtype.ObjectUploaded
 
 	// EventTypeDeleted fires when an object body has been removed
 	// from the storage backend. Used to catch soft-delete cascades
 	// triggered out-of-band (operator deleted via S3 directly).
-	EventTypeDeleted EventType = "paladin.object.deleted"
+	EventTypeDeleted EventType = eventtype.ObjectDeleted
 )
 
 // CloudEvent is the internal envelope. Mirrors the relevant subset of

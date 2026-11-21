@@ -16,6 +16,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"net/http"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -28,11 +30,13 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
@@ -127,9 +131,30 @@ type BucketMeta struct {
 // ObjectLock is the object row's lock state (object-level, distinct from
 // the per-version locks the object_versions trigger enforces).
 type ObjectLock struct {
-	Mode        string // "", "GOVERNANCE", or "COMPLIANCE"
+	Mode        string // "", LockModeGovernance or LockModeCompliance
 	RetainUntil *time.Time
 	LegalHold   bool
+}
+
+// The retention modes, as the API and the object_lock_mode SQL enum spell
+// them.
+const (
+	LockModeGovernance = "GOVERNANCE"
+	LockModeCompliance = "COMPLIANCE"
+)
+
+// RoleLockGovernanceBypass is the role that may weaken or delete through a
+// GOVERNANCE retention window.
+const RoleLockGovernanceBypass = "lock.governance.bypass"
+
+// msgBypassNeedsRole refuses a governance bypass to a caller without the role.
+const msgBypassNeedsRole = "bypass_governance_retention requires role " +
+	RoleLockGovernanceBypass + " or " + apiutil.RolePlatformAdmin
+
+// mayBypassGovernance reports whether p holds a role that may bypass a
+// GOVERNANCE retention window.
+func mayBypassGovernance(p *auth.Principal) bool {
+	return p != nil && (p.HasRole(RoleLockGovernanceBypass) || p.HasRole(apiutil.RolePlatformAdmin))
 }
 
 // Active reports whether the lock blocks deletion right now. governanceBypass
@@ -140,10 +165,10 @@ func (l ObjectLock) Active(now time.Time, governanceBypass bool) bool {
 		return true
 	}
 	retained := l.RetainUntil != nil && l.RetainUntil.After(now)
-	if l.Mode == "COMPLIANCE" && retained {
+	if l.Mode == LockModeCompliance && retained {
 		return true
 	}
-	if l.Mode == "GOVERNANCE" && retained && !governanceBypass {
+	if l.Mode == LockModeGovernance && retained && !governanceBypass {
 		return true
 	}
 	return false
@@ -471,12 +496,19 @@ type UpdateMetadataArgs struct {
 	TenantID        uuid.UUID
 	ObjectID        uuid.UUID
 	ResourceVersion int64
-	UpdatedFields   []string // "metadata","tags","content_type","external_ref"
+	UpdatedFields   []string // FieldMetadata, FieldTags, FieldExternalRef
 	Metadata        map[string]string
 	Tags            map[string]string
 	ContentType     string
 	ExternalRef     string
 }
+
+// The UpdateObject field-mask paths a metadata update writes.
+const (
+	FieldMetadata    = "metadata"
+	FieldTags        = "tags"
+	FieldExternalRef = "external_ref"
+)
 
 type ListObjectsArgs struct {
 	TenantID    uuid.UUID
@@ -577,9 +609,11 @@ type QuotaUpdater interface {
 // SetQuotaUpdater attaches the optional usage hook. Wired by main.
 func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
 
-// SetEventProducer / SetLogger — same opt-in contract as the admin
-// handlers. nil-safe via dispatchEvent's guard.
+// SetEventProducer — same opt-in contract as the admin handlers. nil-safe
+// via dispatchEvent's guard.
 func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
+
+// SetLogger sets where each RPC says how it ended; nil keeps the current one.
 func (h *Handler) SetLogger(l *zap.Logger) {
 	if l != nil {
 		h.log = l
@@ -608,6 +642,44 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 		Payload:      payload,
 	})
 	return err
+}
+
+// The keys of an object lifecycle event's payload, and the values that tell
+// its variants apart: subscribers read them by name.
+const (
+	payloadTenantID         = "tenant_id"
+	payloadCollection       = "collection"
+	payloadKey              = "key"
+	payloadObjectID         = "object_id"
+	payloadSizeBytes        = "size_bytes"
+	payloadETag             = "etag"
+	payloadContentType      = "content_type"
+	payloadUpdatedFields    = "updated_fields"
+	payloadMode             = "mode"
+	payloadBypassGovernance = "bypass_governance"
+	payloadBackendID        = "backend_id"
+	payloadBucket           = "bucket"
+	payloadReclaimed        = "reclaimed"
+	payloadSource           = "source"
+	payloadSourceCollection = "source_collection"
+	payloadSourceObjectID   = "source_object_id"
+
+	deleteModeSoft      = "soft"
+	deleteModePermanent = "permanent"
+	uploadSourceCopy    = "copy"
+)
+
+// objectEventPayload is an object event's payload: the object it is about,
+// plus extra.
+func objectEventPayload(tenantID uuid.UUID, collection, key string, objectID uuid.UUID, extra map[string]any) map[string]any {
+	p := map[string]any{
+		payloadTenantID:   tenantID.String(),
+		payloadCollection: collection,
+		payloadKey:        key,
+		payloadObjectID:   objectID.String(),
+	}
+	maps.Copy(p, extra)
+	return p
 }
 
 // objectResourceName is the C-shape (tenant-first) object resource name. Kept
@@ -667,6 +739,7 @@ func NewHandler(
 		filter:  filter,
 		sm:      sm,
 		presign: cfg,
+		log:     zap.NewNop(),
 	}
 }
 
@@ -714,12 +787,9 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	// itself. It was counted only there, so the metric saw a sliver of the
 	// uploads and a panel on it read as an idle store.
 	start := time.Now()
-	presignOp := metrics.PresignOpPut
-	if in.TransportPOST {
-		presignOp = metrics.PresignOpPost
-	}
 	defer func() {
-		metrics.RecordPresign(ctx, presignOp, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		metrics.RecordPresign(ctx, uploadPresignOp(in.TransportPOST), metrics.PresignOutcome(err), time.Since(start).Seconds())
+		logOutcome(ctx, h.log, opUpload, zapcore.InfoLevel, err, zap.String(fieldCollection, in.Collection))
 	}()
 
 	tenantID, err := auth.EffectiveTenant(ctx)
@@ -747,13 +817,8 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	//    is impossible. It runs before authz: the lookup is tenant-RLS-scoped,
 	//    so it only reveals the caller's own tenant's object-key existence
 	//    (which MapResolveErr already surfaced pre-scoping).
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.Collection, true) // upload (mutation)
+	meta, err := h.uploadTarget(ctx, tenantID, &in)
 	if err != nil {
-		return nil, MapResolveErr(err)
-	}
-	// A public collection names the object; the capability check below is of
-	// the object that will exist.
-	if err := AdmitPublicUpload(meta, &in.Key, in.ContentType); err != nil {
 		return nil, err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, in.Key)
@@ -773,11 +838,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	//    the resource a Collection entity → "does not have the attribute key"
 	//    eval error → fail-closed deny. A client-omitted key authorizes the
 	//    generated object id, which CreateObject persists below (same value).
-	objectID := uuid.NewV7()
-	key := in.Key
-	if key == "" {
-		key = objectID.String()
-	}
+	key := uploadKey(in.Key)
 
 	// 3. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
@@ -798,13 +859,52 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	); err != nil {
 		return nil, err
 	}
+	return h.registerUpload(ctx, tenantID, in, meta, policy, key)
+}
 
-	completion := CompletionModeExplicit
-	if meta.EventsEnabled {
-		completion = CompletionModeImplicit
+// uploadPresignOp is the presign metric's op for an upload by PUT or POST.
+func uploadPresignOp(post bool) string {
+	if post {
+		return metrics.PresignOpPost
 	}
-	bucket := meta.BucketName
+	return metrics.PresignOpPut
+}
 
+// uploadTarget resolves the bucket an upload to in.Collection lands in and
+// admits it there: a public collection names the object itself, which is
+// what the capability check that follows is of.
+func (h *Handler) uploadTarget(ctx context.Context, tenantID uuid.UUID, in *UploadObjectInput) (BucketMeta, error) {
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.Collection, true) // upload (mutation)
+	if err != nil {
+		return BucketMeta{}, MapResolveErr(err)
+	}
+	if err := AdmitPublicUpload(meta, &in.Key, in.ContentType); err != nil {
+		return BucketMeta{}, err
+	}
+	return meta, nil
+}
+
+// uploadKey is the key an upload is stored under: the caller's, or a fresh
+// object id when the caller named none.
+func uploadKey(key string) string {
+	if key == "" {
+		return uuid.NewV7().String()
+	}
+	return key
+}
+
+// completionMode is how an upload to a bucket completes: by the backend's
+// event where it sends them, else by an explicit CompleteObject.
+func completionMode(meta BucketMeta) CompletionMode {
+	if meta.EventsEnabled {
+		return CompletionModeImplicit
+	}
+	return CompletionModeExplicit
+}
+
+// registerUpload inserts the admitted upload's PENDING row, signs its URL and
+// charges the capability budget.
+func (h *Handler) registerUpload(ctx context.Context, tenantID uuid.UUID, in UploadObjectInput, meta BucketMeta, policy uploadpolicy.Policy, key string) (*UploadObjectOutput, error) {
 	// 4. Insert PENDING row with presign expiry. key was derived before authz
 	//    (step 2) so the authorized resource IS the object created.
 	ttl, err := h.presign.TTL.ResolveWithin(presignttl.OpPut, 0, policy.PutTTLCeiling())
@@ -837,9 +937,26 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	// 5. Generate presign. PUT or POST depending on client preference.
 	out := &UploadObjectOutput{
 		Object:         obj,
-		CompletionMode: completion,
-		Method:         "PUT",
+		CompletionMode: completionMode(meta),
+		Method:         http.MethodPut,
 	}
+	if err := h.presignUpload(ctx, tenantID, in, meta, key, ttl, out); err != nil {
+		return nil, err
+	}
+	// Capability budget — burns AFTER the row + URL exist so the
+	// caller's response is meaningful when charge succeeds. If the
+	// charge fails the row is PENDING and the reaper will GC it
+	// once presign expires.
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// presignUpload signs the upload's URL into out: a POST form when the caller
+// asked for one, else a PUT.
+func (h *Handler) presignUpload(ctx context.Context, tenantID uuid.UUID, in UploadObjectInput, meta BucketMeta, key string, ttl time.Duration, out *UploadObjectOutput) error {
+	bucket := meta.BucketName
 	if in.TransportPOST {
 		action, fields, exp, err := h.storage.PresignPost(ctx, PresignPostArgs{
 			BackendID:     meta.BackendID,
@@ -855,9 +972,9 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			CacheControl:  meta.CacheControl,
 		})
 		if err != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign POST: %w", err))
+			return rpcerr.New(connect.CodeInternal, fmt.Errorf("presign POST: %w", err))
 		}
-		out.Method = "POST"
+		out.Method = http.MethodPost
 		out.PostAction = action
 		out.PostFields = fields
 		out.ExpiresAt = exp
@@ -876,21 +993,13 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 			CacheControl:  meta.CacheControl,
 		})
 		if err != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
+			return rpcerr.New(connect.CodeInternal, fmt.Errorf("presign PUT: %w", err))
 		}
 		out.URL = url
 		out.Headers = headers
 		out.ExpiresAt = exp
 	}
-
-	// Capability budget — burns AFTER the row + URL exist so the
-	// caller's response is meaningful when charge succeeds. If the
-	// charge fails the row is PENDING and the reaper will GC it
-	// once presign expires.
-	if err := auth.ChargeRequest(ctx); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return nil
 }
 
 // ─── Exemplar RPC: CompleteObject ────────────────────────────────────────────
@@ -905,14 +1014,16 @@ type CompleteObjectInput struct {
 // CompleteObject is idempotent: if an event has already promoted the object,
 // it returns the current state without error. If the object is still PENDING,
 // it HEADs the backend to retrieve authoritative etag/size/sequencer.
-func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*Object, error) {
+func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_ *Object, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opComplete, zapcore.InfoLevel, err, objectFields(in.Collection, in.ObjectID)...)
+	}()
 	tenantID, err := auth.EffectiveTenant(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-
-	if in.Collection == "" || in.ObjectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
+	if err := requireObjectName(in.Collection, in.ObjectID); err != nil {
+		return nil, err
 	}
 
 	obj, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
@@ -950,75 +1061,130 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 		return nil, connect.Errorf(connect.CodeFailedPrecondition,
 			"cannot complete in state %s", obj.State)
 	}
+	return h.completeUpload(ctx, tenantID, in, obj)
+}
 
+// msgObjectNameRequired refuses a request that does not name its object.
+const msgObjectNameRequired = "collection and object_id are required"
+
+// requireObjectName refuses a request that names no collection or no object.
+func requireObjectName(collection, objectID string) error {
+	if collection == "" || objectID == "" {
+		return connect.NewError(connect.CodeInvalidArgument, msgObjectNameRequired)
+	}
+	return nil
+}
+
+// parseObjectName is requireObjectName that also parses the object's id.
+func parseObjectName(collection, objectID string) (uuid.UUID, error) {
+	if err := requireObjectName(collection, objectID); err != nil {
+		return uuid.Nil(), err
+	}
+	id, err := uuid.Parse(objectID)
+	if err != nil {
+		return uuid.Nil(), rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+	}
+	return id, nil
+}
+
+// storedBytes is what the backend holds for an object, as a HEAD or a copy
+// reports it.
+type storedBytes struct {
+	etag      string
+	size      int64
+	checksum  string
+	sequencer string
+}
+
+// completeUpload promotes a PENDING upload to what the backend holds for it,
+// once the caller's claims about those bytes check out.
+func (h *Handler) completeUpload(ctx context.Context, tenantID uuid.UUID, in CompleteObjectInput, obj Object) (*Object, error) {
 	// Materialize authoritative values via HEAD against the object's bucket.
 	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, true) // complete/promote (mutation)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-	etag, size, checksum, seq, err := h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
+	var b storedBytes
+	b.etag, b.size, b.checksum, b.sequencer, err = h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("object not uploaded yet: %w", err))
+		return nil, headFailure(err)
 	}
-	if in.ETag != "" && etag != in.ETag {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			"etag mismatch")
+	if err := checkUploadClaims(in, obj, b.etag); err != nil {
+		return nil, err
 	}
-	// The caller's own checksum must be the one the object was registered
-	// with — the one its URL was signed for. A different one means the
-	// caller believes it uploaded something it did not.
+	changed, err := h.promoteUploaded(ctx, obj.ObjectID, Location{
+		BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key,
+	}, b, map[string]any{
+		payloadSizeBytes:   b.size,
+		payloadETag:        b.etag,
+		payloadContentType: obj.ContentType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return h.promotedObject(ctx, tenantID, in.Collection, in.ObjectID, changed)
+}
+
+// checkUploadClaims refuses a completion whose caller claims bytes other than
+// the ones stored: an ETag the backend does not report, or a checksum other
+// than the one the object was registered with — the one its URL was signed
+// for. Either means the caller believes it uploaded something it did not.
+func checkUploadClaims(in CompleteObjectInput, obj Object, storedETag string) error {
+	if in.ETag != "" && storedETag != in.ETag {
+		return connect.NewError(connect.CodeFailedPrecondition, "etag mismatch")
+	}
 	if in.Checksum != "" && obj.Checksum != "" && in.Checksum != obj.Checksum {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
+		return connect.NewError(connect.CodeFailedPrecondition,
 			"checksum_value differs from the checksum the object was registered with")
 	}
+	return nil
+}
 
-	// Promote + event record run in ONE transaction (ADR-0003): the
-	// `paladin.object.uploaded` rows are written atomically with the
-	// PENDING→AVAILABLE flip, so a crash can no longer leave the object
-	// AVAILABLE with the event lost (the only notification channel for
-	// implicit-mode buckets). The dispatch runs inside onPromoted, which
-	// fires only on the real transition; a dispatch error rolls the
-	// promote back so the client's at-least-once retry re-promotes and
-	// re-emits — consistent, never half-done. Payload is built from the
-	// pre-promote read + the authoritative inputs (which are exactly the
-	// post-promote etag/size), so no in-tx re-read is needed.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, obj.Collection)
-	changed, err := h.sm.PromoteToAvailableInTx(ctx, obj.ObjectID, etag, size, checksum, seq, statemachine.SourceRPC,
+// promoteUploaded promotes the PENDING object objectID at loc to the bytes b
+// with paladin.object.uploaded in ONE transaction (ADR-0003): the event rows
+// are written atomically with the PENDING→AVAILABLE flip, so a crash can no
+// longer leave the object AVAILABLE with the event lost (the only
+// notification channel for implicit-mode buckets). The dispatch runs inside
+// onPromoted, which fires only on the real transition; a dispatch error rolls
+// the promote back so the client's at-least-once retry re-promotes and
+// re-emits — consistent, never half-done. The payload is the object plus
+// extra, built from what the caller already knows, so no in-tx re-read is
+// needed. Bytes that break the object's registration are discarded. It
+// reports whether the promotion was this call's.
+func (h *Handler) promoteUploaded(ctx context.Context, objectID uuid.UUID, loc Location, b storedBytes, extra map[string]any) (bool, error) {
+	okPrefix := h.canonicalObjectPrefix(ctx, loc.TenantID, loc.Collection)
+	changed, err := h.sm.PromoteToAvailableInTx(ctx, objectID, b.etag, b.size, b.checksum, b.sequencer, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
-			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
-				objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-				map[string]any{
-					"tenant_id":    tenantID.String(),
-					"collection":   obj.Collection,
-					"key":          obj.Key,
-					"object_id":    obj.ObjectID.String(),
-					"size_bytes":   size,
-					"etag":         etag,
-					"content_type": obj.ContentType,
-				})
+			return h.dispatchEventTx(ctx, tx, loc.TenantID, eventtype.ObjectUploaded,
+				objectResourceNameFrom(okPrefix, loc.TenantID, loc.Collection, loc.Key),
+				objectEventPayload(loc.TenantID, loc.Collection, loc.Key, objectID, extra))
 		})
 	if errors.Is(err, statemachine.ErrContentMismatch) {
-		return nil, h.discardMismatched(ctx, obj.ObjectID, Location{
-			BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key,
-		}, err)
+		return false, h.discardMismatched(ctx, objectID, loc, err)
 	}
+	if err != nil {
+		return false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	return changed, nil
+}
+
+// promotedObject reads back an object just promoted. Version history, quota
+// and the capability charge fire only on the real transition (changed), so
+// an at-least-once retry neither re-records a version nor double-charges.
+// They run after the commit: a version or quota hiccup must not roll back a
+// delivered event.
+func (h *Handler) promotedObject(ctx context.Context, tenantID uuid.UUID, collection, objectID string, changed bool) (*Object, error) {
+	fresh, err := h.repo.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	if !changed {
+		return &fresh, nil
 	}
-	// Version history + quota + capability charge fire only on the real
-	// transition (retries land changed=false). These remain post-commit:
-	// they're separate concerns from the event-atomicity guarantee and a
-	// version/quota hiccup must not roll back a delivered event.
-	if changed {
-		LogSideEffect(ctx, EffectVersion, fresh.ObjectID, h.versions.OnPromote(ctx, fresh))
-		h.touchQuota(ctx, fresh)
-		if err := auth.ChargeRequest(ctx); err != nil {
-			return nil, err
-		}
+	LogSideEffect(ctx, EffectVersion, fresh.ObjectID, h.versions.OnPromote(ctx, fresh))
+	h.touchQuota(ctx, fresh)
+	if err := auth.ChargeRequest(ctx); err != nil {
+		return nil, err
 	}
 	return &fresh, nil
 }
@@ -1071,7 +1237,10 @@ func checkDelimiter(d string) error {
 // in.Delimiter is set, and nothing otherwise: bytewise, at most
 // MaxCommonPrefixes, and whether more exist. The same gates as ListObjects
 // hold it, and the filter must compile, though only its state narrows them.
-func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) ([]string, bool, error) {
+func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) (_ []string, _ bool, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opListFolders, zapcore.DebugLevel, err, zap.String(fieldCollection, in.Collection))
+	}()
 	in.Filter = withFacets(in.Filter, in.Facets)
 	if in.Delimiter == "" {
 		return nil, false, nil
@@ -1114,7 +1283,10 @@ func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) (
 // a CEL expression against ObjectSchema. Per-row Cedar authorization is
 // skipped — listing is permitted for any authenticated tenant member to keep
 // pagination cheap (same contract as ListCollections).
-func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Object, string, error) {
+func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) (_ []Object, _ string, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opList, zapcore.DebugLevel, err, zap.String(fieldCollection, in.Collection))
+	}()
 	in.Filter = withFacets(in.Filter, in.Facets)
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
@@ -1166,14 +1338,30 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 		Prefix:      in.Prefix,
 		Delimiter:   in.Delimiter,
 	})
-	if errors.Is(err, keyset.ErrMalformed) || errors.Is(err, keyset.ErrOrderChanged) {
-		return nil, "", connect.NewError(connect.CodeInvalidArgument, "page_token: "+err.Error()).WithCause(err)
-	}
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, "", listError(err)
 	}
+	objs, err = h.authorizeRows(ctx, principal, tenantID, in.Collection, listBackendID, listBucket, objs)
+	if err != nil {
+		return nil, "", err
+	}
+	return objs, next, nil
+}
 
-	// Per-row Cedar. The up-front check above is collection-scoped, so it can't
+// listError answers a listing the store refused: a page token that is
+// malformed or minted for another order is the caller's; anything else is
+// the store failing.
+func listError(err error) error {
+	if errors.Is(err, keyset.ErrMalformed) || errors.Is(err, keyset.ErrOrderChanged) {
+		return connect.NewError(connect.CodeInvalidArgument, "page_token: "+err.Error()).WithCause(err)
+	}
+	return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+}
+
+// authorizeRows drops the rows of a page the caller's policies decline and
+// attaches placement to those it may see it for.
+func (h *Handler) authorizeRows(ctx context.Context, principal *auth.Principal, tenantID uuid.UUID, collection, listBackendID, listBucket string, objs []Object) ([]Object, error) {
+	// Per-row Cedar. ListObjects' up-front check is collection-scoped, so it can't
 	// enforce policies that decide on per-object attributes (tags, state,
 	// size, …). When the tenant's applicable policies read such an attribute
 	// (analysed once at compile time), re-evaluate each returned object and drop
@@ -1183,46 +1371,51 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Objec
 	// Pagination is unaffected: `next` keys on the last FETCHED row (repo), not
 	// the surviving rows — exactly like the CEL filter above — so dropping rows
 	// post-fetch keeps the cursor stable and never skips or repeats an object.
-	perRow := false
-	if pe, ok := h.policy.(cedar.PerObjectEvaluator); ok {
-		perRow, err = pe.NeedsPerObjectEval(ctx, tenantID, in.Collection)
-		if err != nil {
-			return nil, "", apiutil.MapError(fmt.Errorf("authz: %w", err))
-		}
-		if perRow {
-			kept := objs[:0]
-			for _, o := range objs {
-				rowRes := &cedar.Resource{
-					TenantID:    tenantID,
-					Collection:  in.Collection,
-					Key:         o.Key,
-					ObjectID:    o.ObjectID,
-					BackendID:   listBackendID,
-					BucketName:  listBucket,
-					State:       string(o.State),
-					SizeBytes:   o.SizeBytes,
-					ContentType: o.ContentType,
-					Tags:        o.Tags,
-				}
-				authErr := h.authorize(ctx, principal, tenantID, rowRes, cedar.ActionGetObject, o.SizeBytes, o.ContentType)
-				if authErr != nil {
-					if connect.CodeOf(authErr) == connect.CodePermissionDenied {
-						continue // policy declines this specific object
-					}
-					return nil, "", authErr // engine fault, not a denial
-				}
-				// The policies decide per object, so placement does too.
-				h.attachPlacement(ctx, principal, rowRes, &o)
-				kept = append(kept, o)
-			}
-			objs = kept
-		}
+	pe, ok := h.policy.(cedar.PerObjectEvaluator)
+	if !ok {
+		h.attachListPlacement(ctx, principal, tenantID, collection, listBackendID, listBucket, objs)
+		return objs, nil
+	}
+	perRow, err := pe.NeedsPerObjectEval(ctx, tenantID, collection)
+	if err != nil {
+		return nil, apiutil.MapError(fmt.Errorf("authz: %w", err))
 	}
 	if !perRow {
-		h.attachListPlacement(ctx, principal, tenantID, in.Collection, listBackendID, listBucket, objs)
+		h.attachListPlacement(ctx, principal, tenantID, collection, listBackendID, listBucket, objs)
+		return objs, nil
 	}
+	return h.authorizeEachRow(ctx, principal, tenantID, collection, listBackendID, listBucket, objs)
+}
 
-	return objs, next, nil
+// authorizeEachRow re-evaluates the policies for each object of a page,
+// keeping those they allow, with placement decided per object too.
+func (h *Handler) authorizeEachRow(ctx context.Context, principal *auth.Principal, tenantID uuid.UUID, collection, listBackendID, listBucket string, objs []Object) ([]Object, error) {
+	kept := objs[:0]
+	for _, o := range objs {
+		rowRes := &cedar.Resource{
+			TenantID:    tenantID,
+			Collection:  collection,
+			Key:         o.Key,
+			ObjectID:    o.ObjectID,
+			BackendID:   listBackendID,
+			BucketName:  listBucket,
+			State:       string(o.State),
+			SizeBytes:   o.SizeBytes,
+			ContentType: o.ContentType,
+			Tags:        o.Tags,
+		}
+		authErr := h.authorize(ctx, principal, tenantID, rowRes, cedar.ActionGetObject, o.SizeBytes, o.ContentType)
+		if connect.CodeOf(authErr) == connect.CodePermissionDenied {
+			continue // policy declines this specific object
+		}
+		if authErr != nil {
+			return nil, authErr // engine fault, not a denial
+		}
+		// The policies decide per object, so placement does too.
+		h.attachPlacement(ctx, principal, rowRes, &o)
+		kept = append(kept, o)
+	}
+	return kept, nil
 }
 
 // attachListPlacement sets Placement on every row of a page with ONE
@@ -1261,7 +1454,10 @@ type CountObjectsOutput struct {
 // optional CEL filter. With no filter the adapter uses a direct COUNT(*) and
 // returns exact=true; with a filter it iterates rows applying CEL and may
 // return an approximate result when the scan cap is hit.
-func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*CountObjectsOutput, error) {
+func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (_ *CountObjectsOutput, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opCount, zapcore.DebugLevel, err, zap.String(fieldCollection, in.Collection))
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1324,7 +1520,10 @@ const distinctTagValueLimit = 100
 // check (no per-row authz — the result is an aggregate, not object data).
 func (h *Handler) ListDistinctTags(
 	ctx context.Context, collection, pageToken string, pageSize int32,
-) (DistinctTagPage, error) {
+) (_ DistinctTagPage, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opListTags, zapcore.DebugLevel, err, zap.String(fieldCollection, collection))
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return DistinctTagPage{}, err
@@ -1366,7 +1565,8 @@ func (h *Handler) ListDistinctTags(
 // The double gate is intentional: capabilities narrow what an agent can
 // do; Cedar enforces tenant-admin policy. Both must agree before the
 // read happens.
-func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*Object, error) {
+func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (_ *Object, err error) {
+	defer func() { logOutcome(ctx, h.log, opGet, zapcore.DebugLevel, err, objectFields(collection, objectID)...) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1416,7 +1616,14 @@ func (h *Handler) attachLock(ctx context.Context, tenantID uuid.UUID, obj *Objec
 
 // LookupObject resolves an object by (collection, key) instead of object_id —
 // useful when callers only have the path-style identifier (S3-style).
-func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Object, error) {
+func (h *Handler) LookupObject(ctx context.Context, collection, key string) (out *Object, err error) {
+	defer func() {
+		fields := []zap.Field{zap.String(fieldCollection, collection)}
+		if out != nil {
+			fields = append(fields, zap.String(fieldObjectID, out.ObjectID.String()))
+		}
+		logOutcome(ctx, h.log, opLookup, zapcore.DebugLevel, err, fields...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1427,7 +1634,7 @@ func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Ob
 	}
 	obj, err := h.repo.FindByPath(ctx, tenantID, collection, key)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, objectLookupError(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
 	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
@@ -1468,16 +1675,14 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	start := time.Now()
 	defer func() {
 		metrics.RecordPresign(ctx, metrics.PresignOpGet, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		logOutcome(ctx, h.log, opDownload, zapcore.DebugLevel, err, objectFields(collection, objectID)...)
 	}()
 
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if collection == "" || objectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
-	}
-	disposition, err = NormalizeContentDisposition(disposition)
+	disposition, err = checkDownloadInput(collection, objectID, disposition)
 	if err != nil {
 		return nil, err
 	}
@@ -1495,35 +1700,57 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
 		return nil, err
 	}
-	if obj.State != statemachine.StateAvailable {
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"object state %s does not allow download", obj.State)
-	}
-	// Resolve the (backend, bucket) BEFORE the Cedar check so a bucket:/
-	// collection:-scoped read PAT enforces on download; the same read-only
-	// resolution routes the presigned GET below (one lookup, unchanged for
-	// the allowed path — it already ran here immediately after authz).
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, false) // download (read)
-	if err != nil {
-		return nil, MapResolveErr(err)
-	}
-	backendID, bucket := meta.BackendID, meta.BucketName
-	ttl, err = h.presign.TTL.ResolveWithin(presignttl.OpGet, ttl,
-		uploadpolicy.For(h.presign.Limits, meta.Constraints).GetTTLCeiling())
+	meta, ttl, err := h.downloadTarget(ctx, tenantID, collection, obj, ttl)
 	if err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: collection, Key: obj.Key,
-		BackendID: backendID, BucketName: bucket,
+		BackendID: meta.BackendID, BucketName: meta.BucketName,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes, Tags: obj.Tags,
 	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
+	return h.presignDownload(ctx, tenantID, collection, obj, meta, ttl, disposition, requireETagMatch)
+}
+
+// checkDownloadInput refuses a download that does not name its object, and
+// normalises the disposition it asks the URL to carry.
+func checkDownloadInput(collection, objectID, disposition string) (string, error) {
+	if err := requireObjectName(collection, objectID); err != nil {
+		return "", err
+	}
+	return NormalizeContentDisposition(disposition)
+}
+
+// downloadTarget refuses an object with no bytes to serve, and resolves the
+// (backend, bucket) BEFORE the Cedar check so a bucket:/collection:-scoped
+// read PAT enforces on download; the same read-only resolution routes the
+// presigned GET, whose lifetime the bucket's constraints bound.
+func (h *Handler) downloadTarget(ctx context.Context, tenantID uuid.UUID, collection string, obj Object, ttl time.Duration) (BucketMeta, time.Duration, error) {
+	if obj.State != statemachine.StateAvailable {
+		return BucketMeta{}, 0, connect.Errorf(connect.CodeFailedPrecondition,
+			"object state %s does not allow download", obj.State)
+	}
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, false) // download (read)
+	if err != nil {
+		return BucketMeta{}, 0, MapResolveErr(err)
+	}
+	ttl, err = h.presign.TTL.ResolveWithin(presignttl.OpGet, ttl,
+		uploadpolicy.For(h.presign.Limits, meta.Constraints).GetTTLCeiling())
+	if err != nil {
+		return BucketMeta{}, 0, err
+	}
+	return meta, ttl, nil
+}
+
+// presignDownload signs an authorized download's GET URL. requireETagMatch
+// binds it to the object's current ETag.
+func (h *Handler) presignDownload(ctx context.Context, tenantID uuid.UUID, collection string, obj Object, meta BucketMeta, ttl time.Duration, disposition string, requireETagMatch bool) (*DownloadObjectOutput, error) {
 	args := PresignGetArgs{
-		BackendID:          backendID,
+		BackendID:          meta.BackendID,
 		TenantID:           tenantID,
-		Bucket:             bucket,
+		Bucket:             meta.BucketName,
 		Collection:         collection,
 		Key:                obj.Key,
 		TTL:                ttl,
@@ -1562,7 +1789,10 @@ type UpdateObjectInput struct {
 	ExternalRef     string
 }
 
-func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Object, error) {
+func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (_ *Object, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opUpdate, zapcore.InfoLevel, err, objectFields(in.Collection, in.ObjectID)...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1644,15 +1874,11 @@ func (h *Handler) writeMetadata(ctx context.Context, tenantID, objectID uuid.UUI
 		if uerr != nil {
 			return uerr
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.updated",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectUpdated,
 			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-			map[string]any{
-				"tenant_id":      tenantID.String(),
-				"collection":     obj.Collection,
-				"key":            obj.Key,
-				"object_id":      obj.ObjectID.String(),
-				"updated_fields": in.UpdatedFields,
-			})
+			objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
+				payloadUpdatedFields: in.UpdatedFields,
+			}))
 	})
 	return obj, err
 }
@@ -1663,17 +1889,18 @@ func (h *Handler) writeMetadata(ctx context.Context, tenantID, objectID uuid.UUI
 // the object from S3 first, then drops the row. bypassGovernance opt-in
 // honored only for callers holding `lock.governance.bypass` or
 // `platform.admin` — protects compliance-mode locks regardless.
-func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) error {
+func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) (err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opDelete, zapcore.InfoLevel, err,
+			append(objectFields(collection, objectIDStr), zap.Bool("permanent", permanent))...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return err
 	}
-	if collection == "" || objectIDStr == "" {
-		return connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
-	}
-	objectID, err := uuid.Parse(objectIDStr)
+	objectID, err := parseObjectName(collection, objectIDStr)
 	if err != nil {
-		return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+		return err
 	}
 	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
@@ -1703,48 +1930,51 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	if err != nil {
 		return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
-	if !permanent && obj.PublicURL != "" {
-		// A public collection has no trash: a soft delete would leave the
-		// bytes served at the URL (ADR-0027).
-		return apiutil.MapError(publicread.Rulef("a public object is deleted with permanent=true; it has no trash"))
-	}
 	if !permanent {
-		// Only an AVAILABLE object moves to the trash. Asking the state
-		// machine anyway matched no row and came back as a version conflict,
-		// which told the caller to reload and try again — for an upload that
-		// had simply not finished.
-		if obj.State != statemachine.StateAvailable {
-			return SoftDeleteRefusal(obj.State)
-		}
-		// Soft-delete + paladin.object.deleted fan-out in one tx (ADR-0003):
-		// the event is atomic with the AVAILABLE→DELETED flip.
-		err := h.sm.SoftDeleteInTx(ctx, objectID, rv, func(ctx context.Context, tx pgx.Tx) error {
-			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
-				objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-				map[string]any{
-					"tenant_id":  tenantID.String(),
-					"collection": obj.Collection,
-					"key":        obj.Key,
-					"object_id":  obj.ObjectID.String(),
-					"mode":       "soft",
-				})
-		})
-		if err != nil {
-			if errors.Is(err, statemachine.ErrConflict) {
-				return connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
-			}
-			return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-		// Best-effort delete-marker write; post-commit, separate concern —
-		// a marker hiccup must not undo a delivered delete event.
-		LogSideEffect(ctx, EffectDeleteMarker, obj.ObjectID, h.versions.OnSoftDelete(ctx, obj))
-		return nil
+		return h.softDelete(ctx, tenantID, collection, objectID, rv, obj)
 	}
 	if err := h.assertBypassAllowed(principal, bypassGovernance); err != nil {
 		return err
 	}
 	return h.PermanentDelete(ctx, tenantID, obj, rv, bypassGovernance)
+}
+
+// msgPublicHasNoTrash refuses a soft delete in a public collection.
+const msgPublicHasNoTrash = "a public object is deleted with permanent=true; it has no trash"
+
+// softDelete moves an authorized object to the trash with
+// paladin.object.deleted on the same transaction (ADR-0003).
+func (h *Handler) softDelete(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID, rv int64, obj Object) error {
+	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
+	if obj.PublicURL != "" {
+		// A public collection has no trash: a soft delete would leave the
+		// bytes served at the URL (ADR-0027).
+		return apiutil.MapError(publicread.Rulef(msgPublicHasNoTrash))
+	}
+	// Only an AVAILABLE object moves to the trash. Asking the state machine
+	// anyway matched no row and came back as a version conflict, which told
+	// the caller to reload and try again — for an upload that had simply not
+	// finished.
+	if obj.State != statemachine.StateAvailable {
+		return SoftDeleteRefusal(obj.State)
+	}
+	err := h.sm.SoftDeleteInTx(ctx, objectID, rv, func(ctx context.Context, tx pgx.Tx) error {
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectDeleted,
+			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
+			objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
+				payloadMode: deleteModeSoft,
+			}))
+	})
+	if errors.Is(err, statemachine.ErrConflict) {
+		return connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
+	}
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	// Best-effort delete-marker write; post-commit, separate concern — a
+	// marker hiccup must not undo a delivered delete event.
+	LogSideEffect(ctx, EffectDeleteMarker, obj.ObjectID, h.versions.OnSoftDelete(ctx, obj))
+	return nil
 }
 
 // pendingNotTrashable is the refusal a PENDING object's soft delete gets.
@@ -1772,9 +2002,29 @@ func (h *Handler) assertBypassAllowed(principal *auth.Principal, bypassGovernanc
 	if !bypassGovernance {
 		return nil
 	}
-	if principal == nil || (!principal.HasRole("lock.governance.bypass") && !principal.HasRole("platform.admin")) {
-		return connect.NewError(connect.CodePermissionDenied,
-			"bypass_governance_retention requires role lock.governance.bypass or platform.admin")
+	if !mayBypassGovernance(principal) {
+		return connect.NewError(connect.CodePermissionDenied, msgBypassNeedsRole)
+	}
+	return nil
+}
+
+// lockRefusal refuses a permanent delete of an object a version lock still
+// holds. FindByName already resolved this object, so a lock-state read error
+// is a genuine DB fault, not a missing row. It is logged rather than
+// silently swallowed — the HardDelete SQL guard still enforces the lock, so
+// the delete proceeds and lets it (and the version check) decide; the caller
+// may see CodeAborted instead of a precise lock reason, which the log
+// explains.
+func (h *Handler) lockRefusal(ctx context.Context, tenantID, objectID uuid.UUID, bypassGovernance bool) error {
+	locks, err := h.repo.VersionLocks(ctx, tenantID, objectID)
+	if err != nil {
+		logger.FromContext(ctx).Warn("object lock pre-check failed; relying on SQL guard",
+			zap.String("object_id", objectID.String()), zap.Error(err))
+		return nil
+	}
+	if lock, ok := activeLock(locks, time.Now(), bypassGovernance); ok {
+		return connect.Errorf(connect.CodeFailedPrecondition,
+			"cannot delete: %s", lock.Reason())
 	}
 	return nil
 }
@@ -1824,18 +2074,8 @@ func (h *Handler) PermanentDelete(
 	// check is wrong); this just turns a would-be 0-row "version
 	// mismatch" into an accurate FailedPrecondition. Every version's lock
 	// counts, since the delete removes every version.
-	if locks, lerr := h.repo.VersionLocks(ctx, tenantID, objectID); lerr != nil {
-		// FindByName already resolved this object, so a lock-state read
-		// error is a genuine DB fault, not a missing row. Log it rather
-		// than silently swallow — the HardDelete SQL guard still enforces
-		// the lock, so we proceed and let it (and the version check)
-		// decide; the caller may see CodeAborted instead of a precise
-		// lock reason, which the log explains.
-		logger.FromContext(ctx).Warn("object lock pre-check failed; relying on SQL guard",
-			zap.String("object_id", objectID.String()), zap.Error(lerr))
-	} else if lock, ok := activeLock(locks, time.Now(), bypassGovernance); ok {
-		return connect.Errorf(connect.CodeFailedPrecondition,
-			"cannot delete: %s", lock.Reason())
+	if err := h.lockRefusal(ctx, tenantID, objectID, bypassGovernance); err != nil {
+		return err
 	}
 
 	// Row removal + paladin.object.deleted fan-out in one tx (ADR-0003): the
@@ -1868,37 +2108,40 @@ func (h *Handler) PermanentDelete(
 		if perr := h.repo.EnqueuePurgeTx(ctx, tx, debt); perr != nil {
 			return perr
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectDeleted,
 			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-			map[string]any{
-				"tenant_id":         tenantID.String(),
-				"collection":        obj.Collection,
-				"key":               obj.Key,
-				"object_id":         obj.ObjectID.String(),
-				"mode":              "permanent",
-				"bypass_governance": bypassGovernance,
-			})
+			objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
+				payloadMode:             deleteModePermanent,
+				payloadBypassGovernance: bypassGovernance,
+			}))
 	}); err != nil {
 		return apiutil.MapError(err)
 	}
 
-	// Fast path: reclaim the bytes now, so the common case stays synchronous
-	// and the debt table stays empty. A failure here is no longer terminal —
-	// the debt row survives and worker.PurgeDrainer retries it with backoff.
-	// Under the path lock: an object uploaded at this key since owns the
-	// bytes there.
+	h.reclaimBytes(ctx, debt, okPrefix)
+	return nil
+}
+
+// reclaimBytes is a permanent delete's fast path: reclaim the bytes now, so
+// the common case stays synchronous and the debt table stays empty. A failure
+// here is not terminal — the debt row survives and worker.PurgeDrainer
+// retries it with backoff. Under the path lock: an object uploaded at this
+// key since owns the bytes there.
+func (h *Handler) reclaimBytes(ctx context.Context, debt PurgeDebt, okPrefix string) {
+	tenantID, collection, key := debt.TenantID, debt.Collection, debt.Key
+	backendID, bucket := debt.BackendID, debt.BucketName
 	var paid bool
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		var perr error
-		paid, perr = h.repo.PurgeBytesTx(ctx, tx, tenantID, collection, obj.Key, func() error {
-			return h.storage.DeleteObject(ctx, backendID, bucket, tenantID, collection, obj.Key)
+		paid, perr = h.repo.PurgeBytesTx(ctx, tx, tenantID, collection, key, func() error {
+			return h.storage.DeleteObject(ctx, backendID, bucket, tenantID, collection, key)
 		})
 		return perr
 	}); err != nil {
 		logger.FromContext(ctx).Warn("permanent delete: storage delete failed; queued for retry",
 			zap.String("tenant_id", tenantID.String()),
 			zap.String("collection", collection),
-			zap.String("key", obj.Key),
+			zap.String("key", key),
 			zap.String("bucket", bucket),
 			zap.String("purge_id", debt.PurgeID.String()),
 			zap.Error(err),
@@ -1909,12 +2152,12 @@ func (h *Handler) PermanentDelete(
 		// the client to retry a delete that already succeeded, and its retry
 		// would get NotFound. paladin.object.purged is what signals the bytes
 		// actually went; it fires from the drainer instead of here.
-		return nil
+		return
 	}
 	if !paid {
 		// A new object is being written at this key; the drainer settles the
 		// debt once it can tell whose bytes are there.
-		return nil
+		return
 	}
 
 	// Bytes confirmed gone. Clearing the debt and emitting paladin.object.purged
@@ -1926,17 +2169,13 @@ func (h *Handler) PermanentDelete(
 		if serr := h.repo.SettlePurgeTx(ctx, tx, debt.PurgeID); serr != nil {
 			return serr
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.purged",
-			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-			map[string]any{
-				"tenant_id":  tenantID.String(),
-				"collection": obj.Collection,
-				"key":        obj.Key,
-				"object_id":  obj.ObjectID.String(),
-				"backend_id": backendID,
-				"bucket":     bucket,
-				"reclaimed":  true,
-			})
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectPurged,
+			objectResourceNameFrom(okPrefix, tenantID, collection, key),
+			objectEventPayload(tenantID, collection, key, debt.ObjectID, map[string]any{
+				payloadBackendID: backendID,
+				payloadBucket:    bucket,
+				payloadReclaimed: true,
+			}))
 	}); err != nil {
 		// The bytes are gone but the bookkeeping did not commit. Harmless and
 		// self-correcting: the drainer will retry a DELETE against a key that
@@ -1947,7 +2186,6 @@ func (h *Handler) PermanentDelete(
 			zap.Error(err),
 		)
 	}
-	return nil
 }
 
 // ─── RestoreObject ──────────────────────────────────────────────────────────
@@ -1957,28 +2195,24 @@ func (h *Handler) PermanentDelete(
 // rather than skipping the check.
 // Versioning-aware: when bucket has versioning_enabled, also drops the most
 // recent delete-marker before flipping state.
-func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (*Object, error) {
+func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (_ *Object, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opRestore, zapcore.InfoLevel, err, objectFields(collection, objectIDStr)...)
+	}()
 	// Shape of the request first — no identity, no lookup needed. Same order
 	// as VersionHandler.RestoreVersion, and it means the refusal cannot be
 	// mistaken for an authentication failure.
-	if resourceVersion == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"resource_version is required")
-	}
-	expected, err := parseInt64(resourceVersion)
+	expected, err := requiredResourceVersion(resourceVersion)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
+		return nil, err
 	}
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if collection == "" || objectIDStr == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "collection and object_id are required")
-	}
-	objectID, err := uuid.Parse(objectIDStr)
+	objectID, err := parseObjectName(collection, objectIDStr)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid object_id: %w", err))
+		return nil, err
 	}
 	obj, err := h.repo.FindByName(ctx, tenantID, collection, objectIDStr)
 	if err != nil {
@@ -2002,8 +2236,32 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	}, cedar.ActionRestoreObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
+	if err := h.checkRestorable(ctx, tenantID, collection, obj, expected); err != nil {
+		return nil, err
+	}
+	return h.restoreTrashed(ctx, tenantID, collection, objectID, obj)
+}
+
+// requiredResourceVersion parses a restore's resource_version, which is
+// mandatory: an empty one is refused rather than skipping the check.
+func requiredResourceVersion(resourceVersion string) (int64, error) {
+	if resourceVersion == "" {
+		return 0, connect.NewError(connect.CodeInvalidArgument,
+			"resource_version is required")
+	}
+	expected, err := parseInt64(resourceVersion)
+	if err != nil {
+		return 0, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
+	}
+	return expected, nil
+}
+
+// checkRestorable refuses to restore an object that is not in the trash, has
+// moved on since the caller read it, would land on a live object, or has no
+// bytes left to serve.
+func (h *Handler) checkRestorable(ctx context.Context, tenantID uuid.UUID, collection string, obj Object, expected int64) error {
 	if obj.State != statemachine.StateDeleted {
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+		return connect.Errorf(connect.CodeFailedPrecondition,
 			"cannot restore from state %s", obj.State)
 	}
 	// OCC against the row just loaded. The guard is mandatory (validated at
@@ -2012,24 +2270,26 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	// not "impossible", and HardDelete is the other mutation path on that
 	// row — restoring over one is exactly the race worth refusing.
 	if expected != obj.ResourceVersion {
-		return nil, connect.Errorf(connect.CodeAborted,
+		return connect.Errorf(connect.CodeAborted,
 			"resource_version mismatch: expected %d, current %d", expected, obj.ResourceVersion)
 	}
 	collision, err := h.repo.LiveCollision(ctx, tenantID, collection, obj.Key)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	if collision {
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
+		return connect.Errorf(connect.CodeFailedPrecondition,
 			"a live object already occupies %s/%s", collection, obj.Key)
 	}
-	// Versioning-aware restore: if the parent bucket has versioning_enabled
-	// AND the most recent version is a delete-marker, drop that pointer back
-	// to the previous non-marker version. This makes RestoreObject a single
-	// "make visible again" affordance whether or not versioning is on.
-	if err := h.assertBytesPresent(ctx, tenantID, obj); err != nil {
-		return nil, err
-	}
+	return h.assertBytesPresent(ctx, tenantID, obj)
+}
+
+// restoreTrashed takes a restorable object out of the trash. Versioning-aware:
+// if the parent bucket has versioning_enabled AND the most recent version is a
+// delete-marker, the pointer drops back to the previous non-marker version.
+// This makes RestoreObject a single "make visible again" affordance whether or
+// not versioning is on.
+func (h *Handler) restoreTrashed(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID, obj Object) (*Object, error) {
 	if err := h.versions.UnsetDeleteMarkerCurrent(ctx, obj); err != nil {
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("restore version pointer: %w", err))
 	}
@@ -2038,18 +2298,13 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	// payload is built from the pre-restore `obj`.
 	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
 	if err := h.sm.RestoreInTx(ctx, objectID, func(ctx context.Context, tx pgx.Tx) error {
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.restored",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectRestored,
 			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-			map[string]any{
-				"tenant_id":  tenantID.String(),
-				"collection": obj.Collection,
-				"key":        obj.Key,
-				"object_id":  obj.ObjectID.String(),
-			})
+			objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, nil))
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, collection, objectIDStr)
+	fresh, err := h.repo.FindByName(ctx, tenantID, collection, objectID.String())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -2070,45 +2325,28 @@ type CopyObjectInput struct {
 	Tags             map[string]string
 }
 
-func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, error) {
+func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (out *Object, err error) {
+	defer func() {
+		fields := append(objectFields(in.SourceCollection, in.SourceObjectID), zap.String("dest_collection", in.DestCollection))
+		if out != nil {
+			fields = append(fields, zap.String("dest_object_id", out.ObjectID.String()))
+		}
+		logOutcome(ctx, h.log, opCopy, zapcore.InfoLevel, err, fields...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if in.SourceCollection == "" || in.SourceObjectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"source_collection and source_object_id are required")
-	}
-	if in.DestCollection == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			"dest_collection is required")
-	}
-	src, err := h.repo.FindByName(ctx, tenantID, in.SourceCollection, in.SourceObjectID)
-	if err != nil {
-		return nil, objectLookupError(err)
-	}
-	if src.State != statemachine.StateAvailable {
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"cannot copy from state %s", src.State)
-	}
-	// Resolve the DESTINATION (backend, bucket) BEFORE the Cedar check so a
-	// bucket:/collection:-scoped write PAT enforces on the copy target — the
-	// authz Resource below is the destination (ActionCopyObject is checked
-	// against the dest). The same resolution is reused as the copy-dest
-	// Location; the source is resolved after authz as before.
-	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
-	if err != nil {
-		return nil, MapResolveErr(err)
-	}
-	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
-	// A public destination names the copy itself; elsewhere an empty key
-	// keeps the source's.
-	destKey := in.DestKey
-	if err := AdmitPublicUpload(dstMeta, &destKey, src.ContentType); err != nil {
+	if err := checkCopyInput(in); err != nil {
 		return nil, err
 	}
-	if destKey == "" {
-		destKey = src.Key
+	src, err := h.copySource(ctx, tenantID, in)
+	if err != nil {
+		return nil, err
+	}
+	dstMeta, destKey, err := h.copyDestination(ctx, tenantID, in, src)
+	if err != nil {
+		return nil, err
 	}
 	// Copy = Put on the destination URI (semantically a write of new
 	// content) — gated by OpPut. The source must already be readable
@@ -2129,12 +2367,67 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: in.DestCollection, Key: destKey,
-		BackendID: dstBackendID, BucketName: dstBucket,
+		BackendID: dstMeta.BackendID, BucketName: dstMeta.BucketName,
 		ContentType: src.ContentType, SizeBytes: src.SizeBytes, Tags: in.Tags,
 	}, cedar.ActionCopyObject, src.SizeBytes, src.ContentType); err != nil {
 		return nil, err
 	}
+	return h.copyBytes(ctx, tenantID, in, src, dstMeta, destKey)
+}
 
+// checkCopyInput refuses a copy that does not name its source object and
+// its destination collection.
+func checkCopyInput(in CopyObjectInput) error {
+	if in.SourceCollection == "" || in.SourceObjectID == "" {
+		return connect.NewError(connect.CodeInvalidArgument,
+			"source_collection and source_object_id are required")
+	}
+	if in.DestCollection == "" {
+		return connect.NewError(connect.CodeInvalidArgument,
+			"dest_collection is required")
+	}
+	return nil
+}
+
+// copySource reads the object a copy is of; only an AVAILABLE one has bytes
+// to copy.
+func (h *Handler) copySource(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput) (Object, error) {
+	src, err := h.repo.FindByName(ctx, tenantID, in.SourceCollection, in.SourceObjectID)
+	if err != nil {
+		return Object{}, objectLookupError(err)
+	}
+	if src.State != statemachine.StateAvailable {
+		return Object{}, connect.Errorf(connect.CodeFailedPrecondition,
+			"cannot copy from state %s", src.State)
+	}
+	return src, nil
+}
+
+// copyDestination resolves where a copy lands, BEFORE the Cedar check, so a
+// bucket:/collection:-scoped write PAT enforces on the copy target — the
+// authz Resource is the destination (ActionCopyObject is checked against the
+// dest). The same resolution is reused as the copy-dest Location; the source
+// is resolved after authz. A public destination names the copy itself;
+// elsewhere an empty key keeps the source's.
+func (h *Handler) copyDestination(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput, src Object) (BucketMeta, string, error) {
+	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
+	if err != nil {
+		return BucketMeta{}, "", MapResolveErr(err)
+	}
+	destKey := in.DestKey
+	if err := AdmitPublicUpload(dstMeta, &destKey, src.ContentType); err != nil {
+		return BucketMeta{}, "", err
+	}
+	if destKey == "" {
+		destKey = src.Key
+	}
+	return dstMeta, destKey, nil
+}
+
+// copyBytes carries out an authorized copy: the destination row, the
+// storage copy, and the promotion with its event.
+func (h *Handler) copyBytes(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput, src Object, dstMeta BucketMeta, destKey string) (*Object, error) {
+	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
 	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceCollection, false) // copy source (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
@@ -2168,68 +2461,42 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, 
 		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
 		CacheControl: dstMeta.CacheControl, ContentType: src.ContentType,
 	}); err != nil {
-		// Compensate: the destination row was created PENDING. Without this
-		// transition the row would linger forever, since the reconciler only
-		// promotes via HEAD against an object that the failed copy never wrote.
-		if mfErr := h.sm.DiscardFailed(ctx, dst.ObjectID, statemachine.FailedStorageCopy); mfErr != nil {
-			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr))
-		}
-		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))
+		return nil, h.copyFailed(ctx, dst.ObjectID, err)
 	}
 	// Promote + paladin.object.uploaded fan-out in one tx (ADR-0003): the
 	// copy materialises a brand-new object, so subscribers see the same
 	// `paladin.object.uploaded` they'd get from a normal CompleteObject path.
 	// The payload's `source` discriminator lets a consumer that cares
-	// about origin route copies vs direct uploads. Built from the known
-	// inputs (== the post-promote row) so the event can be enqueued inside
-	// the promote tx without a read. A dispatch error rolls the promote
-	// back; the client's at-least-once retry re-runs both.
-	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, in.DestCollection)
-	changed, err := h.sm.PromoteToAvailableInTx(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
-		src.Checksum, "", statemachine.SourceRPC,
-		func(ctx context.Context, tx pgx.Tx) error {
-			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
-				objectResourceNameFrom(okPrefix, tenantID, in.DestCollection, destKey),
-				map[string]any{
-					"tenant_id":         tenantID.String(),
-					"collection":        in.DestCollection,
-					"key":               destKey,
-					"object_id":         dst.ObjectID.String(),
-					"size_bytes":        src.SizeBytes,
-					"etag":              src.ETag,
-					"content_type":      src.ContentType,
-					"source":            "copy",
-					"source_collection": in.SourceCollection,
-					"source_object_id":  in.SourceObjectID,
-				})
-		})
-	if errors.Is(err, statemachine.ErrContentMismatch) {
-		return nil, h.discardMismatched(ctx, dst.ObjectID, Location{
-			BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
-		}, err)
-	}
+	// about origin route copies vs direct uploads.
+	changed, err := h.promoteUploaded(ctx, dst.ObjectID, Location{
+		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
+	}, storedBytes{etag: src.ETag, size: src.SizeBytes, checksum: src.Checksum}, map[string]any{
+		payloadSizeBytes:        src.SizeBytes,
+		payloadETag:             src.ETag,
+		payloadContentType:      src.ContentType,
+		payloadSource:           uploadSourceCopy,
+		payloadSourceCollection: in.SourceCollection,
+		payloadSourceObjectID:   in.SourceObjectID,
+	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, err
 	}
-	fresh, err := h.repo.FindByName(ctx, tenantID, in.DestCollection, dst.ObjectID.String())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	// Same tail as CompleteObject, and for the same reason: these fire only
-	// on the real transition, so an at-least-once retry neither re-records a
-	// version nor double-charges. The capability charge belongs here too — a
+	// Same tail as CompleteObject. The capability charge belongs here too — a
 	// copy is gated by OpPut and materialises a new stored object, so a
 	// budgeted principal that could copy for free would be able to consume
-	// storage without spending anything, which is the one OpPut path where
-	// that was true.
-	if changed {
-		LogSideEffect(ctx, EffectVersion, fresh.ObjectID, h.versions.OnPromote(ctx, fresh))
-		h.touchQuota(ctx, fresh)
-		if err := auth.ChargeRequest(ctx); err != nil {
-			return nil, err
-		}
+	// storage without spending anything.
+	return h.promotedObject(ctx, tenantID, in.DestCollection, dst.ObjectID.String(), changed)
+}
+
+// copyFailed compensates a storage copy that failed: the destination row was
+// created PENDING, and without this transition it would linger forever,
+// since the reconciler only promotes via HEAD against an object that the
+// failed copy never wrote.
+func (h *Handler) copyFailed(ctx context.Context, dstID uuid.UUID, err error) error {
+	if mfErr := h.sm.DiscardFailed(ctx, dstID, statemachine.FailedStorageCopy); mfErr != nil {
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w (compensation also failed: %w)", err, mfErr))
 	}
-	return &fresh, nil
+	return rpcerr.New(connect.CodeInternal, fmt.Errorf("storage copy: %w", err))
 }
 
 // ─── shared internals ──────────────────────────────────────────────────────
@@ -2285,6 +2552,16 @@ func mapCreateErr(err error) error {
 		return connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
 	}
 	return apiutil.MapError(err)
+}
+
+// headFailure answers a HEAD that failed while completing an upload: nothing
+// at the key is the caller's to fix by uploading; a backend that could not be
+// asked is unavailable, not a refusal.
+func headFailure(err error) error {
+	if errors.Is(err, ErrStoredObjectNotFound) {
+		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("object not uploaded yet: %w", err))
+	}
+	return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check the uploaded bytes: %w", err))
 }
 
 // assertBytesPresent HEADs a trashed object before it is restored. Its bytes

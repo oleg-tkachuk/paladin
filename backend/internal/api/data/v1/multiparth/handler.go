@@ -34,6 +34,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type Storage interface {
@@ -233,6 +234,20 @@ type QuotaUpdater interface {
 	OnObjectPromoted(ctx context.Context, tenantID, objectID uuid.UUID, sizeBytes int64) error
 }
 
+// ErrUploadNotFound is the repository's answer for an upload session the
+// tenant does not have — an id that does not parse names none either. Any
+// other GetSession error is the store failing.
+var ErrUploadNotFound = errors.New("upload not found")
+
+// The RPCs as the outcome log names them.
+const (
+	opInitiate    = "initiate"
+	opComplete    = "complete"
+	opAbort       = "abort"
+	opPresignPart = "presign part"
+	opListParts   = "list parts"
+)
+
 type Handler struct {
 	repo     Repository
 	storage  Storage
@@ -242,7 +257,11 @@ type Handler struct {
 	limits   uploadpolicy.Limits
 	versions VersionRecorder // optional
 	quota    QuotaUpdater    // optional
+	log      *zap.Logger
 }
+
+// SetLogger sets where each RPC says how it ended. Unset, nothing is logged.
+func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
 
 // SetQuotaUpdater attaches the optional usage hook called on
 // CompleteMultipartUpload after a successful promotion. nil = no-op.
@@ -259,7 +278,14 @@ func (h *Handler) SetVersionRecorder(v VersionRecorder) { h.versions = v }
 // InitiateMultipartUpload creates the PENDING object row and opens a storage
 // multipart session. Handler contract: size_bytes is required here because
 // part sizing needs it (unlike UploadObject where it's a hint).
-func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs) (*Session, error) {
+func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs) (out *Session, err error) {
+	defer func() {
+		fields := []zap.Field{zap.String("collection", args.Collection)}
+		if out != nil {
+			fields = append(fields, zap.String("upload_id", out.UploadID), zap.String("object_id", out.ObjectID.String()))
+		}
+		h.logOutcome(ctx, opInitiate, zapcore.InfoLevel, err, fields...)
+	}()
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -305,8 +331,15 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if err := h.authorize(ctx, p, tenantID, args.Collection, args.Key, backendID, bucket, cedar.ActionPutObject, args.SizeHint, args.ContentType); err != nil {
 		return nil, err
 	}
+	return h.openSession(ctx, args, meta)
+}
 
+// openSession opens the admitted upload args describes: the storage upload
+// first, then the PENDING object and the session that tracks it.
+func (h *Handler) openSession(ctx context.Context, args InitiateArgs, meta objecth.BucketMeta) (*Session, error) {
+	tenantID, backendID, bucket := args.TenantID, meta.BackendID, meta.BucketName
 	if meta.PublicRead {
+		var err error
 		args.PublicURL, err = h.storage.PublicURL(ctx, backendID, bucket, meta.PublicBaseURL, tenantID, args.Collection, args.Key)
 		if err != nil {
 			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("public url: %w", err))
@@ -339,16 +372,17 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 // returns it as stored. A read of it that fails after the completion
 // succeeded returns a zero Object rather than an error: the upload is done,
 // and a caller told otherwise would retry a session that no longer exists.
-func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) (objecth.Object, error) {
+func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) (_ objecth.Object, err error) {
+	defer func() { h.logOutcome(ctx, opComplete, zapcore.InfoLevel, err, zap.String("upload_id", args.UploadID)) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return objecth.Object{}, err
 	}
 	args.TenantID = tenantID
 
-	sess, err := h.repo.GetSession(ctx, args.UploadID)
+	sess, err := h.session(ctx, tenantID, args.UploadID, SessionRef{})
 	if err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return objecth.Object{}, err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
@@ -359,47 +393,100 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPutObject, 0, ""); err != nil {
 		return objecth.Object{}, err
 	}
-	backendID, bucket := sess.BackendID, sess.Bucket
-	if bucket == "" {
-		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // multipart complete (mutation)
-		if err != nil {
-			return objecth.Object{}, objecth.MapResolveErr(err)
-		}
-	}
-	if err := sess.checkParts(args.Parts); err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
-	}
-	// The composite of the parts' checksums, which the store verified each
-	// part against: what a reader recomputes from the bytes. Recorded before
-	// the store assembles the object, so it is in place whichever promotes
-	// the row first — this call or the storage event.
-	composite, err := sess.compositeChecksum(args.Parts)
+	backendID, bucket, err := h.route(ctx, tenantID, sess)
 	if err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return objecth.Object{}, err
+	}
+	composite, err := h.recordComposite(ctx, sess, args.Parts)
+	if err != nil {
+		return objecth.Object{}, err
+	}
+	a, err := h.assemble(ctx, sess, backendID, bucket, args)
+	if err != nil {
+		return objecth.Object{}, err
+	}
+	h.afterPromote(ctx, sess, a, composite)
+	// Non-fatal — the object is AVAILABLE and the TTL sweep will collect the
+	// row. Logged because "the sweep will get it" is an assumption: if this
+	// fails for every upload, sessions accumulate until the sweep is the only
+	// thing keeping the table finite, and nothing else would say so.
+	h.dropSession(ctx, args.UploadID, "multipart session not deleted after complete")
+	return h.completedObject(ctx, tenantID, sess.ObjectID, args.UploadID), nil
+}
+
+// route is where the session's parts live: the (backend, bucket) it was
+// anchored to at initiate time, or the collection's current binding for a
+// session from before anchoring.
+func (h *Handler) route(ctx context.Context, tenantID uuid.UUID, sess Session) (backendID, bucket string, err error) {
+	if sess.Bucket != "" {
+		return sess.BackendID, sess.Bucket, nil
+	}
+	backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // multipart complete / abort (mutation)
+	if err != nil {
+		return "", "", objecth.MapResolveErr(err)
+	}
+	return backendID, bucket, nil
+}
+
+// recordComposite checks the completion list and records the composite of
+// the parts' checksums, which the store verified each part against: what a
+// reader recomputes from the bytes. Recorded before the store assembles the
+// object, so it is in place whichever promotes the row first — this call or
+// the storage event.
+func (h *Handler) recordComposite(ctx context.Context, sess Session, parts []PartETag) (string, error) {
+	if err := sess.checkParts(parts); err != nil {
+		return "", connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	composite, err := sess.compositeChecksum(parts)
+	if err != nil {
+		return "", connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}
 	if err := h.repo.RecordCompositeChecksum(ctx, sess.ObjectID, composite, sess.PartSizeBytes); err != nil {
-		return objecth.Object{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("record composite checksum: %w", err))
+		return "", rpcerr.New(connect.CodeInternal, fmt.Errorf("record composite checksum: %w", err))
 	}
-	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
+	return composite, nil
+}
+
+// assembled is what the store made of the parts, and whether promoting it was
+// this call's transition.
+type assembled struct {
+	etag    string
+	size    int64
+	changed bool
+}
+
+// assemble has the store assemble the parts and promotes the object. An
+// object whose bytes break its registration is discarded.
+func (h *Handler) assemble(ctx context.Context, sess Session, backendID, bucket string, args CompleteArgs) (assembled, error) {
+	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, args.TenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
 	if err != nil {
-		return objecth.Object{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
+		return assembled{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
 	// No sequencer from multipart completion — events will supply one later.
 	changed, err := h.sm.PromoteToAvailable(ctx, sess.ObjectID, etag, size, "", "", statemachine.SourceRPC)
 	if errors.Is(err, statemachine.ErrContentMismatch) {
-		return objecth.Object{}, h.discardMismatched(ctx, sess, backendID, bucket, args.UploadID, err)
+		return assembled{}, h.discardMismatched(ctx, sess, backendID, bucket, args.UploadID, err)
 	}
 	if err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return assembled{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	if changed && h.versions != nil {
+	return assembled{etag: etag, size: size, changed: changed}, nil
+}
+
+// afterPromote records the version and the quota of an object this call
+// promoted; a retry that found it promoted already records neither.
+func (h *Handler) afterPromote(ctx context.Context, sess Session, a assembled, composite string) {
+	if !a.changed {
+		return
+	}
+	if h.versions != nil {
 		objecth.LogSideEffect(ctx, objecth.EffectVersion, sess.ObjectID, h.versions.OnPromote(ctx, VersionedObject{
 			ObjectID:              sess.ObjectID,
 			TenantID:              sess.TenantID,
 			Collection:            sess.Collection,
 			Key:                   sess.Key,
-			SizeBytes:             size,
-			ETag:                  etag,
+			SizeBytes:             a.size,
+			ETag:                  a.etag,
 			ContentType:           "", // multipart doesn't carry CT through Storage; lookup later
 			ChecksumAlgo:          sess.ChecksumAlgo,
 			Checksum:              composite,
@@ -407,48 +494,50 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 		}))
 	}
 	// Quota accounting — symmetric with single-PUT path on object.Handler.
-	// Suppressed errors: drift gets corrected by the nightly accounting job;
-	// a transient failure must not undo a successful state transition.
-	if changed && h.quota != nil {
-		if err := h.quota.OnObjectPromoted(ctx, sess.TenantID, sess.ObjectID, size); err != nil {
-			// Suppressed on purpose — a transient accounting failure must not
-			// undo a successful state transition, and the nightly job corrects
-			// drift. Logged because that correction is invisible otherwise:
-			// without a line here, "usage looks wrong" has no trail back to
-			// the writes that were never counted.
-			logger.FromContext(ctx).Warn("quota not credited for promoted object",
-				zap.String("tenant_id", sess.TenantID.String()),
-				zap.Int64("size", size), zap.Error(err))
-		}
+	if h.quota == nil {
+		return
 	}
-	if err := h.repo.DeleteSession(ctx, args.UploadID); err != nil {
-		// Non-fatal — the object is AVAILABLE and the TTL sweep will collect
-		// the row. Logged because "the sweep will get it" is an assumption:
-		// if this fails for every upload, sessions accumulate until the sweep
-		// is the only thing keeping the table finite, and nothing else would
-		// say so.
-		logger.FromContext(ctx).Warn("multipart session not deleted after complete",
-			zap.String("upload_id", args.UploadID), zap.Error(err))
+	if err := h.quota.OnObjectPromoted(ctx, sess.TenantID, sess.ObjectID, a.size); err != nil {
+		// Suppressed on purpose — a transient accounting failure must not
+		// undo a successful state transition, and the nightly job corrects
+		// drift. Logged because that correction is invisible otherwise:
+		// without a line here, "usage looks wrong" has no trail back to
+		// the writes that were never counted.
+		logger.FromContext(ctx).Warn("quota not credited for promoted object",
+			zap.String("tenant_id", sess.TenantID.String()),
+			zap.Int64("size", a.size), zap.Error(err))
 	}
-	obj, err := h.repo.Object(ctx, tenantID, sess.ObjectID)
-	if err != nil {
-		logger.FromContext(ctx).Warn("completed object not read back",
-			zap.String("upload_id", args.UploadID), zap.Error(err))
-		return objecth.Object{}, nil
-	}
-	return obj, nil
 }
 
-func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, want SessionRef) error {
+// dropSession deletes a session whose upload is settled. A failure does not
+// fail the RPC — the upload's outcome stands — but is logged as msg, since a
+// systematic one leaves rows behind and nothing else would say so.
+func (h *Handler) dropSession(ctx context.Context, uploadID, msg string) {
+	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
+		logger.FromContext(ctx).Warn(msg, zap.String("upload_id", uploadID), zap.Error(err))
+	}
+}
+
+// completedObject reads back the object a completed upload produced; the zero
+// Object when that read fails, since the upload itself is done.
+func (h *Handler) completedObject(ctx context.Context, tenantID, objectID uuid.UUID, uploadID string) objecth.Object {
+	obj, err := h.repo.Object(ctx, tenantID, objectID)
+	if err != nil {
+		logger.FromContext(ctx).Warn("completed object not read back",
+			zap.String("upload_id", uploadID), zap.Error(err))
+		return objecth.Object{}
+	}
+	return obj
+}
+
+func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, want SessionRef) (err error) {
+	defer func() { h.logOutcome(ctx, opAbort, zapcore.InfoLevel, err, zap.String("upload_id", uploadID)) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return err
 	}
-	sess, err := h.repo.GetSession(ctx, uploadID)
+	sess, err := h.session(ctx, tenantID, uploadID, want)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
-	if err := assertSessionMatches(sess, want); err != nil {
 		return err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
@@ -460,26 +549,18 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionDeleteObject, 0, ""); err != nil {
 		return err
 	}
-	backendID, bucket := sess.BackendID, sess.Bucket
-	if bucket == "" {
-		backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // abort multipart (mutation)
-		if err != nil {
-			return objecth.MapResolveErr(err)
-		}
+	backendID, bucket, err := h.route(ctx, tenantID, sess)
+	if err != nil {
+		return err
 	}
 	if err := h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key); err != nil {
 		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// The session first, marked as aborted: discarding the object cascades
-	// to it, and a cascade records a debt to abort the upload again.
-	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
-		// Same as the complete path: the abort succeeded, so this must not
-		// fail the RPC — but a systematic failure leaves rows behind, and
-		// silence is what makes that invisible. The discard below still
-		// removes the row, with an abort debt that repeats a landed abort.
-		logger.FromContext(ctx).Warn("multipart session not deleted after abort",
-			zap.String("upload_id", uploadID), zap.Error(err))
-	}
+	// to it, and a cascade records a debt to abort the upload again. A failure
+	// here leaves the row to the discard below, with an abort debt that
+	// repeats a landed abort.
+	h.dropSession(ctx, uploadID, "multipart session not deleted after abort")
 	// Discard the underlying object so the reconciler has nothing to promote.
 	if err := h.sm.DiscardFailed(ctx, sess.ObjectID, statemachine.FailedMultipartAborted); err != nil {
 		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -499,35 +580,19 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	start := time.Now()
 	defer func() {
 		metrics.RecordPresign(ctx, metrics.PresignOpPart, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		h.logOutcome(ctx, opPresignPart, zapcore.DebugLevel, err, zap.String("upload_id", uploadID), zap.Int32("part_number", partNumber))
 	}()
 
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	sess, err := h.repo.GetSession(ctx, uploadID)
+	sess, err := h.session(ctx, tenantID, uploadID, want)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
-	if sess.TenantID != tenantID {
-		return "", nil, time.Time{}, connect.NewError(connect.CodePermissionDenied, "tenant mismatch")
-	}
-	if err := assertSessionMatches(sess, want); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	if partNumber <= 0 || (sess.TotalParts > 0 && partNumber > sess.TotalParts) {
-		return "", nil, time.Time{}, connect.Errorf(connect.CodeInvalidArgument,
-			"part_number %d out of range (1..%d)", partNumber, sess.TotalParts)
-	}
-	// A part URL is bound to the part's length, which needs the object's
-	// registered size, and to a checksum, which needs the session's
-	// algorithm. A session without them predates the binding.
-	if sess.SizeBytes <= 0 || sess.TotalParts <= 0 || !checksum.Known(sess.ChecksumAlgo) {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeFailedPrecondition,
-			"upload was initiated without a size and checksum algorithm; start a new upload")
-	}
-	if err := checksum.Validate(sess.ChecksumAlgo, checksumValue); err != nil {
-		return "", nil, time.Time{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
+	if err := sess.checkPart(partNumber, checksumValue); err != nil {
+		return "", nil, time.Time{}, err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	// Presigned part URL grants Put on the underlying object; gate on
@@ -544,8 +609,40 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := h.authorize(ctx, p, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPresignPut, 0, ""); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	// The bucket's constraints bound the part URL's lifetime; the session
-	// keeps routing to the bucket it was opened against.
+	return h.signPart(ctx, tenantID, sess, PartBinding{
+		Number:        partNumber,
+		SizeBytes:     sess.PartLength(partNumber),
+		ChecksumAlgo:  sess.ChecksumAlgo,
+		ChecksumValue: checksumValue,
+	}, ttl)
+}
+
+// checkPart refuses a part the session cannot sign a URL for: a number
+// outside 1..TotalParts, a session from before part URLs were bound to a
+// length and a checksum, or a checksum malformed under the session's
+// algorithm.
+func (s Session) checkPart(partNumber int32, checksumValue string) error {
+	if partNumber <= 0 || (s.TotalParts > 0 && partNumber > s.TotalParts) {
+		return connect.Errorf(connect.CodeInvalidArgument,
+			"part_number %d out of range (1..%d)", partNumber, s.TotalParts)
+	}
+	// A part URL is bound to the part's length, which needs the object's
+	// registered size, and to a checksum, which needs the session's
+	// algorithm. A session without them predates the binding.
+	if s.SizeBytes <= 0 || s.TotalParts <= 0 || !checksum.Known(s.ChecksumAlgo) {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			"upload was initiated without a size and checksum algorithm; start a new upload")
+	}
+	if err := checksum.Validate(s.ChecksumAlgo, checksumValue); err != nil {
+		return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("checksum_value: %w", err))
+	}
+	return nil
+}
+
+// signPart signs the URL for part, living ttl within the bucket's ceiling.
+// The bucket's constraints bound the part URL's lifetime; the session keeps
+// routing to the bucket it was opened against.
+func (h *Handler) signPart(ctx context.Context, tenantID uuid.UUID, sess Session, part PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
 	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, sess.Collection, true) // presign part (mutation)
 	if err != nil {
 		return "", nil, time.Time{}, objecth.MapResolveErr(err)
@@ -558,12 +655,11 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if bucket == "" {
 		backendID, bucket = meta.BackendID, meta.BucketName
 	}
-	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, PartBinding{
-		Number:        partNumber,
-		SizeBytes:     sess.PartLength(partNumber),
-		ChecksumAlgo:  sess.ChecksumAlgo,
-		ChecksumValue: checksumValue,
-	}, ttl)
+	url, hdrs, exp, err := h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, part, ttl)
+	if err != nil {
+		return "", nil, time.Time{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign part: %w", err))
+	}
+	return url, hdrs, exp, nil
 }
 
 // checkParts refuses a completion list that is not the upload's parts
@@ -610,10 +706,7 @@ func (h *Handler) discardMismatched(ctx context.Context, sess Session, backendID
 		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
 	}
 	// The session first, as on abort: discarding the object cascades to it.
-	if err := h.repo.DeleteSession(ctx, uploadID); err != nil {
-		logger.FromContext(ctx).Warn("multipart session not deleted after a refused complete",
-			zap.String("upload_id", uploadID), zap.Error(err))
-	}
+	h.dropSession(ctx, uploadID, "multipart session not deleted after a refused complete")
 	if err := h.sm.DiscardFailed(ctx, sess.ObjectID, statemachine.FailedContentMismatch); err != nil {
 		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; discarding the object failed: %w", cause, err))
 	}
@@ -632,19 +725,14 @@ func (h *Handler) discardMismatched(ctx context.Context, sess Session, backendID
 //
 // The page token is the last part number seen, matching the S3 contract the
 // call is a thin wrapper over.
-func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string, want SessionRef) ([]Part, string, error) {
+func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string, want SessionRef) (_ []Part, _ string, err error) {
+	defer func() { h.logOutcome(ctx, opListParts, zapcore.DebugLevel, err, zap.String("upload_id", uploadID)) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	sess, err := h.repo.GetSession(ctx, uploadID)
+	sess, err := h.session(ctx, tenantID, uploadID, want)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
-	if sess.TenantID != tenantID {
-		return nil, "", connect.NewError(connect.CodePermissionDenied, "tenant mismatch")
-	}
-	if err := assertSessionMatches(sess, want); err != nil {
 		return nil, "", err
 	}
 	// The parts all belong to the session's one object, so that object is
@@ -658,30 +746,104 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, "", err
 	}
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 100
+	after, err := partsPageAfter(pageToken)
+	if err != nil {
+		return nil, "", err
 	}
-	var after int32
-	if pageToken != "" {
-		n, perr := strconv.ParseInt(pageToken, 10, 32)
-		if perr != nil || n < 0 {
-			return nil, "", connect.Errorf(connect.CodeInvalidArgument,
-				"page_token must be a part number: %q", pageToken)
-		}
-		after = int32(n)
-	}
-
 	parts, next, err := h.storage.ListMultipartParts(ctx,
 		sess.BackendID, sess.Bucket, tenantID, sess.StorageUploadID,
-		sess.Collection, sess.Key, pageSize, after)
+		sess.Collection, sess.Key, partsPageSize(pageSize), after)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	var nextToken string
-	if next > 0 {
-		nextToken = strconv.FormatInt(int64(next), 10)
+	return parts, partsPageToken(next), nil
+}
+
+// partsPageSize is the page size ListParts asks the backend for: the
+// caller's, unless unset or above the most it lists at once.
+func partsPageSize(pageSize int32) int32 {
+	if pageSize <= 0 || pageSize > maxPartsPageSize {
+		return defaultPartsPageSize
 	}
-	return parts, nextToken, nil
+	return pageSize
+}
+
+// partsPageAfter is the part number a ListParts page token resumes after; 0
+// for the first page.
+func partsPageAfter(pageToken string) (int32, error) {
+	if pageToken == "" {
+		return 0, nil
+	}
+	n, err := strconv.ParseInt(pageToken, 10, 32)
+	if err != nil || n < 0 {
+		return 0, connect.Errorf(connect.CodeInvalidArgument,
+			"page_token must be a part number: %q", pageToken)
+	}
+	return int32(n), nil
+}
+
+// partsPageToken is the token for the page after the part numbered next; ""
+// when the backend has no more.
+func partsPageToken(next int32) string {
+	if next <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(int64(next), 10)
+}
+
+// ListParts' page size: unset or above the most S3 lists in one call is the
+// default.
+const (
+	defaultPartsPageSize = 100
+	maxPartsPageSize     = 1000
+)
+
+// msgTenantMismatch refuses a session another tenant opened.
+const msgTenantMismatch = "tenant mismatch"
+
+// session reads the upload uploadID names and checks it is the caller's and
+// the object the request names. A session the store does not have is
+// NotFound; any other read error is the store failing, which is Internal —
+// not an absent upload a client would start over for.
+func (h *Handler) session(ctx context.Context, tenantID uuid.UUID, uploadID string, want SessionRef) (Session, error) {
+	sess, err := h.repo.GetSession(ctx, uploadID)
+	switch {
+	case errors.Is(err, ErrUploadNotFound):
+		return Session{}, rpcerr.New(connect.CodeNotFound, err)
+	case err != nil:
+		return Session{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("read upload session: %w", err))
+	}
+	if sess.TenantID != tenantID {
+		return Session{}, connect.NewError(connect.CodePermissionDenied, msgTenantMismatch)
+	}
+	return sess, assertSessionMatches(sess, want)
+}
+
+// logOutcome records how op ended: done at success (info for a change, debug
+// for a read), refused at warn, failed at error. fields name what it acted
+// on; never a URL, a signed header or a checksum.
+func (h *Handler) logOutcome(ctx context.Context, op string, success zapcore.Level, err error, fields ...zap.Field) {
+	if h.log == nil {
+		return
+	}
+	fields = append(fields, zap.String("op", op))
+	if tenant, terr := auth.EffectiveTenant(ctx); terr == nil {
+		fields = append(fields, zap.String("tenant_id", tenant.String()))
+	}
+	switch code := connect.CodeOf(err); {
+	case err == nil:
+		h.log.Log(success, "multipart "+op, fields...)
+	case serverFault(code):
+		h.log.Error("multipart failed", append(fields, zap.Error(err))...)
+	default:
+		h.log.Warn("multipart refused", append(fields, zap.String("code", code.String()), zap.Error(err))...)
+	}
+}
+
+// serverFault reports whether code is the server's failure rather than a
+// refusal of the request.
+func serverFault(code connect.Code) bool {
+	return code == connect.CodeInternal || code == connect.CodeUnknown || code == connect.CodeUnavailable
 }
 
 // authorize runs the Cedar check for a multipart action. backendID/bucket

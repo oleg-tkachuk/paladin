@@ -8,6 +8,8 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -99,7 +101,29 @@ type LockHandler struct {
 	versions VersionRepository
 	locks    LockRepository
 	policy   cedar.Authorizer
+	log      *zap.Logger
 }
+
+// SetLogger sets where each lock RPC says how it ended. Unset, nothing is
+// logged.
+func (h *LockHandler) SetLogger(l *zap.Logger) {
+	if h != nil { // the wiring builds none where its repository is not wired
+		h.log = l
+	}
+}
+
+// The object-lock metric's op and outcome labels.
+const (
+	lockMetricRetention = "retention"
+	lockMetricLegalHold = "legal_hold"
+
+	lockOutcomeApplied           = "applied"
+	lockOutcomeAppliedWithBypass = "applied_with_bypass"
+	lockOutcomeRefusedWeakening  = "refused_weakening"
+	lockOutcomeError             = "error"
+	lockOutcomePlaced            = "placed"
+	lockOutcomeReleased          = "released"
+)
 
 func NewLockHandler(objects Repository, versions VersionRepository, locks LockRepository, policy cedar.Authorizer) *LockHandler {
 	return &LockHandler{objects: objects, versions: versions, locks: locks, policy: policy}
@@ -116,16 +140,14 @@ type SetRetentionInput struct {
 
 // SetRetention applies or extends a retention window on the object's current
 // version.
-func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (ObjectLock, error) {
-	if in.Mode != "GOVERNANCE" && in.Mode != "COMPLIANCE" {
-		return ObjectLock{}, connect.Errorf(connect.CodeInvalidArgument,
-			"mode must be GOVERNANCE or COMPLIANCE, got %q", in.Mode)
-	}
-	if !in.RetainUntil.After(time.Now()) {
-		// A window that has already closed asserts nothing but leaves a row
-		// implying it does. Refusing is clearer than storing a no-op.
-		return ObjectLock{}, connect.NewError(connect.CodeInvalidArgument,
-			"retain_until must be in the future")
+func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (_ ObjectLock, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opSetRetention, zapcore.InfoLevel, err,
+			append(objectFields(in.Collection, in.ObjectID), zap.String("mode", in.Mode),
+				zap.Bool("bypass_governance", in.BypassGovernance))...)
+	}()
+	if err := checkRetention(in); err != nil {
+		return ObjectLock{}, err
 	}
 
 	res, err := h.resolve(ctx, in.Collection, in.ObjectID, cedar.ActionSetObjectRetention)
@@ -139,12 +161,32 @@ func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (O
 	// The bypass flag is a request to weaken a control, so it is gated on a
 	// role rather than on the Cedar action that got us here — the same gate
 	// DeleteObject uses, and for the same reason.
-	if in.BypassGovernance && !res.principal.HasRole("lock.governance.bypass") &&
-		!res.principal.HasRole(apiutil.RolePlatformAdmin) {
-		return ObjectLock{}, connect.NewError(connect.CodePermissionDenied,
-			"bypass_governance_retention requires role lock.governance.bypass or platform.admin")
+	if in.BypassGovernance && !mayBypassGovernance(res.principal) {
+		return ObjectLock{}, connect.NewError(connect.CodePermissionDenied, msgBypassNeedsRole)
 	}
 
+	return h.writeRetention(ctx, res, in)
+}
+
+// checkRetention refuses a retention that is not GOVERNANCE or COMPLIANCE,
+// or whose window has already closed: such a window asserts nothing but
+// leaves a row implying it does, and refusing is clearer than storing a
+// no-op.
+func checkRetention(in SetRetentionInput) error {
+	if in.Mode != LockModeGovernance && in.Mode != LockModeCompliance {
+		return connect.Errorf(connect.CodeInvalidArgument,
+			"mode must be %s or %s, got %q", LockModeGovernance, LockModeCompliance, in.Mode)
+	}
+	if !in.RetainUntil.After(time.Now()) {
+		return connect.NewError(connect.CodeInvalidArgument,
+			"retain_until must be in the future")
+	}
+	return nil
+}
+
+// writeRetention stores an authorized retention on the resolved version and
+// counts how it went.
+func (h *LockHandler) writeRetention(ctx context.Context, res resolved, in SetRetentionInput) (ObjectLock, error) {
 	lock, err := h.locks.SetRetention(ctx, SetRetentionArgs{
 		TenantID:         res.tenantID,
 		VersionID:        res.versionID,
@@ -152,28 +194,32 @@ func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (O
 		RetainUntil:      in.RetainUntil,
 		BypassGovernance: in.BypassGovernance,
 	})
+	if errors.Is(err, ErrRetentionWeakened) {
+		metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, lockOutcomeRefusedWeakening)
+		return ObjectLock{}, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
+	}
 	if err != nil {
-		if errors.Is(err, ErrRetentionWeakened) {
-			metrics.RecordObjectLock(ctx, "retention", in.Mode, "refused_weakening")
-			return ObjectLock{}, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-		}
-		metrics.RecordObjectLock(ctx, "retention", in.Mode, "error")
+		metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, lockOutcomeError)
 		return ObjectLock{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// A COMPLIANCE window cannot be shortened by anyone, so every one of these
 	// is an irreversible commitment of storage until its date passes. Counting
 	// them is the only way an operator learns how much of that has accumulated
 	// before the bill or the capacity alert does the telling.
-	outcome := "applied"
+	outcome := lockOutcomeApplied
 	if in.BypassGovernance {
-		outcome = "applied_with_bypass"
+		outcome = lockOutcomeAppliedWithBypass
 	}
-	metrics.RecordObjectLock(ctx, "retention", in.Mode, outcome)
+	metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, outcome)
 	return lock, nil
 }
 
 // SetLegalHold turns a legal hold on or off on the object's current version.
-func (h *LockHandler) SetLegalHold(ctx context.Context, collection, objectID string, hold bool) (ObjectLock, error) {
+func (h *LockHandler) SetLegalHold(ctx context.Context, collection, objectID string, hold bool) (_ ObjectLock, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opSetLegalHold, zapcore.InfoLevel, err,
+			append(objectFields(collection, objectID), zap.Bool("hold", hold))...)
+	}()
 	res, err := h.resolve(ctx, collection, objectID, cedar.ActionSetObjectLegalHold)
 	if err != nil {
 		return ObjectLock{}, err
@@ -188,19 +234,22 @@ func (h *LockHandler) SetLegalHold(ctx context.Context, collection, objectID str
 
 	lock, err := h.locks.SetLegalHold(ctx, res.tenantID, res.versionID, hold)
 	if err != nil {
-		metrics.RecordObjectLock(ctx, "legal_hold", "", "error")
+		metrics.RecordObjectLock(ctx, lockMetricLegalHold, "", lockOutcomeError)
 		return ObjectLock{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	outcome := "released"
+	outcome := lockOutcomeReleased
 	if hold {
-		outcome = "placed"
+		outcome = lockOutcomePlaced
 	}
-	metrics.RecordObjectLock(ctx, "legal_hold", "", outcome)
+	metrics.RecordObjectLock(ctx, lockMetricLegalHold, "", outcome)
 	return lock, nil
 }
 
 // GetLock reads the lock on the object's current version.
-func (h *LockHandler) GetLock(ctx context.Context, collection, objectID string) (ObjectLock, error) {
+func (h *LockHandler) GetLock(ctx context.Context, collection, objectID string) (_ ObjectLock, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opGetLock, zapcore.DebugLevel, err, objectFields(collection, objectID)...)
+	}()
 	res, err := h.resolve(ctx, collection, objectID, cedar.ActionReadObjectLock)
 	if err != nil {
 		return ObjectLock{}, err
@@ -230,9 +279,8 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 	if err != nil {
 		return out, err
 	}
-	if collection == "" || objectID == "" {
-		return out, connect.NewError(connect.CodeInvalidArgument,
-			"collection and object_id are required")
+	if err := requireObjectName(collection, objectID); err != nil {
+		return out, err
 	}
 	obj, err := h.objects.FindByName(ctx, tenantID, collection, objectID)
 	if err != nil {
@@ -249,18 +297,10 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 		return out, err
 	}
 
-	versionID, err := h.versions.CurrentVersionID(ctx, obj.ObjectID)
+	versionID, err := h.lockedVersion(ctx, obj.ObjectID)
 	if err != nil {
-		return out, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return out, err
 	}
-	if versionID == uuid.Nil() {
-		// Every promoted object gets a version row, so this is either an
-		// object still PENDING or one written before versioning existed.
-		// Either way there is nothing to attach retention to, and silently
-		// succeeding would report a lock that protects nothing.
-		return out, connect.NewError(connect.CodeFailedPrecondition, ErrNoCurrentVersion.Error()).WithCause(ErrNoCurrentVersion)
-	}
-
 	out = resolved{
 		tenantID:  tenantID,
 		principal: principal,
@@ -269,6 +309,22 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 		versionID: versionID,
 	}
 	return out, nil
+}
+
+// lockedVersion is the version a lock on the object attaches to: its current
+// one. Every promoted object gets a version row, so an object without one is
+// still PENDING or was written before versioning existed. Either way there
+// is nothing to attach a lock to, and silently succeeding would report a lock
+// that protects nothing.
+func (h *LockHandler) lockedVersion(ctx context.Context, objectID uuid.UUID) (uuid.UUID, error) {
+	versionID, err := h.versions.CurrentVersionID(ctx, objectID)
+	if err != nil {
+		return uuid.Nil(), connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	}
+	if versionID == uuid.Nil() {
+		return uuid.Nil(), connect.NewError(connect.CodeFailedPrecondition, ErrNoCurrentVersion.Error()).WithCause(ErrNoCurrentVersion)
+	}
+	return versionID, nil
 }
 
 func (h *LockHandler) authorizeLock(

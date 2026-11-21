@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -258,7 +259,7 @@ func (w *LifecycleHardDeleter) settleAndAnnounce(ctx context.Context, r sqlc.Lis
 	}
 	objectID := uuid.UUID(r.ID.Bytes)
 	if err := w.Events.RecordTx(ctx, tx, tenantID.String(), Event{
-		Type:     "paladin.object.purged",
+		Type:     eventtype.ObjectPurged,
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),
 		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",

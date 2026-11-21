@@ -9,7 +9,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -219,7 +218,7 @@ func TestBatchCopyOccupiedDestination(t *testing.T) {
 		{name: "different size", dst: copyOf(func(d *objecth.Object) { d.SizeBytes = 11 }), wantReason: "different object"},
 		{name: "different checksum", dst: copyOf(func(d *objecth.Object) { d.Checksum = "sum-b" }), wantReason: "different object"},
 		{name: "a write in progress", dst: copyOf(func(d *objecth.Object) { d.State = statemachine.StatePending }), wantReason: "write in progress"},
-		{name: "a trashed object", dstErr: pgx.ErrNoRows, wantReason: "in the trash"},
+		{name: "a trashed object", dstErr: objecth.ErrObjectNotFound, wantReason: "in the trash"},
 		{name: "a failed lookup", dstErr: errDB, wantReason: errDB.Error()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

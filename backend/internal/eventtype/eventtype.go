@@ -21,6 +21,24 @@ const SubscriptionTest = "paladin.test"
 // delivers it although the tenant is frozen: it is the event that says so.
 const TenantTrashed = "paladin.tenant.trashed"
 
+// ObjectUploaded is emitted on the transaction that makes an object
+// AVAILABLE: a completed upload, a copy, or the storage event that saw it.
+const ObjectUploaded = "paladin.object.uploaded"
+
+// ObjectUpdated is emitted on the transaction that changes an object's
+// metadata.
+const ObjectUpdated = "paladin.object.updated"
+
+// ObjectDeleted is emitted when an object moves to the trash or is deleted
+// permanently.
+const ObjectDeleted = "paladin.object.deleted"
+
+// ObjectRestored is emitted when an object comes back from the trash.
+const ObjectRestored = "paladin.object.restored"
+
+// ObjectPurged is emitted once a deleted object's bytes are confirmed gone.
+const ObjectPurged = "paladin.object.purged"
+
 // CapabilityCharged is emitted on a charge's transaction for every charge a
 // capability takes, when charge events are on.
 const CapabilityCharged = "paladin.capability.charged"
