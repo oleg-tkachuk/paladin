@@ -15,16 +15,20 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/bucketh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
 func TestBackendSetEnabled_RepoRoundTrip(t *testing.T) {
@@ -520,4 +524,108 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 			}
 		}
 	})
+
+	// A bucket that failed to provision, or is being deleted, is not one a
+	// retry will make ready: it answers not ready, not provisioning.
+	for _, state := range []string{bucketgate.ProvisionFailed, bucketgate.ProvisionDeleting} {
+		t.Run(state+" provisioning refuses writes only", func(t *testing.T) {
+			setProvisionState(t, state)
+			defer setProvisionState(t, bucketgate.ProvisionReady)
+
+			for _, r := range resolvers {
+				if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, bucketgate.ErrBucketNotReady) {
+					t.Errorf("%s %s (write): err=%v, want ErrBucketNotReady", r.name, state, err)
+				}
+				if _, _, err := r.lookup(ctx, tenantID, "docs", false); err != nil {
+					t.Errorf("%s %s (read): err=%v, want success", r.name, state, err)
+				}
+			}
+		})
+	}
+
+	// Maintenance is an advisory label: it gates nothing.
+	t.Run("maintenance gates nothing", func(t *testing.T) {
+		setFlag(t, func(rv int64) error { return be.SetMaintenance(ctx, "three-be", true, rv) })
+		defer setFlag(t, func(rv int64) error { return be.SetMaintenance(ctx, "three-be", false, rv) })
+
+		for _, r := range resolvers {
+			for _, write := range []bool{false, true} {
+				if _, _, err := r.lookup(ctx, tenantID, "docs", write); err != nil {
+					t.Errorf("%s maintenance (write=%v): err=%v, want success", r.name, write, err)
+				}
+			}
+		}
+	})
+}
+
+// What a refusal the resolver gives reaches a client as: the code and the
+// ErrorInfo reason bucketgate names for the state, read from a real row.
+func TestResolverGates_WireCodes(t *testing.T) {
+	h := pgharness.Setup(t)
+	ctx := context.Background()
+	q := sqlc.New(h.PoolMigrate)
+	repo := adapters.NewObjectRepo(q, h.PoolMigrate)
+
+	tenantID := mustCreateTenant(t, h.PoolMigrate, "wire-tenant")
+	seedBackend(t, h.PoolMigrate, "wire-be")
+	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "wire-be", "wire-bucket", "docs")
+	be := adapters.NewBackendRepoV2(q, h.PoolMigrate)
+	// setState puts the backend's drain flag and the bucket's provision state
+	// where a case needs them.
+	setState := func(t *testing.T, readOnly bool, provision string) {
+		t.Helper()
+		if _, err := h.PoolMigrate.Exec(ctx,
+			`UPDATE buckets SET provision_state = $1 WHERE name = 'wire-bucket'`, provision); err != nil {
+			t.Fatalf("set provision_state=%s: %v", provision, err)
+		}
+		cur, err := be.Get(ctx, "wire-be")
+		if err != nil {
+			t.Fatalf("get backend: %v", err)
+		}
+		if err := be.SetReadOnly(ctx, "wire-be", readOnly, cur.ResourceVersion); err != nil {
+			t.Fatalf("set read_only=%v: %v", readOnly, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		name      string
+		readOnly  bool
+		provision string
+		code      connect.Code
+		reason    commonv1.ErrorReason
+	}{
+		{"draining", true, bucketgate.ProvisionReady,
+			connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_READ_ONLY},
+		{"provisioning", false, bucketgate.ProvisionPending,
+			connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_BUCKET_PROVISIONING},
+		{"provision failed", false, bucketgate.ProvisionFailed,
+			connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_FAILED_PRECONDITION},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setState(t, tc.readOnly, tc.provision)
+			defer setState(t, false, bucketgate.ProvisionReady)
+			_, _, err := repo.LookupBucket(ctx, tenantID, "docs", true)
+			mapped := objecth.MapResolveErr(err)
+			if got := connect.CodeOf(mapped); got != tc.code {
+				t.Fatalf("code = %v (%v), want %v", got, mapped, tc.code)
+			}
+			var cerr *connect.Error
+			if !errors.As(mapped, &cerr) {
+				t.Fatalf("%v is not a connect error", mapped)
+			}
+			found := false
+			for _, d := range cerr.Details() {
+				v, verr := connectproto.UnmarshalErrorDetail(d)
+				if verr != nil {
+					t.Fatalf("detail does not decode: %v", verr)
+				}
+				if info, ok := v.(*errdetails.ErrorInfo); ok && info.GetReason() == tc.reason.String() {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%v carries no ErrorInfo reason %s", mapped, tc.reason)
+			}
+		})
+	}
 }

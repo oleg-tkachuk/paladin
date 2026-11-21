@@ -34,6 +34,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
@@ -195,46 +196,22 @@ func (l ObjectLock) Reason() string {
 	return "object is locked"
 }
 
-// ErrBackendDisabled is returned by the bucket-resolution path
-// (LookupBucket / LookupBucketMeta) when the resolved storage backend
-// has been disabled (feature 002). It is the single chokepoint that
-// guarantees a disabled backend processes NO Paladin-mediated operation:
-// every object/presign/multipart/copy path resolves its bucket through
-// the resolver first, so none can reach the object store. Handlers map
-// it to CodeFailedPrecondition via mapResolveErr.
-//
-// NOTE: this cannot revoke presigned URLs already issued — those hit the
-// object store directly, bypassing Paladin, and expire on their own TTL.
-// Disabling only blocks issuance of NEW presigns and Paladin-mediated ops.
-var ErrBackendDisabled = errors.New("storage backend is disabled")
+// The bucket gate's refusals, under the names the resolution path's callers
+// already match on. bucketgate owns them and the state-by-access table that
+// decides which one a lookup answers; LookupBucket and LookupBucketMeta return
+// them for an operation the bucket's or backend's state does not allow.
+var (
+	ErrBackendDisabled    = bucketgate.ErrBackendDisabled
+	ErrBackendReadOnly    = bucketgate.ErrBackendReadOnly
+	ErrBucketProvisioning = bucketgate.ErrBucketProvisioning
+)
 
-// ErrBackendReadOnly is returned by the resolution path for a MUTATION
-// (write=true) when the resolved backend is in the read-only drain state
-// (the schema baseline (001_initial_schema.sql)): enabled, so reads/presign-GET/HEAD/list still resolve,
-// but PUT/POST/multipart-init/copy-dest/update/delete/version writes are
-// refused so an operator can migrate data off before disabling. Same
-// chokepoint + FailedPrecondition mapping as ErrBackendDisabled.
-var ErrBackendReadOnly = errors.New("storage backend is read-only (draining)")
-
-// ErrBucketProvisioning is returned by the resolution path for a MUTATION when
-// the target bucket exists in the catalog but is not provisioned yet
-// (provision_state != 'ready') — the dedicated-bucket window between
-// CreateTenant and the reconciler creating the physical bucket (ADR-0015
-// Phase 1). Mapped to FailedPrecondition so a client retries once the bucket
-// is ready rather than presigning a PUT against a bucket S3 doesn't have.
-var ErrBucketProvisioning = errors.New("storage bucket is still provisioning")
-
-// MapResolveErr maps a bucket-resolution error to the right Connect code:
-// a disabled/read-only backend or a still-provisioning bucket is
-// FailedPrecondition (the resource exists but is not in a state that permits
-// the op); a collection that is not there (apiutil.ErrNotFound) is NotFound;
-// anything else is a failure to look it up, which apiutil.MapError answers
-// as the server's — never NotFound, which a client would act on.
+// MapResolveErr maps a bucket-resolution error to its Connect answer: a gate
+// refusal answers the code and reason bucketgate gives it; a collection that
+// is not there (apiutil.ErrNotFound) is NotFound; anything else is a failure
+// to look it up, which apiutil.MapError answers as the server's — never
+// NotFound, which a client would act on.
 func MapResolveErr(err error) error {
-	if errors.Is(err, ErrBackendDisabled) || errors.Is(err, ErrBackendReadOnly) ||
-		errors.Is(err, ErrBucketProvisioning) {
-		return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
-	}
 	return apiutil.MapError(err)
 }
 
@@ -2649,10 +2626,11 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // matching, so the existing local checks keep working unchanged.
 func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
-	apiutil.RegisterError(ErrBackendDisabled, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_DISABLED)
-	apiutil.RegisterError(ErrBackendReadOnly, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_READ_ONLY)
 	apiutil.RegisterError(ErrVersionNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_OBJECT_VERSION_NOT_FOUND)
 	apiutil.RegisterError(ErrObjectBytesMissing, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_OBJECT_BYTES_MISSING)
+	for _, r := range bucketgate.Refusals() {
+		apiutil.RegisterError(r, r.Code, r.Reason)
+	}
 }
 
 // The side effects of an object's transition that are written after it

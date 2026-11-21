@@ -10,15 +10,19 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/presignttl"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
 // Covers the handler's pure helpers, the opt-in setters, and the ADR-0003
@@ -56,29 +60,55 @@ func TestObjectLockReason(t *testing.T) {
 // ─── MapResolveErr ─────────────────────────────────────────────────────────
 
 // This is the single chokepoint that decides how a resolution failure reaches
-// the client. "Exists but not usable right now" must be FailedPrecondition so
-// clients retry, a collection that is not there is NotFound, and a failure to
+// the client. A state only an operator changes is FailedPrecondition, one the
+// reconciler leaves on its own is Unavailable, each with the reason the
+// console reads; a collection that is not there is NotFound, and a failure to
 // look it up at all is the server's, never NotFound: a client told "not
 // found" while the database was down would act on a lie.
 func TestMapResolveErr(t *testing.T) {
 	cases := []struct {
-		name string
-		err  error
-		want connect.Code
+		name   string
+		err    error
+		want   connect.Code
+		reason string
 	}{
-		{"disabled backend", ErrBackendDisabled, connect.CodeFailedPrecondition},
-		{"read-only backend", ErrBackendReadOnly, connect.CodeFailedPrecondition},
-		{"provisioning bucket", ErrBucketProvisioning, connect.CodeFailedPrecondition},
-		{"missing collection", fmt.Errorf("collection %q %w", "photos", apiutil.ErrNotFound), connect.CodeNotFound},
-		{"failed lookup", errors.New("lookup bucket meta: failed to connect"), connect.CodeInternal},
+		{"disabled backend", ErrBackendDisabled, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_DISABLED.String()},
+		{"read-only backend", ErrBackendReadOnly, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_BACKEND_READ_ONLY.String()},
+		{"provisioning bucket", ErrBucketProvisioning, connect.CodeUnavailable, commonv1.ErrorReason_ERROR_REASON_BUCKET_PROVISIONING.String()},
+		{"bucket not ready", bucketgate.ErrBucketNotReady, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_FAILED_PRECONDITION.String()},
+		{"missing collection", fmt.Errorf("collection %q %w", "photos", apiutil.ErrNotFound), connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND.String()},
+		{"failed lookup", errors.New("lookup bucket meta: failed to connect"), connect.CodeInternal, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := connect.CodeOf(MapResolveErr(tc.err)); got != tc.want {
+			err := MapResolveErr(tc.err)
+			if got := connect.CodeOf(err); got != tc.want {
 				t.Errorf("code = %v, want %v", got, tc.want)
+			}
+			if got := errorReasonOf(t, err); got != tc.reason {
+				t.Errorf("reason = %q, want %q", got, tc.reason)
 			}
 		})
 	}
+}
+
+// errorReasonOf is the ErrorInfo reason err carries, "" for none.
+func errorReasonOf(t *testing.T, err error) string {
+	t.Helper()
+	var cerr *connect.Error
+	if !errors.As(err, &cerr) {
+		return ""
+	}
+	for _, d := range cerr.Details() {
+		v, verr := connectproto.UnmarshalErrorDetail(d)
+		if verr != nil {
+			t.Fatalf("detail does not decode: %v", verr)
+		}
+		if info, ok := v.(*errdetails.ErrorInfo); ok {
+			return info.GetReason()
+		}
+	}
+	return ""
 }
 
 // Wrapped sentinels must still classify — callers wrap with context before
