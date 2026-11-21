@@ -460,6 +460,24 @@ func TestUpdateCollection(t *testing.T) {
 		wantCode(t, err, connect.CodeAborted)
 	})
 
+	t.Run("missing collection → not found", func(t *testing.T) {
+		fr := &fakeRepo{updateTxFn: func(context.Context, UpdateCollectionArgs) (Collection, error) {
+			return Collection{}, fmt.Errorf("collection %q %w", "k", apiutil.ErrNotFound)
+		}}
+		h := NewHandler(fr, allowAll())
+		_, err := h.UpdateCollection(authedCtx(tid), UpdateCollectionArgs{Collection: "k", ExpectedVersion: 3})
+		wantCode(t, err, connect.CodeNotFound)
+	})
+
+	t.Run("store down → internal", func(t *testing.T) {
+		fr := &fakeRepo{updateTxFn: func(context.Context, UpdateCollectionArgs) (Collection, error) {
+			return Collection{}, errors.New("connection reset")
+		}}
+		h := NewHandler(fr, allowAll())
+		_, err := h.UpdateCollection(authedCtx(tid), UpdateCollectionArgs{Collection: "k", ExpectedVersion: 3})
+		wantCode(t, err, connect.CodeInternal)
+	})
+
 	t.Run("ok stamps tenant + forwards expected version", func(t *testing.T) {
 		fr := &fakeRepo{updateTxFn: func(_ context.Context, a UpdateCollectionArgs) (Collection, error) {
 			return fullKey(a.TenantID, a.Collection), nil
@@ -506,6 +524,18 @@ func TestDeleteCollection(t *testing.T) {
 		h := NewHandler(fr, allowAll())
 		err := h.DeleteCollection(authedCtx(tid), uuid.Nil(), "k", 2)
 		wantCode(t, err, connect.CodeAborted)
+	})
+
+	t.Run("missing collection → not found", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn: func(context.Context, uuid.UUID, string) (Collection, error) { return Collection{}, pgx.ErrNoRows },
+			deleteTxFn: func(context.Context, uuid.UUID, string, int64) error {
+				return fmt.Errorf("collection %q %w", "k", apiutil.ErrNotFound)
+			},
+		}
+		h := NewHandler(fr, allowAll())
+		err := h.DeleteCollection(authedCtx(tid), uuid.Nil(), "k", 0)
+		wantCode(t, err, connect.CodeNotFound)
 	})
 
 	t.Run("ok forwards tenant/key/version (canonical pre-read)", func(t *testing.T) {
@@ -719,6 +749,15 @@ func TestBindCollectionToBucket(t *testing.T) {
 		h := NewHandler(fr, allowAll())
 		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil(), "k", validBucket, 4)
 		wantCode(t, err, connect.CodeAborted)
+	})
+
+	t.Run("rebind of a missing collection → not found", func(t *testing.T) {
+		fr := &fakeRepo{rebindFn: func(context.Context, uuid.UUID, string, string, string, int64) error {
+			return fmt.Errorf("collection %q %w", "k", apiutil.ErrNotFound)
+		}}
+		h := NewHandler(fr, allowAll())
+		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil(), "k", validBucket, 0)
+		wantCode(t, err, connect.CodeNotFound)
 	})
 
 	t.Run("rebind other error → failed precondition", func(t *testing.T) {

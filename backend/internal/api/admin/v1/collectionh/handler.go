@@ -622,19 +622,27 @@ func (h *Handler) BindCollectionToBucket(
 		return nil, err
 	}
 	if err := h.repo.Rebind(ctx, tenantID, collection, backendID, bucketName, expectedVersion); err != nil {
-		if errors.Is(err, ErrVersionMismatch) {
-			return nil, connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
-		}
-		if errors.Is(err, publicread.ErrRule) || errors.Is(err, admindomain.ErrBucketNotGranted) {
-			return nil, apiutil.MapError(err)
-		}
-		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("rebind: %w", err))
+		return nil, rebindError(err)
 	}
 	updated, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return &updated, nil
+}
+
+// rebindError is what a refused rebind tells the caller: a stale version is a
+// conflict to retry, a collection the tenant has not got is not found, and a
+// bucket the binding rules refuse says which rule.
+func rebindError(err error) error {
+	if errors.Is(err, ErrVersionMismatch) {
+		return connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
+	}
+	if errors.Is(err, apiutil.ErrNotFound) || errors.Is(err, publicread.ErrRule) ||
+		errors.Is(err, admindomain.ErrBucketNotGranted) {
+		return apiutil.MapError(err)
+	}
+	return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("rebind: %w", err))
 }
 
 // splitBucketResourceName parses "storageBackends/{backend}/buckets/{bucket}".
