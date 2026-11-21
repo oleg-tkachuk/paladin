@@ -111,9 +111,9 @@ func mapQuotaOCCErr(err error) error {
 	case errors.Is(err, pgx.ErrNoRows):
 		return admindomain.ErrVersionMismatch
 	case pgerr.Is(err, pgerr.ForeignKeyViolation) && pgerr.ConstraintIs(err, schema.QuotasTenantIDFK):
-		return fmt.Errorf("quota: no such tenant: %w", admindomain.ErrNotFound)
+		return fmt.Errorf("%w: no such tenant", admindomain.ErrNotFound)
 	case pgerr.Is(err, pgerr.NotNullViolation) && pgerr.Column(err) == schema.BucketQuotasBucketIDColumn:
-		return fmt.Errorf("quota: no such bucket: %w", admindomain.ErrNotFound)
+		return fmt.Errorf("%w: no such bucket", admindomain.ErrNotFound)
 	}
 	return err
 }

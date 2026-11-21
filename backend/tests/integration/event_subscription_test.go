@@ -26,7 +26,7 @@ import (
 //	the local copy, so the caller's struct retained `uuid.Nil`. The
 //	admin handler then called `repo.Get(ctx, s.SubscriptionID)` with
 //	the zero UUID, hit pgx.ErrNoRows → admindomain.ErrNotFound → 500
-//	"admin: resource not found" returned to the operator, while the
+//	"resource not found" returned to the operator, while the
 //	row sat happily committed in the DB (autocommit on INSERT).
 //
 // The contract this test asserts:

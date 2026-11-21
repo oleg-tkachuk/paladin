@@ -24,10 +24,26 @@ func TestQuotaUpsertForAnUnknownScopeIsNotFound(t *testing.T) {
 	repo := adapters.NewQuotaRepoV2(sqlc.New(pool), pool)
 	limit := new(int64(1 << 20))
 
-	if err := repo.UpsertTenant(ctx, admindomain.Quota{TenantID: uuid.New(), MaxTotalBytes: limit}); !errors.Is(err, admindomain.ErrNotFound) {
-		t.Errorf("unknown tenant: err = %v, want ErrNotFound", err)
-	}
-	if err := repo.UpsertBucket(ctx, admindomain.Quota{BackendID: "no-such-backend", BucketName: "no-such-bucket", MaxTotalBytes: limit}); !errors.Is(err, admindomain.ErrNotFound) {
-		t.Errorf("unknown bucket: err = %v, want ErrNotFound", err)
+	// The API sends the text to the caller: what is missing, with no
+	// package names stacked in front of it.
+	for _, tc := range []struct {
+		scope string
+		err   error
+		want  string
+	}{
+		{"tenant", repo.UpsertTenant(ctx, admindomain.Quota{TenantID: uuid.New(), MaxTotalBytes: limit}), quotaNoTenant},
+		{"bucket", repo.UpsertBucket(ctx, admindomain.Quota{BackendID: "no-such-backend", BucketName: "no-such-bucket", MaxTotalBytes: limit}), quotaNoBucket},
+	} {
+		if !errors.Is(tc.err, admindomain.ErrNotFound) {
+			t.Errorf("unknown %s: err = %v, want ErrNotFound", tc.scope, tc.err)
+		} else if tc.err.Error() != tc.want {
+			t.Errorf("unknown %s: message %q, want %q", tc.scope, tc.err, tc.want)
+		}
 	}
 }
+
+// What a quota for a scope that is not there reads.
+const (
+	quotaNoTenant = "resource not found: no such tenant"
+	quotaNoBucket = "resource not found: no such bucket"
+)
