@@ -2583,12 +2583,23 @@ func coalesceMap(primary, fallback map[string]string) map[string]string {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+// ErrPathTaken is what a caller is told of an object created at a path
+// another object holds, in any state, the trash included.
+var ErrPathTaken = errors.New("an object already exists at this key in the collection")
+
+// PathTaken answers err, the unique index refusing a new object's path, as
+// AlreadyExists in the product's words; the index and its SQLSTATE stay in
+// the cause, for the log.
+func PathTaken(err error) error {
+	return connect.NewError(connect.CodeAlreadyExists, ErrPathTaken.Error()).WithCause(errors.Join(ErrPathTaken, err))
+}
+
 func mapCreateErr(err error) error {
 	if err == nil {
 		return nil
 	}
 	if pgerr.Is(err, pgerr.UniqueViolation) {
-		return connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
+		return PathTaken(err)
 	}
 	return apiutil.MapError(err)
 }
