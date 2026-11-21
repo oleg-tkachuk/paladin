@@ -15,6 +15,7 @@ package mcpinspecth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -165,7 +166,7 @@ func (h *Handler) mergedSessions(ctx context.Context, authz string) []mcppkg.Ses
 		wg.Go(func() {
 			infos, err := h.fetchSessions(ctx, u, authz)
 			if err != nil {
-				h.logger().Warn("mcp replica skipped: sessions unavailable", zap.String("target", u), zap.Error(err))
+				h.logger().Warn("mcp replica skipped: sessions unavailable", zap.String("target", loggedURL(u)), zap.String("error", boundedError(err)))
 				return
 			}
 			mu.Lock()
@@ -568,16 +569,66 @@ func (h *Handler) GetBridgeStatus(
 	if lastErr != nil {
 		out.Error = lastErr.Error()
 	} else {
-		out.Error = "no MCP replica answered"
+		out.Error = msgNoReplicaAnswered
 	}
-	h.logger().Warn("mcp bridge unreachable", zap.String("sessions_url", h.sessionsURL), zap.String("error", out.Error))
+	h.logger().Warn("mcp bridge unreachable", zap.String("sessions_url", loggedURL(h.sessionsURL)), zap.String("error", bridgeFailure(lastErr)))
 	return out, nil
+}
+
+// msgNoReplicaAnswered is the bridge status when no replica was asked.
+const msgNoReplicaAnswered = "no MCP replica answered"
+
+// bridgeFailure is why no replica answered, as a log line may carry it.
+func bridgeFailure(lastErr error) string {
+	if lastErr == nil {
+		return msgNoReplicaAnswered
+	}
+	return boundedError(lastErr)
 }
 
 // bridgeAnswered reports whether an HTTP status from the bridge is an answer
 // (2xx) rather than a failure.
 func bridgeAnswered(status int) bool {
 	return status >= http.StatusOK && status < http.StatusMultipleChoices
+}
+
+// unloggableURL stands in a log line for a URL that does not parse, so its
+// text — which may hold credentials — is never written.
+const unloggableURL = "<unparsable url>"
+
+// maxLoggedErrorLen bounds the error text a log line carries from a replica:
+// the bridge chooses that text, so it is cut rather than logged whole.
+const maxLoggedErrorLen = 512
+
+// truncatedMark ends error text cut at maxLoggedErrorLen.
+const truncatedMark = "…(truncated)"
+
+// loggedURL is raw as a log line may carry it: without its query and
+// fragment, where a token may ride, and with any password redacted.
+func loggedURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return unloggableURL
+	}
+	u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = "", false, "", ""
+	return u.Redacted()
+}
+
+// boundedError is err's text as a log line may carry it: a transport error
+// without the URL it names (loggedURL logs that), and at most
+// maxLoggedErrorLen bytes.
+func boundedError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if ue, ok := errors.AsType[*url.Error](err); ok {
+		err = ue.Err
+	}
+	msg := err.Error()
+	if len(msg) > maxLoggedErrorLen {
+		return msg[:maxLoggedErrorLen] + truncatedMark
+	}
+	return msg
 }
 
 // logger is h.log, or a no-op one for a handler built without NewHandler.
