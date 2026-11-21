@@ -36,3 +36,14 @@ func TestReconcilerV2TickReturnsScanFailure(t *testing.T) {
 		t.Error("tick = nil against an unreachable database, want the scan failure")
 	}
 }
+
+// RunOnce is the same tick Run schedules, so the scan failure reaches its
+// caller too.
+func TestReconcilerV2RunOnceReturnsScanFailure(t *testing.T) {
+	r := NewReconcilerV2(statemachine.New(unreachablePool(t)), nil, ReconcilerV2Config{}, zap.NewNop())
+	ctx, cancel := context.WithTimeout(context.Background(), sweepDeadline)
+	defer cancel()
+	if err := r.RunOnce(ctx); err == nil {
+		t.Error("RunOnce = nil against an unreachable database, want the scan failure")
+	}
+}
