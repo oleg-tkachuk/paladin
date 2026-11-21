@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 
@@ -154,10 +155,31 @@ func (r *CollectionRepo) updateWith(ctx context.Context, q *sqlc.Queries, args o
 	if err != nil {
 		return objectkey.Collection{}, fmt.Errorf("update collection: %w", err)
 	}
-	if rows == 0 {
-		return objectkey.Collection{}, objectkey.ErrVersionMismatch
+	if err := r.guarded(ctx, q, args.TenantID, args.Collection, rows); err != nil {
+		return objectkey.Collection{}, err
 	}
 	return r.getWith(ctx, q, args.TenantID, args.Collection)
+}
+
+// guarded says why a guarded collection write touched no row: the tenant has
+// no such collection (apiutil.ErrNotFound), or it is there at another
+// resource_version (ErrVersionMismatch). Update, Delete and Rebind used to
+// answer a version mismatch for both, which tells a caller to re-read and
+// retry what can never succeed. The probe runs on the write's own queries, so
+// inside a tx it sees what the write saw; a probe that fails is returned as
+// itself.
+func (r *CollectionRepo) guarded(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, collection string, rows int64) error {
+	if rows > 0 {
+		return nil
+	}
+	_, err := r.getWith(ctx, q, tenantID, collection)
+	switch {
+	case isNoRows(err):
+		return fmt.Errorf("collection %q %w", collection, apiutil.ErrNotFound)
+	case err != nil:
+		return fmt.Errorf("probe collection: %w", err)
+	}
+	return objectkey.ErrVersionMismatch
 }
 
 func (r *CollectionRepo) Delete(ctx context.Context, tenantID uuid.UUID, collection string, expectedVersion int64) error {
@@ -182,10 +204,7 @@ func (r *CollectionRepo) deleteWith(ctx context.Context, q *sqlc.Queries, tenant
 		}
 		return fmt.Errorf("delete collection: %w", err)
 	}
-	if rows == 0 {
-		return objectkey.ErrVersionMismatch
-	}
-	return nil
+	return r.guarded(ctx, q, tenantID, collection, rows)
 }
 
 // Holding counts a collection's live objects and those in its trash —
@@ -215,10 +234,7 @@ func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collect
 		}
 		return fmt.Errorf("rebind collection: %w", err)
 	}
-	if rows == 0 {
-		return objectkey.ErrVersionMismatch
-	}
-	return nil
+	return r.guarded(ctx, r.q, tenantID, collection, rows)
 }
 
 func (r *CollectionRepo) List(ctx context.Context, args objectkey.ListCollectionsArgs) ([]objectkey.Collection, string, error) {

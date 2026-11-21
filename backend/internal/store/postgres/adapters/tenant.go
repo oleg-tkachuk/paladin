@@ -380,14 +380,27 @@ func (r *TenantRepo) updateWith(ctx context.Context, q *sqlc.Queries, args tenan
 		return tenanth.Tenant{}, fmt.Errorf("update tenant: %w", err)
 	}
 	if rows == 0 {
-		// Nothing matched: a stale version, or a tenant in the trash. Read
-		// the row to say which.
-		if t, gerr := r.getWith(ctx, q, args.TenantID); gerr == nil && !t.DeletedAt.IsZero() {
-			return tenanth.Tenant{}, tenanth.ErrAlreadyDeleted
-		}
-		return tenanth.Tenant{}, tenanth.ErrVersionMismatch
+		return tenanth.Tenant{}, r.whyNotUpdated(ctx, q, args.TenantID)
 	}
 	return r.getWith(ctx, q, args.TenantID)
+}
+
+// whyNotUpdated reads the row an update matched none of to say why: the
+// tenant does not exist (ErrNotFound), it is in the trash (ErrAlreadyDeleted),
+// or it is at another resource_version (ErrVersionMismatch). A missing tenant
+// used to read as the last, which tells a caller to re-read and retry what
+// can never succeed. A probe that fails is returned as itself.
+func (r *TenantRepo) whyNotUpdated(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) error {
+	t, err := r.getWith(ctx, q, tenantID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return tenanth.ErrNotFound
+	case err != nil:
+		return fmt.Errorf("update tenant: probe: %w", err)
+	case !t.DeletedAt.IsZero():
+		return tenanth.ErrAlreadyDeleted
+	}
+	return tenanth.ErrVersionMismatch
 }
 
 // SoftDelete moves an active row to the trash. Returns ErrAlreadyDeleted

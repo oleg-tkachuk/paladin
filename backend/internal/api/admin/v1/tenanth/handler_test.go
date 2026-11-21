@@ -663,6 +663,28 @@ func TestUpdateTenant(t *testing.T) {
 		wantCode(t, err, connect.CodeAborted)
 	})
 
+	// The repository tells a missing tenant from a trashed one and from a
+	// stale version; each keeps its own code, and a store that fails is none
+	// of them.
+	for _, tc := range []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{"missing tenant → not found", ErrNotFound, connect.CodeNotFound},
+		{"trashed tenant → failed precondition", ErrAlreadyDeleted, connect.CodeFailedPrecondition},
+		{"store down → internal", errors.New("connection reset"), connect.CodeInternal},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fr := &fakeRepo{updateTxFn: func(context.Context, pgx.Tx, UpdateTenantArgs) (Tenant, error) {
+				return Tenant{}, tc.err
+			}}
+			_, err := NewHandler(fr, allow()).UpdateTenant(adminCtx(tid),
+				UpdateTenantArgs{TenantID: tid, ExpectedVersion: 4})
+			wantCode(t, err, tc.want)
+		})
+	}
+
 	t.Run("ok trims display_name and forwards", func(t *testing.T) {
 		fr := &fakeRepo{updateTxFn: func(_ context.Context, _ pgx.Tx, a UpdateTenantArgs) (Tenant, error) {
 			return Tenant{TenantID: a.TenantID, DisplayName: *a.DisplayName}, nil

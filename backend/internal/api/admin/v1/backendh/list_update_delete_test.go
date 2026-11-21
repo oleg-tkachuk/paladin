@@ -2,6 +2,7 @@ package backendh
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -178,6 +179,31 @@ func TestUpdateBackendMapsAVersionConflict(t *testing.T) {
 		admindomain.StorageBackend{BackendID: "primary"}, 1, []string{"region"})
 	if connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("code = %v, want Aborted — a stale version is a retryable conflict, not Internal", connect.CodeOf(err))
+	}
+}
+
+// The repository tells a backend that is not registered from one at another
+// version; the handler must keep the two apart, and a store that fails is
+// neither.
+func TestUpdateBackendMapsRepoSentinels(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{"absent backend", admindomain.ErrNotFound, connect.CodeNotFound},
+		{"stale version", admindomain.ErrVersionMismatch, connect.CodeAborted},
+		{"store down", errors.New("connection reset"), connect.CodeInternal},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := NewHandler(&pageRepo{updateErr: tc.err}, allowAuthorizer{})
+			_, err := h.UpdateBackend(ctxWithRoles("platform.admin"),
+				admindomain.StorageBackend{BackendID: "primary"}, 1,
+				[]string{admindomain.StorageBackendPathRegion})
+			if connect.CodeOf(err) != tc.want {
+				t.Fatalf("code = %v, want %v", connect.CodeOf(err), tc.want)
+			}
+		})
 	}
 }
 

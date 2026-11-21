@@ -9,6 +9,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // updateRepo serves one existing object to UpdateObject.
@@ -41,6 +42,7 @@ func TestUpdateObjectAuthorizesTheObject(t *testing.T) {
 	obj := Object{
 		ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "reports/q1.pdf",
 		ContentType: "application/pdf", SizeBytes: 42, Tags: map[string]string{"class": "pii"},
+		State: statemachine.StateAvailable,
 	}
 	authz := &recordingAuthorizer{}
 	h := &Handler{repo: &updateRepo{obj: obj}, policy: authz}

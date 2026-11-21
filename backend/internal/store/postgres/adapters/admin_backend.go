@@ -325,68 +325,52 @@ func (r *BackendRepoV2) List(ctx context.Context, pageSize int32, afterID, filte
 
 func (r *BackendRepoV2) Update(ctx context.Context, b admindomain.StorageBackend, expectedVersion int64, mask []string) error {
 	has := func(field string) bool { return slices.Contains(mask, field) }
-	var displayName, endpoint, publicEndpoint, region, credSecret, sseType, sseKeyID, eventsTarget, eventsQueueURL, cedarPolicy *string
-	var forcePathStyle, eventsEnabled *bool
-	var eventsPollIntervalMs *int64
-
-	if has("display_name") {
-		v := b.DisplayName
-		displayName = &v
-	}
-	if has("endpoint") {
-		v := b.Endpoint
-		endpoint = &v
-	}
-	if has("public_endpoint") {
-		v := b.PublicEndpoint
-		publicEndpoint = &v
-	}
-	if has("region") {
-		v := b.Region
-		region = &v
-	}
-	if has("force_path_style") {
-		v := b.ForcePathStyle
-		forcePathStyle = &v
-	}
-	if has("credentials_secret_ref") {
-		v := b.CredentialsSecretRef
-		credSecret = &v
-	}
-	if has("sse") {
-		t := b.SSE.Type
-		k := b.SSE.KeyID
-		sseType = &t
-		sseKeyID = &k
-	}
-	if has("events") {
-		e := b.Events.Enabled
-		t := b.Events.Target
-		q := b.Events.QueueURL
-		ms := b.Events.PollInterval.Milliseconds()
-		eventsEnabled = &e
-		eventsTarget = &t
-		eventsQueueURL = &q
-		eventsPollIntervalMs = &ms
-	}
-	if has("cedar_policy") {
-		v := b.CedarPolicy
-		cedarPolicy = &v
-	}
-
+	sse := has(admindomain.StorageBackendPathSSE)
+	events := has(admindomain.StorageBackendPathEvents)
 	rows, err := r.q.UpdateStorageBackend(ctx,
-		displayName, endpoint, publicEndpoint, region, forcePathStyle,
-		credSecret, sseType, sseKeyID, eventsEnabled, eventsTarget,
-		eventsQueueURL, eventsPollIntervalMs, cedarPolicy,
+		masked(has(admindomain.StorageBackendPathDisplayName), b.DisplayName),
+		masked(has(admindomain.StorageBackendPathEndpoint), b.Endpoint),
+		masked(has(admindomain.StorageBackendPathPublicEndpoint), b.PublicEndpoint),
+		masked(has(admindomain.StorageBackendPathRegion), b.Region),
+		masked(has(admindomain.StorageBackendPathForcePathStyle), b.ForcePathStyle),
+		masked(has(admindomain.StorageBackendPathCredentialsSecretRef), b.CredentialsSecretRef),
+		masked(sse, b.SSE.Type),
+		masked(sse, b.SSE.KeyID),
+		masked(events, b.Events.Enabled),
+		masked(events, b.Events.Target),
+		masked(events, b.Events.QueueURL),
+		masked(events, b.Events.PollInterval.Milliseconds()),
+		masked(has(admindomain.StorageBackendPathCedarPolicy), b.CedarPolicy),
 		b.BackendID, expectedVersion,
 	)
 	if err != nil {
 		return fmt.Errorf("update backend: %w", err)
 	}
-	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+	return r.guarded(ctx, b.BackendID, rows)
+}
+
+// masked is v when the update mask names its field, and nil — which the
+// UPDATE's COALESCE reads as "keep the column" — when it does not.
+func masked[T any](inMask bool, v T) *T {
+	if !inMask {
+		return nil
 	}
-	return nil
+	return &v
+}
+
+// guarded says why a guarded backend write touched no row: the backend is not
+// registered (ErrNotFound), or it is there at another resource_version
+// (ErrVersionMismatch). Update and Delete used to answer a version mismatch
+// for both, which tells a caller to re-read and retry what can never succeed.
+// A failed probe is returned as itself, not guessed at.
+func (r *BackendRepoV2) guarded(ctx context.Context, backendID string, rows int64) error {
+	if rows > 0 {
+		return nil
+	}
+	if _, err := r.Get(ctx, backendID); err != nil {
+		return err
+	}
+	return admindomain.ErrVersionMismatch
 }
 
 // SetEnabled flips the backend's enable/disable state under OCC. Returns
@@ -397,16 +381,7 @@ func (r *BackendRepoV2) SetEnabled(ctx context.Context, backendID string, enable
 	if err != nil {
 		return fmt.Errorf("set backend enabled: %w", err)
 	}
-	if rows == 0 {
-		// Distinguish "no such backend" from "version mismatch": a
-		// missing row is ErrNotFound; an existing row whose version
-		// moved on is ErrVersionMismatch.
-		if _, getErr := r.q.GetStorageBackendV2(ctx, backendID); errors.Is(getErr, pgx.ErrNoRows) {
-			return admindomain.ErrNotFound
-		}
-		return admindomain.ErrVersionMismatch
-	}
-	return nil
+	return r.guarded(ctx, backendID, rows)
 }
 
 // SetReadOnly flips the backend's drain (read-only) state under OCC
@@ -417,13 +392,7 @@ func (r *BackendRepoV2) SetReadOnly(ctx context.Context, backendID string, readO
 	if err != nil {
 		return fmt.Errorf("set backend read_only: %w", err)
 	}
-	if rows == 0 {
-		if _, getErr := r.q.GetStorageBackendV2(ctx, backendID); errors.Is(getErr, pgx.ErrNoRows) {
-			return admindomain.ErrNotFound
-		}
-		return admindomain.ErrVersionMismatch
-	}
-	return nil
+	return r.guarded(ctx, backendID, rows)
 }
 
 // SetMaintenance flips the operator-set maintenance flag under OCC
@@ -434,13 +403,7 @@ func (r *BackendRepoV2) SetMaintenance(ctx context.Context, backendID string, ma
 	if err != nil {
 		return fmt.Errorf("set backend maintenance: %w", err)
 	}
-	if rows == 0 {
-		if _, getErr := r.q.GetStorageBackendV2(ctx, backendID); errors.Is(getErr, pgx.ErrNoRows) {
-			return admindomain.ErrNotFound
-		}
-		return admindomain.ErrVersionMismatch
-	}
-	return nil
+	return r.guarded(ctx, backendID, rows)
 }
 
 // SetHealth upserts the derived health state (the schema baseline (001_initial_schema.sql)). No OCC and no
@@ -496,8 +459,5 @@ func (r *BackendRepoV2) Delete(ctx context.Context, backendID string, expectedVe
 		}
 		return err
 	}
-	if rows == 0 {
-		return admindomain.ErrVersionMismatch
-	}
-	return nil
+	return r.guarded(ctx, backendID, rows)
 }
