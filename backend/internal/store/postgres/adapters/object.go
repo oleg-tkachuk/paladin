@@ -182,10 +182,15 @@ func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uu
 	return out, nil
 }
 
+// FindByPath reads the live object at a path; objecth.ErrObjectNotFound when
+// there is none — a trashed object still holds its key but is not live.
 func (r *ObjectRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, collection, key string) (objecth.Object, error) {
 	row, err := r.q.LookupObjectByKey(ctx, pgUUID(tenantID), collection, key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return objecth.Object{}, fmt.Errorf("object at %s/%s: %w", collection, key, objecth.ErrObjectNotFound)
+	}
 	if err != nil {
-		return objecth.Object{}, err
+		return objecth.Object{}, fmt.Errorf("look up object by key: %w", err)
 	}
 	return objectFromSQLC(row.Object, row.CollectionName), nil
 }
@@ -206,11 +211,11 @@ func (r *ObjectRepo) updateMetadata(ctx context.Context, q *sqlc.Queries, args o
 	var extRef *string
 	for _, field := range args.UpdatedFields {
 		switch field {
-		case "metadata":
+		case objecth.FieldMetadata:
 			metadata = encodeMap(args.Metadata)
-		case "tags":
+		case objecth.FieldTags:
 			tags = encodeMap(args.Tags)
-		case "external_ref":
+		case objecth.FieldExternalRef:
 			e := args.ExternalRef
 			extRef = &e
 		}

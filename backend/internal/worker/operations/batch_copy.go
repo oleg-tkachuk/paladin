@@ -8,7 +8,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
@@ -296,10 +295,7 @@ func (e *BatchCopyExecutor) fill(ctx context.Context, job copyJob, dstID uuid.UU
 // rather than as the database's unique violation.
 func (e *BatchCopyExecutor) occupiedDestination(ctx context.Context, job copyJob) error {
 	dst, err := e.Objects.FindByPath(ctx, job.args.TenantID, job.args.DstCollection, job.dstKey)
-	// FindByPath hands back the query's own pgx.ErrNoRows, unmapped — unlike
-	// FindByName, which maps it to objecth.ErrObjectNotFound. Mapping one
-	// without the other moves this branch into the lookup error below.
-	if errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, objecth.ErrObjectNotFound) {
 		// FindByPath skips DELETED rows, and a trashed object still holds its
 		// key.
 		return fmt.Errorf("destination key %q is held by an object in the trash", job.dstKey)

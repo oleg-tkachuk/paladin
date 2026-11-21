@@ -8,6 +8,8 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -61,6 +63,14 @@ type TaintHandler struct {
 	objects Repository
 	taints  TaintRepository
 	policy  cedar.Authorizer
+	log     *zap.Logger
+}
+
+// SetLogger sets where SetTaint says how it ended. Unset, nothing is logged.
+func (h *TaintHandler) SetLogger(l *zap.Logger) {
+	if h != nil { // the wiring builds none where its repository is not wired
+		h.log = l
+	}
 }
 
 // NewTaintHandler builds the handler.
@@ -71,8 +81,12 @@ func NewTaintHandler(objects Repository, taints TaintRepository, policy cedar.Au
 // SetTaint replaces an object's taint signals; an empty list clears them.
 // Gated by its own Cedar action, and for a capability by OpManage on the
 // object: clearing a flag re-opens content to agents.
-func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string, signals []string) (*Object, error) {
-	signals, err := normaliseTaint(signals)
+func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string, signals []string) (_ *Object, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opSetTaint, zapcore.InfoLevel, err,
+			append(objectFields(collection, objectID), zap.Strings("signals", signals))...)
+	}()
+	signals, err = normaliseTaint(signals)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
 	}

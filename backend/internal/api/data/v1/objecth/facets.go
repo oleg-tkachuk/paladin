@@ -10,6 +10,8 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -272,7 +274,10 @@ type TagCount struct {
 // admit — every constraint of in but the facet's own choices. It returns nil
 // when the collection's policies decide object by object, since the counts
 // would then include objects the listing does not return.
-func (h *Handler) CountObjectFacets(ctx context.Context, in ListObjectsInput) (*ObjectFacetCounts, error) {
+func (h *Handler) CountObjectFacets(ctx context.Context, in ListObjectsInput) (_ *ObjectFacetCounts, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opCountFacets, zapcore.DebugLevel, err, zap.String(fieldCollection, in.Collection))
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err

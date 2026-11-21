@@ -156,7 +156,7 @@ func (s *ObjectServer) LookupObject(ctx context.Context, req *pb.LookupObjectReq
 // updateObjectPaths are the UpdateObjectRequest fields UpdateObject applies.
 // content_type is on the request but nothing applies it, so it is refused
 // rather than reported as updated.
-var updateObjectPaths = []string{"metadata", "tags", "external_ref"}
+var updateObjectPaths = []string{objecth.FieldMetadata, objecth.FieldTags, objecth.FieldExternalRef}
 
 func (s *ObjectServer) UpdateObject(ctx context.Context, req *pb.UpdateObjectRequest) (*pb.Object, error) {
 	m := req

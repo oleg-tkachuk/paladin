@@ -28,6 +28,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -127,9 +128,30 @@ type BucketMeta struct {
 // ObjectLock is the object row's lock state (object-level, distinct from
 // the per-version locks the object_versions trigger enforces).
 type ObjectLock struct {
-	Mode        string // "", "GOVERNANCE", or "COMPLIANCE"
+	Mode        string // "", LockModeGovernance or LockModeCompliance
 	RetainUntil *time.Time
 	LegalHold   bool
+}
+
+// The retention modes, as the API and the object_lock_mode SQL enum spell
+// them.
+const (
+	LockModeGovernance = "GOVERNANCE"
+	LockModeCompliance = "COMPLIANCE"
+)
+
+// RoleLockGovernanceBypass is the role that may weaken or delete through a
+// GOVERNANCE retention window.
+const RoleLockGovernanceBypass = "lock.governance.bypass"
+
+// msgBypassNeedsRole refuses a governance bypass to a caller without the role.
+const msgBypassNeedsRole = "bypass_governance_retention requires role " +
+	RoleLockGovernanceBypass + " or " + apiutil.RolePlatformAdmin
+
+// mayBypassGovernance reports whether p holds a role that may bypass a
+// GOVERNANCE retention window.
+func mayBypassGovernance(p *auth.Principal) bool {
+	return p != nil && (p.HasRole(RoleLockGovernanceBypass) || p.HasRole(apiutil.RolePlatformAdmin))
 }
 
 // Active reports whether the lock blocks deletion right now. governanceBypass
@@ -140,10 +162,10 @@ func (l ObjectLock) Active(now time.Time, governanceBypass bool) bool {
 		return true
 	}
 	retained := l.RetainUntil != nil && l.RetainUntil.After(now)
-	if l.Mode == "COMPLIANCE" && retained {
+	if l.Mode == LockModeCompliance && retained {
 		return true
 	}
-	if l.Mode == "GOVERNANCE" && retained && !governanceBypass {
+	if l.Mode == LockModeGovernance && retained && !governanceBypass {
 		return true
 	}
 	return false
@@ -471,12 +493,19 @@ type UpdateMetadataArgs struct {
 	TenantID        uuid.UUID
 	ObjectID        uuid.UUID
 	ResourceVersion int64
-	UpdatedFields   []string // "metadata","tags","content_type","external_ref"
+	UpdatedFields   []string // FieldMetadata, FieldTags, FieldExternalRef
 	Metadata        map[string]string
 	Tags            map[string]string
 	ContentType     string
 	ExternalRef     string
 }
+
+// The UpdateObject field-mask paths a metadata update writes.
+const (
+	FieldMetadata    = "metadata"
+	FieldTags        = "tags"
+	FieldExternalRef = "external_ref"
+)
 
 type ListObjectsArgs struct {
 	TenantID    uuid.UUID
@@ -577,9 +606,11 @@ type QuotaUpdater interface {
 // SetQuotaUpdater attaches the optional usage hook. Wired by main.
 func (h *Handler) SetQuotaUpdater(q QuotaUpdater) { h.quota = q }
 
-// SetEventProducer / SetLogger — same opt-in contract as the admin
-// handlers. nil-safe via dispatchEvent's guard.
+// SetEventProducer — same opt-in contract as the admin handlers. nil-safe
+// via dispatchEvent's guard.
 func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
+
+// SetLogger sets where each RPC says how it ended; nil keeps the current one.
 func (h *Handler) SetLogger(l *zap.Logger) {
 	if l != nil {
 		h.log = l
@@ -667,6 +698,7 @@ func NewHandler(
 		filter:  filter,
 		sm:      sm,
 		presign: cfg,
+		log:     zap.NewNop(),
 	}
 }
 
@@ -720,6 +752,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	}
 	defer func() {
 		metrics.RecordPresign(ctx, presignOp, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		logOutcome(ctx, h.log, opUpload, zapcore.InfoLevel, err, zap.String(fieldCollection, in.Collection))
 	}()
 
 	tenantID, err := auth.EffectiveTenant(ctx)
@@ -905,7 +938,10 @@ type CompleteObjectInput struct {
 // CompleteObject is idempotent: if an event has already promoted the object,
 // it returns the current state without error. If the object is still PENDING,
 // it HEADs the backend to retrieve authoritative etag/size/sequencer.
-func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*Object, error) {
+func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_ *Object, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opComplete, zapcore.InfoLevel, err, objectFields(in.Collection, in.ObjectID)...)
+	}()
 	tenantID, err := auth.EffectiveTenant(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
@@ -958,7 +994,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (*
 	}
 	etag, size, checksum, seq, err := h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("object not uploaded yet: %w", err))
+		return nil, headFailure(err)
 	}
 	if in.ETag != "" && etag != in.ETag {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -1071,7 +1107,10 @@ func checkDelimiter(d string) error {
 // in.Delimiter is set, and nothing otherwise: bytewise, at most
 // MaxCommonPrefixes, and whether more exist. The same gates as ListObjects
 // hold it, and the filter must compile, though only its state narrows them.
-func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) ([]string, bool, error) {
+func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) (_ []string, _ bool, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opListFolders, zapcore.DebugLevel, err, zap.String(fieldCollection, in.Collection))
+	}()
 	in.Filter = withFacets(in.Filter, in.Facets)
 	if in.Delimiter == "" {
 		return nil, false, nil
@@ -1114,7 +1153,10 @@ func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) (
 // a CEL expression against ObjectSchema. Per-row Cedar authorization is
 // skipped — listing is permitted for any authenticated tenant member to keep
 // pagination cheap (same contract as ListCollections).
-func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) ([]Object, string, error) {
+func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) (_ []Object, _ string, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opList, zapcore.DebugLevel, err, zap.String(fieldCollection, in.Collection))
+	}()
 	in.Filter = withFacets(in.Filter, in.Facets)
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
@@ -1261,7 +1303,10 @@ type CountObjectsOutput struct {
 // optional CEL filter. With no filter the adapter uses a direct COUNT(*) and
 // returns exact=true; with a filter it iterates rows applying CEL and may
 // return an approximate result when the scan cap is hit.
-func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (*CountObjectsOutput, error) {
+func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (_ *CountObjectsOutput, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opCount, zapcore.DebugLevel, err, zap.String(fieldCollection, in.Collection))
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1324,7 +1369,10 @@ const distinctTagValueLimit = 100
 // check (no per-row authz — the result is an aggregate, not object data).
 func (h *Handler) ListDistinctTags(
 	ctx context.Context, collection, pageToken string, pageSize int32,
-) (DistinctTagPage, error) {
+) (_ DistinctTagPage, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opListTags, zapcore.DebugLevel, err, zap.String(fieldCollection, collection))
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return DistinctTagPage{}, err
@@ -1366,7 +1414,8 @@ func (h *Handler) ListDistinctTags(
 // The double gate is intentional: capabilities narrow what an agent can
 // do; Cedar enforces tenant-admin policy. Both must agree before the
 // read happens.
-func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (*Object, error) {
+func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (_ *Object, err error) {
+	defer func() { logOutcome(ctx, h.log, opGet, zapcore.DebugLevel, err, objectFields(collection, objectID)...) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1416,7 +1465,14 @@ func (h *Handler) attachLock(ctx context.Context, tenantID uuid.UUID, obj *Objec
 
 // LookupObject resolves an object by (collection, key) instead of object_id —
 // useful when callers only have the path-style identifier (S3-style).
-func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Object, error) {
+func (h *Handler) LookupObject(ctx context.Context, collection, key string) (out *Object, err error) {
+	defer func() {
+		fields := []zap.Field{zap.String(fieldCollection, collection)}
+		if out != nil {
+			fields = append(fields, zap.String(fieldObjectID, out.ObjectID.String()))
+		}
+		logOutcome(ctx, h.log, opLookup, zapcore.DebugLevel, err, fields...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1427,7 +1483,7 @@ func (h *Handler) LookupObject(ctx context.Context, collection, key string) (*Ob
 	}
 	obj, err := h.repo.FindByPath(ctx, tenantID, collection, key)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, objectLookupError(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), obj.Collection, obj.Key)
 	if err := auth.AssertCapabilityOp(ctx, limes.OpGet, objectURI); err != nil {
@@ -1468,6 +1524,7 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	start := time.Now()
 	defer func() {
 		metrics.RecordPresign(ctx, metrics.PresignOpGet, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		logOutcome(ctx, h.log, opDownload, zapcore.DebugLevel, err, objectFields(collection, objectID)...)
 	}()
 
 	tenantID, principal, err := apiutil.ActingContext(ctx)
@@ -1562,7 +1619,10 @@ type UpdateObjectInput struct {
 	ExternalRef     string
 }
 
-func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (*Object, error) {
+func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (_ *Object, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opUpdate, zapcore.InfoLevel, err, objectFields(in.Collection, in.ObjectID)...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -1663,7 +1723,11 @@ func (h *Handler) writeMetadata(ctx context.Context, tenantID, objectID uuid.UUI
 // the object from S3 first, then drops the row. bypassGovernance opt-in
 // honored only for callers holding `lock.governance.bypass` or
 // `platform.admin` — protects compliance-mode locks regardless.
-func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) error {
+func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, resourceVersion string, permanent, bypassGovernance bool) (err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opDelete, zapcore.InfoLevel, err,
+			append(objectFields(collection, objectIDStr), zap.Bool("permanent", permanent))...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return err
@@ -1772,9 +1836,8 @@ func (h *Handler) assertBypassAllowed(principal *auth.Principal, bypassGovernanc
 	if !bypassGovernance {
 		return nil
 	}
-	if principal == nil || (!principal.HasRole("lock.governance.bypass") && !principal.HasRole("platform.admin")) {
-		return connect.NewError(connect.CodePermissionDenied,
-			"bypass_governance_retention requires role lock.governance.bypass or platform.admin")
+	if !mayBypassGovernance(principal) {
+		return connect.NewError(connect.CodePermissionDenied, msgBypassNeedsRole)
 	}
 	return nil
 }
@@ -1957,7 +2020,10 @@ func (h *Handler) PermanentDelete(
 // rather than skipping the check.
 // Versioning-aware: when bucket has versioning_enabled, also drops the most
 // recent delete-marker before flipping state.
-func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (*Object, error) {
+func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, resourceVersion string) (_ *Object, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opRestore, zapcore.InfoLevel, err, objectFields(collection, objectIDStr)...)
+	}()
 	// Shape of the request first — no identity, no lookup needed. Same order
 	// as VersionHandler.RestoreVersion, and it means the refusal cannot be
 	// mistaken for an authentication failure.
@@ -2070,7 +2136,14 @@ type CopyObjectInput struct {
 	Tags             map[string]string
 }
 
-func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (*Object, error) {
+func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (out *Object, err error) {
+	defer func() {
+		fields := append(objectFields(in.SourceCollection, in.SourceObjectID), zap.String("dest_collection", in.DestCollection))
+		if out != nil {
+			fields = append(fields, zap.String("dest_object_id", out.ObjectID.String()))
+		}
+		logOutcome(ctx, h.log, opCopy, zapcore.InfoLevel, err, fields...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -2285,6 +2358,16 @@ func mapCreateErr(err error) error {
 		return connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
 	}
 	return apiutil.MapError(err)
+}
+
+// headFailure answers a HEAD that failed while completing an upload: nothing
+// at the key is the caller's to fix by uploading; a backend that could not be
+// asked is unavailable, not a refusal.
+func headFailure(err error) error {
+	if errors.Is(err, ErrStoredObjectNotFound) {
+		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("object not uploaded yet: %w", err))
+	}
+	return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check the uploaded bytes: %w", err))
 }
 
 // assertBytesPresent HEADs a trashed object before it is restored. Its bytes

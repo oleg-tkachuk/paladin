@@ -51,7 +51,7 @@ func (s *ObjectTagServer) PutObjectTags(ctx context.Context, req *pb.PutObjectTa
 		Collection:      collection,
 		ObjectID:        objectID,
 		ResourceVersion: rv,
-		UpdatedFields:   []string{"tags"},
+		UpdatedFields:   []string{objecth.FieldTags},
 		Tags:            m.GetTags(),
 	})
 	if err != nil {
@@ -93,7 +93,7 @@ func (s *ObjectTagServer) DeleteObjectTags(ctx context.Context, req *pb.DeleteOb
 		Collection:      collection,
 		ObjectID:        objectID,
 		ResourceVersion: rv,
-		UpdatedFields:   []string{"tags"},
+		UpdatedFields:   []string{objecth.FieldTags},
 		Tags:            updated,
 	})
 	if err != nil {

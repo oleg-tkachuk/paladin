@@ -9,6 +9,8 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -33,6 +35,15 @@ type VersionHandler struct {
 	// policy authorises the versioning RPCs. Without it they refuse rather
 	// than run unchecked — which is how they ran before it existed.
 	policy cedar.Authorizer
+	log    *zap.Logger
+}
+
+// SetLogger sets where each versioning RPC says how it ended. Unset, nothing
+// is logged.
+func (h *VersionHandler) SetLogger(l *zap.Logger) {
+	if h != nil { // the wiring builds none where its repository is not wired
+		h.log = l
+	}
 }
 
 // errNoVersionAuthorizer is what a versioning RPC returns when the handler was
@@ -139,7 +150,10 @@ type ListVersionsInput struct {
 	PageToken  string
 }
 
-func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput) ([]ObjectVersion, string, error) {
+func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput) (_ []ObjectVersion, _ string, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opListVersions, zapcore.DebugLevel, err, objectFields(in.Collection, in.ObjectID)...)
+	}()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, "", err
@@ -168,7 +182,8 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 
 // ─── Get ────────────────────────────────────────────────────────────────────
 
-func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVersion, error) {
+func (h *VersionHandler) GetVersion(ctx context.Context, name string) (_ *ObjectVersion, err error) {
+	defer func() { logOutcome(ctx, h.log, opGetVersion, zapcore.DebugLevel, err, zap.String("version", name)) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -210,7 +225,8 @@ func (h *VersionHandler) GetVersion(ctx context.Context, name string) (*ObjectVe
 // that is the row a concurrent writer would be racing for. It is mandatory.
 // The field existed on the request for a while but was never read here, so a
 // console that dutifully sent it got no protection from it.
-func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersion string) (*Object, error) {
+func (h *VersionHandler) RestoreVersion(ctx context.Context, name, resourceVersion string) (_ *Object, err error) {
+	defer func() { logOutcome(ctx, h.log, opRestoreVersion, zapcore.InfoLevel, err, zap.String("version", name)) }()
 	// Shape of the request first: this needs no identity and no lookup, and
 	// checking it here rather than trusting protovalidate means callers that
 	// reach the handler by another route get the same guarantee.

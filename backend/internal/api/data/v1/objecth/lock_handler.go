@@ -8,6 +8,8 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -99,7 +101,29 @@ type LockHandler struct {
 	versions VersionRepository
 	locks    LockRepository
 	policy   cedar.Authorizer
+	log      *zap.Logger
 }
+
+// SetLogger sets where each lock RPC says how it ended. Unset, nothing is
+// logged.
+func (h *LockHandler) SetLogger(l *zap.Logger) {
+	if h != nil { // the wiring builds none where its repository is not wired
+		h.log = l
+	}
+}
+
+// The object-lock metric's op and outcome labels.
+const (
+	lockMetricRetention = "retention"
+	lockMetricLegalHold = "legal_hold"
+
+	lockOutcomeApplied           = "applied"
+	lockOutcomeAppliedWithBypass = "applied_with_bypass"
+	lockOutcomeRefusedWeakening  = "refused_weakening"
+	lockOutcomeError             = "error"
+	lockOutcomePlaced            = "placed"
+	lockOutcomeReleased          = "released"
+)
 
 func NewLockHandler(objects Repository, versions VersionRepository, locks LockRepository, policy cedar.Authorizer) *LockHandler {
 	return &LockHandler{objects: objects, versions: versions, locks: locks, policy: policy}
@@ -116,10 +140,15 @@ type SetRetentionInput struct {
 
 // SetRetention applies or extends a retention window on the object's current
 // version.
-func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (ObjectLock, error) {
-	if in.Mode != "GOVERNANCE" && in.Mode != "COMPLIANCE" {
+func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (_ ObjectLock, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opSetRetention, zapcore.InfoLevel, err,
+			append(objectFields(in.Collection, in.ObjectID), zap.String("mode", in.Mode),
+				zap.Bool("bypass_governance", in.BypassGovernance))...)
+	}()
+	if in.Mode != LockModeGovernance && in.Mode != LockModeCompliance {
 		return ObjectLock{}, connect.Errorf(connect.CodeInvalidArgument,
-			"mode must be GOVERNANCE or COMPLIANCE, got %q", in.Mode)
+			"mode must be %s or %s, got %q", LockModeGovernance, LockModeCompliance, in.Mode)
 	}
 	if !in.RetainUntil.After(time.Now()) {
 		// A window that has already closed asserts nothing but leaves a row
@@ -139,10 +168,8 @@ func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (O
 	// The bypass flag is a request to weaken a control, so it is gated on a
 	// role rather than on the Cedar action that got us here — the same gate
 	// DeleteObject uses, and for the same reason.
-	if in.BypassGovernance && !res.principal.HasRole("lock.governance.bypass") &&
-		!res.principal.HasRole(apiutil.RolePlatformAdmin) {
-		return ObjectLock{}, connect.NewError(connect.CodePermissionDenied,
-			"bypass_governance_retention requires role lock.governance.bypass or platform.admin")
+	if in.BypassGovernance && !mayBypassGovernance(res.principal) {
+		return ObjectLock{}, connect.NewError(connect.CodePermissionDenied, msgBypassNeedsRole)
 	}
 
 	lock, err := h.locks.SetRetention(ctx, SetRetentionArgs{
@@ -154,26 +181,30 @@ func (h *LockHandler) SetRetention(ctx context.Context, in SetRetentionInput) (O
 	})
 	if err != nil {
 		if errors.Is(err, ErrRetentionWeakened) {
-			metrics.RecordObjectLock(ctx, "retention", in.Mode, "refused_weakening")
+			metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, lockOutcomeRefusedWeakening)
 			return ObjectLock{}, connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 		}
-		metrics.RecordObjectLock(ctx, "retention", in.Mode, "error")
+		metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, lockOutcomeError)
 		return ObjectLock{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	// A COMPLIANCE window cannot be shortened by anyone, so every one of these
 	// is an irreversible commitment of storage until its date passes. Counting
 	// them is the only way an operator learns how much of that has accumulated
 	// before the bill or the capacity alert does the telling.
-	outcome := "applied"
+	outcome := lockOutcomeApplied
 	if in.BypassGovernance {
-		outcome = "applied_with_bypass"
+		outcome = lockOutcomeAppliedWithBypass
 	}
-	metrics.RecordObjectLock(ctx, "retention", in.Mode, outcome)
+	metrics.RecordObjectLock(ctx, lockMetricRetention, in.Mode, outcome)
 	return lock, nil
 }
 
 // SetLegalHold turns a legal hold on or off on the object's current version.
-func (h *LockHandler) SetLegalHold(ctx context.Context, collection, objectID string, hold bool) (ObjectLock, error) {
+func (h *LockHandler) SetLegalHold(ctx context.Context, collection, objectID string, hold bool) (_ ObjectLock, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opSetLegalHold, zapcore.InfoLevel, err,
+			append(objectFields(collection, objectID), zap.Bool("hold", hold))...)
+	}()
 	res, err := h.resolve(ctx, collection, objectID, cedar.ActionSetObjectLegalHold)
 	if err != nil {
 		return ObjectLock{}, err
@@ -188,19 +219,22 @@ func (h *LockHandler) SetLegalHold(ctx context.Context, collection, objectID str
 
 	lock, err := h.locks.SetLegalHold(ctx, res.tenantID, res.versionID, hold)
 	if err != nil {
-		metrics.RecordObjectLock(ctx, "legal_hold", "", "error")
+		metrics.RecordObjectLock(ctx, lockMetricLegalHold, "", lockOutcomeError)
 		return ObjectLock{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
-	outcome := "released"
+	outcome := lockOutcomeReleased
 	if hold {
-		outcome = "placed"
+		outcome = lockOutcomePlaced
 	}
-	metrics.RecordObjectLock(ctx, "legal_hold", "", outcome)
+	metrics.RecordObjectLock(ctx, lockMetricLegalHold, "", outcome)
 	return lock, nil
 }
 
 // GetLock reads the lock on the object's current version.
-func (h *LockHandler) GetLock(ctx context.Context, collection, objectID string) (ObjectLock, error) {
+func (h *LockHandler) GetLock(ctx context.Context, collection, objectID string) (_ ObjectLock, err error) {
+	defer func() {
+		logOutcome(ctx, h.log, opGetLock, zapcore.DebugLevel, err, objectFields(collection, objectID)...)
+	}()
 	res, err := h.resolve(ctx, collection, objectID, cedar.ActionReadObjectLock)
 	if err != nil {
 		return ObjectLock{}, err

@@ -183,7 +183,7 @@ func TestCompleteObjectRefusesWhenNothingWasUploaded(t *testing.T) {
 	// upload it never made. FailedPrecondition, not Internal: the caller can
 	// fix it by uploading.
 	obj := Object{ObjectID: uuid.NewV7(), Collection: "docs", State: statemachine.StatePending}
-	h, _, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{err: errors.New("404")})
+	h, _, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{err: ErrStoredObjectNotFound})
 
 	_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: obj.ObjectID.String()})
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
