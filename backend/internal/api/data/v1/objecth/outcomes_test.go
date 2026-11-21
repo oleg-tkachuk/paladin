@@ -133,11 +133,11 @@ func TestObjectOutcomeLevels(t *testing.T) {
 // A change is logged at info.
 func TestObjectChangeIsLoggedAtInfo(t *testing.T) {
 	core, logs := observer.New(zapcore.DebugLevel)
-	repo := &stateUpdateRepo{cur: Object{ObjectID: uuid.New(), Collection: "docs", State: statemachine.StateAvailable, ResourceVersion: 1}}
+	repo := &updateRepo{obj: Object{ObjectID: uuid.New(), Collection: "docs", State: statemachine.StateAvailable, ResourceVersion: 1}}
 	h := &Handler{repo: repo, policy: allowAll{}}
 	h.SetLogger(zap.New(core))
 	if _, err := h.UpdateObject(purgeCtx(uuid.New()), UpdateObjectInput{
-		Collection: "docs", ObjectID: repo.cur.ObjectID.String(), ResourceVersion: 1, UpdatedFields: []string{FieldTags},
+		Collection: "docs", ObjectID: repo.obj.ObjectID.String(), ResourceVersion: 1, UpdatedFields: []string{FieldTags},
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,6 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -70,27 +69,6 @@ func TestCompleteObjectHeadFailures(t *testing.T) {
 			}
 		})
 	}
-}
-
-// stateUpdateRepo reads cur and counts the updates it was asked for.
-type stateUpdateRepo struct {
-	fakeObjectRepo
-	cur       Object
-	updateErr error
-	updates   int
-}
-
-func (r *stateUpdateRepo) FindByName(context.Context, uuid.UUID, string, string) (Object, error) {
-	return r.cur, nil
-}
-
-func (r *stateUpdateRepo) RunInTx(ctx context.Context, fn func(context.Context, pgx.Tx) error) error {
-	return fn(ctx, nil)
-}
-
-func (r *stateUpdateRepo) UpdateMetadataTx(context.Context, pgx.Tx, UpdateMetadataArgs) (Object, error) {
-	r.updates++
-	return r.cur, r.updateErr
 }
 
 func TestAssertBypassAllowed(t *testing.T) {

@@ -515,6 +515,44 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
+## Data-plane handlers
+
+### Best-effort reads in objecth fail silently
+
+- **Status:** Deferred.
+- **Reason:** the object handler resolves a collection's bucket before
+  authorizing (`x, y, _ := h.repo.LookupBucket(..., false)` in about eight
+  RPCs), and `canonicalObjectPrefix`, `GetVersion`'s current-version read and
+  `UnsetDeleteMarkerCurrent` swallow their errors the same way. The
+  best-effort design is deliberate, but a store failure there turns into a
+  scoped token's PermissionDenied or a missing pointer with no log line.
+- **Definition of Done:** each swallowed error is logged at Warn with the op,
+  tenant and collection through one shared helper, with a test; the codes the
+  caller sees stay as they are.
+- **Blockers:** none.
+
+### A composite checksum recorded on no row goes unnoticed
+
+- **Status:** Deferred.
+- **Reason:** `MultipartRepo.RecordCompositeChecksum` discards its row count,
+  so a completion whose object is no longer PENDING (promoted by a storage
+  event, or discarded) records nothing and goes on to assemble the parts.
+  Whether that should be a refusal or a no-op is a design question.
+- **Definition of Done:** a zero-row write is told apart — a sentinel the
+  handler maps, or a logged no-op — with a test of each case.
+- **Blockers:** deciding what a retried completion of a promoted object
+  should answer.
+
+### paladin.object.purged names the backend under two keys
+
+- **Status:** Deferred.
+- **Reason:** the object handler's purge event carries `backend_id`; the
+  purge drainer and the lifecycle hard delete carry `backend`. Renaming
+  either is a change subscribers see.
+- **Definition of Done:** one key in every producer, shared as a constant,
+  with an upgrading note for the one that changes.
+- **Blockers:** choosing which spelling stays.
+
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)
