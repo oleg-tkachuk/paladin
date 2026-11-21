@@ -251,6 +251,11 @@ type SignalTenantsResult struct {
 	TenantNames map[string]TenantName
 }
 
+// msgCensusUnavailable is what a caller is told when the worker's census
+// could not be read. The worker's address and its HTTP client's words stay the
+// cause, which the RPC log line carries.
+const msgCensusUnavailable = "the worker's census could not be read; retry"
+
 // PlatformStatsTenants answers "whose" for one of the census counts the
 // console flags. Unlike PlatformStats it has no degraded answer: it is only
 // asked for once the census has shown the count, so a worker that cannot
@@ -264,7 +269,7 @@ func (h *Handler) PlatformStatsTenants(ctx context.Context, signal platformstats
 		platformstats.SignalTenantsPath+"?"+platformstats.SignalQuery(signal, page).Encode(), &tenants); err != nil {
 		h.log.Warn("platform stats: signal tenants unavailable",
 			zap.String("endpoint", platformstats.SignalTenantsPath), zap.String("signal", string(signal)), zap.Error(err))
-		return nil, rpcerr.New(connect.CodeUnavailable, fmt.Errorf("worker census: %w", err))
+		return nil, connect.NewError(connect.CodeUnavailable, msgCensusUnavailable).WithCause(fmt.Errorf("worker census: %w", err))
 	}
 
 	ids := make([]string, 0, len(tenants.Tenants))

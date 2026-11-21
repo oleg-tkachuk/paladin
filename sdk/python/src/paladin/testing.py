@@ -389,8 +389,8 @@ _EXPECTED_BEARER = "expected Bearer token"
 _EMPTY_TOKEN = "empty token"
 _JWT_MALFORMED = "jwt: malformed token"
 _JWT_EXPIRED = "jwt: token expired"
-_API_TOKEN_NOT_FOUND = "api_token: token not found"
-_API_TOKEN_REVOKED = "api_token: token revoked"
+_API_TOKEN_NOT_FOUND = "API token not found"
+_API_TOKEN_REVOKED = "API token revoked"
 _CAPABILITY_UNKNOWN = "The access token is invalid"
 """The server's words for a capability it did not issue: the title of its
 library's problem, as for every refusal of the library's

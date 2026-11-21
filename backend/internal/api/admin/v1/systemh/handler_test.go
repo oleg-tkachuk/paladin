@@ -2,6 +2,7 @@ package systemh
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -281,6 +282,11 @@ func TestPlatformStatsTenants_NoWorkerAnswerIsUnavailable(t *testing.T) {
 				platformstats.SignalQuotaAtLimit, platformstats.TenantPage{})
 			if connect.CodeOf(err) != connect.CodeUnavailable {
 				t.Errorf("err = %v, want Unavailable", err)
+			}
+			// The worker's address and its HTTP client's words are the
+			// log's; the caller reads what could not be done.
+			if cerr, ok := errors.AsType[*connect.Error](err); !ok || cerr.Message() != msgCensusUnavailable {
+				t.Errorf("err = %v, want the message %q", err, msgCensusUnavailable)
 			}
 		})
 	}

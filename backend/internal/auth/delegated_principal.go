@@ -90,7 +90,7 @@ func (i *capabilityInterceptor) delegatedPrincipal(ctx context.Context, c *limes
 		return refuse(err)
 	case err != nil:
 		log.Error("delegated capability's user not read", zap.String("user_id", id.String()), zap.Error(err))
-		return nil, capabilityError(connect.CodeUnavailable, fmt.Errorf("auth: user %s: %w", id, err))
+		return nil, capabilityUncheckedError(fmt.Errorf("read delegating user %s: %w", id, err))
 	case user.Disabled || user.TenantID != c.OnBehalfOf.TenantID:
 		return refuse(fmt.Errorf("user %s may no longer act in tenant %s", id, c.OnBehalfOf.TenantID))
 	}

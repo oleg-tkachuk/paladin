@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -128,8 +129,56 @@ func TestDeleteBucketHeldByANonCollectionIsAConflict(t *testing.T) {
 	if !errors.Is(err, admindomain.ErrConflict) {
 		t.Fatalf("Delete = %v, want ErrConflict", err)
 	}
-	if got := err.Error(); !strings.Contains(got, "tenant_default_bindings") {
-		t.Errorf("the error must name what is holding the bucket.\ngot: %v", got)
+	// What is holding it, in the caller's terms: the table and the
+	// constraint are the log's.
+	if want := `conflict: bucket "` + bucketName + `": held by tenant default bindings`; err.Error() != want {
+		t.Errorf("the error must name what is holding the bucket.\ngot:  %v\nwant: %v", err, want)
+	}
+	assertNoSchemaNames(t, err)
+}
+
+// schemaNames are what a refusal built from a foreign-key violation must not
+// carry: a table, a constraint, a SQLSTATE.
+var schemaNames = []string{"tenant_default_bindings", "_fkey", "SQLSTATE", "users_tenant_id"}
+
+func assertNoSchemaNames(t *testing.T, err error) {
+	t.Helper()
+	for _, s := range schemaNames {
+		if strings.Contains(err.Error(), s) {
+			t.Errorf("%q carries %q", err, s)
+		}
+	}
+}
+
+// TestEveryBlockingRelationHasANoun: a foreign key that refuses deleting a
+// tenant or a bucket is reported by the resource it holds, and that noun
+// comes from admindomain's list. A new such table without a noun would be
+// told to the caller as "other records" — this names it instead.
+func TestEveryBlockingRelationHasANoun(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT c.conrelid::regclass::text
+		FROM pg_constraint c
+		WHERE c.confrelid IN ('buckets'::regclass, 'tenants'::regclass)
+		  AND c.contype = 'f'
+		  AND c.confdeltype IN ('r', 'a')`)
+	if err != nil {
+		t.Fatalf("read pg_constraint: %v", err)
+	}
+	relations, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	if len(relations) == 0 {
+		t.Fatal("no refusing references to tenants or buckets found: the query stopped matching")
+	}
+	for _, r := range relations {
+		if !admindomain.HasRelationNoun(r) {
+			t.Errorf("%s refuses a delete but has no noun in admindomain.RelationNoun", r)
+		}
 	}
 }
 
@@ -161,8 +210,13 @@ func TestPurgeTenantNamesTheRelationHoldingIt(t *testing.T) {
 	if err == nil {
 		t.Fatal("HardDelete on a tenant with a user: want a refusal")
 	}
-	if !strings.Contains(err.Error(), "users") {
-		t.Errorf("the message must name what is holding the tenant.\ngot: %v", err)
+	const want = "tenant still owns resources; remove them before purging it: held by users"
+	if err.Error() != want {
+		t.Errorf("the message must name what is holding the tenant.\ngot:  %v\nwant: %v", err, want)
+	}
+	assertNoSchemaNames(t, err)
+	if got := pgerr.Table(err); got != admindomain.RelationUsers {
+		t.Errorf("the driver's error left the chain: table %q, want %q for the log", got, admindomain.RelationUsers)
 	}
 	if strings.Contains(err.Error(), "object keys") {
 		t.Errorf("the old guess is back.\ngot: %v", err)

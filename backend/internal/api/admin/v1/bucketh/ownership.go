@@ -9,7 +9,6 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
-	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
@@ -62,6 +61,11 @@ func (h *Handler) isReserved(bucket string) bool {
 	return h.reserved.Prefix != "" && strings.HasPrefix(bucket, h.reserved.Prefix)
 }
 
+// msgBucketUnchecked is what a caller is told when the backend could not be
+// asked whether a bucket exists. The backend's answer names its endpoint and
+// request id; it stays the cause, which the RPC log line carries.
+const msgBucketUnchecked = "the backend could not be asked whether the bucket exists; retry"
+
 // checkOwnership refuses a row for a bucket Paladin should not take:
 // a reserved one, an existing one to provision, or a missing one to adopt.
 func (h *Handler) checkOwnership(ctx context.Context, backendID, bucket string, provision bool) error {
@@ -73,7 +77,7 @@ func (h *Handler) checkOwnership(ctx context.Context, backendID, bucket string, 
 	}
 	exists, err := h.provisioner.BucketExists(ctx, backendID, bucket)
 	if err != nil {
-		return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check bucket on backend: %w", err))
+		return connect.NewError(connect.CodeUnavailable, msgBucketUnchecked).WithCause(fmt.Errorf("check bucket on backend: %w", err))
 	}
 	switch {
 	case provision && exists:

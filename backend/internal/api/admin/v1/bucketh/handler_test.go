@@ -2,6 +2,7 @@ package bucketh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -522,9 +523,15 @@ func TestDeleteBucket_RefusesForANonCollectionHolder(t *testing.T) {
 	if code(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v, want FailedPrecondition (%v)", code(err), err)
 	}
-	if msg := err.Error(); !strings.Contains(msg, "tenant_default_bindings") {
+	// In the caller's terms: a table name is nothing a caller has seen.
+	const want = `bucket "acme" is still referenced by 1 tenant default bindings; remove those first`
+	cerr, ok := errors.AsType[*connect.Error](err)
+	if !ok {
+		t.Fatalf("not a connect error: %v", err)
+	}
+	if msg := cerr.Message(); msg != want {
 		t.Errorf("the message must name what is holding the bucket, or the "+
-			"operator is back to guessing.\ngot: %v", msg)
+			"operator is back to guessing.\ngot:  %v\nwant: %v", msg, want)
 	}
 	if msg := err.Error(); strings.Contains(msg, "0 collections") {
 		t.Errorf("relations with nothing in them must not be listed.\ngot: %v", msg)

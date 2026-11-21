@@ -239,8 +239,14 @@ func TestARefusedPurgeErasesNothing(t *testing.T) {
 	before := limesRows(t, ctx, admin, tenant)
 
 	repo := adapters.NewTenantRepo(sqlc.New(pool), pool)
-	if err := repo.Purge(ctx, tenanth.PurgeTenantArgs{TenantID: tenant, Actor: "admin"}); !errors.Is(err, tenanth.ErrTenantHasChildren) {
+	err := repo.Purge(ctx, tenanth.PurgeTenantArgs{TenantID: tenant, Actor: "admin"})
+	if !errors.Is(err, tenanth.ErrTenantHasChildren) {
 		t.Fatalf("purge of a tenant with a user: err = %v, want ErrTenantHasChildren", err)
+	}
+	// Through the erase that wraps it, the caller still reads the resource
+	// alone, not the erase's or the driver's words.
+	if want := "tenant still owns resources; remove them before purging it: held by users"; err.Error() != want {
+		t.Errorf("purge refused as %q, want %q", err, want)
 	}
 	if after := limesRows(t, ctx, admin, tenant); !maps.Equal(after, before) {
 		t.Errorf("a refused purge moved the tenant's rows: %v, were %v", after, before)

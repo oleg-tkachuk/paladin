@@ -142,6 +142,9 @@ func TestDelegatedCapabilityRefusals(t *testing.T) {
 		if connect.CodeOf(err) != tc.want {
 			t.Errorf("%s: err = %v, want %v", tc.name, err, tc.want)
 		}
+		if tc.want == connect.CodeUnavailable {
+			assertUncheckedText(t, err)
+		}
 		if _, perr := PrincipalFromContext(ctx); perr == nil {
 			t.Errorf("%s: a principal was established", tc.name)
 		}

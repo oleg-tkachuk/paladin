@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"uuid"
@@ -926,7 +927,7 @@ func assertCapabilityOp(ctx context.Context, op limes.Op, resourceURI string, ta
 		isTainted, err := tainted(ctx)
 		if err != nil {
 			// Fail closed: "could not tell" is not "clean".
-			return capabilityError(connect.CodeUnavailable, err)
+			return capabilityUncheckedError(fmt.Errorf("taint lookup: %w", err))
 		}
 		if isTainted {
 			req.ResourceTainted = true

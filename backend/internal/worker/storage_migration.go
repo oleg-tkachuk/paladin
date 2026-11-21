@@ -216,6 +216,72 @@ var ErrMigrationMoved = errors.New("storage migration moved on since it was read
 // worker fails the migration rather than retrying it every tick.
 var ErrRebindRefused = errors.New("schema refused the rebind")
 
+// RebindRefusedError is ErrRebindRefused for one collection, with the
+// schema's refusal as its cause: the collection is the migration's recorded
+// reason, the cause is the log's.
+type RebindRefusedError struct {
+	Collection string
+	cause      error
+}
+
+// RebindRefused is the schema refusing to move collection, for cause.
+func RebindRefused(collection string, cause error) error {
+	return &RebindRefusedError{Collection: collection, cause: cause}
+}
+
+func (e *RebindRefusedError) Error() string {
+	return fmt.Sprintf("rebind %q: %v: %v", e.Collection, ErrRebindRefused, e.cause)
+}
+
+func (e *RebindRefusedError) Unwrap() []error { return []error{ErrRebindRefused, e.cause} }
+
+// The reasons a migration records, which GetTenantStorageMigration returns to
+// the operator: what failed, in the product's terms. The error behind each is
+// logged where it happens.
+const (
+	reasonRebindRefused     = "rebind refused: collection %q cannot move to the dedicated bucket"
+	reasonRebindRefusedAny  = "rebind refused: a collection cannot move to the dedicated bucket"
+	reasonVerifyPrefix      = "physical verify: "
+	reasonVerifyUnlisted    = "the objects to verify could not be listed"
+	verifyProblemUnreadable = "could not be read from the target bucket"
+	verifyProblemMissing    = "missing in the target bucket"
+	verifyProblemSize       = "size mismatch: target %d != source %d"
+)
+
+// rebindReason is the recorded reason for a rebind the schema refused.
+func rebindReason(err error) string {
+	if rr, ok := errors.AsType[*RebindRefusedError](err); ok {
+		return fmt.Sprintf(reasonRebindRefused, rr.Collection)
+	}
+	return reasonRebindRefusedAny
+}
+
+// verifyFailure is a physical verify's finding about one object: which, and
+// what is wrong with it. The backend's error, when there is one, is its cause.
+type verifyFailure struct {
+	object  string
+	problem string
+	cause   error
+}
+
+func (v *verifyFailure) Error() string {
+	if v.cause == nil {
+		return v.object + " " + v.problem
+	}
+	return v.object + " " + v.problem + ": " + v.cause.Error()
+}
+
+func (v *verifyFailure) Unwrap() error { return v.cause }
+
+// verifyReason is the recorded reason for a failed physical verify: the
+// object and the problem, without the backend's or the store's words.
+func verifyReason(err error) string {
+	if vf, ok := errors.AsType[*verifyFailure](err); ok {
+		return reasonVerifyPrefix + vf.object + " " + vf.problem
+	}
+	return reasonVerifyPrefix + reasonVerifyUnlisted
+}
+
 // ErrRollbackBehind reports a rebind back refused because objects were
 // written to the target past the rollback cursor since the worker last
 // listed: they are copied first, on the next tick.
@@ -379,7 +445,7 @@ func (w *StorageMigrationWorker) stepRebinding(ctx context.Context, m StorageMig
 		// shared and the tenant is served from its source copies.
 		w.log().Error("rebind refused by the schema; failing the migration",
 			zap.String("tenant_id", m.TenantID.String()), zap.Error(err))
-		return w.Repo.Fail(ctx, m.Read(), "rebind: "+err.Error())
+		return w.Repo.Fail(ctx, m.Read(), rebindReason(err))
 	} else if err != nil {
 		return fmt.Errorf("rebind collections: %w", err)
 	}
@@ -403,7 +469,7 @@ func (w *StorageMigrationWorker) stepVerifying(ctx context.Context, m StorageMig
 		if err := w.verifyPhysical(ctx, m); err != nil {
 			w.log().Error("physical verify failed; rolling the tenant back to its source bucket",
 				zap.String("tenant_id", m.TenantID.String()), zap.Error(err))
-			return w.Repo.StartRollback(ctx, m.Read(), "physical verify: "+err.Error())
+			return w.Repo.StartRollback(ctx, m.Read(), verifyReason(err))
 		}
 	}
 	w.log().Info("migration completed",
@@ -427,13 +493,8 @@ func (w *StorageMigrationWorker) verifyPhysical(ctx context.Context, m StorageMi
 			return nil
 		}
 		for _, o := range objs {
-			dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
-			got, err := w.Header.HeadObject(ctx, dst)
-			if err != nil {
-				return fmt.Errorf("%s/%s missing in target: %w", o.Collection, o.Key, err)
-			}
-			if got != o.SizeBytes {
-				return fmt.Errorf("%s/%s size mismatch: target %d != source %d", o.Collection, o.Key, got, o.SizeBytes)
+			if err := w.verifyObject(ctx, m, o); err != nil {
+				return err
 			}
 			curOK, curKey = o.Collection, o.Key
 		}
@@ -441,6 +502,23 @@ func (w *StorageMigrationWorker) verifyPhysical(ctx context.Context, m StorageMi
 			return nil
 		}
 	}
+}
+
+// verifyObject HEADs o in the TARGET bucket: a *verifyFailure when it is
+// missing, unreadable, or not the size the source recorded.
+func (w *StorageMigrationWorker) verifyObject(ctx context.Context, m StorageMigration, o ObjectRef) error {
+	dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
+	object := o.Collection + "/" + o.Key
+	got, err := w.Header.HeadObject(ctx, dst)
+	switch {
+	case errors.Is(err, ErrObjectMissing):
+		return &verifyFailure{object: object, problem: verifyProblemMissing, cause: err}
+	case err != nil:
+		return &verifyFailure{object: object, problem: verifyProblemUnreadable, cause: err}
+	case got != o.SizeBytes:
+		return &verifyFailure{object: object, problem: fmt.Sprintf(verifyProblemSize, got, o.SizeBytes)}
+	}
+	return nil
 }
 
 // stepCompleted runs the retention-gated cleanup (slice 2): once the window has

@@ -24,8 +24,8 @@ func TestRetryTarget(t *testing.T) {
 		want      string
 		wantCode  connect.Code
 	}{
-		{"first migration keeps what was asked", StorageMigration{}, ErrNotFound, "b1", "b1", 0},
-		{"first migration, nothing asked", StorageMigration{}, ErrNotFound, "", "", 0},
+		{"first migration keeps what was asked", StorageMigration{}, ErrStorageMigrationNotFound, "b1", "b1", 0},
+		{"first migration, nothing asked", StorageMigration{}, ErrStorageMigrationNotFound, "", "", 0},
 		{"the read failing is internal", StorageMigration{}, errors.New("down"), "b1", "", connect.CodeInternal},
 		{"one still running is not retried", StorageMigration{State: "copying"}, nil, "b1", "", connect.CodeFailedPrecondition},
 		{"a failed one is retried on its backend", failed, nil, "", "b2", 0},

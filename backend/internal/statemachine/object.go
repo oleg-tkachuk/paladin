@@ -470,8 +470,8 @@ func (t *Transitioner) PendingOverdue(ctx context.Context, graceBeyond time.Dura
 }
 
 var (
-	ErrConflict = errors.New("statemachine: version conflict")
-	ErrNotFound = errors.New("statemachine: object not found or wrong state")
+	ErrConflict = errors.New("object version conflict")
+	ErrNotFound = errors.New("object not found or not in the expected state")
 )
 
 // isNoRows checks the pgx-specific no-rows error. errors.Is (not a

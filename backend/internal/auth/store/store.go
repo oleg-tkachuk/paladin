@@ -214,19 +214,19 @@ type OAuthGrantStore interface {
 // ─── Common errors ──────────────────────────────────────────────────────────
 
 var (
-	ErrNotFound        = errors.New("auth/store: not found")
-	ErrVersionMismatch = errors.New("auth/store: resource_version mismatch")
-	ErrSubjectTaken    = errors.New("auth/store: subject already exists in tenant")
-	ErrTokenRevoked    = errors.New("auth/store: refresh token revoked")
+	ErrNotFound        = errors.New("resource not found")
+	ErrVersionMismatch = errors.New("resource_version mismatch")
+	ErrSubjectTaken    = errors.New("subject already exists in tenant")
+	ErrTokenRevoked    = errors.New("refresh token revoked")
 	// ErrAlreadyRotated means a conditional Supersede matched no row: the
 	// token was already traded in (or revoked) by the time this caller got
 	// there. Distinct from ErrTokenRevoked, which describes a token found
 	// revoked on READ; this one describes losing a WRITE race, and the
 	// difference matters because only the latter is provably concurrent.
-	ErrAlreadyRotated = errors.New("auth/store: refresh token already rotated")
+	ErrAlreadyRotated = errors.New("refresh token already rotated")
 	// ErrInvalidPageToken is a listing's answer to a page token it did not
 	// mint: the caller's to fix, not the store's failure.
-	ErrInvalidPageToken = errors.New("auth/store: invalid page_token")
+	ErrInvalidPageToken = errors.New("invalid page_token")
 )
 
 // Register the IAM store sentinels with the central error→Connect-code mapper

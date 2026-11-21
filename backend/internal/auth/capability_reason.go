@@ -92,6 +92,13 @@ func capabilityFailure(ctx context.Context, stage string, err error, log bool) e
 	return capabilityError(status, err)
 }
 
+// capabilityUncheckedError is Unavailable for a capability a store kept from
+// being checked: the caller is told to retry, and err — the store's words —
+// stays the cause, for the RPC log line.
+func capabilityUncheckedError(err error) *connect.Error {
+	return withCapabilityInfo(connect.NewError(connect.CodeUnavailable, capabilityUnchecked).WithCause(err), err, commonv1.ErrorReason_ERROR_REASON_UNSPECIFIED)
+}
+
 // capabilityError is connect.NewError carrying the ErrorInfo of err: when it
 // is a refusal of the capability, its reason — so a client tells a spent or
 // revoked capability, which it should stop using, from a request it can fix,

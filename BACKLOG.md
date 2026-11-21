@@ -560,36 +560,33 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### Refusal messages still carry Go package prefixes
+### Credential refusals still begin with `jwt:` and `capability:`
 
 - **Status:** Deferred.
-- **Reason:** the sentinels a caller reads in a refusal were cleaned up for the
-  admin domain only. Others still start with their package's name:
-  `auth/store:` (`resource_version mismatch`, `subject already exists in
-  tenant`), `api_token:` (`audience mismatch`, `token not found`, which the
-  Python SDK's fake mirrors), `statemachine:` (`version conflict`, `object not
-  found or wrong state`), `cedar: stored policy does not compile`, `storage:
-  object not found`. This is noise rather than a leak: the scrub middleware
-  already drops driver errors from every refusal.
-- **Definition of Done:** every sentinel registered with `apiutil.RegisterError`
-  under a refusal code, and every one a handler puts in a refusal's message,
-  names the resource and the reason without a package prefix; a test over the
-  registry fails on a new one; the Python SDK fake follows.
-- **Blockers:** none. The SDK fake's messages change with it.
+- **Reason:** the registered sentinels and the API token refusals were cleaned
+  of package prefixes; the JWT verifier's and the capability gate's were not:
+  `jwt: malformed token`, `jwt: token expired`, `jwt: audience mismatch`,
+  `capability: invalid signature`, `capability: revoked`. Both SDK fakes copy
+  all but the third word for word, and the MCP bridge matches on `audience
+  mismatch`.
+- **Definition of Done:** each names the credential and the reason without a
+  package prefix; the Go and Python SDK fakes follow, and the bridge's match
+  still finds the phrase it looks for.
+- **Blockers:** none.
 
-### Refusals that name tables and constraints on purpose
+### The bridge's upstream probe errors reach the admin verbatim
 
 - **Status:** Deferred.
-- **Reason:** a tenant purge or bucket delete refused by a foreign key names
-  the blocking table (`adapters.blockingRelation`), the Object Lock trigger's
-  message is passed through (`lockRefusal`), and a storage migration the schema
-  refuses records the Postgres error as its failure reason, which
-  `GetTenantStorageMigration` returns. Each was written for an operator, and
-  replacing it needs a product noun for every table that can block.
-- **Definition of Done:** each maps the table or trigger to the resource a
-  caller knows (objects, collections, users, …) and keeps the raw name in the
-  log only.
-- **Blockers:** agreeing on the nouns.
+- **Reason:** `GetBridgeStatus` now answers a classified verdict for a bridge
+  it could not ask, but each upstream's `error` is still the MCP process's own
+  `err.Error()` from its `/livez` probe (`mcp.ProbeUpstreams`), passed through
+  untouched. Those texts are what an operator debugs an mTLS failure by
+  (`x509: certificate signed by unknown authority`), and the bridge logs none
+  of them, so classifying them in place would lose the only copy.
+- **Definition of Done:** the bridge logs each failed probe with its full
+  error; the upstream `error` is a fixed verdict (unreachable, timed out, bad
+  status N, certificate refused), with the plane's URL left to its own field.
+- **Blockers:** none.
 
 ## Database
 

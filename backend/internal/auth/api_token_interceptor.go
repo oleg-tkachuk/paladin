@@ -160,7 +160,7 @@ type apiTokenInterceptor struct {
 func principalFromAPIToken(t *api_token.Token, audienceLabel string) (*Principal, error) {
 	scopes, err := ParseScopes(t.Scopes)
 	if err != nil {
-		return nil, fmt.Errorf("api_token: scope: %w", err)
+		return nil, fmt.Errorf("API token scope: %w", err)
 	}
 	return &Principal{
 		TenantID: t.TenantID,
@@ -230,7 +230,7 @@ func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.
 	// Retry-After is sent.
 	if rpm == 0 {
 		recordRateLimitDecision(ctx, tok.TenantID.String(), false, 0, rpm)
-		return connect.NewError(connect.CodeResourceExhausted, "api_token: rate limit is 0 rpm; the token admits no request")
+		return connect.NewError(connect.CodeResourceExhausted, "API token rate limit is 0 rpm; the token admits no request")
 	}
 	if i.limiter == nil {
 		return nil
@@ -253,7 +253,7 @@ func (i *apiTokenInterceptor) rateLimitGate(ctx context.Context, tok *api_token.
 		return nil
 	}
 	ce := connect.Errorf(connect.CodeResourceExhausted,
-		"api_token: rate limit %d rpm exceeded (weighted=%.1f)", rpm, d.WeightedCount)
+		"API token rate limit %d rpm exceeded (weighted=%.1f)", rpm, d.WeightedCount)
 	if d.RetryAfter > 0 {
 		unary.Info(ctx).ResponseHeader().Set(paladin.HeaderRetryAfter, strconv.Itoa(int(d.RetryAfter.Seconds())))
 	}

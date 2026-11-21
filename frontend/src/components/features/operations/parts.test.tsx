@@ -128,7 +128,7 @@ describe("RetryFailedButton", () => {
             succeeded: 1,
             failed: 1,
             failures: [
-              { object_id: FAILED, reason: "statemachine: version conflict" },
+              { object_id: FAILED, reason: "object version conflict" },
             ],
           }),
         ),

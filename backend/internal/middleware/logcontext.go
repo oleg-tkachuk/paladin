@@ -3,9 +3,11 @@ package middleware
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
@@ -130,7 +132,47 @@ func withheldCause(err error) string {
 	if cause := cerr.Unwrap().Error(); cause != cerr.Message() {
 		return cause
 	}
-	return ""
+	return withheldDriverErrors(cerr.Unwrap(), cerr.Message())
+}
+
+// causeSep joins the driver errors one cause line carries.
+const causeSep = "; "
+
+// The labels a logged Postgres error names its relation and constraint by:
+// the text of a PgError carries neither.
+const (
+	pgTableLabel      = " table="
+	pgConstraintLabel = " constraint="
+)
+
+// withheldDriverErrors describes each driver error in err's tree whose text
+// msg does not quote: a refusal that told the caller which resource holds it,
+// from a foreign-key violation, still logs the table and the constraint.
+func withheldDriverErrors(err error, msg string) string {
+	var out []string
+	walkErrors(err, func(e error) {
+		if isDriverError(e) && !strings.Contains(msg, e.Error()) {
+			out = append(out, driverDetail(e))
+		}
+	})
+	return strings.Join(out, causeSep)
+}
+
+// driverDetail is e's text, with the relation and constraint a Postgres error
+// names.
+func driverDetail(e error) string {
+	pg, ok := e.(*pgconn.PgError) //nolint:errorlint // walkErrors hands over each node
+	if !ok {
+		return e.Error()
+	}
+	out := pg.Error()
+	if pg.TableName != "" {
+		out += pgTableLabel + pg.TableName
+	}
+	if pg.ConstraintName != "" {
+		out += pgConstraintLabel + pg.ConstraintName
+	}
+	return out
 }
 
 // logFailure is the whole decision, split out from the interceptor plumbing so

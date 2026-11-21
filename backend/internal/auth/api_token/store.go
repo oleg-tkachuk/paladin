@@ -76,7 +76,7 @@ const (
 
 // ErrInvalidCursor is a page cursor that is not the id of a token, which is
 // the only cursor ListByTenant hands out.
-var ErrInvalidCursor = errors.New("api_token: invalid page cursor")
+var ErrInvalidCursor = errors.New("invalid API token page cursor")
 
 // ClampListLimit is the page size ListByTenant reads for a requested n.
 func ClampListLimit(n int32) int32 {

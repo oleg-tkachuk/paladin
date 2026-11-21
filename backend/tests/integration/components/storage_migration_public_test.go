@@ -323,6 +323,10 @@ func TestStorageMigrationLeavesPublicCollectionsInPlace(t *testing.T) {
 		if !errors.Is(err, worker.ErrRebindRefused) {
 			t.Fatalf("RebindTenant = %v, want ErrRebindRefused", err)
 		}
+		// The collection is what the worker records as the reason.
+		if rr, ok := errors.AsType[*worker.RebindRefusedError](err); !ok || rr.Collection != "docs" {
+			t.Errorf("RebindTenant = %v, want the refusal to name collection docs", err)
+		}
 		if got := f.boundTo(t, ctx, "docs"); got != f.private {
 			t.Errorf("collection bound to %s after a refused rebind, want %s", got, f.private)
 		}

@@ -4,8 +4,11 @@ package components
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"uuid"
+
+	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -34,6 +37,13 @@ func TestStorageMigrationRPCActsOnTheNamedTenant(t *testing.T) {
 	ctx = auth.WithPrincipal(ctx, &auth.Principal{
 		Subject: "operator", TenantID: uuid.New(), Roles: []string{apiutil.RolePlatformAdmin},
 	})
+
+	// Before any migration the tenant is there and its migration is not:
+	// the answer says so, rather than "tenant not found".
+	if _, err := h.GetTenantStorageMigration(ctx, f.tenant); connect.CodeOf(err) != connect.CodeNotFound ||
+		!errors.Is(err, tenanth.ErrStorageMigrationNotFound) {
+		t.Fatalf("read before any migration = %v, want ErrStorageMigrationNotFound", err)
+	}
 
 	m, err := h.MigrateTenantStorageLayout(ctx, f.tenant, "", 0)
 	if err != nil {

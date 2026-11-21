@@ -182,7 +182,7 @@ func (r *TenantRepo) GetStorageMigration(ctx context.Context, tenantID uuid.UUID
 	m, err := r.q.GetStorageMigration(ctx, pgUUID(tenantID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tenanth.StorageMigration{}, tenanth.ErrNotFound
+			return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationNotFound
 		}
 		return tenanth.StorageMigration{}, err
 	}
