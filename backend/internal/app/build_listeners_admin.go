@@ -358,6 +358,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// the cascade to refresh_tokens is the foreign key's, which RLS does not
 	// filter.
 	oauthClientH := oauthclienth.NewHandler(oauthClients, cfg.Auth.OAuth, polEngine)
+	oauthClientH.SetLogger(l.Named("oauth-clients"))
 	if deps.Capability != nil {
 		oauthClientH.WithCapabilityRevocation(deps.Capability.Auth.BulkRevocation)
 	}
