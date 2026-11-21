@@ -102,13 +102,13 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	policyH.SetLogger(l.Named("policies"))
 	eventSubH.SetLogger(l.Named("event-subscriptions"))
 	bucketV2H.SetEventProducer(events)
-	bucketV2H.SetLogger(l.Named("bucket-events"))
+	bucketV2H.SetLogger(l.Named("buckets"))
 	collectionH.SetEventProducer(events)
-	collectionH.SetLogger(l.Named("collection-events"))
+	collectionH.SetLogger(l.Named("collections"))
 	quotaH.SetEventProducer(events)
 	quotaH.SetLogger(l.Named("quotas"))
 	backendH.SetEventProducer(events)
-	backendH.SetLogger(l.Named("backend-events"))
+	backendH.SetLogger(l.Named("backends"))
 
 	// ─── Interceptor stack ───────────────────────────────────────────────
 	validateInterceptor, err := middleware.ProtoValidate()

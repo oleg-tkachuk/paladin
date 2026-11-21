@@ -43,10 +43,35 @@ type Repository interface {
 	GetTx(ctx context.Context, tx pgx.Tx, backendID string) (admindomain.StorageBackend, error)
 }
 
+// readRoles may read a backend: tenant and bucket admins pick a target
+// backend for new buckets and collections. Every change is platform.admin's.
+var readRoles = []string{apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantAdmin}
+
+// redacted stands in for a credential reference a reader other than a
+// platform admin may not see.
+const redacted = "[REDACTED]"
+
+// The derived health a probe records (sqlc.BackendHealthStatus's values).
 const (
-	rolePlatformAdmin = "platform.admin"
-	roleBucketAdmin   = "bucket.admin"
-	roleTenantAdmin   = "tenant.admin"
+	healthOK    = "ok"
+	healthError = "error"
+)
+
+// EventCredentialsRotated is the lifecycle event RotateCredentials records.
+const EventCredentialsRotated = "paladin.backend.credentials_rotated"
+
+// The op each log line of the backend RPCs names.
+const (
+	opCreate            = "create"
+	opGet               = "get"
+	opList              = "list"
+	opUpdate            = "update"
+	opSetEnabled        = "set enabled"
+	opSetReadOnly       = "set read only"
+	opSetMaintenance    = "set maintenance"
+	opRotateCredentials = "rotate" // the credentials of the backend
+	opDelete            = "delete"
+	opTest              = "test"
 )
 
 // BackendProber runs a read-only reachability + auth probe against a backend's
@@ -150,6 +175,48 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
+// answer maps err for the caller of op on the backend and logs it by what it
+// is: a server fault at error, a refusal the caller can act on at warn.
+func (h *Handler) answer(op, backendID string, err error) error {
+	mapped := apiutil.MapError(err)
+	code := connect.CodeOf(mapped)
+	fields := []zap.Field{
+		zap.String("op", op), zap.String("backend_id", backendID),
+		zap.String("code", code.String()), zap.Error(err),
+	}
+	if apiutil.ServerFault(code) {
+		h.log.Error("backend operation failed", fields...)
+	} else {
+		h.log.Warn("backend operation refused", fields...)
+	}
+	return mapped
+}
+
+// changed logs that op changed the backend, and who changed it. No field
+// carries a credential reference.
+func (h *Handler) changed(ctx context.Context, op string, b admindomain.StorageBackend, extra ...zap.Field) {
+	actor := ""
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		actor = p.Subject
+	}
+	h.log.Info("backend changed", append([]zap.Field{
+		zap.String("op", op),
+		zap.String("backend_id", b.BackendID),
+		zap.Int64("resource_version", b.ResourceVersion),
+		zap.String("actor", actor),
+	}, extra...)...)
+}
+
+// readBack is the backend as op's write left it, which it logs as changed.
+func (h *Handler) readBack(ctx context.Context, op, backendID string, extra ...zap.Field) (*admindomain.StorageBackend, error) {
+	got, err := h.repo.Get(ctx, backendID)
+	if err != nil {
+		return nil, h.answer(op, backendID, fmt.Errorf("read back: %w", err))
+	}
+	h.changed(ctx, op, got, extra...)
+	return &got, nil
+}
+
 // backendResourceName is the canonical StorageBackend resource string
 // subscribers route on (`storageBackends/{backend_id}`).
 func backendResourceName(backendID string) string {
@@ -188,17 +255,14 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID 
 // ─── Create ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBackend) (*admindomain.StorageBackend, error) {
-	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+	if err := requireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageBackend, b.BackendID); err != nil {
 		return nil, err
 	}
-	if b.BackendID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "backend_id required")
-	}
-	if b.Kind == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "kind required")
+	if err := validateNew(b); err != nil {
+		return nil, h.answer(opCreate, b.BackendID, err)
 	}
 	// Create, not Upsert — and MapError, not a hardcoded Internal.
 	//
@@ -214,14 +278,14 @@ func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBacken
 	// The hardcoded CodeInternal had to go with it, or ErrAlreadyExists would
 	// have been flattened into a 500 the way a duplicate collection was.
 	if err := h.repo.Create(ctx, b); err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opCreate, b.BackendID, err)
 	}
 	// The request carries the id, not a name, so the audit row would name
 	// nothing.
 	apiutil.StashResource(ctx, backendResourceName(b.BackendID))
-	got, err := h.repo.Get(ctx, b.BackendID)
+	got, err := h.readBack(ctx, opCreate, b.BackendID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, err
 	}
 	// Probe the new backend once (ADR-0026), so it does not show every
 	// feature unknown — and refuse a public bucket — until an operator runs
@@ -235,18 +299,39 @@ func (h *Handler) CreateBackend(ctx context.Context, b admindomain.StorageBacken
 	// its outcome never fails the create — an unreachable backend registers
 	// with its features unknown.
 	if h.prober != nil {
-		ProbeAndRecord(ctx, h.prober, h.repo, got)
-		if probed, err := h.repo.Get(ctx, b.BackendID); err == nil {
-			got = probed
-		}
+		return h.probed(ctx, *got), nil
 	}
-	return &got, nil
+	return got, nil
+}
+
+// validateNew refuses a new backend with no id or kind.
+func validateNew(b admindomain.StorageBackend) error {
+	if b.BackendID == "" {
+		return connect.NewError(connect.CodeInvalidArgument, "backend_id required")
+	}
+	if b.Kind == "" {
+		return connect.NewError(connect.CodeInvalidArgument, "kind required")
+	}
+	return nil
+}
+
+// probed probes the new backend got and answers it as the probe left it, or
+// as it was registered when it cannot be read again.
+func (h *Handler) probed(ctx context.Context, got admindomain.StorageBackend) *admindomain.StorageBackend {
+	ProbeAndRecord(ctx, h.prober, h.repo, got)
+	probed, err := h.repo.Get(ctx, got.BackendID)
+	if err != nil {
+		h.log.Warn("backend registered, but its probe results could not be read back",
+			zap.String("backend_id", got.BackendID), zap.Error(err))
+		return &got
+	}
+	return &probed
 }
 
 // ─── Read ───────────────────────────────────────────────────────────────────
 
 func (h *Handler) GetBackend(ctx context.Context, backendID string) (*admindomain.StorageBackend, error) {
-	if err := requireAnyRole(ctx, rolePlatformAdmin, roleBucketAdmin, roleTenantAdmin); err != nil {
+	if err := apiutil.RequireAnyRole(ctx, readRoles...); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionReadBackend, backendID); err != nil {
@@ -254,16 +339,10 @@ func (h *Handler) GetBackend(ctx context.Context, backendID string) (*admindomai
 	}
 	b, err := h.repo.Get(ctx, backendID)
 	if err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opGet, backendID, err)
 	}
-	// Tenant/bucket admins get a redacted view — both the active and the
-	// previous (grace-window) secret refs are secrets.
-	p, _ := auth.PrincipalFromContext(ctx)
-	if !p.HasRole(rolePlatformAdmin) {
-		b.CredentialsSecretRef = "[REDACTED]"
-		if b.PreviousCredentialsSecretRef != "" {
-			b.PreviousCredentialsSecretRef = "[REDACTED]"
-		}
+	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
+		redact(&b)
 	}
 	return &b, nil
 }
@@ -272,7 +351,7 @@ func (h *Handler) GetBackend(ctx context.Context, backendID string) (*admindomai
 // CEL expression over StorageBackendSchema, applied after the fetch; the repo
 // cursor is returned unchanged so paging survives a fully-filtered page.
 func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID, filter string) ([]admindomain.StorageBackend, string, error) {
-	if err := requireAnyRole(ctx, rolePlatformAdmin, roleBucketAdmin, roleTenantAdmin); err != nil {
+	if err := apiutil.RequireAnyRole(ctx, readRoles...); err != nil {
 		return nil, "", err
 	}
 	if err := h.authorize(ctx, cedar.ActionReadBackend, ""); err != nil {
@@ -280,22 +359,28 @@ func (h *Handler) ListBackends(ctx context.Context, pageSize int32, afterID, fil
 	}
 	out, next, err := h.repo.List(ctx, pageSize, afterID, filter)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, "", h.answer(opList, "", err)
 	}
-	p, _ := auth.PrincipalFromContext(ctx)
-	if !p.HasRole(rolePlatformAdmin) {
+	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) {
 		for i := range out {
-			out[i].CredentialsSecretRef = "[REDACTED]"
-			if out[i].PreviousCredentialsSecretRef != "" {
-				out[i].PreviousCredentialsSecretRef = "[REDACTED]"
-			}
+			redact(&out[i])
 		}
 	}
 	out, err = celpkg.FilterPage(h.cel, celpkg.StorageBackendSchema, filter, out, backendRow)
 	if err != nil {
-		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+		return nil, "", h.answer(opList, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err)))
 	}
 	return out, next, nil
+}
+
+// redact hides b's credential references from a reader other than a platform
+// admin: both the active and the previous (grace-window) secret refs are
+// secrets.
+func redact(b *admindomain.StorageBackend) {
+	b.CredentialsSecretRef = redacted
+	if b.PreviousCredentialsSecretRef != "" {
+		b.PreviousCredentialsSecretRef = redacted
+	}
 }
 
 // backendRow projects a StorageBackend onto the variables
@@ -328,20 +413,16 @@ func backendRow(b admindomain.StorageBackend) map[string]any {
 // ─── Update ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) UpdateBackend(ctx context.Context, b admindomain.StorageBackend, expectedVersion int64, mask []string) (*admindomain.StorageBackend, error) {
-	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+	if err := requireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageBackend, b.BackendID); err != nil {
 		return nil, err
 	}
 	if err := h.repo.Update(ctx, b, expectedVersion, mask); err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opUpdate, b.BackendID, err)
 	}
-	got, err := h.repo.Get(ctx, b.BackendID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	return &got, nil
+	return h.readBack(ctx, opUpdate, b.BackendID, zap.Strings("update_mask", mask))
 }
 
 // ─── SetBackendEnabled ───────────────────────────────────────────────────────
@@ -355,7 +436,7 @@ func (h *Handler) UpdateBackend(ctx context.Context, b admindomain.StorageBacken
 // The default-backend guard (refuse disabling the configured default)
 // is added in a follow-up so the constructor can carry the default id.
 func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabled bool, expectedVersion int64) (*admindomain.StorageBackend, error) {
-	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+	if err := requireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageBackend, backendID); err != nil {
@@ -366,13 +447,9 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 	// drain (read-only) first; operations resolving to a disabled backend fail
 	// loudly, which is the honest, explicit behaviour.
 	if err := h.repo.SetEnabled(ctx, backendID, enabled, expectedVersion); err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opSetEnabled, backendID, err)
 	}
-	got, err := h.repo.Get(ctx, backendID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	return &got, nil
+	return h.readBack(ctx, opSetEnabled, backendID, zap.Bool("enabled", enabled))
 }
 
 // ─── SetBackendReadOnly ──────────────────────────────────────────────────────
@@ -383,20 +460,16 @@ func (h *Handler) SetBackendEnabled(ctx context.Context, backendID string, enabl
 // is ALLOWED: it's a deliberate migration step (reads keep working), and
 // refusing it would make the default backend un-drainable.
 func (h *Handler) SetBackendReadOnly(ctx context.Context, backendID string, readOnly bool, expectedVersion int64) (*admindomain.StorageBackend, error) {
-	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+	if err := requireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageBackend, backendID); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetReadOnly(ctx, backendID, readOnly, expectedVersion); err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opSetReadOnly, backendID, err)
 	}
-	got, err := h.repo.Get(ctx, backendID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	return &got, nil
+	return h.readBack(ctx, opSetReadOnly, backendID, zap.Bool("read_only", readOnly))
 }
 
 // ─── SetBackendMaintenance ───────────────────────────────────────────────────
@@ -406,24 +479,20 @@ func (h *Handler) SetBackendReadOnly(ctx context.Context, backendID string, read
 // SetBackendReadOnly. Advisory only — it does not gate operations, and (like
 // drain) the configured default backend may be flagged.
 func (h *Handler) SetBackendMaintenance(ctx context.Context, backendID string, maintenance bool, expectedVersion int64) (*admindomain.StorageBackend, error) {
-	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+	if err := requireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageBackend, backendID); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetMaintenance(ctx, backendID, maintenance, expectedVersion); err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opSetMaintenance, backendID, err)
 	}
-	got, err := h.repo.Get(ctx, backendID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	return &got, nil
+	return h.readBack(ctx, opSetMaintenance, backendID, zap.Bool("maintenance", maintenance))
 }
 
 func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef string, grace time.Duration) (*admindomain.StorageBackend, error) {
-	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+	if err := requireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionRotateBackendCredentials, backendID); err != nil {
@@ -454,26 +523,28 @@ func (h *Handler) RotateCredentials(ctx context.Context, backendID, secretRef st
 		if grace > 0 {
 			payload["previous_valid_until"] = rotatedAt.Add(grace).Format(time.RFC3339)
 		}
-		return h.dispatchEventTx(ctx, tx, "paladin.backend.credentials_rotated",
+		return h.dispatchEventTx(ctx, tx, EventCredentialsRotated,
 			backendResourceName(backendID), payload)
 	}); err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opRotateCredentials, backendID, err)
 	}
+	h.changed(ctx, opRotateCredentials, got, zap.Duration("grace", grace))
 	return &got, nil
 }
 
 // ─── Delete ─────────────────────────────────────────────────────────────────
 
 func (h *Handler) DeleteBackend(ctx context.Context, backendID string, expectedVersion int64) error {
-	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+	if err := requireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return err
 	}
 	if err := h.authorize(ctx, cedar.ActionManageBackend, backendID); err != nil {
 		return err
 	}
 	if err := h.repo.Delete(ctx, backendID, expectedVersion); err != nil {
-		return apiutil.MapError(err)
+		return h.answer(opDelete, backendID, err)
 	}
+	h.changed(ctx, opDelete, admindomain.StorageBackend{BackendID: backendID, ResourceVersion: expectedVersion})
 	return nil
 }
 
@@ -491,7 +562,7 @@ type TestBackendOutput struct {
 }
 
 func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBackendOutput, error) {
-	if err := requireRole(ctx, rolePlatformAdmin); err != nil {
+	if err := requireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
 		return nil, err
 	}
 	if err := h.authorize(ctx, cedar.ActionReadBackend, backendID); err != nil {
@@ -501,7 +572,7 @@ func (h *Handler) TestBackend(ctx context.Context, backendID string) (*TestBacke
 	// an "unreachable" result. The row also feeds the dynamic probe path.
 	got, err := h.repo.Get(ctx, backendID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, h.answer(opTest, backendID, err)
 	}
 	// Read-only — no audit row (per the BackendService contract).
 	if h.prober == nil {
@@ -534,11 +605,11 @@ func ProbeAndRecord(ctx context.Context, prober BackendProber, rec ProbeRecorder
 	start := time.Now()
 	perr := prober.Probe(pctx, b)
 	out := &TestBackendOutput{LatencyMs: safecast.Int32From64(time.Since(start).Milliseconds())}
-	status := "ok"
+	status := healthOK
 	if perr != nil {
 		out.Reachable = false
 		out.ErrorMessage = perr.Error()
-		status = "error"
+		status = healthError
 	} else {
 		out.Reachable = true
 	}
@@ -591,17 +662,4 @@ func requireRole(ctx context.Context, role string) error {
 			"role %q required", role)
 	}
 	return nil
-}
-
-func requireAnyRole(ctx context.Context, roles ...string) error {
-	p, err := auth.PrincipalFromContext(ctx)
-	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
-	}
-	for _, r := range roles {
-		if p.HasRole(r) {
-			return nil
-		}
-	}
-	return connect.NewError(connect.CodePermissionDenied, "insufficient role")
 }

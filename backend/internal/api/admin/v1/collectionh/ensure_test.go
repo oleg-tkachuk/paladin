@@ -6,7 +6,6 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
-	"github.com/jackc/pgx/v5"
 )
 
 // EnsureCollection is idempotent: an already-present key is a no-op success
@@ -40,7 +39,7 @@ func TestEnsureCollection_CreatesUnderCallerTenant(t *testing.T) {
 	other := uuid.MustParse("0a8c0000-0000-7000-8000-0000000000c3")
 	fr := &fakeRepo{
 		getFn: func(_ context.Context, _ uuid.UUID, _ string) (Collection, error) {
-			return Collection{}, pgx.ErrNoRows // missing
+			return Collection{}, ErrCollectionNotFound // missing
 		},
 		createTxFn: func(_ context.Context, args CreateCollectionArgs) (Collection, error) {
 			return fullKey(args.TenantID, args.Collection), nil

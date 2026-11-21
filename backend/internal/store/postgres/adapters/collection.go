@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"strings"
 	"uuid"
@@ -122,8 +123,12 @@ func (r *CollectionRepo) Get(ctx context.Context, tenantID uuid.UUID, collection
 
 func (r *CollectionRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, collection string) (objectkey.Collection, error) {
 	row, err := q.GetCollection(ctx, pgUUID(tenantID), collection)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Wraps pgx.ErrNoRows too, for a caller still matching it.
+		return objectkey.Collection{}, fmt.Errorf("%w: %q: %w", objectkey.ErrCollectionNotFound, collection, err)
+	}
 	if err != nil {
-		return objectkey.Collection{}, err
+		return objectkey.Collection{}, fmt.Errorf("get collection: %w", err)
 	}
 	return collectionFromSQLC(row.Collection, row.BackendName, row.BucketName), nil
 }
@@ -226,6 +231,11 @@ func (r *CollectionRepo) Holding(ctx context.Context, tenantID uuid.UUID, collec
 func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collection, backendID, bucketName string, expectedVersion int64) error {
 	rows, err := r.q.BindCollectionToBucket(ctx, pgUUID(tenantID), collection, backendID, bucketName, expectedVersion)
 	if err != nil {
+		// The bucket is resolved by name inside the UPDATE, as on create, so
+		// one that is not registered leaves bucket_id NULL.
+		if pgerr.Is(err, pgerr.NotNullViolation) && pgerr.Column(err) == schema.CollectionsBucketIDColumn {
+			return fmt.Errorf("%w: %s/%s", objectkey.ErrBucketNotFound, backendID, bucketName)
+		}
 		if rule := publicRuleError(err); rule != nil {
 			return rule
 		}

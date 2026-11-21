@@ -3,6 +3,8 @@ package backendh
 import (
 	"testing"
 	"time"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 )
 
 // A bucket can be created only on a backend declared in storage.backends, and
@@ -10,7 +12,7 @@ import (
 // through the API alone first, and the server refused the bucket. Every read
 // of a backend now says whether it is declared.
 func TestBackendsSayWhetherTheyAreDeclared(t *testing.T) {
-	ctx := ctxWithRoles(rolePlatformAdmin)
+	ctx := ctxWithRoles(apiutil.RolePlatformAdmin)
 	h := NewHandler(&pageRepo{}, allowAuthorizer{})
 	h.SetDeclaredBackends([]string{"primary"})
 
@@ -47,7 +49,7 @@ func TestBackendsSayWhetherTheyAreDeclared(t *testing.T) {
 func TestBackendsAreUndeclaredWithoutTheList(t *testing.T) {
 	h := NewHandler(&pageRepo{}, allowAuthorizer{})
 	h.SetDeclaredBackends(nil)
-	b, err := h.GetBackend(ctxWithRoles(rolePlatformAdmin), "primary")
+	b, err := h.GetBackend(ctxWithRoles(apiutil.RolePlatformAdmin), "primary")
 	if err != nil {
 		t.Fatal(err)
 	}
