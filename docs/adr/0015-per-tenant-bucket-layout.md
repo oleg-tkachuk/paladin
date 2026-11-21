@@ -194,7 +194,8 @@ Everything else — `owner_tenant_id`, `provision_state`, `region`,
   `dedicated` tenant gets a pending tenant-owned bucket + default binding in
   the CreateTenant tx, physically created by the backend-routed reconciler —
   and the mutation gate on `provision_state='ready'`
-  (`ErrBucketProvisioning` → FailedPrecondition, retryable).
+  (`ErrBucketProvisioning` → Unavailable with `ERROR_REASON_BUCKET_PROVISIONING`,
+  retryable; the state table lives in `bucketgate`).
 - **Phase 3** (shared→dedicated copy job + `streamThrough` cross-backend
   copy) is tracked in BACKLOG; the `CopyObject` router refuses cross-backend
   pairs loudly until it lands. Smaller deferrals (per-tenant backend
