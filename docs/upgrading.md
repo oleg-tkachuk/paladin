@@ -89,6 +89,204 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — a store failing behind a lookup is INTERNAL, not NOT_FOUND
+
+- `GetTenant`, `PurgeTenant`, `PreviewPurgeTenant`, `GetTenantStorageMigration`
+  and `MigrateTenantStorageLayout` answer `NOT_FOUND` only for a tenant (or a
+  migration) that is not there, with the message `tenant not found`. A database
+  that could not be read is `INTERNAL`, with a request id; it used to be
+  `NOT_FOUND`, carrying the driver's error as its message.
+- `MigrateTenantStorageLayout` answers `FAILED_PRECONDITION` for a tenant with
+  no private collections, or with them in more than one bucket, as before; a
+  database that could not say which bucket is `INTERNAL`, not
+  `FAILED_PRECONDITION`.
+- The same holds for the IAM calls that load a user first: `WhoAmI`,
+  `ListMyMemberships`, `SwitchTenant`, `ChangePassword`, and the admin user
+  calls (`UpdateUser`, `DeleteUser`, `GrantScopes`, `RevokeScopes`,
+  `ResetPassword`, …). A user that is not there is `NOT_FOUND` with the message
+  `user not found` (it was `auth/store: not found`); a store that failed is
+  `INTERNAL`.
+
+## Unreleased — version reads that would answer wrongly fail instead
+
+- `GetObjectVersion` whose current-version pointer cannot be read answers
+  `INTERNAL`, where it answered the version with `is_current: false`.
+- `RestoreObject` on a versioned collection whose versioning config or
+  current version cannot be read answers `INTERNAL`, where it restored the
+  object and left its current version on the delete marker.
+
+## Unreleased — completing a multipart upload whose object moved on is refused
+
+- `CompleteMultipartUpload` for an upload whose object is no longer PENDING
+  went on to assemble the parts. It now answers `FAILED_PRECONDITION`
+  unless the object is AVAILABLE with this completion's checksum: a retry
+  of a completion whose object was already promoted is not refused.
+
+## Unreleased — a default binding for a missing tenant answers NOT_FOUND
+
+- `SetTenantDefaultBinding` naming a tenant id that does not exist answered
+  `PERMISSION_DENIED` (`ERROR_REASON_BUCKET_NOT_GRANTED`), or
+  `INVALID_ARGUMENT` when the bucket was missing too. It now answers
+  `NOT_FOUND` for the tenant, as the slug form of the name already did.
+
+## Unreleased — a batch tag update refuses an object that is not AVAILABLE
+
+- `BatchUpdateTags` reported an object in the trash or still uploading as
+  `resource_version mismatch`, after trying it three times. Its failure now
+  says `failed_precondition: object state <STATE> takes no metadata update`,
+  the reason `UpdateObject` gives, and the object is tried once.
+
+## Unreleased — every paladin.object.purged names the backend as `backend_id`
+
+- A `paladin.object.purged` event from a lifecycle hard delete (`source:
+  lifecycle`) carried the storage backend under `backend`; it now carries it
+  under `backend_id`, as a permanent delete's and the purge drainer's always
+  did. A subscriber reading `backend` on lifecycle purges reads `backend_id`.
+
+## Unreleased — ListAuditLog answers a failing store as INTERNAL
+
+- `ListAuditLog` answers `INTERNAL` when the store fails; it used to answer
+  `UNKNOWN`. A page token the store cannot resume is still
+  `INVALID_ARGUMENT`.
+
+## Unreleased — UserService tells a failing store from a missing user
+
+- Every `UserService` RPC that reads a user first (`UpdateUser`,
+  `DeleteUser`, `GrantScopes`, `RevokeScopes`, `ResetPassword`,
+  `ListOAuthGrants`, `RevokeOAuthGrant`, `ListUserCapabilities`) answers
+  `INTERNAL` when the store fails. It used to answer `NOT_FOUND`, as if the
+  user were gone.
+- `GrantScopes` and `RevokeScopes` answer `NOT_FOUND` for a user removed
+  meanwhile and `ABORTED` for one changed meanwhile, instead of `INTERNAL`.
+- `ResetPassword` on a user removed meanwhile answers `NOT_FOUND` instead of
+  `INTERNAL`.
+- `ListUsers` answers `INVALID_ARGUMENT` for a `page_token` it did not mint
+  and `INTERNAL` for a failing store; both used to answer `UNKNOWN`.
+- `CreateUser` and `ResetPassword` answer `INTERNAL` when the password cannot
+  be hashed for a reason other than its length; a password longer than 72
+  bytes is still `INVALID_ARGUMENT`.
+
+## Unreleased — writing a user that is not there is NOT_FOUND
+
+- `UpdateUser` and `DeleteUser` on a user removed after it was read now
+  answer `NOT_FOUND` with `ERROR_REASON_NOT_FOUND`. They used to answer
+  `ABORTED` with `ERROR_REASON_VERSION_CONFLICT`. `ABORTED` is still the
+  answer for a stale `resource_version`.
+
+## Unreleased — writing an event subscription that is not there is NOT_FOUND
+
+- `UpdateEventSubscription` and `DeleteEventSubscription` on a subscription
+  removed after it was read now answer `NOT_FOUND` with
+  `ERROR_REASON_NOT_FOUND`. They used to answer `ABORTED` with
+  `ERROR_REASON_VERSION_CONFLICT`, which told a client to re-read and retry
+  what can never succeed. `ABORTED` is still the answer for a stale
+  `resource_version`.
+- `ListEventSubscriptions` answers `INTERNAL` when the store fails; it used
+  to answer `UNKNOWN`.
+
+## Unreleased — object and multipart store failures are no longer the caller's fault
+
+- `CompleteMultipartUpload`, `AbortMultipartUpload`, `PresignPart` and
+  `ListParts` answered `NOT_FOUND` whenever the upload session could not be
+  read, an unavailable database included. Only an upload that is not there is
+  `NOT_FOUND` now; a store failure is `INTERNAL` and worth retrying.
+- `PresignPart` answers a presigner failure with `INTERNAL`; it had no code.
+- `LookupObject` answers a store failure with `INTERNAL`, not `NOT_FOUND`.
+- `CompleteObject` answers a storage backend it could not reach with
+  `UNAVAILABLE`; `FAILED_PRECONDITION` is kept for nothing uploaded yet.
+
+## Unreleased — TestBackend answers a store failure as INTERNAL
+
+- `TestBackend` answers `INTERNAL` when the backend cannot be read; it
+  answered `NOT_FOUND` for any failure, so a database outage read as a
+  backend that does not exist. A backend that is not registered is still
+  `NOT_FOUND`.
+
+## Unreleased — a collection RPC the store fails answers INTERNAL
+
+- `BindCollectionToBucket` to a bucket that is not registered answers
+  `NOT_FOUND` (`ERROR_REASON_BUCKET_NOT_FOUND`), as `CreateCollection` does,
+  and a store failure `INTERNAL`; both answered `FAILED_PRECONDITION`. A
+  platform admin's rebind of another tenant's collection now applies.
+- `GetCollection` answers a store failure `INTERNAL`, not `NOT_FOUND`;
+  `ListCollections` answers it `INTERNAL`, not `UNKNOWN`.
+- `EnsureTenantStorage` answers a collection whose bucket was deleted under
+  it `NOT_FOUND`, not `INTERNAL`.
+
+## Unreleased — a bucket RPC the store fails answers INTERNAL
+
+- `ListBuckets` and `ListAccessibleBuckets` answer a store failure as
+  `INTERNAL`; they used to return it with no code, which clients saw as
+  `UNKNOWN`.
+- `SetBucketPolicy`, `SetLifecycleRules`, `SetObjectLock`, `SetVersioning`
+  and `SetReplication` answer `INTERNAL` when the bucket cannot be read back
+  after the write. They used to answer success with an empty bucket.
+
+## Unreleased — updating an object that is not AVAILABLE is FAILED_PRECONDITION
+
+- `UpdateObject`, and the `PutObjectTags` / `DeleteObjectTags` calls built on
+  it, on an object in the trash or still uploading now answer
+  `FAILED_PRECONDITION`, as `DeleteObject` already does. They used to answer
+  `ABORTED` with `ERROR_REASON_VERSION_CONFLICT`, which told a client to
+  re-read and retry an update that could never land. `ABORTED` is still the
+  answer for a stale `resource_version` on an AVAILABLE object.
+
+## Unreleased — updating a tenant that is not there is NOT_FOUND
+
+- `UpdateTenant` on a tenant that does not exist now answers `NOT_FOUND` with
+  `ERROR_REASON_NOT_FOUND`, as `GetTenant` does. It used to answer
+  `ABORTED` with `ERROR_REASON_VERSION_CONFLICT`, which told a client to
+  re-read and retry. `ABORTED` is still the answer for a stale
+  `resource_version`, and a tenant in the trash still answers
+  `FAILED_PRECONDITION`.
+
+## Unreleased — writing to a collection that is not there is NOT_FOUND
+
+- `UpdateCollection`, `DeleteCollection` and `BindCollectionToBucket` on a
+  collection the tenant does not have now answer `NOT_FOUND`, as
+  `GetCollection` does. They used to answer `ABORTED` with
+  `ERROR_REASON_VERSION_CONFLICT`, which told a client to re-read and retry.
+  `ABORTED` is still the answer for a stale `resource_version`.
+
+## Unreleased — a billing summary says when the tenant's budget cannot be read
+
+- `GetTenantSummaryResponse.budget_ceiling` has a new arm,
+  `budget_unreadable` (an empty `BudgetUnreadable` message): the tenant budget
+  store could not be read, so whether the tenant has a cap is unknown. The
+  spend, refunds, charge count and top lists are still the ledger's, and
+  `GetTenantSummary` answers them rather than failing. Before, it answered such
+  a summary with no budget ceiling, which reads as a tenant with no cap
+  configured. A tenant with no budget still gets a summary with no arm set.
+- A client that branches on `budget_ceiling` should handle the new arm. A
+  client built from stubs older than this release sees it as an unset oneof —
+  no budget — so regenerate before relying on the distinction.
+- A ledger that cannot be read still fails the summary, as before.
+  `GetTenantTimeSeries`, which reads the budget only for a unit to fall back
+  on, is unchanged: it logs the failure and answers in the platform's
+  currency.
+
+## Unreleased — updating or deleting a backend that is not there is NOT_FOUND
+
+- `UpdateBackend` and `DeleteBackend` on a storage backend that is not
+  registered now answer `NOT_FOUND`, as `GetBackend` does. They used to answer
+  `ABORTED` with `ERROR_REASON_VERSION_CONFLICT`, which told a client to re-read
+  and retry. `ABORTED` is still the answer for a stale `resource_version`.
+
+## Unreleased — a quota for a tenant or bucket that is not there is NOT_FOUND
+
+- `SetQuota` for a tenant, or a backend and bucket, that does not exist now
+  answers `NOT_FOUND`. It used to answer `INTERNAL` with the database's
+  constraint error as its message. A client that retried an `INTERNAL` here
+  should stop and check the tenant or bucket it names.
+
+## Unreleased — cancelling an operation that is not there is NOT_FOUND
+
+- `CancelOperation` on an operation the tenant does not have now answers
+  `NOT_FOUND`, as `GetOperation` does. It used to answer
+  `FAILED_PRECONDITION`, which is still the answer for an operation that has
+  already finished. A client that treated `FAILED_PRECONDITION` as "gone"
+  should handle `NOT_FOUND` too.
+
 ## release/v0.4.0 — a purged tenant's slug can be released after a period
 
 - **`admin.tenants.slug_reservation_period`** (optional): how long a purged
