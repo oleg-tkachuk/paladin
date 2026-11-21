@@ -16,6 +16,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"net/http"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -34,6 +36,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
@@ -641,6 +644,44 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	return err
 }
 
+// The keys of an object lifecycle event's payload, and the values that tell
+// its variants apart: subscribers read them by name.
+const (
+	payloadTenantID         = "tenant_id"
+	payloadCollection       = "collection"
+	payloadKey              = "key"
+	payloadObjectID         = "object_id"
+	payloadSizeBytes        = "size_bytes"
+	payloadETag             = "etag"
+	payloadContentType      = "content_type"
+	payloadUpdatedFields    = "updated_fields"
+	payloadMode             = "mode"
+	payloadBypassGovernance = "bypass_governance"
+	payloadBackendID        = "backend_id"
+	payloadBucket           = "bucket"
+	payloadReclaimed        = "reclaimed"
+	payloadSource           = "source"
+	payloadSourceCollection = "source_collection"
+	payloadSourceObjectID   = "source_object_id"
+
+	deleteModeSoft      = "soft"
+	deleteModePermanent = "permanent"
+	uploadSourceCopy    = "copy"
+)
+
+// objectEventPayload is an object event's payload: the object it is about,
+// plus extra.
+func objectEventPayload(tenantID uuid.UUID, collection, key string, objectID uuid.UUID, extra map[string]any) map[string]any {
+	p := map[string]any{
+		payloadTenantID:   tenantID.String(),
+		payloadCollection: collection,
+		payloadKey:        key,
+		payloadObjectID:   objectID.String(),
+	}
+	maps.Copy(p, extra)
+	return p
+}
+
 // objectResourceName is the C-shape (tenant-first) object resource name. Kept
 // as the fallback the canonical builders degrade to when the (backend, bucket)
 // binding can't be resolved.
@@ -871,7 +912,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	out := &UploadObjectOutput{
 		Object:         obj,
 		CompletionMode: completion,
-		Method:         "PUT",
+		Method:         http.MethodPut,
 	}
 	if in.TransportPOST {
 		action, fields, exp, err := h.storage.PresignPost(ctx, PresignPostArgs{
@@ -890,7 +931,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 		if err != nil {
 			return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign POST: %w", err))
 		}
-		out.Method = "POST"
+		out.Method = http.MethodPost
 		out.PostAction = action
 		out.PostFields = fields
 		out.ExpiresAt = exp
@@ -1021,17 +1062,13 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, obj.Collection)
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, obj.ObjectID, etag, size, checksum, seq, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
-			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
+			return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectUploaded,
 				objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-				map[string]any{
-					"tenant_id":    tenantID.String(),
-					"collection":   obj.Collection,
-					"key":          obj.Key,
-					"object_id":    obj.ObjectID.String(),
-					"size_bytes":   size,
-					"etag":         etag,
-					"content_type": obj.ContentType,
-				})
+				objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
+					payloadSizeBytes:   size,
+					payloadETag:        etag,
+					payloadContentType: obj.ContentType,
+				}))
 		})
 	if errors.Is(err, statemachine.ErrContentMismatch) {
 		return nil, h.discardMismatched(ctx, obj.ObjectID, Location{
@@ -1704,15 +1741,11 @@ func (h *Handler) writeMetadata(ctx context.Context, tenantID, objectID uuid.UUI
 		if uerr != nil {
 			return uerr
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.updated",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectUpdated,
 			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-			map[string]any{
-				"tenant_id":      tenantID.String(),
-				"collection":     obj.Collection,
-				"key":            obj.Key,
-				"object_id":      obj.ObjectID.String(),
-				"updated_fields": in.UpdatedFields,
-			})
+			objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
+				payloadUpdatedFields: in.UpdatedFields,
+			}))
 	})
 	return obj, err
 }
@@ -1784,15 +1817,11 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 		// Soft-delete + paladin.object.deleted fan-out in one tx (ADR-0003):
 		// the event is atomic with the AVAILABLE→DELETED flip.
 		err := h.sm.SoftDeleteInTx(ctx, objectID, rv, func(ctx context.Context, tx pgx.Tx) error {
-			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
+			return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectDeleted,
 				objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-				map[string]any{
-					"tenant_id":  tenantID.String(),
-					"collection": obj.Collection,
-					"key":        obj.Key,
-					"object_id":  obj.ObjectID.String(),
-					"mode":       "soft",
-				})
+				objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
+					payloadMode: deleteModeSoft,
+				}))
 		})
 		if err != nil {
 			if errors.Is(err, statemachine.ErrConflict) {
@@ -1931,16 +1960,12 @@ func (h *Handler) PermanentDelete(
 		if perr := h.repo.EnqueuePurgeTx(ctx, tx, debt); perr != nil {
 			return perr
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.deleted",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectDeleted,
 			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-			map[string]any{
-				"tenant_id":         tenantID.String(),
-				"collection":        obj.Collection,
-				"key":               obj.Key,
-				"object_id":         obj.ObjectID.String(),
-				"mode":              "permanent",
-				"bypass_governance": bypassGovernance,
-			})
+			objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
+				payloadMode:             deleteModePermanent,
+				payloadBypassGovernance: bypassGovernance,
+			}))
 	}); err != nil {
 		return apiutil.MapError(err)
 	}
@@ -1989,17 +2014,13 @@ func (h *Handler) PermanentDelete(
 		if serr := h.repo.SettlePurgeTx(ctx, tx, debt.PurgeID); serr != nil {
 			return serr
 		}
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.purged",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectPurged,
 			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-			map[string]any{
-				"tenant_id":  tenantID.String(),
-				"collection": obj.Collection,
-				"key":        obj.Key,
-				"object_id":  obj.ObjectID.String(),
-				"backend_id": backendID,
-				"bucket":     bucket,
-				"reclaimed":  true,
-			})
+			objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, map[string]any{
+				payloadBackendID: backendID,
+				payloadBucket:    bucket,
+				payloadReclaimed: true,
+			}))
 	}); err != nil {
 		// The bytes are gone but the bookkeeping did not commit. Harmless and
 		// self-correcting: the drainer will retry a DELETE against a key that
@@ -2104,14 +2125,9 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	// payload is built from the pre-restore `obj`.
 	okPrefix := h.canonicalObjectPrefix(ctx, tenantID, collection)
 	if err := h.sm.RestoreInTx(ctx, objectID, func(ctx context.Context, tx pgx.Tx) error {
-		return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.restored",
+		return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectRestored,
 			objectResourceNameFrom(okPrefix, tenantID, obj.Collection, obj.Key),
-			map[string]any{
-				"tenant_id":  tenantID.String(),
-				"collection": obj.Collection,
-				"key":        obj.Key,
-				"object_id":  obj.ObjectID.String(),
-			})
+			objectEventPayload(tenantID, obj.Collection, obj.Key, obj.ObjectID, nil))
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
@@ -2261,20 +2277,16 @@ func (h *Handler) CopyObject(ctx context.Context, in CopyObjectInput) (out *Obje
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, dst.ObjectID, src.ETag, src.SizeBytes,
 		src.Checksum, "", statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
-			return h.dispatchEventTx(ctx, tx, tenantID, "paladin.object.uploaded",
+			return h.dispatchEventTx(ctx, tx, tenantID, eventtype.ObjectUploaded,
 				objectResourceNameFrom(okPrefix, tenantID, in.DestCollection, destKey),
-				map[string]any{
-					"tenant_id":         tenantID.String(),
-					"collection":        in.DestCollection,
-					"key":               destKey,
-					"object_id":         dst.ObjectID.String(),
-					"size_bytes":        src.SizeBytes,
-					"etag":              src.ETag,
-					"content_type":      src.ContentType,
-					"source":            "copy",
-					"source_collection": in.SourceCollection,
-					"source_object_id":  in.SourceObjectID,
-				})
+				objectEventPayload(tenantID, in.DestCollection, destKey, dst.ObjectID, map[string]any{
+					payloadSizeBytes:        src.SizeBytes,
+					payloadETag:             src.ETag,
+					payloadContentType:      src.ContentType,
+					payloadSource:           uploadSourceCopy,
+					payloadSourceCollection: in.SourceCollection,
+					payloadSourceObjectID:   in.SourceObjectID,
+				}))
 		})
 	if errors.Is(err, statemachine.ErrContentMismatch) {
 		return nil, h.discardMismatched(ctx, dst.ObjectID, Location{

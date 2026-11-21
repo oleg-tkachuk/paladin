@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"testing"
 	"time"
 	"uuid"
@@ -376,4 +377,21 @@ func testPresignConfig() PresignConfig {
 		panic(err)
 	}
 	return PresignConfig{TTL: p, Limits: testUploadLimits}
+}
+
+// An object event's payload names the object in the keys subscribers read,
+// plus whatever the event adds.
+func TestObjectEventPayload(t *testing.T) {
+	tid, oid := uuid.New(), uuid.New()
+	got := objectEventPayload(tid, "docs", "a/b.txt", oid, map[string]any{payloadMode: deleteModeSoft})
+	want := map[string]any{
+		"tenant_id": tid.String(), "collection": "docs", "key": "a/b.txt",
+		"object_id": oid.String(), "mode": "soft",
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("payload = %v, want %v", got, want)
+	}
+	if bare := objectEventPayload(tid, "docs", "k", oid, nil); len(bare) != len(want)-1 {
+		t.Errorf("payload without extras = %v, want the four object keys", bare)
+	}
 }
