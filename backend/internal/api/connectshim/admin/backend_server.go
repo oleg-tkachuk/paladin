@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/backendh"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -62,8 +63,15 @@ func (s *BackendServer) ListBackends(ctx context.Context, req *pb.ListBackendsRe
 
 // updateBackendPaths are the StorageBackend fields UpdateBackend applies.
 var updateBackendPaths = []string{
-	"display_name", "endpoint", "public_endpoint", "region", "force_path_style",
-	"credentials_secret_ref", "sse", "events", "cedar_policy",
+	admindomain.StorageBackendPathDisplayName,
+	admindomain.StorageBackendPathEndpoint,
+	admindomain.StorageBackendPathPublicEndpoint,
+	admindomain.StorageBackendPathRegion,
+	admindomain.StorageBackendPathForcePathStyle,
+	admindomain.StorageBackendPathCredentialsSecretRef,
+	admindomain.StorageBackendPathSSE,
+	admindomain.StorageBackendPathEvents,
+	admindomain.StorageBackendPathCedarPolicy,
 }
 
 func (s *BackendServer) UpdateBackend(ctx context.Context, req *pb.UpdateBackendRequest) (*pb.StorageBackend, error) {

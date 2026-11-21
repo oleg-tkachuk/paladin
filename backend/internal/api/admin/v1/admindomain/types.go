@@ -14,6 +14,20 @@ import (
 
 // ─── Storage backend ────────────────────────────────────────────────────────
 
+// The update_mask paths UpdateBackend applies: the StorageBackend message's
+// proto field names, which the shim checks and the repository reads.
+const (
+	StorageBackendPathDisplayName          = "display_name"
+	StorageBackendPathEndpoint             = "endpoint"
+	StorageBackendPathPublicEndpoint       = "public_endpoint"
+	StorageBackendPathRegion               = "region"
+	StorageBackendPathForcePathStyle       = "force_path_style"
+	StorageBackendPathCredentialsSecretRef = "credentials_secret_ref"
+	StorageBackendPathSSE                  = "sse"
+	StorageBackendPathEvents               = "events"
+	StorageBackendPathCedarPolicy          = "cedar_policy"
+)
+
 type StorageBackend struct {
 	BackendID   string
 	DisplayName string
