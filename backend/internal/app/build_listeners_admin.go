@@ -66,6 +66,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)
+	auditH.SetLogger(l.Named("audit-log"))
 	eventSubH := wire.ProvideEventSubHandler(repos, polEngine, cfg.Dispatcher.Sinks)
 	// The admin plane's Dispatcher serves only the synchronous
 	// TestSubscription RPC (DeliverOne), which bypasses the outbox: the
