@@ -567,17 +567,60 @@ func (h *Handler) GetBridgeStatus(
 		}
 		return out, nil
 	}
-	if lastErr != nil {
-		out.Error = lastErr.Error()
-	} else {
-		out.Error = msgNoReplicaAnswered
-	}
+	out.Error = bridgeVerdict(lastErr)
 	h.logger().Warn("mcp bridge unreachable", zap.String("sessions_url", loggedURL(h.sessionsURL)), zap.String("error", bridgeFailure(lastErr)))
 	return out, nil
 }
 
 // msgNoReplicaAnswered is the bridge status when no replica was asked.
 const msgNoReplicaAnswered = "no MCP replica answered"
+
+// The verdicts an admin reads for a bridge no replica answered for. The
+// transport's own text names the replica's URL and whatever the remote chose
+// to say; it goes to the log line, bounded, and never into the answer.
+const (
+	msgBridgeUnreachable = "the MCP server is unreachable"
+	msgBridgeTimedOut    = "the MCP server timed out"
+	msgBridgeUnreadable  = "the MCP server's answer could not be read"
+	msgBridgeBadStatus   = "the MCP server answered HTTP %d"
+)
+
+// bridgeStatusError is a replica answering /status with a failure status.
+type bridgeStatusError struct{ status int }
+
+func (e *bridgeStatusError) Error() string { return fmt.Sprintf(msgBridgeBadStatus, e.status) }
+
+// bridgeAnswerError is a replica's /status answer that did not decode.
+type bridgeAnswerError struct{ cause error }
+
+func (e *bridgeAnswerError) Error() string { return "decode MCP status: " + e.cause.Error() }
+
+func (e *bridgeAnswerError) Unwrap() error { return e.cause }
+
+// timeoutError is a transport error that can say it timed out, as net.Error
+// and *url.Error do.
+type timeoutError interface {
+	error
+	Timeout() bool
+}
+
+// bridgeVerdict is why no replica answered, as the admin caller is told it:
+// one of a fixed set of verdicts, and the status code when a replica gave one.
+func bridgeVerdict(lastErr error) string {
+	if lastErr == nil {
+		return msgNoReplicaAnswered
+	}
+	if se, ok := errors.AsType[*bridgeStatusError](lastErr); ok {
+		return fmt.Sprintf(msgBridgeBadStatus, se.status)
+	}
+	if _, ok := errors.AsType[*bridgeAnswerError](lastErr); ok {
+		return msgBridgeUnreadable
+	}
+	if te, ok := errors.AsType[timeoutError](lastErr); (ok && te.Timeout()) || errors.Is(lastErr, context.DeadlineExceeded) {
+		return msgBridgeTimedOut
+	}
+	return msgBridgeUnreachable
+}
 
 // bridgeFailure is why no replica answered, as a log line may carry it.
 func bridgeFailure(lastErr error) string {
@@ -671,11 +714,11 @@ func (h *Handler) fetchStatus(ctx context.Context, target, authz string) (mcppkg
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if !bridgeAnswered(resp.StatusCode) {
-		return mcppkg.BridgeStatus{}, fmt.Errorf("MCP server answered HTTP %d", resp.StatusCode)
+		return mcppkg.BridgeStatus{}, &bridgeStatusError{status: resp.StatusCode}
 	}
 	var out mcppkg.BridgeStatus
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return mcppkg.BridgeStatus{}, err
+		return mcppkg.BridgeStatus{}, &bridgeAnswerError{cause: err}
 	}
 	return out, nil
 }
