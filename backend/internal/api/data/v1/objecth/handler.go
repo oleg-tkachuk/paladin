@@ -1797,46 +1797,71 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (_ *Ob
 	if err != nil {
 		return nil, err
 	}
-	objectID, err := objectRef(in.Collection, in.ObjectID)
+	objectID, cur, err := h.updateTarget(ctx, tenantID, in)
 	if err != nil {
 		return nil, err
-	}
-	// Authorize against the object itself, so a policy on its key, tags or
-	// content type applies to an update the same way it does to a delete.
-	cur, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
-	if err != nil {
-		return nil, objectLookupError(err)
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), in.Collection, cur.Key)
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
-	// enforce on metadata/tag writes (this backs PutObjectTags /
-	// DeleteObjectTags). Best-effort + read-only: UpdateObject is a DB-only
-	// mutation that historically resolved no bucket, so a resolution failure
-	// must NOT newly fail an unscoped update — leave the bucket empty (scoped
-	// principals stay fail-closed, unscoped are unaffected).
-	updBackendID, updBucket, _ := h.repo.LookupBucket(ctx, tenantID, in.Collection, false) // update (read-only; authz scope only)
-	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
-		TenantID: tenantID, Collection: in.Collection, Key: cur.Key,
-		BackendID: updBackendID, BucketName: updBucket,
-		ContentType: cur.ContentType, SizeBytes: cur.SizeBytes, Tags: cur.Tags,
-	}, cedar.ActionUpdateObject, cur.SizeBytes, cur.ContentType); err != nil {
+	if err := h.authorize(ctx, principal, tenantID, h.updateResource(ctx, tenantID, in.Collection, cur),
+		cedar.ActionUpdateObject, cur.SizeBytes, cur.ContentType); err != nil {
 		return nil, err
 	}
-	// Only an AVAILABLE object takes an update. Asking the store anyway matched
-	// no row and came back as a version conflict, which told the caller to
-	// reload and retry an update that could never land.
-	if cur.State != statemachine.StateAvailable {
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"object state %s takes no metadata update", cur.State)
+	if err := takesMetadataUpdate(cur); err != nil {
+		return nil, err
 	}
 	obj, err := h.writeMetadata(ctx, tenantID, objectID, in)
 	if err != nil {
 		return nil, apiutil.MapError(err)
 	}
 	return &obj, nil
+}
+
+// updateTarget resolves the object an update names. The update authorizes
+// against the object itself, so a policy on its key, tags or content type
+// applies to an update the same way it does to a delete.
+func (h *Handler) updateTarget(ctx context.Context, tenantID uuid.UUID, in UpdateObjectInput) (uuid.UUID, Object, error) {
+	objectID, err := objectRef(in.Collection, in.ObjectID)
+	if err != nil {
+		return uuid.Nil(), Object{}, err
+	}
+	cur, err := h.repo.FindByName(ctx, tenantID, in.Collection, in.ObjectID)
+	if err != nil {
+		return uuid.Nil(), Object{}, objectLookupError(err)
+	}
+	return objectID, cur, nil
+}
+
+// updateResource is the Cedar resource an update of cur, in collection, is
+// decided on.
+//
+// It resolves the collection→bucket binding so bucket:/collection: PAT scopes
+// enforce on metadata/tag writes (this backs PutObjectTags /
+// DeleteObjectTags). Best-effort + read-only: UpdateObject is a DB-only
+// mutation that historically resolved no bucket, so a resolution failure
+// must NOT newly fail an unscoped update — leave the bucket empty (scoped
+// principals stay fail-closed, unscoped are unaffected).
+func (h *Handler) updateResource(ctx context.Context, tenantID uuid.UUID, collection string, cur Object) *cedar.Resource {
+	backendID, bucket, _ := h.repo.LookupBucket(ctx, tenantID, collection, false) // update (read-only; authz scope only)
+	return &cedar.Resource{
+		TenantID: tenantID, Collection: collection, Key: cur.Key,
+		BackendID: backendID, BucketName: bucket,
+		ContentType: cur.ContentType, SizeBytes: cur.SizeBytes, Tags: cur.Tags,
+	}
+}
+
+// takesMetadataUpdate refuses an update of an object that is not AVAILABLE.
+// Asking the store anyway matched no row and came back as a version
+// conflict, which told the caller to reload and retry an update that could
+// never land.
+func takesMetadataUpdate(cur Object) error {
+	if cur.State != statemachine.StateAvailable {
+		return connect.Errorf(connect.CodeFailedPrecondition,
+			"object state %s takes no metadata update", cur.State)
+	}
+	return nil
 }
 
 // objectRef validates the (collection, object_id) pair a request names and
