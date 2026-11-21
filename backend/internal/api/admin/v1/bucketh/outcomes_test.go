@@ -80,6 +80,10 @@ func TestStoreFailuresAnswerInternal(t *testing.T) {
 		{"reference count", &fakeRepo{bucketRefsErr: errStore}, func(h *Handler) error {
 			return h.DeleteBucket(admin, DeleteBucketInput{BackendID: "primary", BucketName: "acme"})
 		}},
+		{"backend state", &fakeRepo{backendEnaErr: errStore}, func(h *Handler) error {
+			_, err := h.CreateBucket(admin, CreateBucketInput{Bucket: validBucket()})
+			return err
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, logs := observed(tc.repo, zapcore.ErrorLevel)
@@ -172,6 +176,18 @@ func TestChangesAreLogged(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A filter sees a bucket's owner as its id, and a bucket with none as "".
+func TestBucketRowOwner(t *testing.T) {
+	b := validBucket()
+	if got := bucketRow(b)["owner_tenant_id"]; got != b.OwnerTenantID.String() {
+		t.Errorf("owned: owner_tenant_id = %v, want %s", got, b.OwnerTenantID)
+	}
+	b.OwnerTenantID = uuid.Nil()
+	if got := bucketRow(b)["owner_tenant_id"]; got != "" {
+		t.Errorf("unowned: owner_tenant_id = %v, want empty", got)
 	}
 }
 
