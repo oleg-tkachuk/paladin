@@ -8,12 +8,16 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/genproto/googleapis/type/money"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -64,11 +68,16 @@ func TestListTenantSpendNamesEachRow(t *testing.T) {
 }
 
 // A list whose tenants cannot be named is an internal failure, not rows
-// with no names.
+// with no names, and is logged at Error.
 func TestListTenantSpendNamesFailureIsInternal(t *testing.T) {
 	billing := &spendBilling{rows: []billingh.TenantSpend{{TenantID: uuid.New(), UnitCode: "USD"}}}
 	srv := &BillingServer{H: billing, Tenants: &fakeNames{err: errors.New("db down")}}
-	if _, err := srv.ListTenantSpend(context.Background(), &pb.ListTenantSpendRequest{}); connect.CodeOf(err) != connect.CodeInternal {
+	core, logs := observer.New(zapcore.ErrorLevel)
+	ctx := logger.WithContext(context.Background(), zap.New(core))
+	if _, err := srv.ListTenantSpend(ctx, &pb.ListTenantSpendRequest{}); connect.CodeOf(err) != connect.CodeInternal {
 		t.Errorf("err = %v, want Internal", err)
+	}
+	if logs.Len() != 1 {
+		t.Errorf("want one error line, got %v", logs.All())
 	}
 }

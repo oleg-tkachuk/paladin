@@ -106,10 +106,28 @@ func (h *Handler) refused(ctx context.Context, op string, err error, extra ...za
 	return err
 }
 
-// failed logs err, a store op could not read, at Error, and returns it.
+// failed logs err, a store op could not read, and returns it: at Error when
+// the store failed, at Warn when it refused what the request named — a
+// tenant id it does not take, a tenant filter too long.
 func (h *Handler) failed(ctx context.Context, op string, err error, extra ...zap.Field) error {
-	h.log.Error("billing store failed", append(fields(ctx, op, extra...), zap.Stringer("code", connect.CodeOf(err)), zap.Error(err))...)
+	code := connect.CodeOf(err)
+	line := append(fields(ctx, op, extra...), zap.Stringer("code", code), zap.Error(err))
+	if storeFault(code) {
+		h.log.Error("billing store failed", line...)
+	} else {
+		h.log.Warn("billing read refused by the store", line...)
+	}
 	return err
+}
+
+// storeFault is whether a store's error answered code is the store's own
+// failure rather than its refusal of the request.
+func storeFault(code connect.Code) bool {
+	switch code {
+	case connect.CodeInternal, connect.CodeUnknown, connect.CodeUnavailable, connect.CodeDataLoss, connect.CodeDeadlineExceeded:
+		return true
+	}
+	return false
 }
 
 // served logs op answered.

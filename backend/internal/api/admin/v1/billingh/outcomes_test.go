@@ -68,6 +68,45 @@ func TestLedgerFailuresAreLogged(t *testing.T) {
 	}
 }
 
+// The ledger refusing what the request named — a tenant id it does not take,
+// say — is the caller's InvalidArgument, a warning; its scope check failing
+// is the server's own, internal and an error.
+func TestLedgerRefusalsWarnAndFaultsError(t *testing.T) {
+	for _, tc := range []struct {
+		err   error
+		want  connect.Code
+		level zapcore.Level
+	}{
+		{limes.ErrInvalidRequest, connect.CodeInvalidArgument, zapcore.WarnLevel},
+		{limes.ErrScopeMismatch, connect.CodeInternal, zapcore.ErrorLevel},
+		{limes.ErrStoreTimeout, connect.CodeUnavailable, zapcore.ErrorLevel},
+	} {
+		t.Run(tc.err.Error(), func(t *testing.T) {
+			h, logs := logged(NewHandler(&fakeLedger{err: tc.err}, nil, allowAuthorizer{}), zapcore.WarnLevel)
+			_, err := h.GetTenantSummary(ctxWithAdmin(t), uuid.New(), time.Time{}, time.Time{})
+			if connect.CodeOf(err) != tc.want {
+				t.Fatalf("code = %v (%v), want %v", connect.CodeOf(err), err, tc.want)
+			}
+			if logs.Len() != 1 || logs.All()[0].Level != tc.level {
+				t.Fatalf("want one %v line, got %v", tc.level, logs.All())
+			}
+		})
+	}
+}
+
+func TestStoreFault(t *testing.T) {
+	for code, want := range map[connect.Code]bool{
+		connect.CodeInternal: true, connect.CodeUnknown: true, connect.CodeUnavailable: true,
+		connect.CodeDataLoss: true, connect.CodeDeadlineExceeded: true,
+		connect.CodeInvalidArgument: false, connect.CodePermissionDenied: false,
+		connect.CodeFailedPrecondition: false, connect.CodeResourceExhausted: false,
+	} {
+		if got := storeFault(code); got != want {
+			t.Errorf("storeFault(%v) = %v, want %v", code, got, want)
+		}
+	}
+}
+
 // A refused read is logged once at Warn: a policy that denies it, and a
 // deployment with no ledger.
 func TestBillingRefusalsWarn(t *testing.T) {
