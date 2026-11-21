@@ -645,22 +645,23 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 }
 
 // The keys of an object lifecycle event's payload, and the values that tell
-// its variants apart: subscribers read them by name.
+// its variants apart: subscribers read them by name. The keys the purge
+// workers emit too come from eventtype, so every producer spells them alike.
 const (
-	payloadTenantID         = "tenant_id"
-	payloadCollection       = "collection"
-	payloadKey              = "key"
-	payloadObjectID         = "object_id"
+	payloadTenantID         = eventtype.PayloadTenantID
+	payloadCollection       = eventtype.PayloadCollection
+	payloadKey              = eventtype.PayloadKey
+	payloadObjectID         = eventtype.PayloadObjectID
 	payloadSizeBytes        = "size_bytes"
 	payloadETag             = "etag"
 	payloadContentType      = "content_type"
 	payloadUpdatedFields    = "updated_fields"
 	payloadMode             = "mode"
 	payloadBypassGovernance = "bypass_governance"
-	payloadBackendID        = "backend_id"
-	payloadBucket           = "bucket"
-	payloadReclaimed        = "reclaimed"
-	payloadSource           = "source"
+	payloadBackendID        = eventtype.PayloadBackendID
+	payloadBucket           = eventtype.PayloadBucket
+	payloadReclaimed        = eventtype.PayloadReclaimed
+	payloadSource           = eventtype.PayloadSource
 	payloadSourceCollection = "source_collection"
 	payloadSourceObjectID   = "source_object_id"
 

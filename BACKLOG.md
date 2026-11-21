@@ -543,16 +543,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** deciding what a retried completion of a promoted object
   should answer.
 
-### paladin.object.purged names the backend under two keys
-
-- **Status:** Deferred.
-- **Reason:** the object handler's purge event carries `backend_id`; the
-  purge drainer and the lifecycle hard delete carry `backend`. Renaming
-  either is a change subscribers see.
-- **Definition of Done:** one key in every producer, shared as a constant,
-  with an upgrading note for the one that changes.
-- **Blockers:** choosing which spelling stays.
-
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

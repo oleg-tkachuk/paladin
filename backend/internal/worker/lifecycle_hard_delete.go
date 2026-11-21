@@ -258,22 +258,18 @@ func (w *LifecycleHardDeleter) settleAndAnnounce(ctx context.Context, r sqlc.Lis
 		return tx.Commit(ctx)
 	}
 	objectID := uuid.UUID(r.ID.Bytes)
+	payload := objectPurgedPayload(purgedObject{
+		TenantID: tenantID, ObjectID: objectID, Collection: r.CollectionName,
+		Key: r.Path, Backend: r.BackendName, Bucket: r.BucketName,
+	})
+	payload[eventtype.PayloadSource] = purgeSourceLifecycle
 	if err := w.Events.RecordTx(ctx, tx, tenantID.String(), Event{
 		Type:     eventtype.ObjectPurged,
 		At:       time.Now().UTC(),
 		TenantID: tenantID.String(),
 		ResourceName: fmt.Sprintf("storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s",
 			r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path),
-		Payload: map[string]any{
-			"tenant_id":  tenantID.String(),
-			"collection": r.CollectionName,
-			"key":        r.Path,
-			"object_id":  objectID.String(),
-			"backend":    r.BackendName,
-			"bucket":     r.BucketName,
-			"reclaimed":  true,
-			"source":     "lifecycle",
-		},
+		Payload: payload,
 	}); err != nil {
 		return err
 	}
