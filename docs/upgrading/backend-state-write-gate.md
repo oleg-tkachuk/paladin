@@ -17,3 +17,6 @@
   rather than authorized without its bucket and carried out.
 - `GetObjectLock` is a read: a draining backend now serves it instead of
   refusing it with `FAILED_PRECONDITION`.
+- `CompleteMultipartUpload` and part URLs (`PresignPart`) for a session opened
+  before its backend began draining used to go through; they are now refused
+  like every other write. `AbortMultipartUpload` is unchanged.
