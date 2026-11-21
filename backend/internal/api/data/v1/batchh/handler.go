@@ -16,6 +16,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -127,7 +128,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 	// row, so per-row Cedar buys defence in depth at a latency cost across up
 	// to 10k objects. Saying it happens when it does not is worse than either
 	// choice, because a reader counts on a second line of defence.
-	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionDeleteObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionDeleteObject, bucketgate.Write); err != nil {
 		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
@@ -155,10 +156,10 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 		return uuid.Nil(), err
 	}
 	// Require copy on source and put on destination — collection-level check.
-	if err := h.authorize(ctx, p, tenantID, args.SrcCollection, cedar.ActionCopyObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.SrcCollection, cedar.ActionCopyObject, bucketgate.Read); err != nil {
 		return uuid.Nil(), err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.DstCollection, cedar.ActionPutObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.DstCollection, cedar.ActionPutObject, bucketgate.Write); err != nil {
 		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
@@ -185,7 +186,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, auth.OpTag); err != nil {
 		return uuid.Nil(), err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject, bucketgate.Write); err != nil {
 		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
@@ -214,7 +215,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, limes.OpPut); err != nil {
 		return uuid.Nil(), err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionRestoreObject); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionRestoreObject, bucketgate.Write); err != nil {
 		return uuid.Nil(), err
 	}
 	md, _ := json.Marshal(args)
@@ -319,19 +320,80 @@ func (h *Handler) assertCopy(ctx context.Context, tenantID uuid.UUID, args Batch
 // DENIED when a target is off-scope. Each Batch RPC calls this per object-key
 // (BatchCopy: src + dst); any denial short-circuits the whole submit.
 //
-// Best-effort + read-only + nil-safe: an unresolvable binding (or no resolver
-// wired) emits no bucket scope key — unscoped principals are unaffected (the
-// scope-enforcement forbid never fires for them), scoped principals stay
-// fail-closed. write=false: the scope key is independent of the drain gate,
-// and this is a submit-time authz probe, not the mutation itself.
-func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection string, action cedar.Action) error {
-	var backendID, bucket string
-	if h.buckets != nil {
-		backendID, bucket, _ = h.buckets.LookupBucket(ctx, tenantID, collection, false)
+// access says what the batch does to the collection, and so how its binding
+// resolves (binding).
+func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uuid.UUID, collection string, action cedar.Action, access bucketgate.Access) error {
+	backendID, bucket, err := h.binding(ctx, tenantID, collection, access)
+	if err != nil {
+		return err
 	}
 	return apiutil.Decide(ctx, h.policy, apiutil.CedarPrincipal(p), action,
 		&cedar.Resource{TenantID: tenantID, Collection: collection, BackendID: backendID, BucketName: bucket},
 		cedar.RequestContext{})
+}
+
+// msgNoBucketResolver refuses a batch write when no bucket resolver is wired:
+// without one the write gate cannot be asked.
+const msgNoBucketResolver = "batch: bucket lookup not wired"
+
+// The lines binding leaves.
+const (
+	msgSourceUnresolved = "batch source binding unresolved; authorizing without it"
+	msgBindingUnread    = "batch not submitted: bucket binding unreadable"
+	msgGateRefused      = "batch refused by the bucket gate"
+)
+
+// The log keys this package writes.
+const (
+	fieldTenantID   = "tenant_id"
+	fieldCollection = "collection"
+	fieldCode       = "code"
+	fieldOpType     = "op_type"
+	fieldOperation  = "operation_id"
+)
+
+// bindingFields names the collection a binding line is about.
+func bindingFields(tenantID uuid.UUID, collection string) []zap.Field {
+	return []zap.Field{zap.String(fieldTenantID, tenantID.String()), zap.String(fieldCollection, collection)}
+}
+
+// binding resolves collection's (backend, bucket) for the submit-time check.
+//
+// A collection the batch only reads (a copy's source) resolves best-effort, as
+// the single-object reads do: a failure, or no resolver wired, emits no bucket
+// scope key and is warned about, which leaves a scoped principal fail-closed
+// and an unscoped one unaffected. A collection the batch writes goes through
+// the write gate and fails closed, so the batch answers the bucket's state as
+// the single-object write does and is never submitted on an empty binding.
+func (h *Handler) binding(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (backendID, bucket string, err error) {
+	if access == bucketgate.Read {
+		if h.buckets == nil {
+			return "", "", nil
+		}
+		backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, false)
+		if err != nil {
+			h.log.Warn(msgSourceUnresolved, append(bindingFields(tenantID, collection), zap.Error(err))...)
+			return "", "", nil
+		}
+		return backendID, bucket, nil
+	}
+	if h.buckets == nil {
+		h.log.Error(msgNoBucketResolver, bindingFields(tenantID, collection)...)
+		return "", "", connect.NewError(connect.CodeUnavailable, msgNoBucketResolver)
+	}
+	backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, true)
+	if err != nil {
+		mapped := objecth.MapResolveErr(err)
+		code := connect.CodeOf(mapped)
+		fields := append(bindingFields(tenantID, collection), zap.String(fieldCode, code.String()), zap.Error(err))
+		if code == connect.CodeInternal {
+			h.log.Error(msgBindingUnread, fields...)
+		} else {
+			h.log.Warn(msgGateRefused, fields...)
+		}
+		return "", "", mapped
+	}
+	return backendID, bucket, nil
 }
 
 // chargeAndSubmit charges the per-request capability budget BEFORE
@@ -347,12 +409,12 @@ func (h *Handler) chargeAndSubmit(ctx context.Context, opType string, md []byte)
 	id, err := h.submitter.Submit(ctx, opType, md)
 	if err != nil {
 		// The submitter logs its own store failure; this is the batch's.
-		h.log.Warn("batch not submitted", zap.String("op_type", opType), zap.Error(err))
+		h.log.Warn("batch not submitted", zap.String(fieldOpType, opType), zap.Error(err))
 		return uuid.Nil(), err
 	}
-	fields := []zap.Field{zap.String("op_type", opType), zap.String("operation_id", id.String())}
+	fields := []zap.Field{zap.String(fieldOpType, opType), zap.String(fieldOperation, id.String())}
 	if tenant, terr := auth.EffectiveTenant(ctx); terr == nil {
-		fields = append(fields, zap.String("tenant_id", tenant.String()))
+		fields = append(fields, zap.String(fieldTenantID, tenant.String()))
 	}
 	h.log.Info("batch submitted", fields...)
 	return id, nil

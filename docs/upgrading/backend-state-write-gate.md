@@ -20,3 +20,6 @@
 - `CompleteMultipartUpload` and part URLs (`PresignPart`) for a session opened
   before its backend began draining used to go through; they are now refused
   like every other write. `AbortMultipartUpload` is unchanged.
+- The batch delete, tag, restore and copy submits answer the same states the
+  single-object writes do, before anything is queued; a copy may still read
+  from a draining source.

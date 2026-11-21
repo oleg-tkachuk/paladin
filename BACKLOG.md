@@ -517,6 +517,21 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
+### Batch executors do not re-check the bucket gate when they run
+
+- **Status:** Deferred.
+- **Reason:** a batch that writes is refused at submit time by the write gate
+  (`batchh.binding`), but the worker's soft-delete, restore and tag executors
+  (`internal/worker/operations/batch_{delete,restore,update_tags}.go`) write
+  rows without asking it again. A backend that starts draining between submit
+  and run still has the batch applied. Copy (`batch_copy.go`) and permanent
+  delete (through `PermanentDelete`) already resolve with `write=true`.
+- **Definition of Done:** each executor resolves its collection through the
+  write gate before its first item and fails the operation with the gate's
+  refusal; a test drains the backend between submit and run.
+- **Blockers:** deciding whether a drain that starts mid-batch fails the rest
+  of the batch or only the items not yet written.
+
 ### AbortMultipartUpload skips the bucket gate for an anchored session
 
 - **Status:** Deferred.
