@@ -531,18 +531,6 @@ the same commit. Treat this file like a runtime invariant.
   caller sees stay as they are.
 - **Blockers:** none.
 
-### A composite checksum recorded on no row goes unnoticed
-
-- **Status:** Deferred.
-- **Reason:** `MultipartRepo.RecordCompositeChecksum` discards its row count,
-  so a completion whose object is no longer PENDING (promoted by a storage
-  event, or discarded) records nothing and goes on to assemble the parts.
-  Whether that should be a refusal or a no-op is a design question.
-- **Definition of Done:** a zero-row write is told apart — a sentinel the
-  handler maps, or a logged no-op — with a test of each case.
-- **Blockers:** deciding what a retried completion of a promoted object
-  should answer.
-
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

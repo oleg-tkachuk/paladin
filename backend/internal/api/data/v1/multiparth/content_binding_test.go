@@ -260,6 +260,50 @@ func TestCompleteStopsWhenTheCompositeIsNotRecorded(t *testing.T) {
 	}
 }
 
+// A composite that finds the object past PENDING recorded nothing, and the
+// completion used to assemble the parts anyway. The same completion retried
+// after its object was promoted goes on; anything else is refused before the
+// store is asked to assemble.
+func TestCompleteOfAnObjectNoLongerPending(t *testing.T) {
+	tid := uuid.New()
+	sess := sessionForTenant(tid)
+	composite, err := sess.compositeChecksum(completeParts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name      string
+		object    objecth.Object
+		objectErr error
+		want      connect.Code
+	}{
+		{"the same completion, retried", objecth.Object{State: statemachine.StateAvailable, Checksum: composite}, nil, 0},
+		{"promoted from other parts", objecth.Object{State: statemachine.StateAvailable, Checksum: "other"}, nil, connect.CodeFailedPrecondition},
+		{"in the trash", objecth.Object{State: statemachine.StateDeleted, Checksum: composite}, nil, connect.CodeFailedPrecondition},
+		{"unreadable", objecth.Object{}, errors.New("db down"), connect.CodeInternal},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := sessionRepo(tid)
+			repo.recordErr = fmt.Errorf("record: %w", ErrNotPending)
+			repo.object, repo.objectErr = tc.object, tc.objectErr
+			storage := &fakeStorage{}
+			h := NewHandler(repo, storage, allow(), &fakeSM{}, testTTLPolicy(), testUploadLimits)
+			_, err := h.CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1", Parts: completeParts()})
+			assembled := storage.lastComplete.storageUploadID != ""
+			if tc.want == 0 {
+				if err != nil || !assembled {
+					t.Fatalf("err = %v, assembled = %v; want the retry to go on", err, assembled)
+				}
+				return
+			}
+			wantCode(t, err, tc.want)
+			if assembled {
+				t.Error("the store assembled parts no PENDING object was waiting for")
+			}
+		})
+	}
+}
+
 // orderedSM records when the object is discarded relative to the session.
 type orderedSM struct {
 	fakeSM
