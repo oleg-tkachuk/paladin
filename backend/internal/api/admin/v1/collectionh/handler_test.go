@@ -394,13 +394,24 @@ func TestGetCollection(t *testing.T) {
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
-	t.Run("repo error → not found", func(t *testing.T) {
+	t.Run("missing → not found", func(t *testing.T) {
 		fr := &fakeRepo{getFn: func(context.Context, uuid.UUID, string) (Collection, error) {
-			return Collection{}, errors.New("missing")
+			return Collection{}, fmt.Errorf("%w: %q", ErrCollectionNotFound, "k")
 		}}
 		h := NewHandler(fr, allowAll())
 		_, err := h.GetCollection(authedCtx(tid), uuid.Nil(), "k")
 		wantCode(t, err, connect.CodeNotFound)
+	})
+
+	// A store that fails is the server's fault, not a collection that is not
+	// there: it used to answer NOT_FOUND.
+	t.Run("store failure → internal", func(t *testing.T) {
+		fr := &fakeRepo{getFn: func(context.Context, uuid.UUID, string) (Collection, error) {
+			return Collection{}, errors.New("connection reset by peer")
+		}}
+		h := NewHandler(fr, allowAll())
+		_, err := h.GetCollection(authedCtx(tid), uuid.Nil(), "k")
+		wantCode(t, err, connect.CodeInternal)
 	})
 
 	t.Run("ok defaults tenant to caller + forwards key", func(t *testing.T) {
@@ -751,22 +762,44 @@ func TestBindCollectionToBucket(t *testing.T) {
 		wantCode(t, err, connect.CodeAborted)
 	})
 
-	t.Run("rebind of a missing collection → not found", func(t *testing.T) {
-		fr := &fakeRepo{rebindFn: func(context.Context, uuid.UUID, string, string, string, int64) error {
-			return fmt.Errorf("collection %q %w", "k", apiutil.ErrNotFound)
-		}}
-		h := NewHandler(fr, allowAll())
-		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil(), "k", validBucket, 0)
-		wantCode(t, err, connect.CodeNotFound)
-	})
+	// The repository types every refusal it can name; what is left is the
+	// store failing, which used to answer FAILED_PRECONDITION.
+	for name, tc := range map[string]struct {
+		err  error
+		want connect.Code
+	}{
+		"unclassified failure → internal": {errors.New("connection reset by peer"), connect.CodeInternal},
+		"unknown bucket → not found":      {fmt.Errorf("%w: b/gone", ErrBucketNotFound), connect.CodeNotFound},
+		"missing collection → not found":  {fmt.Errorf("%w: %q", ErrCollectionNotFound, "k"), connect.CodeNotFound},
+		"adapter's not-found → not found": {fmt.Errorf("collection %q %w", "k", apiutil.ErrNotFound), connect.CodeNotFound},
+	} {
+		t.Run("rebind "+name, func(t *testing.T) {
+			fr := &fakeRepo{rebindFn: func(context.Context, uuid.UUID, string, string, string, int64) error {
+				return tc.err
+			}}
+			h := NewHandler(fr, allowAll())
+			_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil(), "k", validBucket, 0)
+			wantCode(t, err, tc.want)
+		})
+	}
 
-	t.Run("rebind other error → failed precondition", func(t *testing.T) {
-		fr := &fakeRepo{rebindFn: func(context.Context, uuid.UUID, string, string, string, int64) error {
-			return errors.New("bucket tenancy violation")
+	// A platform admin rebinding another tenant's collection writes as that
+	// tenant, as Update and Delete do; under row-level security the row is
+	// otherwise not there to change.
+	t.Run("rebind runs as the target tenant", func(t *testing.T) {
+		other := uuid.New()
+		var acting uuid.UUID
+		fr := &fakeRepo{rebindFn: func(ctx context.Context, _ uuid.UUID, _, _, _ string, _ int64) error {
+			acting, _ = auth.EffectiveTenant(ctx)
+			return nil
 		}}
 		h := NewHandler(fr, allowAll())
-		_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil(), "k", validBucket, 0)
-		wantCode(t, err, connect.CodeFailedPrecondition)
+		if _, err := h.BindCollectionToBucket(adminCtx(tid), other, "k", validBucket, 0); err != nil {
+			t.Fatal(err)
+		}
+		if acting != other {
+			t.Errorf("rebind ran as %s, want the target tenant %s", acting, other)
+		}
 	})
 
 	t.Run("rebind ok but re-read fails → internal", func(t *testing.T) {

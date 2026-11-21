@@ -14,8 +14,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
-
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"connectrpc.com/connect/v2"
@@ -165,6 +163,24 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 	}
 }
 
+// answer maps err for the caller of op on the tenant's collection and logs it
+// by what it is: a server fault at error, a refusal the caller can act on at
+// warn.
+func (h *Handler) answer(op string, tenantID uuid.UUID, collection string, err error) error {
+	mapped := apiutil.MapError(err)
+	code := connect.CodeOf(mapped)
+	fields := []zap.Field{
+		zap.String("op", op), zap.String("tenant_id", tenantID.String()), zap.String("collection", collection),
+		zap.String("code", code.String()), zap.Error(err),
+	}
+	if apiutil.ServerFault(code) {
+		h.log.Error("collection operation failed", fields...)
+	} else {
+		h.log.Warn("collection operation refused", fields...)
+	}
+	return mapped
+}
+
 // dispatchEventTx records the event on the caller's tx so it commits
 // atomically with the collection mutation (ADR-0003). Returns the
 // error (caller rolls back); nil-safe.
@@ -266,7 +282,7 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 		// The prefix is gone with it: the adapter already labels its errors
 		// "create collection: …", and adding a second one produced
 		// "create collection: create collection: ERROR: …".
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(opCreate, args.TenantID, args.Collection, err)
 	}
 	// writes into the slot the audit mw installed
 	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection))
@@ -310,10 +326,10 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 	switch _, gerr := h.repo.Get(ctx, args.TenantID, args.Collection); {
 	case gerr == nil:
 		return false, nil
-	case errors.Is(gerr, pgx.ErrNoRows):
+	case errors.Is(gerr, ErrCollectionNotFound):
 		// fall through to create
 	default:
-		return false, connect.NewError(connect.CodeInternal, gerr.Error()).WithCause(gerr)
+		return false, h.answer(opEnsure, args.TenantID, args.Collection, gerr)
 	}
 	// Create + paladin.collection.created in one tx (ADR-0003), mirroring
 	// CreateCollection.
@@ -341,11 +357,9 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 			return false, nil
 		}
 		// A refusal the repository named — a bucket the tenant may not bind
-		// to — keeps its code; anything else is Internal.
-		if errors.Is(err, admindomain.ErrBucketNotGranted) {
-			return false, apiutil.MapError(err)
-		}
-		return false, rpcerr.New(connect.CodeInternal, fmt.Errorf("ensure collection: %w", err))
+		// to, one that is not registered — keeps its code; anything else is
+		// Internal.
+		return false, h.answer(opEnsure, args.TenantID, args.Collection, fmt.Errorf("ensure collection: %w", err))
 	}
 	return true, nil
 }
@@ -379,11 +393,11 @@ func (h *Handler) GetCollection(ctx context.Context, tenantID uuid.UUID, collect
 	ctx = auth.WithActingTenant(ctx, tenantID)
 	b, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, h.answer(opGet, tenantID, collection, err)
 	}
 	page := []Collection{b}
 	if err := h.withUsage(ctx, page); err != nil {
-		return nil, err
+		return nil, h.answer(opGet, tenantID, collection, err)
 	}
 	return &page[0], nil
 }
@@ -399,7 +413,7 @@ func (h *Handler) withUsage(ctx context.Context, page []Collection) error {
 	}
 	usage, err := h.repo.Usage(ctx, keys)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return fmt.Errorf("collection usage: %w", err)
 	}
 	for i := range page {
 		page[i].Usage = usage[keys[i]]
@@ -465,7 +479,7 @@ func (h *Handler) UpdateCollection(ctx context.Context, args UpdateCollectionArg
 				"resource_version": b.ResourceVersion,
 			})
 	}); err != nil {
-		return nil, mapVersionErr(err)
+		return nil, h.answer(opUpdate, tenantID, args.Collection, err)
 	}
 	apiutil.StashResource(ctx, CanonicalName(b.BackendID, b.BucketName, b.TenantID, b.Collection))
 	return &b, nil
@@ -513,7 +527,7 @@ func (h *Handler) DeleteCollection(
 		if errors.Is(err, ErrCollectionHasObjects) {
 			err = h.notEmpty(ctx, tenantID, collection)
 		}
-		return mapVersionErr(err)
+		return h.answer(opDelete, tenantID, collection, err)
 	}
 	apiutil.StashResource(ctx, resourceName)
 	return nil
@@ -568,14 +582,14 @@ func (h *Handler) ListCollections(ctx context.Context, args ListCollectionsArgs)
 	}
 	page, next, err := h.repo.List(ctx, args)
 	if err != nil {
-		return nil, "", err
+		return nil, "", h.answer(opList, authzTenant, "", err)
 	}
 	page, err = celpkg.FilterPage(h.cel, celpkg.CollectionSchema, args.Filter, page, collectionRow)
 	if err != nil {
-		return nil, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err))
+		return nil, "", h.answer(opList, authzTenant, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("filter: %w", err)))
 	}
 	if err := h.withUsage(ctx, page); err != nil {
-		return nil, "", err
+		return nil, "", h.answer(opList, authzTenant, "", err)
 	}
 	return page, next, nil
 }
@@ -621,28 +635,21 @@ func (h *Handler) BindCollectionToBucket(
 	if err := h.authorizeFull(ctx, p, tenantID, collection, backendID, bucketName, cedar.ActionBindCollectionToBucket); err != nil {
 		return nil, err
 	}
+	// Write as the row's owner, as Update and Delete do: under row-level
+	// security a platform admin's rebind of another tenant's collection
+	// otherwise finds no row to change.
+	ctx = auth.WithActingTenant(ctx, tenantID)
+	// The repository types every refusal it can name — a stale version, a
+	// public-collection rule, a bucket not granted or not registered, a
+	// collection that is not there; what is left is the store failing.
 	if err := h.repo.Rebind(ctx, tenantID, collection, backendID, bucketName, expectedVersion); err != nil {
-		return nil, rebindError(err)
+		return nil, h.answer(opBind, tenantID, collection, fmt.Errorf("rebind: %w", err))
 	}
 	updated, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, h.answer(opBind, tenantID, collection, fmt.Errorf("read back: %w", err))
 	}
 	return &updated, nil
-}
-
-// rebindError is what a refused rebind tells the caller: a stale version is a
-// conflict to retry, a collection the tenant has not got is not found, and a
-// bucket the binding rules refuse says which rule.
-func rebindError(err error) error {
-	if errors.Is(err, ErrVersionMismatch) {
-		return connect.NewError(connect.CodeAborted, err.Error()).WithCause(err)
-	}
-	if errors.Is(err, apiutil.ErrNotFound) || errors.Is(err, publicread.ErrRule) ||
-		errors.Is(err, admindomain.ErrBucketNotGranted) {
-		return apiutil.MapError(err)
-	}
-	return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("rebind: %w", err))
 }
 
 // splitBucketResourceName parses "storageBackends/{backend}/buckets/{bucket}".
@@ -758,6 +765,11 @@ var ErrCollectionExists = errors.New("collection already exists in this tenant")
 // collections.bucket_id under CodeInternal.
 var ErrBucketNotFound = errors.New("bucket not found on this backend")
 
+// ErrCollectionNotFound is returned when the tenant has no collection by the
+// name: on a read, and on a guarded write that finds none to change. A store
+// that fails is neither: that is the server's fault.
+var ErrCollectionNotFound = errors.New("collection not found")
+
 // ErrVersionMismatch is returned when optimistic-concurrency control fails.
 // Repositories should surface it so handlers can map to CodeAborted.
 var ErrVersionMismatch = errors.New("resource_version mismatch")
@@ -768,14 +780,23 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 func (h *Handler) notEmpty(ctx context.Context, tenantID uuid.UUID, collection string) error {
 	holding, err := h.repo.Holding(ctx, tenantID, collection)
 	if err != nil {
+		h.log.Error("collection delete refused: its objects could not be counted",
+			zap.String("tenant_id", tenantID.String()), zap.String("collection", collection), zap.Error(err))
 		return ErrCollectionHasObjects
 	}
 	return &CollectionNotEmptyError{Holding: holding}
 }
 
-func mapVersionErr(err error) error {
-	return apiutil.MapError(err)
-}
+// The op each log line of the collection RPCs names.
+const (
+	opCreate = "create"
+	opEnsure = "ensure"
+	opGet    = "get"
+	opList   = "list"
+	opUpdate = "update"
+	opDelete = "delete"
+	opBind   = "bind"
+)
 
 // Register this package's sentinels with the central error→Connect-code
 // mapper (ADR-0002). mapVersionErr now delegates to apiutil.MapError; the
@@ -785,6 +806,7 @@ func init() {
 	apiutil.RegisterError(ErrCollectionHasObjects, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_COLLECTION_NOT_EMPTY)
 	apiutil.RegisterError(ErrCollectionExists, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_COLLECTION_EXISTS)
 	apiutil.RegisterError(ErrBucketNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_BUCKET_NOT_FOUND)
+	apiutil.RegisterError(ErrCollectionNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
 	// A stored Cedar policy that will not compile is a state of the data, not
 	// a fault of the server. Registered here rather than in the cedar package
 	// because apiutil's registry is the API layer's, and cedar sits below it.
