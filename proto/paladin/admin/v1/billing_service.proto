@@ -131,13 +131,17 @@ message GetTenantSummaryResponse {
   reserved 9;
   reserved "max_budget_micros";
   // budget_ceiling is the tenant's budget cap, copied for UI convenience so
-  // the frontend doesn't need a second RPC. Neither arm is set for a tenant
-  // with no budget row.
+  // the frontend doesn't need a second RPC. No arm is set for a tenant with
+  // no budget row; budget_unreadable is set when the budget could not be
+  // read, which says nothing about whether the tenant has one.
   oneof budget_ceiling {
     // max_budget is the cap; a zero amount allows no spend.
     google.type.Money max_budget = 11;
     // unlimited_budget is no cap.
     UnlimitedBudget unlimited_budget = 12;
+    // budget_unreadable is a budget that could not be read: the spend
+    // stands, the cap is unknown.
+    BudgetUnreadable budget_unreadable = 14;
   }
   repeated TopEntry top_capabilities = 4;
   repeated TopEntry top_actors = 5;
@@ -148,6 +152,11 @@ message GetTenantSummaryResponse {
   // they took less this.
   google.type.Money refunded = 13;
 }
+
+// BudgetUnreadable is the budget_ceiling arm of a summary whose tenant budget
+// could not be read. It carries no cause: why the read failed is the
+// server's log to say, not the response's.
+message BudgetUnreadable {}
 
 message TopEntry {
   // label is the capability_id / actor_subject / op string,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 
 import { MoneySchema } from "@/gen/google/type/money_pb";
+import { BudgetUnreadableSchema } from "@/gen/paladin/admin/v1/billing_service_pb";
 
 import {
   budgetCeiling,
@@ -42,5 +43,15 @@ describe("budget ceilings", () => {
       expect(budgetUnlimited(c)).toBe(false);
       expect(budgetUnit(c)).toBeUndefined();
     }
+  });
+
+  it("reads an unreadable budget as neither a limit nor unlimited, with no unit", () => {
+    const unknown = {
+      case: "budgetUnreadable",
+      value: create(BudgetUnreadableSchema),
+    } as const;
+    expect(budgetLimit(unknown)).toBeUndefined();
+    expect(budgetUnlimited(unknown)).toBe(false);
+    expect(budgetUnit(unknown)).toBeUndefined();
   });
 });
