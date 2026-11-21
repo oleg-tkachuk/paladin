@@ -547,6 +547,39 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** deciding whether repointing a version is a write to the
   backend.
 
+## API error messages
+
+### Refusal messages still carry Go package prefixes
+
+- **Status:** Deferred.
+- **Reason:** the sentinels a caller reads in a refusal were cleaned up for the
+  admin domain only. Others still start with their package's name:
+  `auth/store:` (`resource_version mismatch`, `subject already exists in
+  tenant`), `api_token:` (`audience mismatch`, `token not found`, which the
+  Python SDK's fake mirrors), `statemachine:` (`version conflict`, `object not
+  found or wrong state`), `cedar: stored policy does not compile`, `storage:
+  object not found`. This is noise rather than a leak: the scrub middleware
+  already drops driver errors from every refusal.
+- **Definition of Done:** every sentinel registered with `apiutil.RegisterError`
+  under a refusal code, and every one a handler puts in a refusal's message,
+  names the resource and the reason without a package prefix; a test over the
+  registry fails on a new one; the Python SDK fake follows.
+- **Blockers:** none. The SDK fake's messages change with it.
+
+### Refusals that name tables and constraints on purpose
+
+- **Status:** Deferred.
+- **Reason:** a tenant purge or bucket delete refused by a foreign key names
+  the blocking table (`adapters.blockingRelation`), the Object Lock trigger's
+  message is passed through (`lockRefusal`), and a storage migration the schema
+  refuses records the Postgres error as its failure reason, which
+  `GetTenantStorageMigration` returns. Each was written for an operator, and
+  replacing it needs a product noun for every table that can block.
+- **Definition of Done:** each maps the table or trigger to the resource a
+  caller knows (objects, collections, users, …) and keeps the raw name in the
+  log only.
+- **Blockers:** agreeing on the nouns.
+
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

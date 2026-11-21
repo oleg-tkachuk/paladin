@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary/unarytest"
 )
@@ -77,7 +78,7 @@ func TestClassifyTransientThroughAHandler(t *testing.T) {
 	probe := &unarytest.Probe{OnCall: func(context.Context) error {
 		return connect.NewError(connect.CodeInternal, driverText).WithCause(errUnreachable)
 	}}
-	interceptors := []connect.ServerInterceptor{unarytest.LeavesRequest(t), ScrubInternal(), logSeat, ClassifyTransient(isUnreachable)}
+	interceptors := []connect.ServerInterceptor{unarytest.LeavesRequest(t), ScrubInternal(zap.NewNop()), logSeat, ClassifyTransient(isUnreachable)}
 
 	_, err := unarytest.CallProbe(context.Background(), probe, interceptors)
 	if connect.CodeOf(err) != connect.CodeUnavailable {

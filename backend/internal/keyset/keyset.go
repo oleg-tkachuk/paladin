@@ -15,8 +15,8 @@ import (
 
 // The ways a page token is refused. Both are the caller's error.
 var (
-	ErrMalformed    = errors.New("keyset: malformed page token")
-	ErrOrderChanged = errors.New("keyset: page token was issued for another order; start from the first page")
+	ErrMalformed    = errors.New("malformed page token")
+	ErrOrderChanged = errors.New("page token was issued for another order; start from the first page")
 )
 
 // Order is a list's sort: the field, as order_by names it, and its direction.
@@ -48,13 +48,15 @@ func Encode(c Cursor) string {
 
 // Decode reads token, which must have been minted for want.
 func Decode(token string, want Order) (Cursor, error) {
+	// The decoders' errors stay out of the refusal: the caller is sent its
+	// text, and they name Go's types and the token's wire fields.
 	b, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
-		return Cursor{}, fmt.Errorf("%w: %w", ErrMalformed, err)
+		return Cursor{}, ErrMalformed
 	}
 	var w wire
 	if err := json.Unmarshal(b, &w); err != nil {
-		return Cursor{}, fmt.Errorf("%w: %w", ErrMalformed, err)
+		return Cursor{}, ErrMalformed
 	}
 	if w.ID == uuid.Nil() {
 		return Cursor{}, fmt.Errorf("%w: no row id", ErrMalformed)

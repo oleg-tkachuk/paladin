@@ -2583,22 +2583,38 @@ func coalesceMap(primary, fallback map[string]string) map[string]string {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+// ErrPathTaken is what a caller is told of an object created at a path
+// another object holds, in any state, the trash included.
+var ErrPathTaken = errors.New("an object already exists at this key in the collection")
+
+// PathTaken answers err, the unique index refusing a new object's path, as
+// AlreadyExists in the product's words; the index and its SQLSTATE stay in
+// the cause, for the log.
+func PathTaken(err error) error {
+	return connect.NewError(connect.CodeAlreadyExists, ErrPathTaken.Error()).WithCause(errors.Join(ErrPathTaken, err))
+}
+
 func mapCreateErr(err error) error {
 	if err == nil {
 		return nil
 	}
 	if pgerr.Is(err, pgerr.UniqueViolation) {
-		return connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
+		return PathTaken(err)
 	}
 	return apiutil.MapError(err)
 }
 
+// ErrNotUploaded is what a caller completing an upload is told when nothing
+// is at the key.
+var ErrNotUploaded = errors.New("object not uploaded yet")
+
 // headFailure answers a HEAD that failed while completing an upload: nothing
 // at the key is the caller's to fix by uploading; a backend that could not be
-// asked is unavailable, not a refusal.
+// asked is unavailable, not a refusal. The backend's own answer stays in the
+// cause: its request ids and status line are nothing the caller can act on.
 func headFailure(err error) error {
 	if errors.Is(err, ErrStoredObjectNotFound) {
-		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("object not uploaded yet: %w", err))
+		return connect.NewError(connect.CodeFailedPrecondition, ErrNotUploaded.Error()).WithCause(errors.Join(ErrNotUploaded, err))
 	}
 	return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check the uploaded bytes: %w", err))
 }

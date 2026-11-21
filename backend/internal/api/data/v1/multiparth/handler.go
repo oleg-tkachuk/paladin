@@ -366,7 +366,7 @@ func (h *Handler) openSession(ctx context.Context, args InitiateArgs, meta objec
 		// as UploadObject reports it: a conflict the caller can act on, not a
 		// failure of the server.
 		if pgerr.Is(err, pgerr.UniqueViolation) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, err.Error()).WithCause(err)
+			return nil, objecth.PathTaken(err)
 		}
 		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}

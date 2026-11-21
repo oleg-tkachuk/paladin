@@ -22,25 +22,25 @@ import (
 // for admin repositories. Handlers map these to connect.CodeNotFound and
 // connect.CodeAborted respectively.
 var (
-	ErrNotFound        = errors.New("admin: resource not found")
-	ErrVersionMismatch = errors.New("admin: resource_version mismatch")
-	ErrConflict        = errors.New("admin: conflict")
+	ErrNotFound        = errors.New("resource not found")
+	ErrVersionMismatch = errors.New("resource_version mismatch")
+	ErrConflict        = errors.New("conflict")
 	// ErrAlreadyExists — a create refused because the resource is already
 	// there. Distinct from ErrConflict, which is FailedPrecondition and means
 	// "some other precondition is unmet": a caller retrying a create needs to
 	// tell "it exists" from "something else is wrong", and the code is the
 	// only part of the answer they can branch on.
-	ErrAlreadyExists = errors.New("admin: already exists")
+	ErrAlreadyExists = errors.New("already exists")
 
 	// ErrBucketOwnerRequired — a bucket named without the tenant that owns it
 	// (ADR-0032).
-	ErrBucketOwnerRequired = errors.New("admin: a bucket needs the tenant that owns it")
+	ErrBucketOwnerRequired = errors.New("a bucket needs the tenant that owns it")
 	// ErrBucketNotGranted — a tenant binding a collection to a bucket it
 	// neither owns nor holds a grant on.
-	ErrBucketNotGranted = errors.New("admin: the tenant neither owns the bucket nor holds a grant on it")
+	ErrBucketNotGranted = errors.New("the tenant neither owns the bucket nor holds a grant on it")
 	// ErrBucketGrantInUse — a grant revoked while the tenant still has
 	// collections in the bucket.
-	ErrBucketGrantInUse = errors.New("admin: the tenant still has collections in the bucket")
+	ErrBucketGrantInUse = errors.New("the tenant still has collections in the bucket")
 )
 
 // Register the admin domain sentinels with the central error→Connect-code

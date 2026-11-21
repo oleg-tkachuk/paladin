@@ -141,7 +141,7 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 	// repo.Create stamps the generated SubscriptionID onto s; without
 	// the pointer receiver this Get would look up the caller's zero
 	// UUID and fail closed with ErrNotFound, leaving an "orphan" row
-	// in the DB and surfacing a confusing "admin: resource not found"
+	// in the DB and surfacing a confusing "resource not found"
 	// CodeInternal back to the operator.
 	got, err := h.readBack(ctx, s)
 	if err != nil {

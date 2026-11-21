@@ -546,7 +546,7 @@ func TestGetTenant(t *testing.T) {
 
 	t.Run("repo miss → not found", func(t *testing.T) {
 		fr := &fakeRepo{getFn: func(context.Context, uuid.UUID) (Tenant, error) {
-			return Tenant{}, errors.New("no row")
+			return Tenant{}, ErrNotFound
 		}}
 		_, err := NewHandler(fr, allow()).GetTenant(principalCtx(tid), tid)
 		wantCode(t, err, connect.CodeNotFound)
@@ -797,7 +797,7 @@ func TestPurgeTenant(t *testing.T) {
 
 	t.Run("repo miss → not found", func(t *testing.T) {
 		fr := &fakeRepo{getFn: func(context.Context, uuid.UUID) (Tenant, error) {
-			return Tenant{}, errors.New("no row")
+			return Tenant{}, ErrNotFound
 		}}
 		err := NewHandler(fr, allow()).PurgeTenant(adminCtx(tid), tid)
 		wantCode(t, err, connect.CodeNotFound)
@@ -915,7 +915,7 @@ func TestMigrateTenantStorageLayout(t *testing.T) {
 
 	t.Run("repo miss → not found", func(t *testing.T) {
 		fr := &fakeRepo{getFn: func(context.Context, uuid.UUID) (Tenant, error) {
-			return Tenant{}, errors.New("no row")
+			return Tenant{}, ErrNotFound
 		}}
 		_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
 		wantCode(t, err, connect.CodeNotFound)
@@ -991,6 +991,17 @@ func TestMigrateTenantStorageLayout(t *testing.T) {
 		}
 		_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
 		wantCode(t, err, connect.CodeFailedPrecondition)
+	})
+
+	// A store that could not say where the tenant's collections live is the
+	// server's fault, not a precondition the caller could meet.
+	t.Run("source bucket unreadable → internal", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn:          sharedTenant,
+			sourceBucketFn: func(context.Context, uuid.UUID) (string, string, error) { return "", "", errStoreDown },
+		}
+		_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+		wantCode(t, err, connect.CodeInternal)
 	})
 
 	// Only public collections: they stay in their bucket, so nothing moves and
@@ -1206,7 +1217,7 @@ func TestGetTenantStorageMigration(t *testing.T) {
 
 	t.Run("repo miss → not found", func(t *testing.T) {
 		fr := &fakeRepo{getMigrationFn: func(context.Context, uuid.UUID) (StorageMigration, error) {
-			return StorageMigration{}, errors.New("none")
+			return StorageMigration{}, ErrNotFound
 		}}
 		_, err := NewHandler(fr, allow()).GetTenantStorageMigration(adminCtx(tid), tid)
 		wantCode(t, err, connect.CodeNotFound)

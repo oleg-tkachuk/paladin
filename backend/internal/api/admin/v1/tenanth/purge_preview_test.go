@@ -2,7 +2,6 @@ package tenanth
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 	"uuid"
@@ -31,7 +30,7 @@ func TestPreviewPurgeTenant(t *testing.T) {
 
 	t.Run("repo miss → not found", func(t *testing.T) {
 		fr := &fakeRepo{getFn: func(context.Context, uuid.UUID) (Tenant, error) {
-			return Tenant{}, errors.New("no row")
+			return Tenant{}, ErrNotFound
 		}}
 		_, err := NewHandler(fr, allow()).PreviewPurgeTenant(adminCtx(tid), tid)
 		wantCode(t, err, connect.CodeNotFound)

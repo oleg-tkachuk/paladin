@@ -153,9 +153,18 @@ func TestCoalesceMap(t *testing.T) {
 // A unique-index conflict is the "this key already exists" case and must
 // surface as AlreadyExists, not as a generic internal error.
 func TestMapCreateErrUniqueViolation(t *testing.T) {
-	err := mapCreateErr(&pgconn.PgError{Code: "23505", Message: "duplicate key"})
+	dup := &pgconn.PgError{Severity: "ERROR", Code: "23505", Message: `duplicate key value violates unique constraint "objects_live_path_key"`}
+	err := mapCreateErr(dup)
 	if got := connect.CodeOf(err); got != connect.CodeAlreadyExists {
 		t.Errorf("code = %v, want AlreadyExists", got)
+	}
+	// The caller reads the product's words; the constraint stays in the cause.
+	var cerr *connect.Error
+	if !errors.As(err, &cerr) || cerr.Message() != ErrPathTaken.Error() {
+		t.Errorf("message = %q, want %q", cerr.Message(), ErrPathTaken.Error())
+	}
+	if !errors.Is(err, dup) {
+		t.Error("the driver's error is not kept as the cause")
 	}
 }
 

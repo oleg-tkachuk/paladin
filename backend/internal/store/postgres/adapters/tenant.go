@@ -233,6 +233,11 @@ func (r *TenantRepo) Get(ctx context.Context, tenantID uuid.UUID) (tenanth.Tenan
 
 func (r *TenantRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) (tenanth.Tenant, error) {
 	row, err := q.GetTenant(ctx, pgUUID(tenantID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The handlers send this text to the caller: the domain's words, not
+		// the driver's "no rows in result set".
+		return tenanth.Tenant{}, tenanth.ErrNotFound
+	}
 	if err != nil {
 		return tenanth.Tenant{}, err
 	}
@@ -417,7 +422,7 @@ func (r *TenantRepo) updateWith(ctx context.Context, q *sqlc.Queries, args tenan
 func (r *TenantRepo) whyNotUpdated(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID) error {
 	t, err := r.getWith(ctx, q, tenantID)
 	switch {
-	case errors.Is(err, pgx.ErrNoRows):
+	case errors.Is(err, tenanth.ErrNotFound):
 		return tenanth.ErrNotFound
 	case err != nil:
 		return fmt.Errorf("update tenant: probe: %w", err)
@@ -449,7 +454,7 @@ func (r *TenantRepo) softDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 	if rows == 0 {
 		// Re-read to disambiguate.
 		t, gerr := r.getWith(ctx, q, tenantID)
-		if errors.Is(gerr, pgx.ErrNoRows) {
+		if errors.Is(gerr, tenanth.ErrNotFound) {
 			return tenanth.ErrNotFound
 		}
 		if gerr != nil {
@@ -574,7 +579,7 @@ func (r *TenantRepo) restoreWith(ctx context.Context, q *sqlc.Queries, tenantID 
 	if rows == 0 {
 		// Re-read to distinguish missing vs active.
 		t, gerr := r.getWith(ctx, q, tenantID)
-		if errors.Is(gerr, pgx.ErrNoRows) {
+		if errors.Is(gerr, tenanth.ErrNotFound) {
 			return tenanth.Tenant{}, tenanth.ErrNotFound
 		}
 		if gerr != nil {

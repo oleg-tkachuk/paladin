@@ -5,6 +5,7 @@ package components
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"uuid"
 
@@ -122,6 +123,11 @@ func TestCollectionCreateRefusedWithoutAGrant(t *testing.T) {
 	})
 	if !errors.Is(err, admindomain.ErrBucketNotGranted) {
 		t.Fatalf("create in a bucket the tenant may not bind: %v, want ErrBucketNotGranted", err)
+	}
+	// The API sends this text to the caller: the bucket, not the trigger's
+	// error with its constraint and SQLSTATE.
+	if pgerr.Constraint(err) != "" || strings.Contains(err.Error(), "SQLSTATE") || !strings.Contains(err.Error(), bucket) {
+		t.Errorf("create in a bucket the tenant may not bind: %q", err)
 	}
 }
 

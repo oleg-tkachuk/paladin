@@ -208,7 +208,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		// Outermost of all: tracing and the failure log inside it see an
 		// internal error as it happened; the caller sees its code and a
 		// request id, not a driver's message.
-		middleware.ScrubInternal(),
+		middleware.ScrubInternal(l),
 		otelInt,
 		// Outermost after tracing, and BEFORE auth on purpose: connect
 		// applies the first-listed interceptor outermost, so anything

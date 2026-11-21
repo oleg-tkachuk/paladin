@@ -341,7 +341,7 @@ func assembleDataMux(ctx context.Context, deps *SharedDeps, shared planeShared) 
 		// Outermost of all: tracing and the failure log inside it see an
 		// internal error as it happened; the caller sees its code and a
 		// request id, not a driver's message.
-		middleware.ScrubInternal(),
+		middleware.ScrubInternal(l),
 		shared.otel,
 		// Outermost after tracing, and BEFORE auth on purpose: connect
 		// applies the first-listed interceptor outermost, so anything
@@ -517,7 +517,7 @@ func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, share
 		// Outermost of all: tracing and the failure log inside it see an
 		// internal error as it happened; the caller sees its code and a
 		// request id, not a driver's message.
-		middleware.ScrubInternal(),
+		middleware.ScrubInternal(l),
 		shared.otel,
 		// Outermost after tracing, and BEFORE auth on purpose: connect
 		// applies the first-listed interceptor outermost, so anything

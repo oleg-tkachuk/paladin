@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
+	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
@@ -99,7 +100,7 @@ func TestScrubInternalThroughAHandler(t *testing.T) {
 		unary.Info(ctx).ResponseHeader().Set(paladin.HeaderRetryAfter, retryAfter)
 		return connect.NewError(connect.CodeInternal, leak)
 	}}
-	interceptors := []connect.ServerInterceptor{ScrubInternal(), inner}
+	interceptors := []connect.ServerInterceptor{ScrubInternal(zap.NewNop()), inner}
 
 	for name, sent := range map[string]string{"an id the caller sent": "req-from-caller", "no id": ""} {
 		t.Run(name, func(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
+	"go.uber.org/zap"
 )
 
 // internalMessage is all a caller is told of a failure on the server's side.
@@ -15,6 +16,10 @@ const internalMessage = "internal error"
 
 // requestIDSep joins internalMessage and the request id a caller quotes back.
 const requestIDSep = "; request id "
+
+// msgDriverTextDropped is logged when a refusal's message carried a driver's
+// error and the caller was given it without.
+const msgDriverTextDropped = "refusal message carried a driver error; dropped from the reply"
 
 // scrubbedCodes are the codes that report the server failing, whose messages
 // carry what the caller has no use for and must not see: a driver's error with
@@ -33,19 +38,29 @@ var libraryPrefixes = []string{"limes: "}
 // ScrubInternal replaces the message of an error that reports the server
 // failing — Internal, Unknown, DataLoss — with a generic one naming the
 // request id, and keeps its code, its details and its metadata. Any other
-// error keeps its message, without the names of the server's libraries. A request
+// error keeps its message, without the names of the server's libraries and
+// without the text of any database driver error it wraps, which is logged
+// as the defect in the wrap that it is. A request
 // that arrives without an id is given one, set on the request before the
 // inner interceptors run, so the failure log line and the caller's message
 // carry the same id.
 //
 // Install it outermost: LogOutcome and the tracing interceptor inside it see
 // the original error, which is where its detail belongs.
-func ScrubInternal() connect.ServerInterceptor {
+func ScrubInternal(l *zap.Logger) connect.ServerInterceptor {
 	return func(next connect.ServerFunc) connect.ServerFunc {
 		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 			info := unary.Info(ctx)
 			id := ensureRequestID(info.RequestHeader().Get(HeaderRequestID), info.RequestHeader().Set)
-			err := scrub(next(ctx, spec, stream), id)
+			raw := next(ctx, spec, stream)
+			if carriesDriverText(raw) {
+				l.Warn(msgDriverTextDropped,
+					zap.String(fieldRPC, spec.Procedure),
+					zap.String(fieldCode, connect.CodeOf(raw).String()),
+					zap.String(fieldRequestID, id),
+				)
+			}
+			err := scrub(raw, id)
 			if err != nil && scrubbedCodes[connect.CodeOf(err)] {
 				info.ResponseHeader().Set(HeaderRequestID, id)
 			}
@@ -64,7 +79,8 @@ func ensureRequestID(id string, set func(key, value string)) string {
 }
 
 // scrub is err with its message replaced when its code reports the server
-// failing, and with the server's library names taken out of it otherwise.
+// failing, and with the server's library names and its driver's errors taken
+// out of it otherwise.
 func scrub(err error, requestID string) error {
 	if err == nil {
 		return nil
@@ -76,7 +92,7 @@ func scrub(err error, requestID string) error {
 		if !isConnect {
 			return err
 		}
-		msg := withoutLibraryNames(cerr.Message())
+		msg := withoutLibraryNames(withoutDriverText(cerr.Message(), code, driverTexts(err)))
 		if msg == cerr.Message() {
 			return err
 		}

@@ -1,7 +1,9 @@
 package keyset
 
 import (
+	"encoding/base64"
 	"errors"
+	"strings"
 	"testing"
 	"uuid"
 )
@@ -14,6 +16,30 @@ func TestRoundTrip(t *testing.T) {
 	}
 	if got != c {
 		t.Errorf("decoded %+v, want %+v", got, c)
+	}
+}
+
+// packageNamePrefix is how this package would name itself in an error.
+const packageNamePrefix = "keyset:"
+
+// A token the caller altered is refused in the product's words: the decoder's
+// own error names Go's types and the token's wire fields, which are nothing
+// a caller can act on, and a package name in front says less still.
+func TestDecode_MalformedSaysOnlyThat(t *testing.T) {
+	for name, tok := range map[string]string{
+		"not base64":       "%%%",
+		"not json":         base64.RawURLEncoding.EncodeToString([]byte("not json")),
+		"wrong field type": base64.RawURLEncoding.EncodeToString([]byte(`{"v": 7, "i": "x"}`)),
+	} {
+		_, err := Decode(tok, Order{Field: "key"})
+		if !errors.Is(err, ErrMalformed) || err.Error() != ErrMalformed.Error() {
+			t.Errorf("%s: err = %q, want exactly %q", name, err, ErrMalformed)
+		}
+	}
+	for _, err := range []error{ErrMalformed, ErrOrderChanged} {
+		if strings.HasPrefix(err.Error(), packageNamePrefix) {
+			t.Errorf("%q names the package", err)
+		}
 	}
 }
 

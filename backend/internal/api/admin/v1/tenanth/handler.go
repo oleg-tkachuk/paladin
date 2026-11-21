@@ -687,7 +687,7 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 	// join would drop it for any caller but the tenant itself.
 	t, err := h.repo.Get(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, apiutil.MapError(err)
 	}
 	return &t, nil
 }
@@ -756,7 +756,7 @@ func (h *Handler) readAsTenant(ctx context.Context, t Tenant, callerTenant uuid.
 	}
 	scoped, err := h.repo.Get(auth.WithActingTenant(ctx, t.TenantID), t.TenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, apiutil.MapError(err)
 	}
 	return &scoped, nil
 }
@@ -834,9 +834,9 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	// count: they live in a public bucket and the migration leaves them there
 	// (worker.StorageMigrationWorker says why), so a tenant with only public
 	// collections has nothing to migrate.
-	srcBackend, srcBucket, err := h.repo.TenantSourceBucket(ctx, tenantID)
+	srcBackend, srcBucket, err := h.sourceBucket(ctx, tenantID)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("cannot determine source bucket to migrate from: %w", err))
+		return nil, err
 	}
 
 	if targetBackend == "" {
@@ -852,13 +852,27 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	})
 }
 
+// sourceBucket is the (backend, bucket) the tenant's private collections bind
+// to. No such bucket, or more than one, is a precondition the caller must
+// meet; a store that failed is the server's fault, answered without its error.
+func (h *Handler) sourceBucket(ctx context.Context, tenantID uuid.UUID) (string, string, error) {
+	backend, bucket, err := h.repo.TenantSourceBucket(ctx, tenantID)
+	switch {
+	case errors.Is(err, ErrNoCollectionsToMigrate) || errors.Is(err, ErrSourceBucketAmbiguous):
+		return "", "", rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("cannot determine source bucket to migrate from: %w", err))
+	case err != nil:
+		return "", "", apiutil.MapError(fmt.Errorf("read source bucket: %w", err))
+	}
+	return backend, bucket, nil
+}
+
 // unlessShared answers a migration request for a tenant that is not shared:
 // it starts the rollback of a stuck dedicated tenant (done), or refuses. A
 // shared tenant goes on to migrate (not done, no error).
 func (h *Handler) unlessShared(ctx context.Context, tenantID uuid.UUID) (*StorageMigration, bool, error) {
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
-		return nil, false, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, false, apiutil.MapError(err)
 	}
 	if t.StorageLayout == StorageLayoutShared {
 		return nil, false, nil
@@ -990,7 +1004,7 @@ func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.U
 	// above, or a platform admin reads its own tenant's (none).
 	m, err := h.repo.GetStorageMigration(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, apiutil.MapError(err)
 	}
 	return &m, nil
 }
@@ -1156,7 +1170,7 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 	// destructive call lands.
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return apiutil.MapError(err)
 	}
 	if t.DeletedAt.IsZero() {
 		return connect.NewError(connect.CodeFailedPrecondition,
