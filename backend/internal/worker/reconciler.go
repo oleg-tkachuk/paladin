@@ -77,6 +77,10 @@ func (r *ReconcilerV2) Run(ctx context.Context) error {
 	return RunTicker(ctx, "reconciler", r.cfg.PollInterval, r.tick)
 }
 
+// RunOnce reconciles a single batch and returns its first failure. Run calls
+// the same tick on a schedule; exposed for tests and any on-demand trigger.
+func (r *ReconcilerV2) RunOnce(ctx context.Context) error { return r.tick(ctx) }
+
 // tick reconciles one batch, carrying on past an object that fails, and
 // returns the first failure — the scan's, an object's, or the overdue sample's.
 func (r *ReconcilerV2) tick(ctx context.Context) (first error) {

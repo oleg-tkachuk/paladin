@@ -44,32 +44,37 @@ func (headFunc) DeleteObject(context.Context, string, string, uuid.UUID, string,
 	return nil
 }
 
-// runOneTick starts the reconciler, lets it fire at least once, and stops it.
-// Driving Run (rather than reaching for the unexported tick) keeps the test on
-// the same path production takes: ScanPendingExpired → reconcile → transition.
+// tickDeadline bounds one reconciler tick. Generous on purpose: the full
+// components suite runs in parallel, each test on its own cloned database, and
+// a tick there can take seconds. A tick that still overruns it fails the test
+// instead of leaving the object half-reconciled.
+const tickDeadline = time.Minute
+
+// runOneTick runs exactly one reconciler tick to completion, synchronously:
+// ScanPendingExpired → reconcile → transition, the path Run schedules. A tick
+// failure is expected in the unreachable-backend cases, so it is only logged;
+// the test asserts on the state the tick left behind.
 func runOneTick(t *testing.T, probe worker.StorageProbe, sm *statemachine.Transitioner) {
 	t.Helper()
 	r := worker.NewReconcilerV2(sm, probe, worker.ReconcilerV2Config{
-		PollInterval: 50 * time.Millisecond,
 		// The seeded objects lapsed 48h ago, so any small grace picks them
 		// up. Not sub-second, though: ScanPendingExpired passes
 		// graceBeyond.String() straight into a Postgres interval cast, and
 		// Go renders sub-microsecond durations as "1ns", which Postgres
-		// rejects — the scan then errors and tick swallows it as a warning.
+		// rejects — the scan then errors and the tick returns that instead.
 		PendingGraceTTL: time.Second,
 		BatchSize:       100,
 	}, zap.NewNop())
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), tickDeadline)
 	defer cancel()
-	done := make(chan struct{})
-	go func() {
-		_ = r.Run(ctx)
-		close(done)
-	}()
-	time.Sleep(300 * time.Millisecond) // several ticks at 50ms
-	cancel()
-	<-done
+	err := r.RunOnce(ctx)
+	if ctx.Err() != nil {
+		t.Fatalf("reconciler tick did not finish within %v: %v", tickDeadline, err)
+	}
+	if err != nil {
+		t.Logf("reconciler tick reported: %v", err)
+	}
 }
 
 // TestReconcilerDiscardsWhenBytesAreAbsent is the regression test: a HEAD
