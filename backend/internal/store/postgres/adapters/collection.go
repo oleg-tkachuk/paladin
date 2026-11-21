@@ -109,7 +109,7 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 		if err := publicRuleError(err); err != nil {
 			return objectkey.Collection{}, err
 		}
-		if err := tenancyError(err); err != nil {
+		if err := tenancyError(err, args.BackendID, args.BucketName); err != nil {
 			return objectkey.Collection{}, err
 		}
 		return objectkey.Collection{}, fmt.Errorf("create collection: %w", err)
@@ -240,7 +240,7 @@ func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collect
 		if rule := publicRuleError(err); rule != nil {
 			return rule
 		}
-		if refused := tenancyError(err); refused != nil {
+		if refused := tenancyError(err, backendID, bucketName); refused != nil {
 			return refused
 		}
 		return fmt.Errorf("rebind collection: %w", err)
@@ -427,10 +427,11 @@ func publicRuleError(err error) error {
 
 // tenancyError turns the binding trigger's refusal — a bucket the tenant
 // neither owns nor holds a grant on (ADR-0032) — into ErrBucketNotGranted,
-// and returns nil for any other error.
-func tenancyError(err error) error {
+// naming the bucket, and returns nil for any other error. The trigger's own
+// error is left out: the caller is sent this text.
+func tenancyError(err error, backendID, bucketName string) error {
 	if pgerr.Is(err, pgerr.CheckViolation) && pgerr.ConstraintIs(err, schema.CollectionsBucketTenancy) {
-		return fmt.Errorf("%w: %w", admindomain.ErrBucketNotGranted, err)
+		return fmt.Errorf("%w: %s/%s", admindomain.ErrBucketNotGranted, backendID, bucketName)
 	}
 	return nil
 }
