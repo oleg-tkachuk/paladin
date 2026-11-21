@@ -461,6 +461,7 @@ func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, share
 		WithReuseAudit(repos.Audit, l).
 		WithCollectionRoutes(wire.ProvideCollectionRouteLister(repos, polEngine, cfg))
 	userH := wire.ProvideUserHandler(repos, polEngine)
+	userH.SetLogger(l.Named("users"))
 	if deps.Capability != nil {
 		userH.WithSessionRevoker(deps.Capability.Auth.BulkRevocation).
 			WithCapabilities(deps.Capability.Records)
