@@ -71,6 +71,24 @@ func TestCompleteObjectHeadFailures(t *testing.T) {
 	}
 }
 
+// The refusal says what the caller can fix, in the product's words: the
+// backend's own answer — its request ids, its status line — stays in the
+// cause, for the log.
+func TestCompleteObjectNotUploadedSaysOnlyThat(t *testing.T) {
+	const backendAnswer = "operation error S3: HeadObject, https response error StatusCode: 404, RequestID: R1, HostID: H1"
+	headErr := fmt.Errorf("head: %w: %w", ErrStoredObjectNotFound, errors.New(backendAnswer))
+	obj := Object{ObjectID: uuid.NewV7(), Collection: "docs", State: statemachine.StatePending}
+	h, _, ctx, _ := completeHandler(&completeRepo{obj: obj}, headStorage{err: headErr})
+	_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: obj.ObjectID.String()})
+	var cerr *connect.Error
+	if !errors.As(err, &cerr) || cerr.Message() != ErrNotUploaded.Error() {
+		t.Fatalf("caller reads %v, want %q", err, ErrNotUploaded)
+	}
+	if !errors.Is(err, headErr) {
+		t.Error("the backend's answer is not kept as the cause")
+	}
+}
+
 func TestAssertBypassAllowed(t *testing.T) {
 	withRoles := func(roles ...string) *auth.Principal { return &auth.Principal{Subject: "u1", Roles: roles} }
 	for name, tc := range map[string]struct {

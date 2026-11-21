@@ -2604,12 +2604,17 @@ func mapCreateErr(err error) error {
 	return apiutil.MapError(err)
 }
 
+// ErrNotUploaded is what a caller completing an upload is told when nothing
+// is at the key.
+var ErrNotUploaded = errors.New("object not uploaded yet")
+
 // headFailure answers a HEAD that failed while completing an upload: nothing
 // at the key is the caller's to fix by uploading; a backend that could not be
-// asked is unavailable, not a refusal.
+// asked is unavailable, not a refusal. The backend's own answer stays in the
+// cause: its request ids and status line are nothing the caller can act on.
 func headFailure(err error) error {
 	if errors.Is(err, ErrStoredObjectNotFound) {
-		return rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("object not uploaded yet: %w", err))
+		return connect.NewError(connect.CodeFailedPrecondition, ErrNotUploaded.Error()).WithCause(errors.Join(ErrNotUploaded, err))
 	}
 	return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check the uploaded bytes: %w", err))
 }
