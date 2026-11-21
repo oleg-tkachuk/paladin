@@ -2610,7 +2610,7 @@ func headFailure(err error) error {
 // through a storage event; a HEAD that cannot reach the backend is
 // unavailable, not a refusal.
 func (h *Handler) assertBytesPresent(ctx context.Context, tenantID uuid.UUID, obj Object) error {
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // restore is a row flip: a read-only backend allows it
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // a HEAD; RestoreObject passed the write gate already
 	if err != nil {
 		return MapResolveErr(err)
 	}
