@@ -34,6 +34,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type Storage interface {
@@ -233,6 +234,20 @@ type QuotaUpdater interface {
 	OnObjectPromoted(ctx context.Context, tenantID, objectID uuid.UUID, sizeBytes int64) error
 }
 
+// ErrUploadNotFound is the repository's answer for an upload session the
+// tenant does not have — an id that does not parse names none either. Any
+// other GetSession error is the store failing.
+var ErrUploadNotFound = errors.New("upload not found")
+
+// The RPCs as the outcome log names them.
+const (
+	opInitiate    = "initiate"
+	opComplete    = "complete"
+	opAbort       = "abort"
+	opPresignPart = "presign part"
+	opListParts   = "list parts"
+)
+
 type Handler struct {
 	repo     Repository
 	storage  Storage
@@ -242,7 +257,11 @@ type Handler struct {
 	limits   uploadpolicy.Limits
 	versions VersionRecorder // optional
 	quota    QuotaUpdater    // optional
+	log      *zap.Logger
 }
+
+// SetLogger sets where each RPC says how it ended. Unset, nothing is logged.
+func (h *Handler) SetLogger(l *zap.Logger) { h.log = l }
 
 // SetQuotaUpdater attaches the optional usage hook called on
 // CompleteMultipartUpload after a successful promotion. nil = no-op.
@@ -259,7 +278,14 @@ func (h *Handler) SetVersionRecorder(v VersionRecorder) { h.versions = v }
 // InitiateMultipartUpload creates the PENDING object row and opens a storage
 // multipart session. Handler contract: size_bytes is required here because
 // part sizing needs it (unlike UploadObject where it's a hint).
-func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs) (*Session, error) {
+func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs) (out *Session, err error) {
+	defer func() {
+		fields := []zap.Field{zap.String("collection", args.Collection)}
+		if out != nil {
+			fields = append(fields, zap.String("upload_id", out.UploadID), zap.String("object_id", out.ObjectID.String()))
+		}
+		h.logOutcome(ctx, opInitiate, zapcore.InfoLevel, err, fields...)
+	}()
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, err
@@ -339,16 +365,17 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 // returns it as stored. A read of it that fails after the completion
 // succeeded returns a zero Object rather than an error: the upload is done,
 // and a caller told otherwise would retry a session that no longer exists.
-func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) (objecth.Object, error) {
+func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs) (_ objecth.Object, err error) {
+	defer func() { h.logOutcome(ctx, opComplete, zapcore.InfoLevel, err, zap.String("upload_id", args.UploadID)) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return objecth.Object{}, err
 	}
 	args.TenantID = tenantID
 
-	sess, err := h.repo.GetSession(ctx, args.UploadID)
+	sess, err := h.session(ctx, tenantID, args.UploadID, SessionRef{})
 	if err != nil {
-		return objecth.Object{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return objecth.Object{}, err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
@@ -439,16 +466,14 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	return obj, nil
 }
 
-func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, want SessionRef) error {
+func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, want SessionRef) (err error) {
+	defer func() { h.logOutcome(ctx, opAbort, zapcore.InfoLevel, err, zap.String("upload_id", uploadID)) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return err
 	}
-	sess, err := h.repo.GetSession(ctx, uploadID)
+	sess, err := h.session(ctx, tenantID, uploadID, want)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
-	if err := assertSessionMatches(sess, want); err != nil {
 		return err
 	}
 	objectURI := paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)
@@ -499,20 +524,15 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	start := time.Now()
 	defer func() {
 		metrics.RecordPresign(ctx, metrics.PresignOpPart, metrics.PresignOutcome(err), time.Since(start).Seconds())
+		h.logOutcome(ctx, opPresignPart, zapcore.DebugLevel, err, zap.String("upload_id", uploadID), zap.Int32("part_number", partNumber))
 	}()
 
 	tenantID, p, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	sess, err := h.repo.GetSession(ctx, uploadID)
+	sess, err := h.session(ctx, tenantID, uploadID, want)
 	if err != nil {
-		return "", nil, time.Time{}, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
-	if sess.TenantID != tenantID {
-		return "", nil, time.Time{}, connect.NewError(connect.CodePermissionDenied, "tenant mismatch")
-	}
-	if err := assertSessionMatches(sess, want); err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if partNumber <= 0 || (sess.TotalParts > 0 && partNumber > sess.TotalParts) {
@@ -558,12 +578,16 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if bucket == "" {
 		backendID, bucket = meta.BackendID, meta.BucketName
 	}
-	return h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, PartBinding{
+	url, hdrs, exp, err = h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, PartBinding{
 		Number:        partNumber,
 		SizeBytes:     sess.PartLength(partNumber),
 		ChecksumAlgo:  sess.ChecksumAlgo,
 		ChecksumValue: checksumValue,
 	}, ttl)
+	if err != nil {
+		return "", nil, time.Time{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("presign part: %w", err))
+	}
+	return url, hdrs, exp, nil
 }
 
 // checkParts refuses a completion list that is not the upload's parts
@@ -632,19 +656,14 @@ func (h *Handler) discardMismatched(ctx context.Context, sess Session, backendID
 //
 // The page token is the last part number seen, matching the S3 contract the
 // call is a thin wrapper over.
-func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string, want SessionRef) ([]Part, string, error) {
+func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32, pageToken string, want SessionRef) (_ []Part, _ string, err error) {
+	defer func() { h.logOutcome(ctx, opListParts, zapcore.DebugLevel, err, zap.String("upload_id", uploadID)) }()
 	tenantID, principal, err := apiutil.ActingContext(ctx)
 	if err != nil {
 		return nil, "", err
 	}
-	sess, err := h.repo.GetSession(ctx, uploadID)
+	sess, err := h.session(ctx, tenantID, uploadID, want)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
-	}
-	if sess.TenantID != tenantID {
-		return nil, "", connect.NewError(connect.CodePermissionDenied, "tenant mismatch")
-	}
-	if err := assertSessionMatches(sess, want); err != nil {
 		return nil, "", err
 	}
 	// The parts all belong to the session's one object, so that object is
@@ -658,8 +677,8 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, "", err
 	}
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 100
+	if pageSize <= 0 || pageSize > maxPartsPageSize {
+		pageSize = defaultPartsPageSize
 	}
 	var after int32
 	if pageToken != "" {
@@ -682,6 +701,61 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 		nextToken = strconv.FormatInt(int64(next), 10)
 	}
 	return parts, nextToken, nil
+}
+
+// ListParts' page size: unset or above the most S3 lists in one call is the
+// default.
+const (
+	defaultPartsPageSize = 100
+	maxPartsPageSize     = 1000
+)
+
+// msgTenantMismatch refuses a session another tenant opened.
+const msgTenantMismatch = "tenant mismatch"
+
+// session reads the upload uploadID names and checks it is the caller's and
+// the object the request names. A session the store does not have is
+// NotFound; any other read error is the store failing, which is Internal —
+// not an absent upload a client would start over for.
+func (h *Handler) session(ctx context.Context, tenantID uuid.UUID, uploadID string, want SessionRef) (Session, error) {
+	sess, err := h.repo.GetSession(ctx, uploadID)
+	switch {
+	case errors.Is(err, ErrUploadNotFound):
+		return Session{}, rpcerr.New(connect.CodeNotFound, err)
+	case err != nil:
+		return Session{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("read upload session: %w", err))
+	}
+	if sess.TenantID != tenantID {
+		return Session{}, connect.NewError(connect.CodePermissionDenied, msgTenantMismatch)
+	}
+	return sess, assertSessionMatches(sess, want)
+}
+
+// logOutcome records how op ended: done at success (info for a change, debug
+// for a read), refused at warn, failed at error. fields name what it acted
+// on; never a URL, a signed header or a checksum.
+func (h *Handler) logOutcome(ctx context.Context, op string, success zapcore.Level, err error, fields ...zap.Field) {
+	if h.log == nil {
+		return
+	}
+	fields = append(fields, zap.String("op", op))
+	if tenant, terr := auth.EffectiveTenant(ctx); terr == nil {
+		fields = append(fields, zap.String("tenant_id", tenant.String()))
+	}
+	switch code := connect.CodeOf(err); {
+	case err == nil:
+		h.log.Log(success, "multipart "+op, fields...)
+	case serverFault(code):
+		h.log.Error("multipart failed", append(fields, zap.Error(err))...)
+	default:
+		h.log.Warn("multipart refused", append(fields, zap.String("code", code.String()), zap.Error(err))...)
+	}
+}
+
+// serverFault reports whether code is the server's failure rather than a
+// refusal of the request.
+func serverFault(code connect.Code) bool {
+	return code == connect.CodeInternal || code == connect.CodeUnknown || code == connect.CodeUnavailable
 }
 
 // authorize runs the Cedar check for a multipart action. backendID/bucket

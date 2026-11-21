@@ -517,7 +517,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 
 	t.Run("session missing → not found", func(t *testing.T) {
 		repo := &fakeRepo{getSessionFn: func(context.Context, string) (Session, error) {
-			return Session{}, errors.New("no session")
+			return Session{}, fmt.Errorf("no session: %w", ErrUploadNotFound)
 		}}
 		_, err := newHandler(repo, &fakeStorage{}, allow()).
 			CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1"})
@@ -599,7 +599,7 @@ func TestAbortMultipartUpload(t *testing.T) {
 
 	t.Run("session missing → not found", func(t *testing.T) {
 		repo := &fakeRepo{getSessionFn: func(context.Context, string) (Session, error) {
-			return Session{}, errors.New("no session")
+			return Session{}, fmt.Errorf("no session: %w", ErrUploadNotFound)
 		}}
 		err := newHandler(repo, &fakeStorage{}, allow()).
 			AbortMultipartUpload(authedCtx(tid), "up-1", SessionRef{})
@@ -654,7 +654,7 @@ func TestPresignPart(t *testing.T) {
 
 	t.Run("session missing → not found", func(t *testing.T) {
 		repo := &fakeRepo{getSessionFn: func(context.Context, string) (Session, error) {
-			return Session{}, errors.New("no session")
+			return Session{}, fmt.Errorf("no session: %w", ErrUploadNotFound)
 		}}
 		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).
 			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
@@ -822,7 +822,7 @@ func TestListParts(t *testing.T) {
 
 	t.Run("session missing → not found", func(t *testing.T) {
 		repo := &fakeRepo{getSessionFn: func(context.Context, string) (Session, error) {
-			return Session{}, errors.New("no session")
+			return Session{}, fmt.Errorf("no session: %w", ErrUploadNotFound)
 		}}
 		_, _, err := newHandler(repo, &fakeStorage{}, allow()).
 			ListParts(authedCtx(tid), "up-1", 10, "", SessionRef{})

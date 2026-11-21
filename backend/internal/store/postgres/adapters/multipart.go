@@ -120,7 +120,13 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 	}, nil
 }
 
+// GetSession reads one upload session; multiparth.ErrUploadNotFound when the
+// store has none by that id — an id that does not parse names none either,
+// and Postgres would refuse it as a malformed uuid rather than match no row.
 func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multiparth.Session, error) {
+	if _, err := uuid.Parse(uploadID); err != nil {
+		return multiparth.Session{}, fmt.Errorf("upload %q: %w", uploadID, multiparth.ErrUploadNotFound)
+	}
 	const q = `
 				SELECT mu.id, mu.object_id, mu.storage_upload_id,
 		       mu.part_size_bytes, mu.total_parts, mu.created_at,
@@ -163,7 +169,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 	)
 	if err != nil {
 		if isNoRows(err) {
-			return multiparth.Session{}, fmt.Errorf("upload %q not found", uploadID)
+			return multiparth.Session{}, fmt.Errorf("upload %q: %w", uploadID, multiparth.ErrUploadNotFound)
 		}
 		return multiparth.Session{}, fmt.Errorf("get multipart session: %w", err)
 	}
