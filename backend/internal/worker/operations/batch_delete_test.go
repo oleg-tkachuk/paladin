@@ -479,7 +479,7 @@ func TestBatchUpdateTagsSucceeds(t *testing.T) {
 	tenant := uuid.New()
 	id := uuid.New()
 	repo := &tagRepo{
-		lookupRepo: lookupRepo{objs: []objecth.Object{{ObjectID: id, Collection: "k", ResourceVersion: 5}}},
+		lookupRepo: lookupRepo{objs: []objecth.Object{available(id, 5)}},
 		updErrs:    map[uuid.UUID]error{},
 	}
 	e := &BatchUpdateTagsExecutor{Objects: repo}
@@ -517,7 +517,7 @@ func TestBatchUpdateTagsPartialSuccess(t *testing.T) {
 	tenant := uuid.New()
 	ok, bad, missing := uuid.New(), uuid.New(), uuid.New()
 	repo := &tagRepo{
-		lookupRepo: lookupRepo{objs: []objecth.Object{{ObjectID: ok, Collection: "k"}, {ObjectID: bad, Collection: "k"}}},
+		lookupRepo: lookupRepo{objs: []objecth.Object{available(ok, 0), available(bad, 0)}},
 		updErrs:    map[uuid.UUID]error{bad: objecth.ErrVersionMismatch},
 	}
 	e := &BatchUpdateTagsExecutor{Objects: repo}

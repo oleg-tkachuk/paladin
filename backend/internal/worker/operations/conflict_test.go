@@ -120,8 +120,9 @@ func TestBatchDeleteReadsWhatTheConflictLeft(t *testing.T) {
 // after the other write, at its new version.
 func TestBatchUpdateTagsTriesAConflictAgainOnAFreshRead(t *testing.T) {
 	tenant, id := uuid.New(), uuid.New()
-	before := objecth.Object{ObjectID: id, Collection: "k", ResourceVersion: 5, Tags: map[string]string{"a": "1"}}
-	after := objecth.Object{ObjectID: id, Collection: "k", ResourceVersion: 6, Tags: map[string]string{"a": "1", "b": "2"}}
+	before, after := available(id, 5), available(id, 6)
+	before.Tags = map[string]string{"a": "1"}
+	after.Tags = map[string]string{"a": "1", "b": "2"}
 	repo := &rereadRepo{reads: [][]objecth.Object{{before}, {after}}, updConflicts: 1}
 	e := &BatchUpdateTagsExecutor{Objects: repo}
 	body, err := e.Execute(context.Background(), mkOp(t, tenant, batchh.BatchUpdateTagsArgs{

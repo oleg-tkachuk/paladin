@@ -2020,6 +2020,15 @@ func SoftDeleteRefusal(state statemachine.State) error {
 		"object state %s cannot move to the trash", state)
 }
 
+// MetadataUpdateRefusal says why an object in state takes no metadata or tag
+// write: the store matches only an AVAILABLE row, so asking it anyway comes
+// back as a version conflict, which reads as worth a retry and never is.
+// Batch tag updates report it per object.
+func MetadataUpdateRefusal(state statemachine.State) error {
+	return connect.Errorf(connect.CodeFailedPrecondition,
+		"object state %s takes no metadata update", state)
+}
+
 // assertBypassAllowed gates the governance-retention override. It lives on
 // the RPC side because it is the only part of the permanent delete that needs
 // a principal: BatchDelete's executor runs with no caller on the context, and

@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // BatchUpdateTagsExecutor implements the BatchUpdateTags operation type.
@@ -124,6 +125,11 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Ope
 func (e *BatchUpdateTagsExecutor) updateOne(ctx context.Context, args batchh.BatchUpdateTagsArgs, obj objecth.Object, found bool) error {
 	if !found {
 		return errObjectNotFound
+	}
+	// Checked on every read, the conflict's re-read included: an object
+	// trashed meanwhile is refused, not retried as a conflict.
+	if obj.State != statemachine.StateAvailable {
+		return objecth.MetadataUpdateRefusal(obj.State)
 	}
 	_, err := e.Objects.UpdateMetadata(ctx, objecth.UpdateMetadataArgs{
 		TenantID:        args.TenantID,

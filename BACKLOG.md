@@ -705,19 +705,6 @@ the same commit. Treat this file like a runtime invariant.
   integration test beside the existing bucket-missing one.
 - **Blockers:** none.
 
-### Batch tag updates retry a trashed object as a version conflict
-
-- **Status:** Deferred.
-- **Reason:** `UpdateMetadata` matches only AVAILABLE rows, so the
-  BatchUpdateTags executor reads a trashed or pending object's zero-row write
-  as a conflict, re-reads it `conflictAttempts` times, and reports
-  "resource_version mismatch". UpdateObject now refuses such an object up
-  front; the executor does not.
-- **Definition of Done:** the executor skips a non-AVAILABLE object with a
-  reason naming its state and no retry, as batch delete does with
-  `objecth.SoftDeleteRefusal`; a test covers a trashed id in a batch.
-- **Blockers:** none.
-
 ## Configuration
 
 ### `llm:` and `vector:` schema blocks removed — features never landed
