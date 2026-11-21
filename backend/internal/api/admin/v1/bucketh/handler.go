@@ -167,13 +167,40 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, backendID,
 
 // authorizeStored authorizes action on the bucket as it is stored: with its
 // owner, which a policy may decide on. Every bucket has one (ADR-0032), so
-// none of these asks Cedar about a bucket with no owner any more.
-func (h *Handler) authorizeStored(ctx context.Context, action cedar.Action, backendID, bucketName string) error {
+// none of these asks Cedar about a bucket with no owner any more. It returns
+// the stored bucket, which op then decides on.
+func (h *Handler) authorizeStored(ctx context.Context, op string, action cedar.Action, backendID, bucketName string) (admindomain.Bucket, error) {
 	b, err := h.repo.Get(ctx, backendID, bucketName)
 	if err != nil {
-		return apiutil.MapError(err)
+		return admindomain.Bucket{}, h.answer(op, backendID, bucketName, err)
 	}
-	return h.authorize(ctx, action, backendID, bucketName, b.OwnerTenantID)
+	return b, h.authorize(ctx, action, backendID, bucketName, b.OwnerTenantID)
+}
+
+// answer maps err for the caller of op on the bucket and logs it by what it
+// is: a server fault at error, a refusal the caller can act on at warn.
+func (h *Handler) answer(op, backendID, bucketName string, err error) error {
+	mapped := apiutil.MapError(err)
+	code := connect.CodeOf(mapped)
+	fields := []zap.Field{
+		zap.String("op", op), zap.String("backend_id", backendID), zap.String("bucket_name", bucketName),
+		zap.String("code", code.String()), zap.Error(err),
+	}
+	if apiutil.ServerFault(code) {
+		h.log.Error("bucket operation failed", fields...)
+	} else {
+		h.log.Warn("bucket operation refused", fields...)
+	}
+	return mapped
+}
+
+// readBack is the bucket as op's write left it.
+func (h *Handler) readBack(ctx context.Context, op, backendID, bucketName string) (*admindomain.Bucket, error) {
+	got, err := h.repo.Get(ctx, backendID, bucketName)
+	if err != nil {
+		return nil, h.answer(op, backendID, bucketName, fmt.Errorf("read back: %w", err))
+	}
+	return &got, nil
 }
 
 // ─── Create ─────────────────────────────────────────────────────────────────
@@ -269,7 +296,7 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, "paladin.bucket.created",
+		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, EventBucketCreated,
 			bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
 			map[string]any{
 				"tenant_id":       got.OwnerTenantID.String(),
@@ -373,7 +400,7 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, "paladin.bucket.created",
+		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, EventBucketCreated,
 			bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
 			map[string]any{
 				"tenant_id":       got.OwnerTenantID.String(),
@@ -435,7 +462,7 @@ func (h *Handler) GetBucket(ctx context.Context, backendID, bucketName string) (
 	}
 	b, err := h.repo.Get(ctx, backendID, bucketName)
 	if err != nil {
-		return nil, mapNotFound(err)
+		return nil, h.answer(opGet, backendID, bucketName, err)
 	}
 	// Cedar runs after the read so the engine sees authoritative ownership.
 	if err := h.authorize(ctx, cedar.ActionReadBucket, b.BackendID, b.BucketName, b.OwnerTenantID); err != nil {
@@ -476,7 +503,7 @@ func (h *Handler) ListBuckets(ctx context.Context, args admindomain.ListBucketsA
 	}
 	page, next, err := h.repo.List(ctx, args)
 	if err != nil {
-		return nil, "", err
+		return nil, "", h.answer(opList, args.BackendID, "", err)
 	}
 	page, err = celpkg.FilterPage(h.cel, celpkg.PhysicalBucketSchema, args.Filter, page, bucketRow)
 	if err != nil {
@@ -522,7 +549,11 @@ func (h *Handler) ListAccessibleBuckets(ctx context.Context, tenantID uuid.UUID,
 	if err := h.authorize(ctx, cedar.ActionReadBucket, "", "", tenantID); err != nil {
 		return nil, "", err
 	}
-	return h.repo.ListAccessible(ctx, tenantID, pageSize, afterBackend, afterName)
+	page, next, err := h.repo.ListAccessible(ctx, tenantID, pageSize, afterBackend, afterName)
+	if err != nil {
+		return nil, "", h.answer(opListAccessible, "", "", err)
+	}
+	return page, next, nil
 }
 
 // ─── Update ─────────────────────────────────────────────────────────────────
@@ -539,11 +570,8 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	}
 	// Authorized against the bucket as stored, and — when the owner moves —
 	// against the new owner too: a policy on either tenant has a say.
-	stored, err := h.repo.Get(ctx, in.Bucket.BackendID, in.Bucket.BucketName)
+	stored, err := h.authorizeStored(ctx, opUpdate, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName)
 	if err != nil {
-		return nil, apiutil.MapError(err)
-	}
-	if err := h.authorize(ctx, cedar.ActionManageBucket, in.Bucket.BackendID, in.Bucket.BucketName, stored.OwnerTenantID); err != nil {
 		return nil, err
 	}
 	ownerMoves := slices.Contains(in.UpdateMask, MaskOwnerTenantID)
@@ -579,7 +607,7 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 		if e != nil {
 			return e
 		}
-		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, "paladin.bucket.updated",
+		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, EventBucketUpdated,
 			bucketResourceName(got.OwnerTenantID, got.BackendID, got.BucketName),
 			map[string]any{
 				"tenant_id":        got.OwnerTenantID.String(),
@@ -591,7 +619,7 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 				// cached snapshot if they care which scalar moved.
 			})
 	}); err != nil {
-		return nil, mapVersion(err)
+		return nil, h.answer(opUpdate, in.Bucket.BackendID, in.Bucket.BucketName, err)
 	}
 	return &got, nil
 }
@@ -602,14 +630,13 @@ func (h *Handler) SetPolicy(ctx context.Context, backendID, bucketName, policy s
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorizeStored(ctx, cedar.ActionConfigureBucketPolicy, backendID, bucketName); err != nil {
+	if _, err := h.authorizeStored(ctx, opSetPolicy, cedar.ActionConfigureBucketPolicy, backendID, bucketName); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetPolicy(ctx, backendID, bucketName, policy, expectedVersion); err != nil {
-		return nil, mapVersion(err)
+		return nil, h.answer(opSetPolicy, backendID, bucketName, err)
 	}
-	got, _ := h.repo.Get(ctx, backendID, bucketName)
-	return &got, nil
+	return h.readBack(ctx, opSetPolicy, backendID, bucketName)
 }
 
 // ErrLifecycleTransition refuses a lifecycle rule that transitions objects
@@ -621,7 +648,8 @@ func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName s
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorizeStored(ctx, cedar.ActionConfigureLifecycle, backendID, bucketName); err != nil {
+	stored, err := h.authorizeStored(ctx, opSetLifecycle, cedar.ActionConfigureLifecycle, backendID, bucketName)
+	if err != nil {
 		return nil, err
 	}
 	// Validate every rule's CEL match upfront so a typo is rejected at
@@ -635,49 +663,43 @@ func (h *Handler) SetLifecycleRules(ctx context.Context, backendID, bucketName s
 			return nil, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("rule[%d] (id=%q): %w", i, r.ID, ErrLifecycleTransition))
 		}
 	}
-	if err := h.refuseLifecycleOnPublic(ctx, backendID, bucketName, rules); err != nil {
-		return nil, err
+	if err := refuseLifecycleOnPublic(stored, rules); err != nil {
+		return nil, h.answer(opSetLifecycle, backendID, bucketName, err)
 	}
 	if err := h.repo.SetLifecycle(ctx, backendID, bucketName, rules, expectedVersion); err != nil {
-		return nil, mapVersion(err)
+		return nil, h.answer(opSetLifecycle, backendID, bucketName, err)
 	}
-	got, _ := h.repo.Get(ctx, backendID, bucketName)
-	return &got, nil
+	return h.readBack(ctx, opSetLifecycle, backendID, bucketName)
 }
 
 func (h *Handler) SetObjectLock(ctx context.Context, backendID, bucketName string, lock admindomain.ObjectLockConfig, expectedVersion int64) (*admindomain.Bucket, error) {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorizeStored(ctx, cedar.ActionConfigureLock, backendID, bucketName); err != nil {
+	stored, err := h.authorizeStored(ctx, opSetObjectLock, cedar.ActionConfigureLock, backendID, bucketName)
+	if err != nil {
 		return nil, err
 	}
 	// Object lock attaches retention to a VERSION, so a bucket without
 	// versioning has nothing to attach it to: every SetObjectRetention would
 	// fail on "no current version" while the bucket reported object lock as
 	// enabled. S3 has the same precondition, for the same reason.
-	if lock.Enabled {
-		current, err := h.repo.Get(ctx, backendID, bucketName)
-		if err != nil {
-			return nil, mapVersion(err)
-		}
-		if !current.Versioning.Enabled {
-			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				"object lock requires versioning; enable versioning on the bucket first")
-		}
+	if lock.Enabled && !stored.Versioning.Enabled {
+		return nil, h.answer(opSetObjectLock, backendID, bucketName, connect.NewError(connect.CodeFailedPrecondition,
+			"object lock requires versioning; enable versioning on the bucket first"))
 	}
 	if err := h.repo.SetObjectLock(ctx, backendID, bucketName, lock, expectedVersion); err != nil {
-		return nil, mapVersion(err)
+		return nil, h.answer(opSetObjectLock, backendID, bucketName, err)
 	}
-	got, _ := h.repo.Get(ctx, backendID, bucketName)
-	return &got, nil
+	return h.readBack(ctx, opSetObjectLock, backendID, bucketName)
 }
 
 func (h *Handler) SetVersioning(ctx context.Context, backendID, bucketName string, v admindomain.BucketVersioning, expectedVersion int64) (*admindomain.Bucket, error) {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorizeStored(ctx, cedar.ActionConfigureVersioning, backendID, bucketName); err != nil {
+	stored, err := h.authorizeStored(ctx, opSetVersioning, cedar.ActionConfigureVersioning, backendID, bucketName)
+	if err != nil {
 		return nil, err
 	}
 	// The other half of the same precondition. Turning versioning off under a
@@ -686,35 +708,27 @@ func (h *Handler) SetVersioning(ctx context.Context, backendID, bucketName strin
 	// version a future lock would need. Refusing here means the operator has
 	// to disable object lock first, which is the decision they are actually
 	// making.
-	if !v.Enabled {
-		current, err := h.repo.Get(ctx, backendID, bucketName)
-		if err != nil {
-			return nil, mapVersion(err)
-		}
-		if current.ObjectLock.Enabled {
-			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				"cannot disable versioning while object lock is enabled; disable object lock first")
-		}
+	if !v.Enabled && stored.ObjectLock.Enabled {
+		return nil, h.answer(opSetVersioning, backendID, bucketName, connect.NewError(connect.CodeFailedPrecondition,
+			"cannot disable versioning while object lock is enabled; disable object lock first"))
 	}
 	if err := h.repo.SetVersioning(ctx, backendID, bucketName, v, expectedVersion); err != nil {
-		return nil, mapVersion(err)
+		return nil, h.answer(opSetVersioning, backendID, bucketName, err)
 	}
-	got, _ := h.repo.Get(ctx, backendID, bucketName)
-	return &got, nil
+	return h.readBack(ctx, opSetVersioning, backendID, bucketName)
 }
 
 func (h *Handler) SetReplication(ctx context.Context, backendID, bucketName string, r admindomain.BucketReplication, expectedVersion int64) (*admindomain.Bucket, error) {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return nil, err
 	}
-	if err := h.authorizeStored(ctx, cedar.ActionConfigureReplication, backendID, bucketName); err != nil {
+	if _, err := h.authorizeStored(ctx, opSetReplication, cedar.ActionConfigureReplication, backendID, bucketName); err != nil {
 		return nil, err
 	}
 	if err := h.repo.SetReplication(ctx, backendID, bucketName, r, expectedVersion); err != nil {
-		return nil, mapVersion(err)
+		return nil, h.answer(opSetReplication, backendID, bucketName, err)
 	}
-	got, _ := h.repo.Get(ctx, backendID, bucketName)
-	return &got, nil
+	return h.readBack(ctx, opSetReplication, backendID, bucketName)
 }
 
 // ─── Delete ─────────────────────────────────────────────────────────────────
@@ -745,9 +759,63 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
 		return err
 	}
-	if err := h.authorizeStored(ctx, cedar.ActionManageBucket, in.BackendID, in.BucketName); err != nil {
+	stored, err := h.authorizeStored(ctx, opDelete, cedar.ActionManageBucket, in.BackendID, in.BucketName)
+	if err != nil {
 		return err
 	}
+	if err := h.deletable(ctx, in, stored); err != nil {
+		return h.answer(opDelete, in.BackendID, in.BucketName, err)
+	}
+	// Outbox model for deletes (mirrors CreateBucket): the row stays in
+	// place flipped to 'deleting', and the bucket-reconciler worker
+	// drives the physical s3.DeleteBucket then the actual row removal.
+	// That avoids the same orphan window the create path used to have.
+	//
+	// When the operator opts out of backend deletion — S3 cleanup is their
+	// problem — the row is deleted right away instead. Faster, and it avoids
+	// parking dev/test rows in a 'deleting' loop the worker can never resolve
+	// (no S3 → always transient).
+	//
+	// Outbox mode fires a `.deleting` (not `.deleted`) event because the
+	// bucket isn't actually gone yet — the reconciler worker drives the
+	// physical S3 DeleteBucket and only THEN does the row disappear.
+	// Subscribers that want the terminal state can listen for `.deleted`
+	// once the worker emits it (BACKLOG — reconciler doesn't yet emit
+	// per-row events on completion). The write and its event commit in one
+	// tx (ADR-0003); the event's owner is the one the bucket was authorized
+	// with.
+	write, eventType, mode := h.repo.DeleteTx, EventBucketDeleted, deleteModeImmediate
+	if in.DeleteOnBackend {
+		write, eventType, mode = h.repo.MarkDeletingTx, EventBucketDeleting, deleteModeOutbox
+	}
+	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := write(ctx, tx, in.BackendID, in.BucketName, in.ExpectedVersion); e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, stored.OwnerTenantID, eventType,
+			bucketResourceName(stored.OwnerTenantID, stored.BackendID, stored.BucketName),
+			map[string]any{
+				"tenant_id":   stored.OwnerTenantID.String(),
+				"backend_id":  stored.BackendID,
+				"bucket_name": stored.BucketName,
+				"mode":        mode,
+			})
+	}); err != nil {
+		return h.answer(opDelete, in.BackendID, in.BucketName, err)
+	}
+	return nil
+}
+
+// The mode a delete event names: the row removed at once, or marked for the
+// reconciler to remove after the backend's bucket.
+const (
+	deleteModeImmediate = "immediate"
+	deleteModeOutbox    = "outbox"
+)
+
+// deletable refuses a delete of the stored bucket while anything holds it, or
+// a delete on the backend of one Paladin did not create there.
+func (h *Handler) deletable(ctx context.Context, in DeleteBucketInput, stored admindomain.Bucket) error {
 	// Refuse while anything still holds this bucket under ON DELETE RESTRICT.
 	// Without the check the only thing standing in the way is the foreign key
 	// itself, and a foreign key is not an API contract: the caller got
@@ -770,8 +838,8 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	// of another tenant's data as free. Measured, not assumed: as paladin_app
 	// with no session tenant the same count returns 0 where the owner sees 1,
 	// while the FK check — an internal trigger that does not consult RLS —
-	// sees the row either way. The platform.admin / bucket.admin gate above
-	// is what licenses the wider read.
+	// sees the row either way. The platform.admin / bucket.admin gate in
+	// DeleteBucket is what licenses the wider read.
 	refs, err := h.repo.CountBucketReferences(
 		auth.WithCrossTenantRead(ctx), in.BackendID, in.BucketName)
 	if err != nil {
@@ -782,96 +850,45 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 			"bucket %q is still referenced by %s; remove those first",
 			in.BucketName, held)
 	}
-	// Outbox model for deletes (mirrors CreateBucket): the row stays in
-	// place flipped to 'deleting', and the bucket-reconciler worker
-	// drives the physical s3.DeleteBucket then the actual row removal.
-	// That avoids the same orphan window the create path used to have.
-	//
-	// When the operator opted out of backend deletion, we still mark
-	// 'deleting' rather than physical-delete inline — the worker has
-	// the same code path that handles the "no provisioner" case (it
-	// just deletes the row without calling S3) and concentrating the
-	// terminal logic there keeps the handler simple.
-	if in.DeleteOnBackend && h.provisioner == nil {
-		return connect.NewError(connect.CodeUnavailable, "backend provisioning not wired")
-	}
-	if in.DeleteOnBackend {
-		current, err := h.repo.Get(ctx, in.BackendID, in.BucketName)
-		if err != nil {
-			return apiutil.MapError(err)
-		}
-		if !current.CreatedOnBackend {
-			return apiutil.MapError(fmt.Errorf(
-				"%w: %q holds data Paladin did not write; delete the row only, and the bucket out of band",
-				ErrBucketNotCreatedByPaladin, in.BucketName))
-		}
-	}
 	if !in.DeleteOnBackend {
-		// Operator says S3 cleanup is their problem — physically delete
-		// the row right away. Faster and avoids parking dev/test rows
-		// in a 'deleting' loop the worker can never resolve (no S3 →
-		// always transient).
-		// Snapshot the row before deletion so we can attach owner
-		// tenant_id to the event payload — repo.Delete leaves us
-		// without that context.
-		// Snapshot before delete (pre-tx read) for the event's owner
-		// tenant_id; the delete + paladin.bucket.deleted commit in one tx
-		// (ADR-0003). When the pre-read failed we skip the event but still
-		// run the OCC-guarded delete.
-		preDelete, getErr := h.repo.Get(ctx, in.BackendID, in.BucketName)
-		if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-			if e := h.repo.DeleteTx(ctx, tx, in.BackendID, in.BucketName, in.ExpectedVersion); e != nil {
-				return e
-			}
-			if getErr != nil {
-				return nil
-			}
-			return h.dispatchEventTx(ctx, tx, preDelete.OwnerTenantID, "paladin.bucket.deleted",
-				bucketResourceName(preDelete.OwnerTenantID, preDelete.BackendID, preDelete.BucketName),
-				map[string]any{
-					"tenant_id":   preDelete.OwnerTenantID.String(),
-					"backend_id":  preDelete.BackendID,
-					"bucket_name": preDelete.BucketName,
-					"mode":        "immediate",
-				})
-		}); err != nil {
-			return mapVersion(err)
-		}
 		return nil
 	}
-	// Outbox-mode delete fires a `.deleting` (not `.deleted`) event because
-	// the bucket isn't actually gone yet — the reconciler worker drives the
-	// physical S3 DeleteBucket and only THEN does the row disappear.
-	// Subscribers that want the terminal state can listen for `.deleted`
-	// once the worker emits it (BACKLOG — reconciler doesn't yet emit
-	// per-row events on completion). Mark + event commit in one tx (ADR-0003).
-	preMark, getErr := h.repo.Get(ctx, in.BackendID, in.BucketName)
-	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-		if e := h.repo.MarkDeletingTx(ctx, tx, in.BackendID, in.BucketName, in.ExpectedVersion); e != nil {
-			return e
-		}
-		if getErr != nil {
-			return nil
-		}
-		return h.dispatchEventTx(ctx, tx, preMark.OwnerTenantID, "paladin.bucket.deleting",
-			bucketResourceName(preMark.OwnerTenantID, preMark.BackendID, preMark.BucketName),
-			map[string]any{
-				"tenant_id":   preMark.OwnerTenantID.String(),
-				"backend_id":  preMark.BackendID,
-				"bucket_name": preMark.BucketName,
-				"mode":        "outbox",
-			})
-	}); err != nil {
-		return mapVersion(err)
+	if h.provisioner == nil {
+		return connect.NewError(connect.CodeUnavailable, "backend provisioning not wired")
+	}
+	if !stored.CreatedOnBackend {
+		return fmt.Errorf(
+			"%w: %q holds data Paladin did not write; delete the row only, and the bucket out of band",
+			ErrBucketNotCreatedByPaladin, in.BucketName)
 	}
 	return nil
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-func mapNotFound(err error) error { return apiutil.MapError(err) }
+// The op each log line of the bucket RPCs names.
+const (
+	opCreate         = "create"
+	opEnsure         = "ensure"
+	opGet            = "get"
+	opList           = "list"
+	opListAccessible = "list accessible"
+	opUpdate         = "update"
+	opDelete         = "delete"
+	opSetPolicy      = "set policy"
+	opSetLifecycle   = "set lifecycle"
+	opSetObjectLock  = "set object lock"
+	opSetVersioning  = "set versioning"
+	opSetReplication = "set replication"
+	opGrant          = "grant"
+	opRevokeGrant    = "revoke grant"
+	opListGrants     = "list grants"
+)
 
-func mapVersion(err error) error { return apiutil.MapError(err) }
-
-// silence unused
-var _ = auth.AudienceAdmin
+// The lifecycle events the bucket RPCs record.
+const (
+	EventBucketCreated  = "paladin.bucket.created"
+	EventBucketUpdated  = "paladin.bucket.updated"
+	EventBucketDeleted  = "paladin.bucket.deleted"
+	EventBucketDeleting = "paladin.bucket.deleting"
+)

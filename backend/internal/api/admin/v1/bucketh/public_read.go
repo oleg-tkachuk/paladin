@@ -105,17 +105,10 @@ func checkPublicBaseURL(raw string) error {
 
 // refuseLifecycleOnPublic: the lifecycle worker moves objects to the trash,
 // which leaves a public object's bytes served (ADR-0027).
-func (h *Handler) refuseLifecycleOnPublic(ctx context.Context, backendID, bucketName string, rules []admindomain.LifecycleRule) error {
-	if len(rules) == 0 {
-		return nil
-	}
-	b, err := h.repo.Get(ctx, backendID, bucketName)
-	if err != nil {
-		return apiutil.MapError(err)
-	}
-	if b.PublicRead {
-		return apiutil.MapError(publicread.Rulef(
-			"a public bucket takes no lifecycle rules: they move objects to the trash, where their bytes stay public"))
+func refuseLifecycleOnPublic(b admindomain.Bucket, rules []admindomain.LifecycleRule) error {
+	if len(rules) > 0 && b.PublicRead {
+		return publicread.Rulef(
+			"a public bucket takes no lifecycle rules: they move objects to the trash, where their bytes stay public")
 	}
 	return nil
 }

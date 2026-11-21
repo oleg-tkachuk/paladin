@@ -50,6 +50,10 @@ type fakeRepo struct {
 	// "no references" on exactly the buckets it is meant to protect.
 	getCalls         int
 	getNotFoundFirst bool
+	// failGetFrom, when set, makes the Get calls from that one on (1-based)
+	// fail with getErr, so the reads before a write succeed and its read-back
+	// does not.
+	failGetFrom int
 
 	bucketRefs      []admindomain.BucketReference
 	bucketRefsErr   error
@@ -114,6 +118,12 @@ func (f *fakeRepo) Get(context.Context, string, string) (admindomain.Bucket, err
 	// idempotent path returns and the race branch is never reached.
 	if f.getNotFoundFirst && f.getCalls == 1 {
 		return admindomain.Bucket{}, admindomain.ErrNotFound
+	}
+	if f.failGetFrom > 0 {
+		if f.getCalls >= f.failGetFrom {
+			return admindomain.Bucket{}, f.getErr
+		}
+		return f.getBucket, nil
 	}
 	return f.getBucket, f.getErr
 }
