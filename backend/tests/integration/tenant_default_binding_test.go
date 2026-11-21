@@ -10,11 +10,45 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
+
+// TestTenantDefaultBinding_MissingTenantIsNotFound: a tenant that does not
+// exist owns and holds a grant on nothing, so its binding used to be refused
+// as a bucket not granted — or, for a bucket that is not there either, as a
+// missing bucket. The request names the tenant first; that it is missing is
+// the answer.
+func TestTenantDefaultBinding_MissingTenantIsNotFound(t *testing.T) {
+	f := setupDispatcher(t)
+	ctx := context.Background()
+	owner := mustCreateTenant(t, f.h.PoolMigrate, "binding-owner")
+	seedOwnedBucket(t, f.h.PoolMigrate, owner, "primary", "owned-elsewhere")
+	other := mustCreateTenant(t, f.h.PoolMigrate, "binding-other")
+	repo := adapters.NewTenantRepo(sqlc.New(f.h.PoolMigrate), f.h.PoolMigrate)
+
+	for _, tc := range []struct {
+		name   string
+		tenant uuid.UUID
+		bucket string
+		want   error
+	}{
+		{"missing tenant, a bucket it holds no grant on", uuid.New(), "storageBackends/primary/buckets/owned-elsewhere", tenanth.ErrNotFound},
+		{"missing tenant, a missing bucket", uuid.New(), "storageBackends/primary/buckets/nope", tenanth.ErrNotFound},
+		{"real tenant, a bucket it holds no grant on", other, "storageBackends/primary/buckets/owned-elsewhere", admindomain.ErrBucketNotGranted},
+		{"real tenant, a missing bucket", other, "storageBackends/primary/buckets/nope", tenanth.ErrDefaultBindingBucketMissing},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := repo.SetDefaultBinding(ctx, tc.tenant, tc.bucket, "admin@local"); !errors.Is(err, tc.want) {
+				t.Fatalf("SetDefaultBinding = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
 
 func TestTenantDefaultBinding_SetGetClear(t *testing.T) {
 	f := setupDispatcher(t)

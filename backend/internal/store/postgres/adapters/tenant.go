@@ -295,16 +295,8 @@ func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, 
 	if err != nil {
 		return tenanth.DefaultBinding{}, err
 	}
-	// A default binding is where the tenant's collections go, so it names
-	// only a bucket the tenant owns or holds a grant on (ADR-0032); the
-	// binding trigger would refuse the first collection otherwise.
-	switch may, err := r.q.TenantMayBindBucket(ctx, pgUUID(tenantID), backendName, bucketName); {
-	case errors.Is(err, pgx.ErrNoRows):
-		return tenanth.DefaultBinding{}, tenanth.ErrDefaultBindingBucketMissing
-	case err != nil:
-		return tenanth.DefaultBinding{}, fmt.Errorf("set default binding: may bind: %w", err)
-	case !may:
-		return tenanth.DefaultBinding{}, admindomain.ErrBucketNotGranted
+	if err := r.mayBind(ctx, tenantID, backendName, bucketName); err != nil {
+		return tenanth.DefaultBinding{}, err
 	}
 	n, err := r.q.SetTenantDefaultBinding(ctx, pgUUID(tenantID), backendName, bucketName, setBy)
 	if err != nil {
@@ -324,6 +316,38 @@ func (r *TenantRepo) SetDefaultBinding(ctx context.Context, tenantID uuid.UUID, 
 		return tenanth.DefaultBinding{}, err
 	}
 	return defaultBindingFromSQLC(row.TenantDefaultBinding, row.BackendName, row.BucketName), nil
+}
+
+// mayBind refuses a default binding to a bucket the tenant may not bind. A
+// default binding is where the tenant's collections go, so it names only a
+// bucket the tenant owns or holds a grant on (ADR-0032); the binding trigger
+// would refuse the first collection otherwise.
+func (r *TenantRepo) mayBind(ctx context.Context, tenantID uuid.UUID, backendName, bucketName string) error {
+	switch may, err := r.q.TenantMayBindBucket(ctx, pgUUID(tenantID), backendName, bucketName); {
+	case errors.Is(err, pgx.ErrNoRows):
+		return r.bindingRefusal(ctx, tenantID, tenanth.ErrDefaultBindingBucketMissing)
+	case err != nil:
+		return fmt.Errorf("set default binding: may bind: %w", err)
+	case !may:
+		return r.bindingRefusal(ctx, tenantID, admindomain.ErrBucketNotGranted)
+	}
+	return nil
+}
+
+// bindingRefusal is why a default binding was refused: refusal, unless the
+// tenant does not exist, which is ErrNotFound. A missing tenant neither owns
+// nor holds a grant on any bucket, so the bucket check alone would blame the
+// bucket. Asked only once a binding is refused, so a binding that lands pays
+// no extra read.
+func (r *TenantRepo) bindingRefusal(ctx context.Context, tenantID uuid.UUID, refusal error) error {
+	_, err := r.q.GetTenant(ctx, pgUUID(tenantID))
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return tenanth.ErrNotFound
+	case err != nil:
+		return fmt.Errorf("set default binding: read tenant: %w", err)
+	}
+	return refusal
 }
 
 // ClearDefaultBinding is idempotent — 0 rows affected is a no-op success.

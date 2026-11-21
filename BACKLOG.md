@@ -694,17 +694,6 @@ the same commit. Treat this file like a runtime invariant.
   `apiutil.MapError`, so anything else is Internal; tests cover each.
 - **Blockers:** none.
 
-### Setting a default binding for a missing tenant reads as bucket-not-granted
-
-- **Status:** Deferred.
-- **Reason:** `TenantRepo.SetDefaultBinding` asks `TenantMayBindBucket`
-  first, and a tenant that does not exist neither owns nor holds a grant on
-  any bucket, so it is refused as `ErrBucketNotGranted` rather than
-  `ErrNotFound`. Found while auditing zero-row outcomes; it is not one.
-- **Definition of Done:** a missing tenant answers NOT_FOUND, with an
-  integration test beside the existing bucket-missing one.
-- **Blockers:** none.
-
 ## Configuration
 
 ### `llm:` and `vector:` schema blocks removed — features never landed
