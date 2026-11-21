@@ -9,3 +9,11 @@
 - A draining (read-only) or disabled backend's refusal now carries its
   reason, `ERROR_REASON_BACKEND_READ_ONLY` or `ERROR_REASON_BACKEND_DISABLED`,
   in the error's `ErrorInfo`. It came with the code alone before.
+- `RestoreObject`, `RestoreVersion`, `UpdateObject` (and the tag RPCs on it),
+  `DeleteObject` to the trash, `SetObjectTaint` and `CompleteObject` — its
+  already-completed no-op included — used to proceed on a draining or
+  provisioning backend. They are now refused there like every other write.
+- A write whose bucket could not be looked up is refused with `INTERNAL`
+  rather than authorized without its bucket and carried out.
+- `GetObjectLock` is a read: a draining backend now serves it instead of
+  refusing it with `FAILED_PRECONDITION`.

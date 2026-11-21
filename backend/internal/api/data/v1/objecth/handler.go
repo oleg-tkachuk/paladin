@@ -1017,19 +1017,16 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 		return nil, err
 	}
 	principal, _ := auth.PrincipalFromContext(ctx)
-	// Populate the physical (backend, bucket) on the authz Resource so a
-	// bucket:/collection:-scoped PAT enforces on complete. Best-effort +
-	// read-only: this RPC is also the idempotent already-AVAILABLE no-op,
-	// which historically resolved no bucket, so a resolution failure must NOT
-	// newly fail an unscoped completion — leave the bucket empty (scoped
-	// principals stay fail-closed as before, unscoped principals are
-	// unaffected because the scope-enforcement forbid never fires for them).
-	// The PENDING promote path below still resolves with write=true, keeping
-	// the disabled/read-only-backend gate exactly where it was.
-	authBackendID, authBucket := scopeBucket(ctx, h.log, h.repo, opComplete, tenantID, obj.Collection, false)
+	// A completion is a write, the already-AVAILABLE no-op included: it goes
+	// through the write gate, so it answers a draining or provisioning bucket
+	// as every other write does, and Cedar decides on the resolved binding.
+	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection)
+	if err != nil {
+		return nil, err
+	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
-		BackendID: authBackendID, BucketName: authBucket,
+		BackendID: backendID, BucketName: bucket,
 		ContentType: obj.ContentType, SizeBytes: obj.SizeBytes,
 	}, cedar.ActionPutObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
@@ -1043,7 +1040,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 		return nil, connect.Errorf(connect.CodeFailedPrecondition,
 			"cannot complete in state %s", obj.State)
 	}
-	return h.completeUpload(ctx, tenantID, in, obj)
+	return h.completeUpload(ctx, tenantID, in, obj, backendID, bucket)
 }
 
 // msgObjectNameRequired refuses a request that does not name its object.
@@ -1079,14 +1076,14 @@ type storedBytes struct {
 }
 
 // completeUpload promotes a PENDING upload to what the backend holds for it,
-// once the caller's claims about those bytes check out.
-func (h *Handler) completeUpload(ctx context.Context, tenantID uuid.UUID, in CompleteObjectInput, obj Object) (*Object, error) {
+// once the caller's claims about those bytes check out. backendID and bucket
+// are the binding the write gate resolved for it.
+func (h *Handler) completeUpload(ctx context.Context, tenantID uuid.UUID, in CompleteObjectInput, obj Object, backendID, bucket string) (*Object, error) {
 	// Materialize authoritative values via HEAD against the object's bucket.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, true) // complete/promote (mutation)
-	if err != nil {
-		return nil, MapResolveErr(err)
-	}
-	var b storedBytes
+	var (
+		b   storedBytes
+		err error
+	)
 	b.etag, b.size, b.checksum, b.sequencer, err = h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
 	if err != nil {
 		return nil, headFailure(err)
@@ -1238,7 +1235,7 @@ func (h *Handler) ListCommonPrefixes(ctx context.Context, in ListObjectsInput) (
 	if err := auth.AssertCapabilityOp(ctx, limes.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
 		return nil, false, err
 	}
-	backendID, bucket := scopeBucket(ctx, h.log, h.repo, opListFolders, tenantID, in.Collection, false)
+	backendID, bucket := scopeBucket(ctx, h.log, h.repo, opListFolders, tenantID, in.Collection)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: in.Collection,
 		BackendID: backendID, BucketName: bucket,
@@ -1296,7 +1293,7 @@ func (h *Handler) ListObjects(ctx context.Context, in ListObjectsInput) (_ []Obj
 	// scope-enforcement forbid never fires for them) and scoped principals
 	// stay fail-closed. Resolved ONCE here and reused by the per-row loop
 	// below (the collection→bucket binding is constant across the page).
-	listBackendID, listBucket := scopeBucket(ctx, h.log, h.repo, opList, tenantID, in.Collection, false)
+	listBackendID, listBucket := scopeBucket(ctx, h.log, h.repo, opList, tenantID, in.Collection)
 	// One tenant+collection-scoped Cedar check up front; per-row Cedar would
 	// dominate pagination cost.
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
@@ -1449,7 +1446,7 @@ func (h *Handler) CountObjects(ctx context.Context, in CountObjectsInput) (_ *Co
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on count; best-effort + read-only (see ListObjects).
-	countBackendID, countBucket := scopeBucket(ctx, h.log, h.repo, opCount, tenantID, in.Collection, false)
+	countBackendID, countBucket := scopeBucket(ctx, h.log, h.repo, opCount, tenantID, in.Collection)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: in.Collection,
 		BackendID: countBackendID, BucketName: countBucket,
@@ -1515,7 +1512,7 @@ func (h *Handler) ListDistinctTags(
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on the tag facet; best-effort + read-only (see ListObjects).
-	tagsBackendID, tagsBucket := scopeBucket(ctx, h.log, h.repo, opListTags, tenantID, collection, false)
+	tagsBackendID, tagsBucket := scopeBucket(ctx, h.log, h.repo, opListTags, tenantID, collection)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: collection,
 		BackendID: tagsBackendID, BucketName: tagsBucket,
@@ -1567,7 +1564,7 @@ func (h *Handler) GetObject(ctx context.Context, collection, objectID string) (_
 	// Resolve the collection→bucket binding (obj carries no bucket — the find
 	// query does not JOIN collections) so bucket:/collection: PAT scopes
 	// enforce on read; best-effort + read-only (see ListObjects).
-	getBackendID, getBucket := scopeBucket(ctx, h.log, h.repo, opGet, tenantID, obj.Collection, false)
+	getBackendID, getBucket := scopeBucket(ctx, h.log, h.repo, opGet, tenantID, obj.Collection)
 	getRes := &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: getBackendID, BucketName: getBucket,
@@ -1624,7 +1621,7 @@ func (h *Handler) LookupObject(ctx context.Context, collection, key string) (out
 	}
 	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
 	// enforce on lookup; best-effort + read-only (see ListObjects).
-	lkBackendID, lkBucket := scopeBucket(ctx, h.log, h.repo, opLookup, tenantID, obj.Collection, false)
+	lkBackendID, lkBucket := scopeBucket(ctx, h.log, h.repo, opLookup, tenantID, obj.Collection)
 	lkRes := &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: lkBackendID, BucketName: lkBucket,
@@ -1787,7 +1784,11 @@ func (h *Handler) UpdateObject(ctx context.Context, in UpdateObjectInput) (_ *Ob
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	if err := h.authorize(ctx, principal, tenantID, h.updateResource(ctx, tenantID, in.Collection, cur),
+	resource, err := h.updateResource(ctx, tenantID, in.Collection, cur)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, principal, tenantID, resource,
 		cedar.ActionUpdateObject, cur.SizeBytes, cur.ContentType); err != nil {
 		return nil, err
 	}
@@ -1819,19 +1820,20 @@ func (h *Handler) updateTarget(ctx context.Context, tenantID uuid.UUID, in Updat
 // updateResource is the Cedar resource an update of cur, in collection, is
 // decided on.
 //
-// It resolves the collection→bucket binding so bucket:/collection: PAT scopes
-// enforce on metadata/tag writes (this backs PutObjectTags /
-// DeleteObjectTags). Best-effort + read-only: UpdateObject is a DB-only
-// mutation that historically resolved no bucket, so a resolution failure
-// must NOT newly fail an unscoped update — leave the bucket empty (scoped
-// principals stay fail-closed, unscoped are unaffected).
-func (h *Handler) updateResource(ctx context.Context, tenantID uuid.UUID, collection string, cur Object) *cedar.Resource {
-	backendID, bucket, _ := h.repo.LookupBucket(ctx, tenantID, collection, false) // update (read-only; authz scope only)
+// It resolves the collection→bucket binding through the write gate, so
+// bucket:/collection: PAT scopes enforce on metadata/tag writes (this backs
+// PutObjectTags / DeleteObjectTags) and the update answers the bucket's state
+// as every other write does.
+func (h *Handler) updateResource(ctx context.Context, tenantID uuid.UUID, collection string, cur Object) (*cedar.Resource, error) {
+	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, collection)
+	if err != nil {
+		return nil, err
+	}
 	return &cedar.Resource{
 		TenantID: tenantID, Collection: collection, Key: cur.Key,
 		BackendID: backendID, BucketName: bucket,
 		ContentType: cur.ContentType, SizeBytes: cur.SizeBytes, Tags: cur.Tags,
-	}
+	}, nil
 }
 
 // takesMetadataUpdate refuses an update of an object that is not AVAILABLE.
@@ -1917,15 +1919,12 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	if err := auth.AssertCapabilityOp(ctx, limes.OpDelete, objectURI); err != nil {
 		return err
 	}
-	// Populate the physical (backend, bucket) on the authz Resource so a
-	// bucket:/collection:-scoped PAT enforces on delete (soft AND permanent).
-	// Best-effort + read-only: the soft-delete path historically resolved no
-	// bucket, so a resolution failure must NOT newly fail an unscoped
-	// soft-delete — leave the bucket empty (scoped principals stay
-	// fail-closed as before, unscoped principals are unaffected). The
-	// permanent path below still resolves with write=true, keeping the
-	// disabled/read-only-backend gate exactly where it was.
-	authBackendID, authBucket := scopeBucket(ctx, h.log, h.repo, opDelete, tenantID, collection, false)
+	// A delete, to the trash or for good, is a write: it goes through the
+	// write gate, and Cedar decides on the binding it resolves.
+	authBackendID, authBucket, err := writeBinding(ctx, h.repo, tenantID, collection)
+	if err != nil {
+		return err
+	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: collection, Key: obj.Key,
 		BackendID: authBackendID, BucketName: authBucket,
@@ -1933,12 +1932,21 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	}, cedar.ActionDeleteObject, obj.SizeBytes, obj.ContentType); err != nil {
 		return err
 	}
+	return h.deleteAuthorized(ctx, tenantID, principal, objectID, obj, resourceVersion, permanent, bypassGovernance)
+}
+
+// deleteAuthorized carries out a delete DeleteObject has authorized: to the
+// trash, or for good when permanent is set.
+func (h *Handler) deleteAuthorized(
+	ctx context.Context, tenantID uuid.UUID, principal *auth.Principal, objectID uuid.UUID, obj Object,
+	resourceVersion string, permanent, bypassGovernance bool,
+) error {
 	rv, err := parseInt64(resourceVersion)
 	if err != nil {
 		return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("invalid resource_version: %w", err))
 	}
 	if !permanent {
-		return h.softDelete(ctx, tenantID, collection, objectID, rv, obj)
+		return h.softDelete(ctx, tenantID, obj.Collection, objectID, rv, obj)
 	}
 	if err := h.assertBypassAllowed(principal, bypassGovernance); err != nil {
 		return err
@@ -2240,11 +2248,12 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	// Resolve the collection→bucket binding so bucket:/collection: PAT scopes
-	// enforce on restore; best-effort + read-only: restore is a DB-only state
-	// flip that historically resolved no bucket, so a resolution failure must
-	// NOT newly fail an unscoped restore (scoped principals stay fail-closed).
-	rsBackendID, rsBucket := scopeBucket(ctx, h.log, h.repo, opRestore, tenantID, obj.Collection, false)
+	// A restore puts an object back in the bucket: a write, through the write
+	// gate, and Cedar decides on the binding it resolves.
+	rsBackendID, rsBucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection)
+	if err != nil {
+		return nil, err
+	}
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: obj.Collection, Key: obj.Key,
 		BackendID: rsBackendID, BucketName: rsBucket,

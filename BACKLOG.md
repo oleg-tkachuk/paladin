@@ -517,36 +517,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### UpdateObject's best-effort bucket lookup fails silently
-
-- **Status:** Deferred.
-- **Reason:** the scope-only bucket lookups and the canonical event prefix
-  in `objecth` now warn through `scopeBucket` / `warnBestEffort`, except the
-  lookup in `UpdateObject` (`updBackendID, updBucket, _ :=
-  h.repo.LookupBucket(...)`), left alone while that function was being split
-  in a parallel change. A store failure there still turns into a scoped
-  token's PermissionDenied with no line.
-- **Definition of Done:** the lookup goes through
-  `scopeBucket(ctx, h.log, h.repo, opUpdate, ...)`, and `opUpdate` joins
-  the table in `TestBestEffortBucketLookupsWarnWhenTheStoreFails`.
-- **Blockers:** none.
-
-### RestoreVersion's scope lookup reads a draining backend as a failure
-
-- **Status:** Deferred.
-- **Reason:** `VersionHandler.authorizeParent` resolves the bucket with
-  `write=true` for RestoreVersion, so a read-only (draining) or provisioning
-  bucket answers a gate error. That lookup is scope-only: the error is now
-  warned about as a failed read, a scoped token is denied, and an unscoped
-  caller restores anyway. RestoreObject resolves with `write=false` because
-  a restore is a row flip; RestoreVersion repoints the current version, and
-  whether a draining backend should allow that is not decided.
-- **Definition of Done:** either RestoreVersion resolves with `write=false`
-  like RestoreObject, or the gate errors refuse it with FailedPrecondition
-  through `MapResolveErr`; a test covers a read-only backend.
-- **Blockers:** deciding whether repointing a version is a write to the
-  backend.
-
 ## API error messages
 
 ### Refusal messages still carry Go package prefixes

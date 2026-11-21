@@ -39,12 +39,13 @@ func warnBestEffort(ctx context.Context, l *zap.Logger, op, read string, tenantI
 		zap.Error(err))
 }
 
-// scopeBucket resolves collection's (backend, bucket) for op's authorization
-// scope, best-effort: a failure is warned about and answers empty, which
-// leaves a scoped principal fail-closed and an unscoped one unaffected.
-// write gates the read-only drain as LookupBucket does.
-func scopeBucket(ctx context.Context, l *zap.Logger, repo Repository, op string, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string) {
-	backendID, bucket, err := repo.LookupBucket(ctx, tenantID, collection, write)
+// scopeBucket resolves collection's (backend, bucket) for a READ's
+// authorization scope, best-effort: a failure is warned about and answers
+// empty, which leaves a scoped principal fail-closed and an unscoped one
+// unaffected. A write never comes here: writeBinding resolves it through the
+// write gate and fails closed.
+func scopeBucket(ctx context.Context, l *zap.Logger, repo Repository, op string, tenantID uuid.UUID, collection string) (backendID, bucket string) {
+	backendID, bucket, err := repo.LookupBucket(ctx, tenantID, collection, false)
 	if err != nil {
 		warnBestEffort(ctx, l, op, readScopeBucket, tenantID, collection, err)
 		return "", ""

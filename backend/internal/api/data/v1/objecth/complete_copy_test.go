@@ -149,18 +149,19 @@ func TestCompleteObjectAuthzResourceCarriesBucket(t *testing.T) {
 	}
 }
 
-func TestCompleteObjectSurvivesAnUnresolvableBucketOnTheNoOpPath(t *testing.T) {
-	// The idempotent no-op predates the bucket binding and must not start
-	// failing for callers whose collection resolves to nothing: the read-side
-	// lookup error is dropped on purpose.
+// A completion is a write, its idempotent no-op included: a binding that
+// cannot be read fails it rather than authorizing it on an empty binding,
+// which used to let it through.
+func TestCompleteObjectFailsClosedOnAnUnresolvableBucket(t *testing.T) {
 	obj := Object{ObjectID: uuid.NewV7(), Collection: "docs", State: statemachine.StateAvailable}
 	h, authz, ctx, _ := completeHandler(&completeRepo{obj: obj, bucketErr: errors.New("no binding")}, headStorage{})
 
-	if _, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: obj.ObjectID.String()}); err != nil {
-		t.Fatalf("an unresolvable binding newly failed an idempotent completion: %v", err)
+	_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: obj.ObjectID.String()})
+	if got := connect.CodeOf(err); got != connect.CodeInternal {
+		t.Fatalf("CompleteObject = %v (code %v), want Internal", err, got)
 	}
-	if authz.lastResource.BucketName != "" {
-		t.Errorf("bucket = %q, want empty when nothing resolved", authz.lastResource.BucketName)
+	if authz.lastResource != nil {
+		t.Errorf("Cedar was asked with binding %+v; an unresolved write must not reach it", authz.lastResource)
 	}
 }
 
