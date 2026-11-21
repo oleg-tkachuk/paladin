@@ -6,3 +6,5 @@
   `ERROR_REASON_VERSION_CONFLICT`, which told a client to re-read and retry
   what can never succeed. `ABORTED` is still the answer for a stale
   `resource_version`.
+- `ListEventSubscriptions` answers `INTERNAL` when the store fails; it used
+  to answer `UNKNOWN`.
