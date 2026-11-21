@@ -198,8 +198,8 @@ type Repository interface {
 	// ErrStorageMigrationNotRollbackable and nothing changes. Returns the
 	// migration as moved.
 	RollBackStuckStorageMigration(ctx context.Context, tenantID uuid.UUID) (StorageMigration, error)
-	// GetStorageMigration returns the tenant's migration status. ErrNotFound
-	// when none was ever started.
+	// GetStorageMigration returns the tenant's migration status.
+	// ErrStorageMigrationNotFound when none was ever started.
 	GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (StorageMigration, error)
 	// TenantSourceBucket returns the (backend, bucket) the tenant's objects
 	// physically live in today — the DISTINCT binding across its collections.
@@ -908,12 +908,12 @@ func DedicatedBucketName(tenantID uuid.UUID) string {
 }
 
 // retryTarget is the backend a migration goes to, given the tenant's latest
-// migration (prev, or prevErr ErrNotFound when it has none) and the backend
-// the caller asked for, "" for none. Only a failed migration may be retried,
+// migration (prev, or prevErr ErrStorageMigrationNotFound when it has none)
+// and the backend the caller asked for, "" for none. Only a failed migration may be retried,
 // and only on the backend it targeted.
 func retryTarget(prev StorageMigration, prevErr error, requested string) (string, error) {
 	switch {
-	case errors.Is(prevErr, ErrNotFound):
+	case errors.Is(prevErr, ErrStorageMigrationNotFound):
 		return requested, nil
 	case prevErr != nil:
 		return "", connect.NewError(connect.CodeInternal, prevErr.Error()).WithCause(prevErr)
@@ -976,7 +976,7 @@ func (h *Handler) rollBackStuck(ctx context.Context, tenantID uuid.UUID, layout 
 	}
 	prev, err := h.repo.GetStorageMigration(ctx, tenantID)
 	switch {
-	case errors.Is(err, ErrNotFound):
+	case errors.Is(err, ErrStorageMigrationNotFound):
 		return nil, false, nil
 	case err != nil:
 		return nil, false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
@@ -1318,6 +1318,15 @@ var ErrVersionMismatch = errors.New("resource_version mismatch")
 // unambiguous "missing", not a version conflict).
 var ErrNotFound = errors.New("tenant not found")
 
+// msgNoStorageMigration is what a caller reading a tenant's storage migration
+// is told when none was ever started.
+const msgNoStorageMigration = "no storage migration for this tenant"
+
+// ErrStorageMigrationNotFound — Repository.GetStorageMigration returns this
+// when the tenant has no migration: the migration is missing, which "tenant
+// not found" misreported.
+var ErrStorageMigrationNotFound = errors.New(msgNoStorageMigration)
+
 // SlugHolder is what holds a tenant slug a create was refused, as the
 // SLUG_TAKEN ErrorInfo names it under SlugHolderMetadataKey. The values are
 // the reason's contract (common/v1/error_reason.proto) and what the
@@ -1440,6 +1449,7 @@ var ErrTenantHoldsLockedObjects = errors.New(
 func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
 	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
+	apiutil.RegisterError(ErrStorageMigrationNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
 	apiutil.RegisterError(ErrSlugConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
 	apiutil.RegisterError(ErrSlugHeldInTrash, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
 	apiutil.RegisterError(ErrSlugRetired, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)

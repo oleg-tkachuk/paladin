@@ -1,8 +1,10 @@
 ## Unreleased — a store failing behind a lookup is INTERNAL, not NOT_FOUND
 
 - `GetTenant`, `PurgeTenant`, `PreviewPurgeTenant`, `GetTenantStorageMigration`
-  and `MigrateTenantStorageLayout` answer `NOT_FOUND` only for a tenant (or a
-  migration) that is not there, with the message `tenant not found`. A database
+  and `MigrateTenantStorageLayout` answer `NOT_FOUND` only for a tenant that is
+  not there, with the message `tenant not found`; `GetTenantStorageMigration`
+  for a tenant with no migration says `no storage migration for this tenant`,
+  still `NOT_FOUND`. A database
   that could not be read is `INTERNAL`, with a request id; it used to be
   `NOT_FOUND`, carrying the driver's error as its message.
 - `MigrateTenantStorageLayout` answers `FAILED_PRECONDITION` for a tenant with

@@ -237,7 +237,7 @@ func (f *fakeRepo) GetStorageMigration(ctx context.Context, id uuid.UUID) (Stora
 	}
 	// No migration yet: MigrateTenantStorageLayout reads this to tell a first
 	// start from a retry.
-	return StorageMigration{}, ErrNotFound
+	return StorageMigration{}, ErrStorageMigrationNotFound
 }
 
 func (f *fakeRepo) TenantSourceBucket(ctx context.Context, id uuid.UUID) (string, string, error) {
@@ -1215,12 +1215,13 @@ func TestGetTenantStorageMigration(t *testing.T) {
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
-	t.Run("repo miss → not found", func(t *testing.T) {
-		fr := &fakeRepo{getMigrationFn: func(context.Context, uuid.UUID) (StorageMigration, error) {
-			return StorageMigration{}, ErrNotFound
-		}}
-		_, err := NewHandler(fr, allow()).GetTenantStorageMigration(adminCtx(tid), tid)
+	// The tenant is there; its migration is not, and the answer says which.
+	t.Run("no migration → not found, naming the migration", func(t *testing.T) {
+		_, err := NewHandler(&fakeRepo{}, allow()).GetTenantStorageMigration(adminCtx(tid), tid)
 		wantCode(t, err, connect.CodeNotFound)
+		if cerr, ok := errors.AsType[*connect.Error](err); !ok || cerr.Message() != msgNoStorageMigration {
+			t.Errorf("err = %v, want the message %q", err, msgNoStorageMigration)
+		}
 	})
 
 	t.Run("ok returns status", func(t *testing.T) {
