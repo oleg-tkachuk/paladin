@@ -212,7 +212,8 @@ func pageSessions(infos []mcppkg.SessionInfo, req *commonv1.PageRequest) ([]mcpp
 	if tok := req.GetPageToken(); tok != "" {
 		// An unknown cursor (the session was reaped between pages) restarts
 		// the listing rather than failing it.
-		if i := slices.IndexFunc(infos, func(s mcppkg.SessionInfo) bool { return s.ID == tok }); i >= 0 {
+		i := slices.IndexFunc(infos, func(s mcppkg.SessionInfo) bool { return s.ID == tok })
+		if i >= 0 {
 			start = i + 1
 		}
 	}
