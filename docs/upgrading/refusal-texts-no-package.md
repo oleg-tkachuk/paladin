@@ -1,4 +1,4 @@
-## Unreleased — refusal messages no longer begin with a package name
+## sdk/python/v0.151.0, sdk/go/v0.151.0 — refusal messages no longer begin with a package name
 
 Codes and `ErrorInfo` reasons are unchanged; only the message text moved. A
 client that matches on the text should match on the reason instead.

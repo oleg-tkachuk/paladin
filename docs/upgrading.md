@@ -89,11 +89,102 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — `UNAVAILABLE` answers no longer quote the backend that failed
+
+The code is unchanged; the message is a fixed sentence and the backend's own
+error is in the server's RPC log line.
+
+- Completing an upload, or restoring an object, when the storage backend could
+  not be asked: `the uploaded bytes could not be checked; retry` and `the
+  object's bytes could not be checked; retry`, instead of the S3 client's
+  error with its URL and request id.
+- Creating or adopting a bucket when the backend could not say whether it
+  exists: `the backend could not be asked whether the bucket exists; retry`.
+- `PlatformStatsTenants` when the worker did not answer: `the worker's census
+  could not be read; retry`.
+- A capability whose taint lookup, or whose delegating user's lookup, failed:
+  `the capability could not be checked; retry`, as other capability outages
+  already read.
+
+## Unreleased — `GetBridgeStatus` answers a verdict, not a transport error
+
+When no MCP replica answered, `error` is one of `the MCP server is
+unreachable`, `the MCP server timed out`, `the MCP server answered HTTP <n>` or
+`the MCP server's answer could not be read`. It used to be the HTTP client's
+error, naming the replica's URL. The full error is in the admin plane's
+`mcp bridge unreachable` log line. Each upstream's `error` is unchanged.
+
+## Unreleased — refused deletes name resources, not tables
+
+Codes and reasons are unchanged; the message text moved. The table and the
+constraint behind each refusal are in the server's RPC log line instead.
+
+- `PurgeTenant` refused by what the tenant still owns reads `tenant still owns
+  resources; remove them before purging it: held by users` (or `collections`,
+  `owned buckets`, `billing charges`, …). It used to name the table, as in
+  `tenant still has rows referencing it; …: users`.
+- `DeleteBucket` names what holds the bucket the same way:
+  `… referenced by 1 tenant default bindings` rather than
+  `1 tenant_default_bindings`.
+- A storage migration's recorded error, which `GetTenantStorageMigration`
+  returns, no longer carries the database's or the storage backend's error. A
+  refused rebind reads `rebind refused: collection "photos" cannot move to the
+  dedicated bucket`; a failed physical verify names the object and the problem,
+  as in `physical verify: docs/a.txt missing in the target bucket`.
+- A purge refused by a legal hold or a retention window still names the object
+  version holding it, as before.
+
+## sdk/python/v0.151.0, sdk/go/v0.151.0 — refusal messages no longer begin with a package name
+
+Codes and `ErrorInfo` reasons are unchanged; only the message text moved. A
+client that matches on the text should match on the reason instead.
+
+- API tokens: `api_token: token not found` is `API token not found`, and the
+  same for `malformed API token`, `API token expired`, `API token revoked`,
+  `API token audience mismatch`, `invalid API token request` and the rate-limit
+  refusals (`API token rate limit …`). The Go and Python SDK fakes answer the
+  same.
+- IAM: `auth/store: resource_version mismatch` is `resource_version mismatch`,
+  and `auth/store: subject already exists in tenant` is `subject already exists
+  in tenant`; `invalid page_token` and `resource not found` likewise.
+- A batch's per-object reason `statemachine: version conflict` is `object
+  version conflict`, and `statemachine: object not found or wrong state` is
+  `object not found or not in the expected state`.
+- `cedar: stored policy does not compile` is `stored policy does not compile`.
+
+## Unreleased — every write answers the backend's and bucket's state alike
+
+- A bucket still provisioning on its backend now refuses a write with
+  `UNAVAILABLE` and the new reason `ERROR_REASON_BUCKET_PROVISIONING`, not
+  `FAILED_PRECONDITION`: the reconciler creates the bucket on its own, so a
+  retry helps. A bucket that failed to provision, or is being deleted, refuses
+  a write with `FAILED_PRECONDITION` (`storage bucket is not ready for
+  writes`).
+- A draining (read-only) or disabled backend's refusal now carries its
+  reason, `ERROR_REASON_BACKEND_READ_ONLY` or `ERROR_REASON_BACKEND_DISABLED`,
+  in the error's `ErrorInfo`. It came with the code alone before.
+- `RestoreObject`, `RestoreVersion`, `UpdateObject` (and the tag RPCs on it),
+  `DeleteObject` to the trash, `SetObjectTaint` and `CompleteObject` — its
+  already-completed no-op included — used to proceed on a draining or
+  provisioning backend. They are now refused there like every other write.
+- A write whose bucket could not be looked up is refused with `INTERNAL`
+  rather than authorized without its bucket and carried out.
+- `GetObjectLock` is a read: a draining backend now serves it instead of
+  refusing it with `FAILED_PRECONDITION`.
+- `CompleteMultipartUpload` and part URLs (`PresignPart`) for a session opened
+  before its backend began draining used to go through; they are now refused
+  like every other write. `AbortMultipartUpload` is unchanged.
+- The batch delete, tag, restore and copy submits answer the same states the
+  single-object writes do, before anything is queued; a copy may still read
+  from a draining source.
+
 ## Unreleased — a store failing behind a lookup is INTERNAL, not NOT_FOUND
 
 - `GetTenant`, `PurgeTenant`, `PreviewPurgeTenant`, `GetTenantStorageMigration`
-  and `MigrateTenantStorageLayout` answer `NOT_FOUND` only for a tenant (or a
-  migration) that is not there, with the message `tenant not found`. A database
+  and `MigrateTenantStorageLayout` answer `NOT_FOUND` only for a tenant that is
+  not there, with the message `tenant not found`; `GetTenantStorageMigration`
+  for a tenant with no migration says `no storage migration for this tenant`,
+  still `NOT_FOUND`. A database
   that could not be read is `INTERNAL`, with a request id; it used to be
   `NOT_FOUND`, carrying the driver's error as its message.
 - `MigrateTenantStorageLayout` answers `FAILED_PRECONDITION` for a tenant with
