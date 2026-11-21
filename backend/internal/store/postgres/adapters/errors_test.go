@@ -3,50 +3,82 @@ package adapters
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 )
 
-// blockingRelation names the table an operator has to go and empty before a
-// delete will succeed. The precedence is the whole content of the function:
-// the table name is the answer, the constraint name is a grep-able fallback,
-// and the generic phrase is what is left when Postgres told us neither.
-func TestBlockingRelation(t *testing.T) {
+// blockingResource names what a caller has to remove before a delete will
+// succeed, in the caller's terms: the table Postgres reports is translated,
+// and one with no name a caller knows — or none at all — is "other records".
+// Neither the table nor the constraint is in the answer; the RPC log carries
+// both.
+func TestBlockingResource(t *testing.T) {
 	cases := map[string]struct {
 		err  error
 		want string
 	}{
-		"table wins over constraint": {
-			err:  &pgconn.PgError{Code: "23503", TableName: "users", ConstraintName: "users_tenant_id_fkey"},
+		"a table with a noun": {
+			err:  &pgconn.PgError{Code: "23001", TableName: "users", ConstraintName: "users_tenant_id_fkey"},
 			want: "users",
 		},
-		"constraint when no table": {
-			err:  &pgconn.PgError{Code: "23503", ConstraintName: "users_tenant_id_fkey"},
-			want: "users_tenant_id_fkey",
+		"a table named for its rows": {
+			err:  &pgconn.PgError{Code: "23503", TableName: "tenant_default_bindings", ConstraintName: "tenant_default_bindings_bucket_id_fkey"},
+			want: "tenant default bindings",
 		},
-		"neither": {
-			err:  &pgconn.PgError{Code: "23503"},
-			want: "another table",
+		"constraint only": {
+			err:  &pgconn.PgError{Code: "23503", ConstraintName: "users_tenant_id_fkey"},
+			want: "other records",
+		},
+		"a table with no noun": {
+			err:  &pgconn.PgError{Code: "23503", TableName: "some_new_table"},
+			want: "other records",
 		},
 		"wrapped still resolves": {
-			err:  fmt.Errorf("delete tenant: %w", &pgconn.PgError{Code: "23503", TableName: "objects"}),
-			want: "objects",
+			err:  fmt.Errorf("delete tenant: %w", &pgconn.PgError{Code: "23503", TableName: "collections"}),
+			want: "collections",
 		},
 		"not a postgres error": {
 			err:  errors.New("connection refused"),
-			want: "another table",
+			want: "other records",
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if got := blockingRelation(tc.err); got != tc.want {
-				t.Errorf("blockingRelation = %q, want %q", got, tc.want)
+			if got := blockingResource(tc.err); got != tc.want {
+				t.Errorf("blockingResource = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// A refusal built from a foreign-key violation reads as the resource holding
+// the delete, with no table, constraint or SQLSTATE in it, and keeps the
+// driver's error in its chain for the log and for classification.
+func TestRestrictRefusal(t *testing.T) {
+	pg := &pgconn.PgError{Severity: "ERROR", Code: "23001", Message: `update or delete on table "tenants" violates RESTRICT setting`, TableName: "users", ConstraintName: "users_tenant_id_fkey"}
+	err := restrictRefusal(tenanth.ErrTenantHasChildren, fmt.Errorf("hard-delete: %w", pg))
+
+	const want = "tenant still owns resources; remove them before purging it: held by users"
+	if err.Error() != want {
+		t.Errorf("message %q, want %q", err, want)
+	}
+	for _, leak := range []string{"users_tenant_id_fkey", "SQLSTATE", "RESTRICT"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Errorf("message %q carries %q", err, leak)
+		}
+	}
+	if !errors.Is(err, tenanth.ErrTenantHasChildren) {
+		t.Error("the sentinel is lost")
+	}
+	if got := pgerr.Table(err); got != pg.TableName {
+		t.Errorf("the driver error is lost from the chain: table %q", got)
 	}
 }
 
@@ -56,6 +88,7 @@ func TestBlockingRelation(t *testing.T) {
 // message is what tells them apart — a CHECK failing for another reason must
 // not be reported as a legal hold.
 func TestLockRefusal(t *testing.T) {
+	const lockedVersion = "object version v"
 	cases := map[string]struct {
 		err  error
 		want bool
@@ -91,8 +124,15 @@ func TestLockRefusal(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, got := lockRefusal(tc.err); got != tc.want {
+			msg, got := lockRefusal(tc.err)
+			if got != tc.want {
 				t.Errorf("lockRefusal = %v, want %v", got, tc.want)
+			}
+			// The message the trigger raises is passed through on purpose:
+			// the migrations word it for the caller, naming the version
+			// held, and it names no table, trigger or constraint.
+			if got && !strings.Contains(msg, lockedVersion) {
+				t.Errorf("lockRefusal message %q does not name the version held", msg)
 			}
 		})
 	}

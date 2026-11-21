@@ -535,7 +535,7 @@ func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 			// `users`, which every tenant has. An operator following that
 			// message went looking in the wrong place; a purge blocked by
 			// users reported collections.
-			return fmt.Errorf("%w: %s", tenanth.ErrTenantHasChildren, blockingRelation(err))
+			return restrictRefusal(tenanth.ErrTenantHasChildren, err)
 		}
 		return fmt.Errorf("hard-delete tenant: %w", err)
 	}

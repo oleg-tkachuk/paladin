@@ -296,7 +296,9 @@ describe("TrashPage", () => {
   // that disappears.
   it("keeps a refused purge's reason under its row", async () => {
     h.purgeTenant.mockRejectedValue(
-      new Error("tenant still has rows referencing it: charges"),
+      new Error(
+        "tenant still owns resources; remove them before purging it: held by billing charges",
+      ),
     );
     render(<TrashPage />);
     await screen.findByText("Older");
@@ -313,7 +315,9 @@ describe("TrashPage", () => {
   it("clears the reason once the purge goes through", async () => {
     h.purgeTenant
       .mockRejectedValueOnce(
-        new Error("tenant still has rows referencing it: charges"),
+        new Error(
+          "tenant still owns resources; remove them before purging it: held by billing charges",
+        ),
       )
       .mockResolvedValueOnce(undefined);
     render(<TrashPage />);

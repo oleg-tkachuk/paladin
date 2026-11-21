@@ -188,7 +188,7 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, at worker.Migra
 		// the whole tenant's binding during rebind.
 		if _, err := qtx.BindCollectionToBucket(ctx, pgUUID(tenantID), ok, targetBackendID, targetBucketName, 0); err != nil {
 			if pgerr.Is(err, pgerr.CheckViolation) {
-				return fmt.Errorf("rebind %q: %w: %w", ok, worker.ErrRebindRefused, err)
+				return worker.RebindRefused(ok, err)
 			}
 			return fmt.Errorf("rebind %q: %w", ok, err)
 		}

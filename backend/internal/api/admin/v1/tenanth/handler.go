@@ -1423,7 +1423,7 @@ var ErrDefaultBindingBucketMissing = errors.New(
 // Surfaced as FAILED_PRECONDITION with actionable text rather than a raw
 // Postgres FK-violation string mapped to Internal.
 var ErrTenantHasChildren = errors.New(
-	"tenant still has rows referencing it; remove them before hard-deleting the tenant")
+	"tenant still owns resources; remove them before purging it")
 
 // ErrTenantHoldsLockedObjects — Repository.HardDelete returns this when an
 // object the tenant owns is under a legal hold or an unexpired retention

@@ -2,29 +2,31 @@ package adapters
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 )
 
-// blockingRelation names the table whose rows are refusing a delete, for the
-// message an operator reads.
+// blockingResource names what is refusing a delete, as the caller knows it.
 //
 // Postgres fills TableName on a foreign-key violation with the REFERENCING
-// table, which is exactly the answer; the constraint name is the fallback,
-// because a name an operator can grep for beats a guess. This used to derive
-// the table by stripping suffixes off the constraint name — see pgerr.Table
-// for why that cannot be made correct.
-func blockingRelation(err error) string {
-	if t := pgerr.Table(err); t != "" {
-		return t
-	}
-	if c := pgerr.Constraint(err); c != "" {
-		return c
-	}
-	return "another table"
+// table, which is the answer; admindomain.RelationNoun translates it, since a
+// caller has never seen a table. The table and the constraint stay in the
+// error's chain (restrictRefusal), where the RPC log line finds them. This
+// used to derive the table by stripping suffixes off the constraint name — see
+// pgerr.Table for why that cannot be made correct.
+func blockingResource(err error) string {
+	return admindomain.RelationNoun(pgerr.Table(err))
+}
+
+// restrictRefusal is public refused by the foreign-key violation err: it reads
+// as public and the resource holding the delete, and keeps err in its chain.
+func restrictRefusal(public, err error) error {
+	return pgerr.Withhold(fmt.Errorf("%w: held by %s", public, blockingResource(err)), err)
 }
 
 // lockRefusal reports whether err is an Object Lock trigger refusing a

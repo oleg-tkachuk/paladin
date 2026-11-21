@@ -791,7 +791,7 @@ func heldBy(refs []admindomain.BucketReference) string {
 	var parts []string
 	for _, r := range refs {
 		if r.Count > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", r.Count, r.Relation))
+			parts = append(parts, fmt.Sprintf("%d %s", r.Count, admindomain.RelationNoun(r.Relation)))
 		}
 	}
 	return strings.Join(parts, ", ")

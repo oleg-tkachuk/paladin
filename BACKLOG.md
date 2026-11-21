@@ -563,20 +563,6 @@ the same commit. Treat this file like a runtime invariant.
   still finds the phrase it looks for.
 - **Blockers:** none.
 
-### Refusals that name tables and constraints on purpose
-
-- **Status:** Deferred.
-- **Reason:** a tenant purge or bucket delete refused by a foreign key names
-  the blocking table (`adapters.blockingRelation`), the Object Lock trigger's
-  message is passed through (`lockRefusal`), and a storage migration the schema
-  refuses records the Postgres error as its failure reason, which
-  `GetTenantStorageMigration` returns. Each was written for an operator, and
-  replacing it needs a product noun for every table that can block.
-- **Definition of Done:** each maps the table or trigger to the resource a
-  caller knows (objects, collections, users, …) and keeps the raw name in the
-  log only.
-- **Blockers:** agreeing on the nouns.
-
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

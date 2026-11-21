@@ -512,8 +512,7 @@ func (r *BucketRepoV2) deleteWith(ctx context.Context, q *sqlc.Queries, backendI
 		// them on how the constraint was declared, and matching only the
 		// first is how the tenant path once leaked raw SQL text.
 		if pgerr.Is(err, pgerr.ForeignKeyViolation) {
-			return fmt.Errorf("%w: bucket %q is still referenced by %s",
-				admindomain.ErrConflict, bucketName, blockingRelation(err))
+			return restrictRefusal(fmt.Errorf("%w: bucket %q", admindomain.ErrConflict, bucketName), err)
 		}
 		return err
 	}
