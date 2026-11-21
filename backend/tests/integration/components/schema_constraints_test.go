@@ -54,6 +54,7 @@ func TestSchemaConstraintNamesExist(t *testing.T) {
 		{"TenantDefaultBindingsBucketFK", schema.TenantDefaultBindingsBucketFK},
 		{"BucketsPK", schema.BucketsPK},
 		{"BucketsBackendFK", schema.BucketsBackendFK},
+		{"QuotasTenantIDFK", schema.QuotasTenantIDFK},
 	} {
 		var ok bool
 		if err := pool.QueryRow(ctx, q, c.name).Scan(&ok); err != nil {
