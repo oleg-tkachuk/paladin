@@ -106,7 +106,7 @@ func (r *EventSubscriptionRepoV2) Update(ctx context.Context, s admindomain.Even
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, s.SubscriptionID)
 	}
 	return nil
 }
@@ -117,9 +117,20 @@ func (r *EventSubscriptionRepoV2) Delete(ctx context.Context, id uuid.UUID, expe
 		return err
 	}
 	if rows == 0 {
-		return admindomain.ErrVersionMismatch
+		return r.missingOrStale(ctx, id)
 	}
 	return nil
+}
+
+// missingOrStale says why a guarded write touched no row: the subscription is
+// gone (ErrNotFound), or it is there at another resource_version. Both used to
+// come back as a version mismatch, which tells a caller to re-read and retry
+// what can never succeed.
+func (r *EventSubscriptionRepoV2) missingOrStale(ctx context.Context, id uuid.UUID) error {
+	if _, err := r.Get(ctx, id); err != nil {
+		return err
+	}
+	return admindomain.ErrVersionMismatch
 }
 
 func eventSubFromSQLC(row sqlc.EventSubscription) admindomain.EventSubscription {
