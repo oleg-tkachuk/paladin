@@ -834,9 +834,9 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 	// count: they live in a public bucket and the migration leaves them there
 	// (worker.StorageMigrationWorker says why), so a tenant with only public
 	// collections has nothing to migrate.
-	srcBackend, srcBucket, err := h.repo.TenantSourceBucket(ctx, tenantID)
+	srcBackend, srcBucket, err := h.sourceBucket(ctx, tenantID)
 	if err != nil {
-		return nil, rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("cannot determine source bucket to migrate from: %w", err))
+		return nil, err
 	}
 
 	if targetBackend == "" {
@@ -850,6 +850,20 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 		TargetBucketName:        DedicatedBucketName(tenantID),
 		CleanupRetentionSeconds: cleanupRetentionOrDefault(cleanupRetentionSeconds),
 	})
+}
+
+// sourceBucket is the (backend, bucket) the tenant's private collections bind
+// to. No such bucket, or more than one, is a precondition the caller must
+// meet; a store that failed is the server's fault, answered without its error.
+func (h *Handler) sourceBucket(ctx context.Context, tenantID uuid.UUID) (string, string, error) {
+	backend, bucket, err := h.repo.TenantSourceBucket(ctx, tenantID)
+	switch {
+	case errors.Is(err, ErrNoCollectionsToMigrate) || errors.Is(err, ErrSourceBucketAmbiguous):
+		return "", "", rpcerr.New(connect.CodeFailedPrecondition, fmt.Errorf("cannot determine source bucket to migrate from: %w", err))
+	case err != nil:
+		return "", "", apiutil.MapError(fmt.Errorf("read source bucket: %w", err))
+	}
+	return backend, bucket, nil
 }
 
 // unlessShared answers a migration request for a tenant that is not shared:

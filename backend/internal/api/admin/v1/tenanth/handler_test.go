@@ -993,6 +993,17 @@ func TestMigrateTenantStorageLayout(t *testing.T) {
 		wantCode(t, err, connect.CodeFailedPrecondition)
 	})
 
+	// A store that could not say where the tenant's collections live is the
+	// server's fault, not a precondition the caller could meet.
+	t.Run("source bucket unreadable → internal", func(t *testing.T) {
+		fr := &fakeRepo{
+			getFn:          sharedTenant,
+			sourceBucketFn: func(context.Context, uuid.UUID) (string, string, error) { return "", "", errStoreDown },
+		}
+		_, err := NewHandler(fr, allow()).MigrateTenantStorageLayout(adminCtx(tid), tid, "", 0)
+		wantCode(t, err, connect.CodeInternal)
+	})
+
 	// Only public collections: they stay in their bucket, so nothing moves and
 	// nothing starts.
 	t.Run("no private collections → failed precondition, nothing started", func(t *testing.T) {
