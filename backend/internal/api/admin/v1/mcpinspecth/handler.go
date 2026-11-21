@@ -603,15 +603,16 @@ const maxLoggedErrorLen = 512
 // truncatedMark ends error text cut at maxLoggedErrorLen.
 const truncatedMark = "…(truncated)"
 
-// loggedURL is raw as a log line may carry it: without its query and
-// fragment, where a token may ride, and with any password redacted.
+// loggedURL is raw as a log line may carry it: its scheme and host (with
+// port) alone. Userinfo, path, query and fragment can each carry a token, so
+// none is written; a URL that does not parse or names no host is the
+// placeholder.
 func loggedURL(raw string) string {
 	u, err := url.Parse(raw)
-	if err != nil {
+	if err != nil || u.Host == "" {
 		return unloggableURL
 	}
-	u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = "", false, "", ""
-	return u.Redacted()
+	return (&url.URL{Scheme: u.Scheme, Host: u.Host}).String()
 }
 
 // boundedError is err's text as a log line may carry it: a transport error

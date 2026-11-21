@@ -16,8 +16,11 @@ import (
 
 func TestLoggedURL(t *testing.T) {
 	for _, tc := range []struct{ name, in, want string }{
-		{"plain", "http://mcp:8095/sessions", "http://mcp:8095/sessions"},
-		{"credentials and token", "http://user:pass@mcp:8095/sessions?token=abc#frag", "http://user:xxxxx@mcp:8095/sessions"},
+		{"plain", "http://mcp:8095/sessions", "http://mcp:8095"},
+		{"credentials and token", "http://user:pass@mcp:8095/sessions?token=abc#frag", "http://mcp:8095"},
+		{"user-only userinfo", "https://tok@mcp/sessions", "https://mcp"},
+		{"token in the path", "http://mcp:8095/t/s3cr3t/sessions", "http://mcp:8095"},
+		{"no host", "/sessions?token=abc", unloggableURL},
 		{"unparsable", "http://[::1", unloggableURL},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
