@@ -4,8 +4,6 @@ import (
 	"context"
 	"uuid"
 
-	"connectrpc.com/connect/v2"
-
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
@@ -69,7 +67,7 @@ func (h *Handler) PreviewPurgeTenant(ctx context.Context, tenantID uuid.UUID) (*
 		return nil, err
 	}
 	if _, err := h.repo.Get(ctx, tenantID); err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, apiutil.MapError(err)
 	}
 	p, err := h.repo.PreviewPurge(ctx, tenantID, PurgePreviewNames)
 	if err != nil {

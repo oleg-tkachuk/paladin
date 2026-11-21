@@ -687,7 +687,7 @@ func (h *Handler) GetTenant(ctx context.Context, tenantID uuid.UUID) (*Tenant, e
 	// join would drop it for any caller but the tenant itself.
 	t, err := h.repo.Get(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, apiutil.MapError(err)
 	}
 	return &t, nil
 }
@@ -756,7 +756,7 @@ func (h *Handler) readAsTenant(ctx context.Context, t Tenant, callerTenant uuid.
 	}
 	scoped, err := h.repo.Get(auth.WithActingTenant(ctx, t.TenantID), t.TenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, apiutil.MapError(err)
 	}
 	return &scoped, nil
 }
@@ -858,7 +858,7 @@ func (h *Handler) MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.
 func (h *Handler) unlessShared(ctx context.Context, tenantID uuid.UUID) (*StorageMigration, bool, error) {
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
-		return nil, false, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, false, apiutil.MapError(err)
 	}
 	if t.StorageLayout == StorageLayoutShared {
 		return nil, false, nil
@@ -990,7 +990,7 @@ func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.U
 	// above, or a platform admin reads its own tenant's (none).
 	m, err := h.repo.GetStorageMigration(auth.WithActingTenant(ctx, tenantID), tenantID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return nil, apiutil.MapError(err)
 	}
 	return &m, nil
 }
@@ -1156,7 +1156,7 @@ func (h *Handler) PurgeTenant(ctx context.Context, tenantID uuid.UUID) error {
 	// destructive call lands.
 	t, err := h.repo.Get(ctx, tenantID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, err.Error()).WithCause(err)
+		return apiutil.MapError(err)
 	}
 	if t.DeletedAt.IsZero() {
 		return connect.NewError(connect.CodeFailedPrecondition,
