@@ -517,35 +517,46 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### UpdateObject's best-effort bucket lookup fails silently
+### Batch executors do not re-check the bucket gate when they run
 
 - **Status:** Deferred.
-- **Reason:** the scope-only bucket lookups and the canonical event prefix
-  in `objecth` now warn through `scopeBucket` / `warnBestEffort`, except the
-  lookup in `UpdateObject` (`updBackendID, updBucket, _ :=
-  h.repo.LookupBucket(...)`), left alone while that function was being split
-  in a parallel change. A store failure there still turns into a scoped
-  token's PermissionDenied with no line.
-- **Definition of Done:** the lookup goes through
-  `scopeBucket(ctx, h.log, h.repo, opUpdate, ...)`, and `opUpdate` joins
-  the table in `TestBestEffortBucketLookupsWarnWhenTheStoreFails`.
+- **Reason:** a batch that writes is refused at submit time by the write gate
+  (`batchh.binding`), but the worker's soft-delete, restore and tag executors
+  (`internal/worker/operations/batch_{delete,restore,update_tags}.go`) write
+  rows without asking it again. A backend that starts draining between submit
+  and run still has the batch applied. Copy (`batch_copy.go`) and permanent
+  delete (through `PermanentDelete`) already resolve with `write=true`.
+- **Definition of Done:** each executor resolves its collection through the
+  write gate before its first item and fails the operation with the gate's
+  refusal; a test drains the backend between submit and run.
+- **Blockers:** deciding whether a drain that starts mid-batch fails the rest
+  of the batch or only the items not yet written.
+
+### AbortMultipartUpload skips the bucket gate for an anchored session
+
+- **Status:** Deferred.
+- **Reason:** an abort only releases parts, so it is deliberately left out of
+  the write gate: on a draining or provisioning backend it frees storage
+  rather than adding data. A session from before anchoring still resolves
+  with `write=true` (`multiparth.route`), so the same abort is refused there,
+  and its Cedar check runs on an empty binding.
+- **Definition of Done:** abort resolves the same way for both sessions —
+  through the gate as a read, refused only on a disabled backend — and is
+  authorized on the resolved binding; a test covers both session shapes.
 - **Blockers:** none.
 
-### RestoreVersion's scope lookup reads a draining backend as a failure
+### Multipart writes gate on the collection's binding, not the anchored bucket
 
 - **Status:** Deferred.
-- **Reason:** `VersionHandler.authorizeParent` resolves the bucket with
-  `write=true` for RestoreVersion, so a read-only (draining) or provisioning
-  bucket answers a gate error. That lookup is scope-only: the error is now
-  warned about as a failed read, a scoped token is denied, and an unscoped
-  caller restores anyway. RestoreObject resolves with `write=false` because
-  a restore is a row flip; RestoreVersion repoints the current version, and
-  whether a draining backend should allow that is not decided.
-- **Definition of Done:** either RestoreVersion resolves with `write=false`
-  like RestoreObject, or the gate errors refuse it with FailedPrecondition
-  through `MapResolveErr`; a test covers a read-only backend.
-- **Blockers:** deciding whether repointing a version is a write to the
-  backend.
+- **Reason:** CompleteMultipartUpload and PresignPart ask the write gate about
+  the collection's current binding (`multiparth.writeTarget`), then write to
+  the bucket the session was anchored to. After a storage migration rebinds
+  the collection, a session anchored to the old, draining backend passes the
+  gate on the new binding.
+- **Definition of Done:** the gate is asked about the anchored bucket's own
+  backend and provision state (a lookup by backend and bucket name), and a
+  test rebinds the collection mid-session.
+- **Blockers:** a store query by (backend, bucket) for the gate's state.
 
 ## API error messages
 

@@ -393,13 +393,13 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return objecth.Object{}, err
 	}
-	// The session anchored its (backend, bucket) at initiate time; pass it to
-	// authz so a bucket:/collection:-scoped PAT enforces on complete.
-	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPutObject, 0, ""); err != nil {
+	// Through the write gate before Cedar, then authorized on where the parts
+	// live, so a bucket:/collection:-scoped PAT enforces on complete.
+	_, backendID, bucket, err := h.writeTarget(ctx, tenantID, sess)
+	if err != nil {
 		return objecth.Object{}, err
 	}
-	backendID, bucket, err := h.route(ctx, tenantID, sess)
-	if err != nil {
+	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, backendID, bucket, cedar.ActionPutObject, 0, ""); err != nil {
 		return objecth.Object{}, err
 	}
 	composite, err := h.recordComposite(ctx, sess, args.Parts)
@@ -417,6 +417,24 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	// thing keeping the table finite, and nothing else would say so.
 	h.dropSession(ctx, args.UploadID, "multipart session not deleted after complete")
 	return h.completedObject(ctx, tenantID, sess.ObjectID, args.UploadID), nil
+}
+
+// writeTarget passes sess's collection through the write gate and answers
+// where the session's parts live, for a write on them: the (backend, bucket)
+// anchored at initiate time, or the collection's current binding for a
+// session from before anchoring. The gate is asked even for an anchored
+// session, so a completion or a part URL answers a draining or provisioning
+// bucket as every other write does; meta is the collection's binding, for the
+// bucket's constraints.
+func (h *Handler) writeTarget(ctx context.Context, tenantID uuid.UUID, sess Session) (meta objecth.BucketMeta, backendID, bucket string, err error) {
+	meta, err = h.repo.LookupBucketMeta(ctx, tenantID, sess.Collection, true) // multipart write (mutation)
+	if err != nil {
+		return objecth.BucketMeta{}, "", "", objecth.MapResolveErr(err)
+	}
+	if sess.Bucket != "" {
+		return meta, sess.BackendID, sess.Bucket, nil
+	}
+	return meta, meta.BackendID, meta.BucketName, nil
 }
 
 // route is where the session's parts live: the (backend, bucket) it was
@@ -632,12 +650,16 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
-	// scopes on the part presign.
-	if err := h.authorize(ctx, p, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionPresignPut, 0, ""); err != nil {
+	// Through the write gate before Cedar, then authorized on where the part
+	// goes, so a bucket:/collection:-scoped PAT enforces on the part presign.
+	meta, backendID, bucket, err := h.writeTarget(ctx, tenantID, sess)
+	if err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.signPart(ctx, tenantID, sess, PartBinding{
+	if err := h.authorize(ctx, p, tenantID, sess.Collection, sess.Key, backendID, bucket, cedar.ActionPresignPut, 0, ""); err != nil {
+		return "", nil, time.Time{}, err
+	}
+	return h.signPart(ctx, tenantID, sess, meta, backendID, bucket, PartBinding{
 		Number:        partNumber,
 		SizeBytes:     sess.PartLength(partNumber),
 		ChecksumAlgo:  sess.ChecksumAlgo,
@@ -667,21 +689,13 @@ func (s Session) checkPart(partNumber int32, checksumValue string) error {
 	return nil
 }
 
-// signPart signs the URL for part, living ttl within the bucket's ceiling.
-// The bucket's constraints bound the part URL's lifetime; the session keeps
-// routing to the bucket it was opened against.
-func (h *Handler) signPart(ctx context.Context, tenantID uuid.UUID, sess Session, part PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, sess.Collection, true) // presign part (mutation)
-	if err != nil {
-		return "", nil, time.Time{}, objecth.MapResolveErr(err)
-	}
-	ttl, err = h.ttl.ResolveWithin(presignttl.OpPart, ttl, uploadpolicy.For(h.limits, meta.Constraints).PutTTLCeiling())
+// signPart signs the URL for part, living ttl within the bucket's ceiling,
+// against (backendID, bucket), where writeTarget found the session's parts.
+// The collection's bucket constraints (meta) bound the part URL's lifetime.
+func (h *Handler) signPart(ctx context.Context, tenantID uuid.UUID, sess Session, meta objecth.BucketMeta, backendID, bucket string, part PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
+	ttl, err := h.ttl.ResolveWithin(presignttl.OpPart, ttl, uploadpolicy.For(h.limits, meta.Constraints).PutTTLCeiling())
 	if err != nil {
 		return "", nil, time.Time{}, err
-	}
-	backendID, bucket := sess.BackendID, sess.Bucket
-	if bucket == "" {
-		backendID, bucket = meta.BackendID, meta.BucketName
 	}
 	url, hdrs, exp, err := h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, part, ttl)
 	if err != nil {

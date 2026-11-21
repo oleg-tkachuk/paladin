@@ -286,7 +286,9 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 	if err != nil {
 		return out, objectLookupError(err)
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, tenantID, collection, true) // lock write is a mutation
+	// Setting a lock is a write, through the write gate; reading one is a
+	// read, which a draining backend still serves.
+	meta, err := h.objects.LookupBucketMeta(ctx, tenantID, collection, action != cedar.ActionReadObjectLock)
 	if err != nil {
 		return out, MapResolveErr(err)
 	}

@@ -189,23 +189,21 @@ func TestUpdateObjectCedarDenial(t *testing.T) {
 	}
 }
 
-// The bucket binding only scopes the authorization: failing to resolve it
-// does not fail an update, it leaves the binding empty for Cedar.
-func TestUpdateObjectBucketLookupIsBestEffort(t *testing.T) {
+// An update is a write: failing to resolve its bucket binding fails it, rather
+// than authorizing it on an empty binding and writing, as it used to.
+func TestUpdateObjectFailsClosedOnAnUnresolvableBucket(t *testing.T) {
 	tenantID := uuid.New()
 	obj := updObject(tenantID, statemachine.StateAvailable)
 	repo := &scriptedUpdateRepo{obj: obj, bucketErr: errors.New("connection reset")}
 	authz := &recordingAuthorizer{}
 	h := &Handler{repo: repo, policy: authz}
-	if _, err := h.UpdateObject(updCtx(tenantID), updInput(obj)); err != nil {
-		t.Fatalf("UpdateObject: %v", err)
+	_, err := h.UpdateObject(updCtx(tenantID), updInput(obj))
+	wantUpdateCode(t, err, connect.CodeInternal)
+	if authz.lastResource != nil {
+		t.Fatalf("Cedar was asked with %+v; an unresolved write must not reach it", authz.lastResource)
 	}
-	r := authz.lastResource
-	if r == nil || r.BackendID != "" || r.BucketName != "" {
-		t.Fatalf("resource = %+v, want an empty binding", r)
-	}
-	if repo.writes != 1 {
-		t.Errorf("writes = %d, want 1", repo.writes)
+	if repo.writes != 0 {
+		t.Errorf("writes = %d, want 0", repo.writes)
 	}
 }
 

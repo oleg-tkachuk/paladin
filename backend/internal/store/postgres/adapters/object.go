@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
@@ -644,9 +645,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 	var (
 		meta             objecth.BucketMeta
 		constraintsJSON  []byte
-		enabled          bool
-		readOnly         bool
-		provisionState   string
+		state            bucketgate.State
 		defaultMode      *string
 		retentionSeconds int64
 		bucketConstraint []byte
@@ -654,7 +653,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 	if err := r.pool.QueryRow(ctx, q, pgUUID(tenantID), collection).Scan(
 		&meta.BackendID, &meta.BucketName, &meta.VersioningEnabled, &meta.ObjectLockEnabled,
 		&defaultMode, &retentionSeconds,
-		&constraintsJSON, &enabled, &readOnly, &meta.EventsEnabled, &provisionState, &bucketConstraint,
+		&constraintsJSON, &state.Enabled, &state.ReadOnly, &meta.EventsEnabled, &state.ProvisionState, &bucketConstraint,
 		&meta.PublicRead, &meta.CacheControl, &meta.PublicBaseURL,
 	); err != nil {
 		if isNoRows(err) {
@@ -662,7 +661,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		}
 		return objecth.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
 	}
-	if err := bucketOpAllowed(write, enabled, readOnly, provisionState); err != nil {
+	if err := bucketgate.Check(bucketgate.AccessOf(write), state); err != nil {
 		return objecth.BucketMeta{}, err
 	}
 	// Fail closed on a document that does not decode: these are limits the
@@ -673,10 +672,24 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 			return objecth.BucketMeta{}, fmt.Errorf("bucket %q constraints: %w", meta.BucketName, err)
 		}
 	}
-	if v, ok := readBoolOverride(constraintsJSON, "versioning_enabled"); ok {
+	overlayVersioningAndLock(&meta, constraintsJSON, defaultMode, retentionSeconds)
+	return meta, nil
+}
+
+// The collection constraints keys that override the bucket's flags.
+const (
+	constraintVersioningEnabled = "versioning_enabled"
+	constraintObjectLockEnabled = "object_lock_enabled"
+)
+
+// overlayVersioningAndLock applies a collection's versioning and Object Lock
+// overrides (constraintsJSON) over the bucket's flags in meta, and the
+// bucket's default lock mode and retention, as LookupBucketMeta documents.
+func overlayVersioningAndLock(meta *objecth.BucketMeta, constraintsJSON []byte, defaultMode *string, retentionSeconds int64) {
+	if v, ok := readBoolOverride(constraintsJSON, constraintVersioningEnabled); ok {
 		meta.VersioningEnabled = v
 	}
-	if v, ok := readBoolOverride(constraintsJSON, "object_lock_enabled"); ok {
+	if v, ok := readBoolOverride(constraintsJSON, constraintObjectLockEnabled); ok {
 		meta.ObjectLockEnabled = v
 	}
 	if defaultMode != nil {
@@ -685,7 +698,6 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 	if retentionSeconds > 0 {
 		meta.ObjectLockDefaultRetention = time.Duration(retentionSeconds) * time.Second
 	}
-	return meta, nil
 }
 
 // readBoolOverride extracts a top-level bool field from the constraints

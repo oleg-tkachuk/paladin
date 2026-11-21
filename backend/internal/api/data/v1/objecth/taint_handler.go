@@ -94,15 +94,18 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 	if err != nil {
 		return nil, err
 	}
-	if err := requireObjectName(collection, objectID); err != nil {
-		return nil, err
-	}
-	obj, err := h.objects.FindByName(ctx, tenantID, collection, objectID)
+	obj, err := h.target(ctx, tenantID, collection, objectID)
 	if err != nil {
-		return nil, objectLookupError(err)
+		return nil, err
 	}
 	if err := auth.AssertCapabilityOp(ctx, limes.OpManage,
 		CapabilityObjectURI(tenantID, obj.Collection, obj.Key)); err != nil {
+		return nil, err
+	}
+	// Setting a taint is a write on the object: it answers the bucket's state
+	// as every other write does, and Cedar decides on the resolved binding.
+	backendID, bucket, err := writeBinding(ctx, h.objects, tenantID, obj.Collection)
+	if err != nil {
 		return nil, err
 	}
 	if h.policy != nil {
@@ -113,6 +116,8 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 				TenantID:    tenantID,
 				Collection:  obj.Collection,
 				Key:         obj.Key,
+				BackendID:   backendID,
+				BucketName:  bucket,
 				ObjectID:    obj.ObjectID,
 				State:       string(obj.State),
 				SizeBytes:   obj.SizeBytes,
@@ -130,6 +135,18 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 	}
 	obj.Taint = stored
 	return &obj, nil
+}
+
+// target is the object a SetTaint request names.
+func (h *TaintHandler) target(ctx context.Context, tenantID uuid.UUID, collection, objectID string) (Object, error) {
+	if err := requireObjectName(collection, objectID); err != nil {
+		return Object{}, err
+	}
+	obj, err := h.objects.FindByName(ctx, tenantID, collection, objectID)
+	if err != nil {
+		return Object{}, objectLookupError(err)
+	}
+	return obj, nil
 }
 
 // Tainted reports whether the object a capability URI names carries any

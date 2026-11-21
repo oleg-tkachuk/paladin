@@ -81,10 +81,10 @@ func (h *VersionHandler) authorizeParent(
 	if h.policy == nil {
 		return connect.NewError(connect.CodePermissionDenied, errNoVersionAuthorizer.Error()).WithCause(errNoVersionAuthorizer)
 	}
-	write := action != cedar.ActionGetObject
-	// Best-effort, as in GetObject: an unbound collection emits no bucket
-	// scope key, which leaves scoped principals fail-closed.
-	backendID, bucket := scopeBucket(ctx, h.log, h.objects, rpc, tenantID, parent.Collection, write)
+	backendID, bucket, err := h.parentBinding(ctx, rpc, tenantID, parent.Collection, action)
+	if err != nil {
+		return err
+	}
 	decision, err := h.policy.IsAuthorized(ctx,
 		apiutil.CedarPrincipal(principal),
 		action,
@@ -104,6 +104,19 @@ func (h *VersionHandler) authorizeParent(
 			"policy denied %s on %s/%s", action, parent.Collection, parent.Key)
 	}
 	return nil
+}
+
+// parentBinding resolves the parent's (backend, bucket) for action's
+// authorization. Reading a version is a read, best-effort as in GetObject: an
+// unbound collection emits no bucket scope key, which leaves scoped principals
+// fail-closed. Anything else rewrites the object, so it goes through the write
+// gate and fails closed.
+func (h *VersionHandler) parentBinding(ctx context.Context, rpc string, tenantID uuid.UUID, collection string, action cedar.Action) (backendID, bucket string, err error) {
+	if action == cedar.ActionGetObject {
+		backendID, bucket = scopeBucket(ctx, h.log, h.objects, rpc, tenantID, collection)
+		return backendID, bucket, nil
+	}
+	return writeBinding(ctx, h.objects, tenantID, collection)
 }
 
 // CapabilityObjectURI is the resource a capability names an object by.

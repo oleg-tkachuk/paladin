@@ -3,6 +3,8 @@ package objecth
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"uuid"
 
@@ -56,10 +58,10 @@ func warnedOnce(t *testing.T, logs *observer.ObservedLogs, op string, tenantID u
 	}
 }
 
-// The RPCs that resolve a collection's bucket only to scope their
+// The reads that resolve a collection's bucket only to scope their
 // authorization go on without it when the lookup fails, and a scoped token is
 // then denied. That denial used to come with no line saying the lookup
-// failed; each now warns once.
+// failed; each now warns once. Writes do not go on: see write_gate_test.go.
 func TestBestEffortBucketLookupsWarnWhenTheStoreFails(t *testing.T) {
 	tenantID := uuid.New()
 	const collection = "docs"
@@ -74,9 +76,6 @@ func TestBestEffortBucketLookupsWarnWhenTheStoreFails(t *testing.T) {
 		op   string
 		call func(ctx context.Context, h *Handler)
 	}{
-		{opComplete, func(ctx context.Context, h *Handler) {
-			_, _ = h.CompleteObject(ctx, CompleteObjectInput{Collection: collection, ObjectID: uuid.New().String()})
-		}},
 		{opListFolders, func(ctx context.Context, h *Handler) {
 			_, _, _ = h.ListCommonPrefixes(ctx, ListObjectsInput{Collection: collection, Delimiter: "/"})
 		}},
@@ -92,18 +91,58 @@ func TestBestEffortBucketLookupsWarnWhenTheStoreFails(t *testing.T) {
 		{opListTags, func(ctx context.Context, h *Handler) { _, _ = h.ListDistinctTags(ctx, collection, "", 0) }},
 		{opGet, func(ctx context.Context, h *Handler) { _, _ = h.GetObject(ctx, collection, uuid.New().String()) }},
 		{opLookup, func(ctx context.Context, h *Handler) { _, _ = h.LookupObject(ctx, collection, "k") }},
-		{opDelete, func(ctx context.Context, h *Handler) {
-			_ = h.DeleteObject(ctx, collection, uuid.New().String(), "1", false, false)
-		}},
-		{opRestore, func(ctx context.Context, h *Handler) {
-			_, _ = h.RestoreObject(ctx, collection, uuid.New().String(), "1")
-		}},
 	} {
 		t.Run(tc.op, func(t *testing.T) {
 			core, logs := observer.New(zapcore.DebugLevel)
 			ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
 			tc.call(ctx, newHandler(zap.New(core)))
 			warnedOnce(t, logs, tc.op, tenantID, collection)
+		})
+	}
+}
+
+// A write whose bucket binding cannot be read fails, and the RPC's outcome
+// line says why at Error: the store failure is the server's, not the
+// caller's.
+func TestWriteBindingFailureIsLoggedAtError(t *testing.T) {
+	tenantID := uuid.New()
+	const collection = "docs"
+	for _, tc := range []struct {
+		op   string
+		call func(ctx context.Context, h *Handler) error
+	}{
+		{opComplete, func(ctx context.Context, h *Handler) error {
+			_, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: collection, ObjectID: uuid.New().String()})
+			return err
+		}},
+		{opDelete, func(ctx context.Context, h *Handler) error {
+			return h.DeleteObject(ctx, collection, uuid.New().String(), "1", false, false)
+		}},
+		{opRestore, func(ctx context.Context, h *Handler) error {
+			_, err := h.RestoreObject(ctx, collection, uuid.New().String(), "1")
+			return err
+		}},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			core, logs := observer.New(zapcore.DebugLevel)
+			h := &Handler{repo: &unresolvedRepo{}, policy: denyAll{}}
+			h.SetLogger(zap.New(core))
+			ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
+			if err := tc.call(ctx, h); err == nil {
+				t.Fatal("a write with an unreadable binding succeeded")
+			}
+			var errs []observer.LoggedEntry
+			for _, e := range logs.All() {
+				if e.Level == zapcore.ErrorLevel {
+					errs = append(errs, e)
+				}
+			}
+			if len(errs) != 1 {
+				t.Fatalf("error lines = %d, want 1; logs %v", len(errs), logs.All())
+			}
+			if f := errs[0].ContextMap(); f["op"] != tc.op || !strings.Contains(fmt.Sprint(f["error"]), errBucketStore.Error()) {
+				t.Errorf("error line = %v, want op %q and the store's error", f, tc.op)
+			}
 		})
 	}
 }

@@ -285,7 +285,7 @@ func (h *Handler) CountObjectFacets(ctx context.Context, in ListObjectsInput) (_
 	if err := auth.AssertCapabilityOp(ctx, limes.OpList, capabilityCollectionURI(tenantID, in.Collection)); err != nil {
 		return nil, err
 	}
-	backendID, bucket := scopeBucket(ctx, h.log, h.repo, opCountFacets, tenantID, in.Collection, false)
+	backendID, bucket := scopeBucket(ctx, h.log, h.repo, opCountFacets, tenantID, in.Collection)
 	if err := h.authorize(ctx, principal, tenantID, &cedar.Resource{
 		TenantID: tenantID, Collection: in.Collection,
 		BackendID: backendID, BucketName: bucket,

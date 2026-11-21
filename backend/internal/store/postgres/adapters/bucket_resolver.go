@@ -9,11 +9,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 )
 
 // This file holds the collection→bucket resolution that every data-plane op
-// funnels through, and the three gates it applies.
+// funnels through. The gates themselves are bucketgate.Check, applied here to
+// the row the query reads.
 //
 // It exists because the resolution used to be copied, byte for byte, into
 // ObjectRepo, PresignRepo and MultipartRepo, with a fourth copy of the gates
@@ -38,48 +39,24 @@ const resolveBucketQuery = `
 		JOIN storage_backends sb ON sb.id = bk.backend_id
 		WHERE c.tenant_id = $1 AND c.name = $2`
 
-// bucketOpAllowed applies the three gates to an already-read row. `write`
-// splits them by operation class: a disabled backend refuses everything,
-// while the read-only drain (`001_initial_schema.sql`) and the provisioning gate refuse
-// mutations only — reads keep resolving, which is the entire point of a
-// drain.
-//
-// Kept separate from the query so LookupBucketMeta, whose SELECT carries the
-// versioning and lock columns too, applies the same policy without a second
-// copy of it.
-func bucketOpAllowed(write, enabled, readOnly bool, provisionState string) error {
-	if !enabled {
-		return objecth.ErrBackendDisabled
-	}
-	if write && readOnly {
-		return objecth.ErrBackendReadOnly
-	}
-	if write && provisionState != "ready" {
-		return objecth.ErrBucketProvisioning
-	}
-	return nil
-}
-
 // resolveBucket returns the (backend, bucket) pair bound to a collection, or
 // the gate error refusing the operation.
 func resolveBucket(
 	ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, collection string, write bool,
 ) (string, string, error) {
 	var (
-		backendID      string
-		bucket         string
-		enabled        bool
-		readOnly       bool
-		provisionState string
+		backendID string
+		bucket    string
+		state     bucketgate.State
 	)
 	if err := pool.QueryRow(ctx, resolveBucketQuery, pgUUID(tenantID), collection).
-		Scan(&backendID, &bucket, &enabled, &readOnly, &provisionState); err != nil {
+		Scan(&backendID, &bucket, &state.Enabled, &state.ReadOnly, &state.ProvisionState); err != nil {
 		if isNoRows(err) {
 			return "", "", fmt.Errorf("collection %q %w", collection, apiutil.ErrNotFound)
 		}
 		return "", "", fmt.Errorf("lookup bucket: %w", err)
 	}
-	if err := bucketOpAllowed(write, enabled, readOnly, provisionState); err != nil {
+	if err := bucketgate.Check(bucketgate.AccessOf(write), state); err != nil {
 		return "", "", err
 	}
 	return backendID, bucket, nil

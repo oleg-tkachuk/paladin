@@ -1,56 +1,45 @@
 package adapters
 
 import (
-	"errors"
 	"testing"
+	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 )
 
-// With the three gates in one function they are pure, so the whole policy
-// fits in a table instead of needing a Postgres per case. The integration
-// test still drives all three repos end to end; this pins the decision itself,
-// including the combinations a fixture would have to work to produce.
-func TestBucketOpAllowed(t *testing.T) {
-	cases := []struct {
-		name           string
-		write          bool
-		enabled        bool
-		readOnly       bool
-		provisionState string
-		want           error
+// A collection's constraints override the bucket's versioning and lock flags
+// either way; a key it does not set, or sets to something not a bool, leaves
+// the bucket's flag. The bucket's default lock mode and retention carry over.
+func TestOverlayVersioningAndLock(t *testing.T) {
+	governance := objecth.LockModeGovernance
+	const retentionSeconds = 3600
+	for _, tc := range []struct {
+		name        string
+		bucket      objecth.BucketMeta
+		constraints string
+		mode        *string
+		retention   int64
+		want        objecth.BucketMeta
 	}{
-		{"read on a healthy bucket", false, true, false, "ready", nil},
-		{"write on a healthy bucket", true, true, false, "ready", nil},
-
-		// Disabled refuses both classes: the backend is out of service, and
-		// a read would resolve to a bucket nobody is maintaining.
-		{"read on a disabled backend", false, false, false, "ready", objecth.ErrBackendDisabled},
-		{"write on a disabled backend", true, false, false, "ready", objecth.ErrBackendDisabled},
-
-		// Drain refuses mutations only — serving reads is the point of it.
-		{"read while draining", false, true, true, "ready", nil},
-		{"write while draining", true, true, true, "ready", objecth.ErrBackendReadOnly},
-
-		// Same split for a bucket that does not exist on the backend yet.
-		{"read while provisioning", false, true, false, "pending", nil},
-		{"write while provisioning", true, true, false, "pending", objecth.ErrBucketProvisioning},
-		{"write while deleting", true, true, false, "deleting", objecth.ErrBucketProvisioning},
-		{"write on a failed provision", true, true, false, "failed", objecth.ErrBucketProvisioning},
-
-		// Precedence, where the states overlap. Disabled outranks the rest:
-		// telling an operator a bucket is still provisioning, when the
-		// backend it lives on is switched off, sends them to the wrong page.
-		{"disabled and draining", true, false, true, "ready", objecth.ErrBackendDisabled},
-		{"disabled and provisioning", true, false, false, "pending", objecth.ErrBackendDisabled},
-		{"draining and provisioning", true, true, true, "pending", objecth.ErrBackendReadOnly},
-	}
-	for _, tc := range cases {
+		{"no overrides", objecth.BucketMeta{VersioningEnabled: true}, "", nil, 0,
+			objecth.BucketMeta{VersioningEnabled: true}},
+		{"forced off", objecth.BucketMeta{VersioningEnabled: true, ObjectLockEnabled: true},
+			`{"versioning_enabled": false, "object_lock_enabled": false}`, nil, 0, objecth.BucketMeta{}},
+		{"forced on", objecth.BucketMeta{},
+			`{"versioning_enabled": true, "object_lock_enabled": true}`, nil, 0,
+			objecth.BucketMeta{VersioningEnabled: true, ObjectLockEnabled: true}},
+		{"not a bool", objecth.BucketMeta{VersioningEnabled: true}, `{"versioning_enabled": "no"}`, nil, 0,
+			objecth.BucketMeta{VersioningEnabled: true}},
+		{"lock defaults", objecth.BucketMeta{}, "", &governance, retentionSeconds,
+			objecth.BucketMeta{ObjectLockDefaultMode: governance, ObjectLockDefaultRetention: retentionSeconds * time.Second}},
+	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := bucketOpAllowed(tc.write, tc.enabled, tc.readOnly, tc.provisionState)
-			if !errors.Is(got, tc.want) {
-				t.Errorf("bucketOpAllowed(write=%v, enabled=%v, readOnly=%v, %q) = %v, want %v",
-					tc.write, tc.enabled, tc.readOnly, tc.provisionState, got, tc.want)
+			got := tc.bucket
+			overlayVersioningAndLock(&got, []byte(tc.constraints), tc.mode, tc.retention)
+			if got.VersioningEnabled != tc.want.VersioningEnabled || got.ObjectLockEnabled != tc.want.ObjectLockEnabled ||
+				got.ObjectLockDefaultMode != tc.want.ObjectLockDefaultMode ||
+				got.ObjectLockDefaultRetention != tc.want.ObjectLockDefaultRetention {
+				t.Fatalf("overlay = %+v, want %+v", got, tc.want)
 			}
 		})
 	}

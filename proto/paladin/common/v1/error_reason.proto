@@ -149,4 +149,8 @@ enum ErrorReason {
   // share of the replay cache holds. Not permanent: the share frees as proofs
   // age out.
   ERROR_REASON_CAPABILITY_PROOF_QUOTA_EXCEEDED = 63;
+  // A write to a bucket its storage backend does not hold yet: the bucket is
+  // registered and still being created there. Not permanent: retry once it
+  // has been created.
+  ERROR_REASON_BUCKET_PROVISIONING = 64;
 }
