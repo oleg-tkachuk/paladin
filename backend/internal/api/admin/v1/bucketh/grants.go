@@ -5,6 +5,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -44,13 +45,18 @@ func (h *Handler) GrantBucket(ctx context.Context, backendID, bucketName string,
 	if err != nil {
 		return admindomain.BucketGrant{}, h.answer(opGrant, backendID, bucketName, err)
 	}
+	h.changed(ctx, opGrant, stored, zap.String(logGrantee, tenantID.String()))
 	return g, nil
 }
+
+// logGrantee is the log key of the tenant a grant is to.
+const logGrantee = "grantee_tenant_id"
 
 // RevokeBucketGrant takes tenantID's grant back. Refused with
 // ErrBucketGrantInUse while that tenant still has collections in the bucket.
 func (h *Handler) RevokeBucketGrant(ctx context.Context, backendID, bucketName string, tenantID uuid.UUID) error {
-	if _, err := h.grantable(ctx, opRevokeGrant, backendID, bucketName, cedar.ActionManageBucket, manageRoles); err != nil {
+	stored, err := h.grantable(ctx, opRevokeGrant, backendID, bucketName, cedar.ActionManageBucket, manageRoles)
+	if err != nil {
 		return err
 	}
 	// Whether the tenant still has collections there is a question about
@@ -59,6 +65,7 @@ func (h *Handler) RevokeBucketGrant(ctx context.Context, backendID, bucketName s
 	if err := h.grants.RevokeGrant(auth.WithCrossTenantRead(ctx), backendID, bucketName, tenantID); err != nil {
 		return h.answer(opRevokeGrant, backendID, bucketName, err)
 	}
+	h.changed(ctx, opRevokeGrant, stored, zap.String(logGrantee, tenantID.String()))
 	return nil
 }
 

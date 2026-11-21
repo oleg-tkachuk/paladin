@@ -194,13 +194,27 @@ func (h *Handler) answer(op, backendID, bucketName string, err error) error {
 	return mapped
 }
 
-// readBack is the bucket as op's write left it.
+// readBack is the bucket as op's write left it, which it logs as changed.
 func (h *Handler) readBack(ctx context.Context, op, backendID, bucketName string) (*admindomain.Bucket, error) {
 	got, err := h.repo.Get(ctx, backendID, bucketName)
 	if err != nil {
 		return nil, h.answer(op, backendID, bucketName, fmt.Errorf("read back: %w", err))
 	}
+	h.changed(ctx, op, got)
 	return &got, nil
+}
+
+// changed logs that op changed bucket b: under which owner, at which
+// version, and who changed it.
+func (h *Handler) changed(ctx context.Context, op string, b admindomain.Bucket, extra ...zap.Field) {
+	h.log.Info("bucket changed", append([]zap.Field{
+		zap.String("op", op),
+		zap.String("tenant_id", b.OwnerTenantID.String()),
+		zap.String("backend_id", b.BackendID),
+		zap.String("bucket_name", b.BucketName),
+		zap.Int64("resource_version", b.ResourceVersion),
+		zap.String("actor", grantedBy(ctx)),
+	}, extra...)...)
 }
 
 // ─── Create ─────────────────────────────────────────────────────────────────
@@ -238,6 +252,7 @@ func (h *Handler) CreateBucket(ctx context.Context, in CreateBucketInput) (*admi
 		// FailedPrecondition respectively.
 		return nil, h.answer(opCreate, b.BackendID, b.BucketName, err)
 	}
+	h.changed(ctx, opCreate, got, zap.String("provision_state", got.ProvisionState))
 	return &got, nil
 }
 
@@ -381,6 +396,7 @@ func (h *Handler) EnsureBucket(ctx context.Context, in CreateBucketInput) (*admi
 	}
 	got, err := h.createRow(ctx, provisioned(b, in.ProvisionOnBackend))
 	if err == nil {
+		h.changed(ctx, opEnsure, got, zap.String("provision_state", got.ProvisionState))
 		return &got, true, nil
 	}
 	// Lost a race to a concurrent create (unique violation →
@@ -583,6 +599,8 @@ func (h *Handler) UpdateBucket(ctx context.Context, in UpdateBucketInput) (*admi
 	if err != nil {
 		return nil, h.answer(opUpdate, in.Bucket.BackendID, in.Bucket.BucketName, err)
 	}
+	h.changed(ctx, opUpdate, got, zap.Strings("update_mask", in.UpdateMask),
+		zap.String("previous_tenant_id", stored.OwnerTenantID.String()))
 	return &got, nil
 }
 
@@ -827,6 +845,7 @@ func (h *Handler) DeleteBucket(ctx context.Context, in DeleteBucketInput) error 
 	}); err != nil {
 		return h.answer(opDelete, in.BackendID, in.BucketName, err)
 	}
+	h.changed(ctx, opDelete, stored, zap.String("mode", mode))
 	return nil
 }
 

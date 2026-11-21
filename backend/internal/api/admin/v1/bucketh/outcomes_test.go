@@ -91,6 +91,90 @@ func TestStoreFailuresAnswerInternal(t *testing.T) {
 	}
 }
 
+// Every change to a bucket is logged once at info: what changed, on which
+// bucket, under which owner, and who changed it.
+func TestChangesAreLogged(t *testing.T) {
+	stored := validBucket()
+	stored.Versioning.Enabled = true
+	admin := ctxAs(apiutil.RoleBucketAdmin)
+	grantee := uuid.New()
+	for _, tc := range []struct {
+		op   string
+		call func(*Handler) error
+	}{
+		{opCreate, func(h *Handler) error {
+			_, err := h.CreateBucket(admin, CreateBucketInput{Bucket: stored})
+			return err
+		}},
+		{opEnsure, func(h *Handler) error {
+			_, _, err := h.EnsureBucket(admin, CreateBucketInput{Bucket: stored})
+			return err
+		}},
+		{opUpdate, func(h *Handler) error {
+			_, err := h.UpdateBucket(admin, UpdateBucketInput{Bucket: stored, ExpectedVersion: 1})
+			return err
+		}},
+		{opDelete, func(h *Handler) error {
+			return h.DeleteBucket(admin, DeleteBucketInput{BackendID: stored.BackendID, BucketName: stored.BucketName})
+		}},
+		{opSetPolicy, func(h *Handler) error {
+			_, err := h.SetPolicy(admin, stored.BackendID, stored.BucketName, "", 1)
+			return err
+		}},
+		{opSetLifecycle, func(h *Handler) error {
+			_, err := h.SetLifecycleRules(admin, stored.BackendID, stored.BucketName, nil, 1)
+			return err
+		}},
+		{opSetObjectLock, func(h *Handler) error {
+			_, err := h.SetObjectLock(admin, stored.BackendID, stored.BucketName, admindomain.ObjectLockConfig{Enabled: true}, 1)
+			return err
+		}},
+		{opSetVersioning, func(h *Handler) error {
+			_, err := h.SetVersioning(admin, stored.BackendID, stored.BucketName, admindomain.BucketVersioning{Enabled: true}, 1)
+			return err
+		}},
+		{opSetReplication, func(h *Handler) error {
+			_, err := h.SetReplication(admin, stored.BackendID, stored.BucketName, admindomain.BucketReplication{}, 1)
+			return err
+		}},
+		{opGrant, func(h *Handler) error {
+			_, err := h.GrantBucket(admin, stored.BackendID, stored.BucketName, grantee)
+			return err
+		}},
+		{opRevokeGrant, func(h *Handler) error {
+			return h.RevokeBucketGrant(admin, stored.BackendID, stored.BucketName, grantee)
+		}},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			repo := &fakeRepo{getBucket: stored, getTxBucket: stored, backendEnabled: true}
+			if tc.op == opCreate || tc.op == opEnsure {
+				repo.getNotFoundFirst = true
+			}
+			core, logs := observer.New(zapcore.InfoLevel)
+			h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
+			h.SetGrants(&fakeGrants{})
+			h.SetLogger(zap.New(core))
+			if err := tc.call(h); err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			all := logs.All()
+			if len(all) != 1 || all[0].Level != zapcore.InfoLevel {
+				t.Fatalf("want one info line, got %v", all)
+			}
+			want := map[string]any{
+				"op": tc.op, "tenant_id": stored.OwnerTenantID.String(), "actor": "tester",
+				"backend_id": stored.BackendID, "bucket_name": stored.BucketName,
+			}
+			got := all[0].ContextMap()
+			for k, v := range want {
+				if got[k] != v {
+					t.Errorf("%s = %v, want %v", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
 // A refusal the caller can act on keeps its code and is logged at warn.
 func TestRefusalsAreLoggedAtWarn(t *testing.T) {
 	h, logs := observed(&fakeRepo{setPolicyErr: admindomain.ErrVersionMismatch}, zapcore.WarnLevel)

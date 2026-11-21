@@ -256,7 +256,7 @@ func assembleDataMux(ctx context.Context, deps *SharedDeps, shared planeShared) 
 	// backend-existence checker (a tenant may not create backends).
 	bucketBootstrapH := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
 	bucketBootstrapH.SetEventProducer(apiEvents)
-	bucketBootstrapH.SetLogger(l.Named("bucket-events"))
+	bucketBootstrapH.SetLogger(l.Named("buckets"))
 	collectionBootstrapH := wire.ProvideCollectionHandler(repos, polEngine, cfg)
 	collectionBootstrapH.SetEventProducer(apiEvents)
 	collectionBootstrapH.SetLogger(l.Named("collection-events"))
