@@ -19,12 +19,14 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -53,6 +55,30 @@ type Handler struct {
 	// net.DefaultResolver; overridable so the fan-out is testable without
 	// depending on what the host's DNS happens to return.
 	resolver hostResolver
+	log      *zap.Logger
+}
+
+// bridgeRequestTimeout bounds one request to an MCP replica, so one hung pod
+// cannot hold the admin page.
+const bridgeRequestTimeout = 5 * time.Second
+
+// statusPath is the bridge's status endpoint, beside the configured
+// /sessions one.
+const statusPath = "/status"
+
+// The layer a profile comes from (MCPProfile.Source).
+const (
+	sourceBuiltIn      = "built_in"
+	sourceUserOnly     = "user_only"
+	sourceUserOverride = "user_override"
+)
+
+// SetLogger sets where the handler says what it could not reach. Unset, it
+// says nothing.
+func (h *Handler) SetLogger(l *zap.Logger) {
+	if l != nil {
+		h.log = l
+	}
 }
 
 // hostResolver is the one lookup sessionTargets needs. *net.Resolver satisfies
@@ -69,8 +95,9 @@ func NewHandler(cfg config.MCP, policy cedar.Authorizer) *Handler {
 		cfg:         cfg,
 		policy:      policy,
 		sessionsURL: cfg.HTTP.SessionsURL,
-		httpClient:  &http.Client{Timeout: 5 * time.Second},
+		httpClient:  &http.Client{Timeout: bridgeRequestTimeout},
 		resolver:    net.DefaultResolver,
+		log:         zap.NewNop(),
 	}
 }
 
@@ -104,75 +131,13 @@ func (h *Handler) ListSessions(ctx context.Context, req *adminv1.ListSessionsReq
 	}
 	authz := info.RequestHeader().Get("Authorization")
 
-	// Fan out across every MCP replica: the registry is process-local, so a
-	// single LB'd query only sees one pod's sessions. Resolve the configured
-	// host to all its A-records (a headless Service returns one per pod) and
-	// query each directly, in parallel. A single-address host (ClusterIP / a
-	// bare IP) collapses to one query — the prior behaviour. A replica that
-	// errors or times out simply contributes nothing (graceful-degrade).
-	targets := h.sessionTargets(ctx)
-	merged := map[string]mcppkg.SessionInfo{}
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for _, u := range targets {
-		wg.Add(1)
-		go func(target string) {
-			defer wg.Done()
-			infos, err := h.fetchSessions(ctx, target, authz)
-			if err != nil {
-				return // unreachable / non-200 replica → skip
-			}
-			mu.Lock()
-			for _, s := range infos {
-				// Session ids are minted per pod, so collisions are unexpected;
-				// keep the freshest by last_seen if one ever occurs.
-				if prev, ok := merged[s.ID]; !ok || s.LastSeen.After(prev.LastSeen) {
-					merged[s.ID] = s
-				}
-			}
-			mu.Unlock()
-		}(u)
+	infos := h.mergedSessions(ctx, authz)
+	sortSessions(infos)
+	page, next := pageSessions(infos, req.GetPage())
+	if next != "" {
+		out.Page = &commonv1.PageResponse{NextPageToken: next}
 	}
-	wg.Wait()
-
-	infos := make([]mcppkg.SessionInfo, 0, len(merged))
-	for _, s := range merged {
-		infos = append(infos, s)
-	}
-	sort.Slice(infos, func(i, j int) bool {
-		if infos[i].StartedAt.Equal(infos[j].StartedAt) {
-			return infos[i].ID < infos[j].ID
-		}
-		return infos[i].StartedAt.Before(infos[j].StartedAt)
-	})
-	// Page the MERGED list, not each replica's. A cursor minted by one pod is
-	// meaningless to another, and the fan-out has to complete before the
-	// ordering is even known — so the page bounds the response, which is what
-	// the wire and the caller care about. The replicas' own /sessions endpoint
-	// stays unpaged on purpose: it is an internal, plane-to-plane call whose
-	// only consumer is this merge.
-	start := 0
-	if tok := req.GetPage().GetPageToken(); tok != "" {
-		for i := range infos {
-			if infos[i].ID == tok {
-				start = i + 1
-				break
-			}
-		}
-		// An unknown cursor (the session was reaped between pages) restarts
-		// the listing rather than failing it.
-	}
-	limit := int(req.GetPage().GetPageSize())
-	if limit <= 0 {
-		limit = defaultSessionPageSize
-	}
-	end := start + limit
-	if end >= len(infos) {
-		end = len(infos)
-	} else {
-		out.Page = &commonv1.PageResponse{NextPageToken: infos[end-1].ID}
-	}
-	for _, s := range infos[start:end] {
+	for _, s := range page {
 		out.Sessions = append(out.Sessions, &adminv1.MCPSession{
 			Id:            s.ID,
 			AgentSubject:  s.AgentSubject,
@@ -183,6 +148,82 @@ func (h *Handler) ListSessions(ctx context.Context, req *adminv1.ListSessionsReq
 		})
 	}
 	return out, nil
+}
+
+// mergedSessions fans out across every MCP replica: the registry is
+// process-local, so a single LB'd query only sees one pod's sessions. It
+// resolves the configured host to all its A-records (a headless Service
+// returns one per pod) and queries each directly, in parallel. A
+// single-address host (ClusterIP / a bare IP) collapses to one query. A
+// replica that errors or times out contributes nothing (graceful-degrade),
+// and is logged.
+func (h *Handler) mergedSessions(ctx context.Context, authz string) []mcppkg.SessionInfo {
+	merged := map[string]mcppkg.SessionInfo{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, u := range h.sessionTargets(ctx) {
+		wg.Go(func() {
+			infos, err := h.fetchSessions(ctx, u, authz)
+			if err != nil {
+				h.logger().Warn("mcp replica skipped: sessions unavailable", zap.String("target", u), zap.Error(err))
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			for _, s := range infos {
+				// Session ids are minted per pod, so collisions are unexpected;
+				// keep the freshest by last_seen if one ever occurs.
+				if prev, ok := merged[s.ID]; !ok || s.LastSeen.After(prev.LastSeen) {
+					merged[s.ID] = s
+				}
+			}
+		})
+	}
+	wg.Wait()
+	infos := make([]mcppkg.SessionInfo, 0, len(merged))
+	for _, s := range merged {
+		infos = append(infos, s)
+	}
+	return infos
+}
+
+// sortSessions orders infos oldest first, ties by id.
+func sortSessions(infos []mcppkg.SessionInfo) {
+	sort.Slice(infos, func(i, j int) bool {
+		if infos[i].StartedAt.Equal(infos[j].StartedAt) {
+			return infos[i].ID < infos[j].ID
+		}
+		return infos[i].StartedAt.Before(infos[j].StartedAt)
+	})
+}
+
+// pageSessions is the page of infos req asks for, and the cursor of the next
+// one ("" when none follows).
+//
+// It pages the MERGED list, not each replica's. A cursor minted by one pod is
+// meaningless to another, and the fan-out has to complete before the
+// ordering is even known — so the page bounds the response, which is what
+// the wire and the caller care about. The replicas' own /sessions endpoint
+// stays unpaged on purpose: it is an internal, plane-to-plane call whose only
+// consumer is this merge.
+func pageSessions(infos []mcppkg.SessionInfo, req *commonv1.PageRequest) ([]mcppkg.SessionInfo, string) {
+	start := 0
+	if tok := req.GetPageToken(); tok != "" {
+		// An unknown cursor (the session was reaped between pages) restarts
+		// the listing rather than failing it.
+		if i := slices.IndexFunc(infos, func(s mcppkg.SessionInfo) bool { return s.ID == tok }); i >= 0 {
+			start = i + 1
+		}
+	}
+	limit := int(req.GetPageSize())
+	if limit <= 0 {
+		limit = defaultSessionPageSize
+	}
+	end := start + limit
+	if end >= len(infos) {
+		return infos[start:], ""
+	}
+	return infos[start:end], infos[end-1].ID
 }
 
 // sessionTargets expands SessionsURL into one URL per resolved host address
@@ -295,13 +336,13 @@ func (h *Handler) profiles() []*adminv1.MCPProfile {
 	for name, patterns := range mcppkg.DefaultProfiles {
 		merged[name] = entry{
 			patterns: append([]string(nil), patterns...),
-			source:   "built_in",
+			source:   sourceBuiltIn,
 		}
 	}
 	for name, p := range h.cfg.Profiles {
-		src := "user_only"
+		src := sourceUserOnly
 		if _, ok := merged[name]; ok {
-			src = "user_override"
+			src = sourceUserOverride
 		}
 		merged[name] = entry{
 			patterns: append([]string(nil), p.Tools...),
@@ -398,6 +439,7 @@ func (h *Handler) listRegistered(ctx context.Context, st *adminv1.MCPOAuthState)
 	}
 	clients, err := h.clients.ListClients(ctx)
 	if err != nil {
+		h.logger().Error("oauth clients unreadable for mcp inspect", zap.Error(err))
 		st.RegisteredClientsError = err.Error()
 		return
 	}
@@ -528,7 +570,22 @@ func (h *Handler) GetBridgeStatus(
 	} else {
 		out.Error = "no MCP replica answered"
 	}
+	h.logger().Warn("mcp bridge unreachable", zap.String("sessions_url", h.sessionsURL), zap.String("error", out.Error))
 	return out, nil
+}
+
+// bridgeAnswered reports whether an HTTP status from the bridge is an answer
+// (2xx) rather than a failure.
+func bridgeAnswered(status int) bool {
+	return status >= http.StatusOK && status < http.StatusMultipleChoices
+}
+
+// logger is h.log, or a no-op one for a handler built without NewHandler.
+func (h *Handler) logger() *zap.Logger {
+	if h.log == nil {
+		return zap.NewNop()
+	}
+	return h.log
 }
 
 // statusURL rewrites a /sessions target into its /status sibling. The two
@@ -540,7 +597,7 @@ func statusURL(sessionsTarget string) string {
 	if err != nil {
 		return sessionsTarget
 	}
-	u.Path = "/status"
+	u.Path = statusPath
 	return u.String()
 }
 
@@ -560,7 +617,7 @@ func (h *Handler) fetchStatus(ctx context.Context, target, authz string) (mcppkg
 		return mcppkg.BridgeStatus{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+	if !bridgeAnswered(resp.StatusCode) {
 		return mcppkg.BridgeStatus{}, fmt.Errorf("MCP server answered HTTP %d", resp.StatusCode)
 	}
 	var out mcppkg.BridgeStatus
