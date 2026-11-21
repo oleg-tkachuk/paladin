@@ -28,7 +28,7 @@ SET display_name = COALESCE(sqlc.narg(display_name), display_name),
 WHERE id = sqlc.arg(id)
   AND (sqlc.arg(expected_version) = 0 OR resource_version = sqlc.arg(expected_version));
 
--- name: UpdateUserPasswordHash :exec
+-- name: UpdateUserPasswordHash :execrows
 UPDATE users
 SET password_hash = $2,
     updated_at    = now()

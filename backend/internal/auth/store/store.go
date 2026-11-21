@@ -224,6 +224,9 @@ var (
 	// revoked on READ; this one describes losing a WRITE race, and the
 	// difference matters because only the latter is provably concurrent.
 	ErrAlreadyRotated = errors.New("auth/store: refresh token already rotated")
+	// ErrInvalidPageToken is a listing's answer to a page token it did not
+	// mint: the caller's to fix, not the store's failure.
+	ErrInvalidPageToken = errors.New("auth/store: invalid page_token")
 )
 
 // Register the IAM store sentinels with the central error→Connect-code mapper
@@ -235,4 +238,5 @@ func init() {
 	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
 	apiutil.RegisterError(ErrSubjectTaken, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SUBJECT_TAKEN)
+	apiutil.RegisterError(ErrInvalidPageToken, connect.CodeInvalidArgument, commonv1.ErrorReason_ERROR_REASON_INVALID_ARGUMENT)
 }
