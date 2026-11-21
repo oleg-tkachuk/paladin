@@ -12,6 +12,7 @@ package celh
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
@@ -45,7 +46,7 @@ func (h *Handler) Validate(ctx context.Context, req *pb.ValidateCELRequest) (*pb
 	schema := celfilter.SchemaByName(m.GetSchema())
 	if schema == nil {
 		return nil, connect.Errorf(connect.CodeInvalidArgument,
-			"unknown schema %q (want one of: Object, Collection, AuditLogEntry, EventEnvelope)", m.GetSchema())
+			"unknown schema %q (want one of: %s)", m.GetSchema(), strings.Join(celfilter.SchemaNames(), ", "))
 	}
 
 	err := celfilter.CompileFirstError(schema, m.GetExpression())
