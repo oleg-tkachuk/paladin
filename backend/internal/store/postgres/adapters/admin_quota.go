@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -93,15 +95,25 @@ func upsertBucketQuota(ctx context.Context, qq *sqlc.Queries, q admindomain.Quot
 	return mapQuotaOCCErr(err)
 }
 
-// mapQuotaOCCErr turns "no row came back" into the OCC conflict it means.
+// mapQuotaOCCErr turns "no row came back" into the OCC conflict it means,
+// and a scope that is not there into ErrNotFound.
 //
 // The upsert RETURNINGs a row only when the INSERT fired or the DO UPDATE's
 // version guard held. No row means the row exists and its resource_version is
 // not what the caller passed — a concurrent writer got there first, or the
 // caller sent 0 for a row that already exists.
+//
+// A tenant that is not there trips quotas' foreign key; a bucket that is not
+// there leaves the subquery for bucket_quotas.bucket_id empty, a NOT NULL
+// violation. Either is the caller naming something absent, not a failure.
 func mapQuotaOCCErr(err error) error {
-	if errors.Is(err, pgx.ErrNoRows) {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
 		return admindomain.ErrVersionMismatch
+	case pgerr.Is(err, pgerr.ForeignKeyViolation) && pgerr.ConstraintIs(err, schema.QuotasTenantIDFK):
+		return fmt.Errorf("quota: no such tenant: %w", admindomain.ErrNotFound)
+	case pgerr.Is(err, pgerr.NotNullViolation) && pgerr.Column(err) == schema.BucketQuotasBucketIDColumn:
+		return fmt.Errorf("quota: no such bucket: %w", admindomain.ErrNotFound)
 	}
 	return err
 }

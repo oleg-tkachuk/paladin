@@ -9,12 +9,14 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
@@ -186,6 +188,8 @@ func (s *BillingServer) ListTenantSpend(
 	}
 	names, err := s.Tenants.TenantNames(ctx, ids)
 	if err != nil {
+		logger.FromContext(ctx).Error("billing: tenant names unreadable",
+			zap.Int("tenants", len(ids)), zap.Error(err))
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("billing: tenant names: %w", err))
 	}
 	out := &pb.ListTenantSpendResponse{Tenants: make([]*pb.TenantSpend, 0, len(spend)), Truncated: truncated}

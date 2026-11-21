@@ -19,6 +19,44 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
+// EventQuotaSet is the event a quota write records.
+const EventQuotaSet = "paladin.quota.set"
+
+// The scope a quota event's payload names.
+const (
+	scopeTenant = "tenant"
+	scopeBucket = "bucket"
+)
+
+// The keys of a quota event's payload beside the caps, which are spelled as
+// the mask spells them.
+const (
+	payloadTenantID   = "tenant_id"
+	payloadScope      = "scope"
+	payloadBackendID  = "backend_id"
+	payloadBucketName = "bucket_name"
+)
+
+// The resource names a quota event carries.
+const (
+	tenantQuotaResource = "tenants/%s/quota"
+	bucketQuotaResource = "tenants/%s/buckets/%s/%s/quota"
+)
+
+// The operations a log line names.
+const (
+	opGetTenantQuota = "GetTenantQuota"
+	opGetBucketQuota = "GetBucketQuota"
+	opSetQuota       = "SetQuota"
+	opResetUsage     = "ResetUsage"
+)
+
+// The messages a change is logged under.
+const (
+	msgQuotaSet        = "quota set"
+	msgQuotaUsageReset = "quota usage reset"
+)
+
 // EventProducer mirrors the seam used by tenanth / bucketh /
 // objectkeyh — narrow interface, *worker.EventRecorder implements it.
 type EventProducer interface {
@@ -57,12 +95,54 @@ func NewHandler(r Repository, policy cedar.Authorizer) *Handler {
 }
 
 // SetEventProducer / SetLogger — same opt-in contract as the rest
-// of the producer-wired handlers.
+// of the producer-wired handlers. The logger records each change, refusal
+// and store failure; unset, nothing is.
 func (h *Handler) SetEventProducer(p EventProducer) { h.events = p }
 func (h *Handler) SetLogger(l *zap.Logger) {
 	if l != nil {
 		h.log = l
 	}
+}
+
+// answer logs err, met by op, and returns what the caller is told: a refusal
+// — a code the handler chose, a quota not there, a version that moved —
+// keeps its code and is a warning; anything else is the store failing,
+// internal, and an error.
+func (h *Handler) answer(ctx context.Context, op string, err error, fields ...zap.Field) error {
+	mapped := apiutil.MapError(err)
+	fields = append(fields, zap.String("op", op), actor(ctx), zap.Error(err))
+	if connect.CodeOf(mapped) == connect.CodeInternal {
+		h.log.Error("quota store failed", fields...)
+	} else {
+		h.log.Warn("quota request refused", append(fields, zap.Stringer("code", connect.CodeOf(mapped)))...)
+	}
+	return mapped
+}
+
+// actor names the caller ctx carries, "" for none.
+func actor(ctx context.Context) zap.Field {
+	return zap.String("actor", subject(ctx))
+}
+
+// subject is the subject of the principal ctx carries, "" for none.
+func subject(ctx context.Context) string {
+	if p, err := auth.PrincipalFromContext(ctx); err == nil {
+		return p.Subject
+	}
+	return ""
+}
+
+// scopeFields names the quota q is: its id when it has one, and its tenant or
+// its bucket.
+func scopeFields(q admindomain.Quota) []zap.Field {
+	var fields []zap.Field
+	if q.QuotaID != uuid.Nil() {
+		fields = append(fields, zap.String("quota_id", q.QuotaID.String()))
+	}
+	if q.TenantID != uuid.Nil() {
+		return append(fields, zap.String("tenant_id", q.TenantID.String()))
+	}
+	return append(fields, zap.String("backend_id", q.BackendID), zap.String("bucket_name", q.BucketName))
 }
 
 // dispatchEventTx records the event on the caller's tx so it commits
@@ -73,19 +153,14 @@ func (h *Handler) dispatchEventTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 	if h.events == nil || tenantID == uuid.Nil() {
 		return nil
 	}
-	actor := ""
-	if p, err := auth.PrincipalFromContext(ctx); err == nil {
-		actor = p.Subject
-	}
-	err := h.events.RecordTx(ctx, tx, tenantID.String(), worker.Event{
+	return h.events.RecordTx(ctx, tx, tenantID.String(), worker.Event{
 		Type:         eventType,
 		At:           time.Now().UTC(),
 		TenantID:     tenantID.String(),
 		ResourceName: resourceName,
-		ActorSubject: actor,
+		ActorSubject: subject(ctx),
 		Payload:      payload,
 	})
-	return err
 }
 
 // authorize gates a quota RPC against Cedar. The Resource carries the
@@ -106,37 +181,48 @@ func (h *Handler) authorize(ctx context.Context, action cedar.Action, q admindom
 	return auth.WithActingTenant(ctx, q.TenantID), nil
 }
 
-func (h *Handler) GetTenantQuota(ctx context.Context, tenantID uuid.UUID) (*admindomain.Quota, error) {
+// crossTenant refuses a caller reading tenantID's quota from another tenant,
+// unless it is a platform admin.
+func crossTenant(ctx context.Context, tenantID uuid.UUID) error {
 	caller, _, err := apiutil.CallerContext(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !apiutil.HasRole(ctx, apiutil.RolePlatformAdmin) && tenantID != caller {
-		return nil, connect.NewError(connect.CodePermissionDenied, "cross-tenant denied")
+		return connect.NewError(connect.CodePermissionDenied, "cross-tenant denied")
 	}
-	if ctx, err = h.authorize(ctx, cedar.ActionReadQuota, admindomain.Quota{TenantID: tenantID}); err != nil {
-		return nil, err
+	return nil
+}
+
+func (h *Handler) GetTenantQuota(ctx context.Context, tenantID uuid.UUID) (*admindomain.Quota, error) {
+	scope := admindomain.Quota{TenantID: tenantID}
+	if err := crossTenant(ctx, tenantID); err != nil {
+		return nil, h.answer(ctx, opGetTenantQuota, err, scopeFields(scope)...)
+	}
+	ctx, err := h.authorize(ctx, cedar.ActionReadQuota, scope)
+	if err != nil {
+		return nil, h.answer(ctx, opGetTenantQuota, err, scopeFields(scope)...)
 	}
 	q, err := h.repo.GetTenant(ctx, tenantID)
 	if err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(ctx, opGetTenantQuota, err, scopeFields(scope)...)
 	}
 	return &q, nil
 }
 
 func (h *Handler) GetBucketQuota(ctx context.Context, backendID, bucketName string) (*admindomain.Quota, error) {
+	scope := admindomain.Quota{BackendID: backendID, BucketName: bucketName}
 	if err := apiutil.RequireAnyRole(ctx,
 		apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin, apiutil.RoleTenantAdmin); err != nil {
-		return nil, err
+		return nil, h.answer(ctx, opGetBucketQuota, err, scopeFields(scope)...)
 	}
-	ctx, err := h.authorize(ctx, cedar.ActionReadQuota,
-		admindomain.Quota{BackendID: backendID, BucketName: bucketName})
+	ctx, err := h.authorize(ctx, cedar.ActionReadQuota, scope)
 	if err != nil {
-		return nil, err
+		return nil, h.answer(ctx, opGetBucketQuota, err, scopeFields(scope)...)
 	}
 	q, err := h.repo.GetBucket(ctx, backendID, bucketName)
 	if err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.answer(ctx, opGetBucketQuota, err, scopeFields(scope)...)
 	}
 	return &q, nil
 }
@@ -154,99 +240,132 @@ func (h *Handler) GetBucketQuota(ctx context.Context, backendID, bucketName stri
 // neither told.
 func (h *Handler) SetQuota(ctx context.Context, q admindomain.Quota, mask []string) (*admindomain.Quota, error) {
 	if err := apiutil.RequireAnyRole(ctx, apiutil.RolePlatformAdmin, apiutil.RoleBucketAdmin); err != nil {
-		return nil, err
+		return nil, h.answer(ctx, opSetQuota, err, scopeFields(q)...)
 	}
 	ctx, err := h.authorize(ctx, cedar.ActionManageQuota, q)
 	if err != nil {
-		return nil, err
+		return nil, h.answer(ctx, opSetQuota, err, scopeFields(q)...)
 	}
-	tenantScope := q.TenantID != uuid.Nil()
+	tenantScope, err := scopeOf(q)
+	if err != nil {
+		return nil, h.answer(ctx, opSetQuota, err, scopeFields(q)...)
+	}
+	if q, err = h.withMaskedCaps(ctx, q, tenantScope, mask); err != nil {
+		return nil, h.answer(ctx, opSetQuota, err, scopeFields(q)...)
+	}
+	var got admindomain.Quota
+	if tenantScope {
+		got, err = h.setTenantQuota(ctx, q)
+	} else {
+		got, err = h.setBucketQuota(ctx, q)
+	}
+	if err != nil {
+		return nil, h.answer(ctx, opSetQuota, err, scopeFields(q)...)
+	}
+	h.log.Info(msgQuotaSet, append(scopeFields(got), actor(ctx), zap.Int64("resource_version", got.ResourceVersion))...)
+	return &got, nil
+}
+
+// scopeOf is whether q is a tenant's quota rather than a bucket's: exactly
+// one of the two is named, or the request is InvalidArgument.
+func scopeOf(q admindomain.Quota) (tenantScope bool, err error) {
+	tenantScope = q.TenantID != uuid.Nil()
 	bucketScope := q.BackendID != "" && q.BucketName != ""
 	if tenantScope == bucketScope {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
+		return false, connect.NewError(connect.CodeInvalidArgument,
 			"exactly one of tenant_id or (backend_id, bucket_name) must be set")
 	}
-	// The upsert writes all four caps, so the caps the mask does not name are
-	// taken from the stored row; with none stored they are no cap. A row that
-	// changes between this read and the write fails the version guard.
+	return tenantScope, nil
+}
+
+// withMaskedCaps is q with the caps mask names and the stored row's others.
+// The upsert writes all four caps, so the caps the mask does not name are
+// taken from the stored row; with none stored they are no cap. A row that
+// changes between this read and the write fails the version guard.
+func (h *Handler) withMaskedCaps(ctx context.Context, q admindomain.Quota, tenantScope bool, mask []string) (admindomain.Quota, error) {
 	var current admindomain.Quota
-	var readErr error
+	var err error
 	if tenantScope {
-		current, readErr = h.repo.GetTenant(ctx, q.TenantID)
+		current, err = h.repo.GetTenant(ctx, q.TenantID)
 	} else {
-		current, readErr = h.repo.GetBucket(ctx, q.BackendID, q.BucketName)
+		current, err = h.repo.GetBucket(ctx, q.BackendID, q.BucketName)
 	}
-	if readErr != nil && !errors.Is(readErr, admindomain.ErrNotFound) {
-		return nil, apiutil.MapError(readErr)
+	if err != nil && !errors.Is(err, admindomain.ErrNotFound) {
+		return q, err
 	}
 	caps, err := applyCapMask(current, q, mask)
 	if err != nil {
-		return nil, err
+		return q, err
 	}
 	q.MaxTotalBytes, q.MaxObjectCount = caps.MaxTotalBytes, caps.MaxObjectCount
 	q.MaxBytesPerDay, q.MaxObjectsPerDay = caps.MaxBytesPerDay, caps.MaxObjectsPerDay
-	if tenantScope {
-		// Upsert + paladin.quota.set in one tx (ADR-0003). The event payload is
-		// the caps we just wrote (== q), so no in-tx read-back is needed;
-		// the full row is fetched post-commit for the response.
-		if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
-			if e := h.repo.UpsertTenantTx(ctx, tx, q); e != nil {
-				return e
-			}
-			return h.dispatchEventTx(ctx, tx, q.TenantID, "paladin.quota.set",
-				fmt.Sprintf("tenants/%s/quota", q.TenantID),
-				map[string]any{
-					"tenant_id":           q.TenantID.String(),
-					"scope":               "tenant",
-					"max_total_bytes":     q.MaxTotalBytes,
-					"max_object_count":    q.MaxObjectCount,
-					"max_bytes_per_day":   q.MaxBytesPerDay,
-					"max_objects_per_day": q.MaxObjectsPerDay,
-				})
-		}); err != nil {
-			return nil, apiutil.MapError(err)
-		}
-		got, err := h.repo.GetTenant(ctx, q.TenantID)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-		}
-		return &got, nil
-	}
-	// Bucket scope: the fan-out target is the bucket's owner, which the
-	// read-back joins from `buckets` — so the upsert, the read-back and the
-	// event all run on one tx (ADR-0003). `got` is reused for the response.
-	var got admindomain.Quota
+	return q, nil
+}
+
+// capsPayload is the event payload naming q's caps, beside scope's keys.
+func capsPayload(q admindomain.Quota, scope map[string]any) map[string]any {
+	scope[CapMaxTotalBytes] = q.MaxTotalBytes
+	scope[CapMaxObjectCount] = q.MaxObjectCount
+	scope[CapMaxBytesPerDay] = q.MaxBytesPerDay
+	scope[CapMaxObjectsPerDay] = q.MaxObjectsPerDay
+	return scope
+}
+
+// setTenantQuota writes a tenant's caps and paladin.quota.set in one tx
+// (ADR-0003). The event payload is the caps just written (== q), so no in-tx
+// read-back is needed; the full row is fetched post-commit for the response.
+func (h *Handler) setTenantQuota(ctx context.Context, q admindomain.Quota) (admindomain.Quota, error) {
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		if e := h.repo.UpsertTenantTx(ctx, tx, q); e != nil {
+			return e
+		}
+		return h.dispatchEventTx(ctx, tx, q.TenantID, EventQuotaSet,
+			fmt.Sprintf(tenantQuotaResource, q.TenantID),
+			capsPayload(q, map[string]any{payloadTenantID: q.TenantID.String(), payloadScope: scopeTenant}))
+	}); err != nil {
+		return admindomain.Quota{}, err
+	}
+	got, err := h.repo.GetTenant(ctx, q.TenantID)
+	if err != nil {
+		// The caps are written; only the answer is lost, so it is internal
+		// whatever the read said, a row not found included.
+		return admindomain.Quota{}, connect.NewError(connect.CodeInternal,
+			"quota written but not read back: "+err.Error()).WithCause(err)
+	}
+	return got, nil
+}
+
+// setBucketQuota writes a bucket's caps. The fan-out target is the bucket's
+// owner, which the read-back joins from `buckets` — so the upsert, the
+// read-back and the event all run on one tx (ADR-0003), and the read-back is
+// the response.
+func (h *Handler) setBucketQuota(ctx context.Context, q admindomain.Quota) (admindomain.Quota, error) {
+	var got admindomain.Quota
+	err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		if e := h.repo.UpsertBucketTx(ctx, tx, q); e != nil {
 			return e
 		}
 		var e error
-		got, e = h.repo.GetBucketTx(ctx, tx, q.BackendID, q.BucketName)
-		if e != nil {
+		if got, e = h.repo.GetBucketTx(ctx, tx, q.BackendID, q.BucketName); e != nil {
 			return e
 		}
 		// A shared bucket has no owner, so its quota has nobody to tell.
-		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, "paladin.quota.set",
-			fmt.Sprintf("tenants/%s/buckets/%s/%s/quota", got.OwnerTenantID, got.BackendID, got.BucketName),
-			map[string]any{
-				"tenant_id":           got.OwnerTenantID.String(),
-				"scope":               "bucket",
-				"backend_id":          got.BackendID,
-				"bucket_name":         got.BucketName,
-				"max_total_bytes":     got.MaxTotalBytes,
-				"max_object_count":    got.MaxObjectCount,
-				"max_bytes_per_day":   got.MaxBytesPerDay,
-				"max_objects_per_day": got.MaxObjectsPerDay,
-			})
-	}); err != nil {
-		return nil, apiutil.MapError(err)
-	}
-	return &got, nil
+		return h.dispatchEventTx(ctx, tx, got.OwnerTenantID, EventQuotaSet,
+			fmt.Sprintf(bucketQuotaResource, got.OwnerTenantID, got.BackendID, got.BucketName),
+			capsPayload(got, map[string]any{
+				payloadTenantID:   got.OwnerTenantID.String(),
+				payloadScope:      scopeBucket,
+				payloadBackendID:  got.BackendID,
+				payloadBucketName: got.BucketName,
+			}))
+	})
+	return got, err
 }
 
 func (h *Handler) ResetUsage(ctx context.Context, quotaID uuid.UUID) error {
+	named := admindomain.Quota{QuotaID: quotaID}
 	if err := apiutil.RequireRole(ctx, apiutil.RolePlatformAdmin); err != nil {
-		return err
+		return h.answer(ctx, opResetUsage, err, scopeFields(named)...)
 	}
 	// The request names only the quota id, so load the row first: Cedar then
 	// sees its tenant or bucket, and the reset runs as that tenant. The read
@@ -254,17 +373,23 @@ func (h *Handler) ResetUsage(ctx context.Context, quotaID uuid.UUID) error {
 	// than the platform admin calling.
 	q, err := h.repo.GetByID(auth.WithCrossTenantRead(ctx), quotaID)
 	if err != nil {
-		return apiutil.MapError(err)
+		return h.answer(ctx, opResetUsage, err, scopeFields(named)...)
 	}
 	ctx, err = h.authorize(ctx, cedar.ActionResetQuotaUsage, q)
 	if err != nil {
-		return err
+		return h.answer(ctx, opResetUsage, err, scopeFields(q)...)
 	}
 	now := time.Now().UTC()
 	if q.TenantID == uuid.Nil() {
 		// A bucket quota is platform configuration outside RLS
 		// (044_bucket_quotas.sql); there is no tenant to act as.
-		return apiutil.MapError(h.repo.ResetBucketDaily(ctx, quotaID, now))
+		err = h.repo.ResetBucketDaily(ctx, quotaID, now)
+	} else {
+		err = h.repo.ResetDaily(ctx, quotaID, now)
 	}
-	return apiutil.MapError(h.repo.ResetDaily(ctx, quotaID, now))
+	if err != nil {
+		return h.answer(ctx, opResetUsage, err, scopeFields(q)...)
+	}
+	h.log.Info(msgQuotaUsageReset, append(scopeFields(q), actor(ctx))...)
+	return nil
 }

@@ -106,7 +106,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	collectionH.SetEventProducer(events)
 	collectionH.SetLogger(l.Named("collection-events"))
 	quotaH.SetEventProducer(events)
-	quotaH.SetLogger(l.Named("quota-events"))
+	quotaH.SetLogger(l.Named("quotas"))
 	backendH.SetEventProducer(events)
 	backendH.SetLogger(l.Named("backend-events"))
 
@@ -337,6 +337,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		if deps.Capability != nil {
 			billingHandler = billingh.NewHandler(deps.Capability.Ledger, usageStore, polEngine).
 				WithCurrency(deps.Cfg.Capability.Currency)
+			billingHandler.SetLogger(l.Named("billing"))
 		}
 		paladinadminv1connect.RegisterBillingServiceHandler(adminServer, admin.NewBillingServer(billingHandler, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool)))
 	}
@@ -357,6 +358,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// the cascade to refresh_tokens is the foreign key's, which RLS does not
 	// filter.
 	oauthClientH := oauthclienth.NewHandler(oauthClients, cfg.Auth.OAuth, polEngine)
+	oauthClientH.SetLogger(l.Named("oauth-clients"))
 	if deps.Capability != nil {
 		oauthClientH.WithCapabilityRevocation(deps.Capability.Auth.BulkRevocation)
 	}

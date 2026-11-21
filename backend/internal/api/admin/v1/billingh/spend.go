@@ -9,6 +9,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
@@ -42,24 +43,48 @@ type TenantSpend struct {
 // ReadBilling on the caller's own tenant it needs the platform.admin role.
 func (h *Handler) ListTenantSpend(ctx context.Context, periodStart, periodEnd time.Time, limit int) ([]TenantSpend, bool, error) {
 	if err := h.authorizeAcrossTenants(ctx); err != nil {
-		return nil, false, err
+		return nil, false, h.refused(ctx, opListTenantSpend, err)
 	}
 	if h.ledger == nil {
-		return nil, false, connect.NewError(connect.CodeUnavailable, "billing: capability subsystem disabled")
+		return nil, false, h.refused(ctx, opListTenantSpend, subsystemDisabled())
 	}
-	switch {
-	case limit == 0:
-		limit = DefaultSpendLimit
-	case limit < 0 || limit > MaxSpendLimit:
-		return nil, false, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Sprintf("limit %d is outside 0..%d", limit, MaxSpendLimit))
+	limit, err := spendLimit(limit)
+	if err != nil {
+		return nil, false, h.refused(ctx, opListTenantSpend, err)
 	}
 	start, end, err := resolvePeriod(periodStart, periodEnd)
 	if err != nil {
-		return nil, false, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+		return nil, false, h.refused(ctx, opListTenantSpend, invalidPeriod(err))
 	}
+	ranked, err := h.spendOver(ctx, start, end)
+	if err != nil {
+		return nil, false, h.failed(ctx, opListTenantSpend, err)
+	}
+	h.served(ctx, opListTenantSpend, zap.Int("tenants", len(ranked)))
+	if len(ranked) > limit {
+		return ranked[:limit], true, nil
+	}
+	return ranked, false, nil
+}
+
+// spendLimit is the number of tenants a request for limit lists:
+// DefaultSpendLimit for 0, InvalidArgument outside 0..MaxSpendLimit.
+func spendLimit(limit int) (int, error) {
+	switch {
+	case limit == 0:
+		return DefaultSpendLimit, nil
+	case limit < 0 || limit > MaxSpendLimit:
+		return 0, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Sprintf("limit %d is outside 0..%d", limit, MaxSpendLimit))
+	}
+	return limit, nil
+}
+
+// spendOver is every tenant's spend from start to end, ranked; none for an
+// empty period.
+func (h *Handler) spendOver(ctx context.Context, start, end time.Time) ([]TenantSpend, error) {
 	if !start.Before(end) {
-		return []TenantSpend{}, false, nil
+		return []TenantSpend{}, nil
 	}
 	req := meter.SumChargesRequest{
 		AllTenants: true, From: start, To: end,
@@ -71,13 +96,9 @@ func (h *Handler) ListTenantSpend(ctx context.Context, periodStart, periodEnd ti
 		sums = append(sums, s)
 		return true
 	}); err != nil {
-		return nil, false, err
+		return nil, err
 	}
-	ranked := rankSpend(sums, h.currency)
-	if len(ranked) > limit {
-		return ranked[:limit], true, nil
-	}
-	return ranked, false, nil
+	return rankSpend(sums, h.currency), nil
 }
 
 // authorizeAcrossTenants gates a read of every tenant's billing: ReadBilling

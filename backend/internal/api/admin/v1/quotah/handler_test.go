@@ -55,6 +55,11 @@ type fakeQuotaRepo struct {
 	byIDErr  error
 	byIDCtx  context.Context
 	resetCtx context.Context
+	// bucketErr fails GetBucket and GetBucketTx; upsertErr fails both Tx
+	// upserts; readBackErr fails a GetTenant once a tenant upsert has run.
+	bucketErr   error
+	upsertErr   error
+	readBackErr error
 }
 
 func (f *fakeQuotaRepo) UpsertTenant(context.Context, admindomain.Quota) error { return nil }
@@ -64,10 +69,13 @@ func (f *fakeQuotaRepo) GetTenant(context.Context, uuid.UUID) (admindomain.Quota
 		f.firstTenantErr = nil
 		return admindomain.Quota{}, err
 	}
+	if f.readBackErr != nil && f.upsertTenant > 0 {
+		return admindomain.Quota{}, f.readBackErr
+	}
 	return f.tenantQuota, f.tenantErr
 }
 func (f *fakeQuotaRepo) GetBucket(context.Context, string, string) (admindomain.Quota, error) {
-	return f.bucketQuota, nil
+	return f.bucketQuota, f.bucketErr
 }
 func (f *fakeQuotaRepo) IncrementUsage(context.Context, uuid.UUID, int64, int64) error { return nil }
 func (f *fakeQuotaRepo) ResetDaily(ctx context.Context, _ uuid.UUID, _ time.Time) error {
@@ -90,15 +98,15 @@ func (f *fakeQuotaRepo) RunInTx(ctx context.Context, fn func(context.Context, pg
 func (f *fakeQuotaRepo) UpsertTenantTx(_ context.Context, _ pgx.Tx, q admindomain.Quota) error {
 	f.upsertTenant++
 	f.upserted = q
-	return nil
+	return f.upsertErr
 }
 func (f *fakeQuotaRepo) UpsertBucketTx(_ context.Context, _ pgx.Tx, q admindomain.Quota) error {
 	f.upsertBucket++
 	f.upserted = q
-	return nil
+	return f.upsertErr
 }
 func (f *fakeQuotaRepo) GetBucketTx(context.Context, pgx.Tx, string, string) (admindomain.Quota, error) {
-	return f.bucketQuota, nil
+	return f.bucketQuota, f.bucketErr
 }
 
 func ctxAs(tenant uuid.UUID, roles ...string) context.Context {

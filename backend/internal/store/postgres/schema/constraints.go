@@ -98,3 +98,15 @@ const (
 	// BucketsBackendFK — FK to backends.backend_id.
 	BucketsBackendFK = "buckets_backend_id_fkey"
 )
+
+// quotas / bucket_quotas names — see 001_initial_schema.sql and
+// 044_bucket_quotas.sql.
+const (
+	// QuotasTenantIDFK — FK quotas.tenant_id → tenants.id. A quota written
+	// for a tenant that is not there trips it.
+	QuotasTenantIDFK = "quotas_tenant_id_fkey"
+	// BucketQuotasBucketIDColumn — bucket_quotas.bucket_id, NOT NULL. The
+	// upsert resolves it from the backend and bucket names by subquery, so an
+	// unknown bucket arrives as a NOT NULL violation on this column.
+	BucketQuotasBucketIDColumn = "bucket_id"
+)

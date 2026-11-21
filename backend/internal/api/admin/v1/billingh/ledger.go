@@ -37,8 +37,8 @@ var ledgerBuckets = map[string]meter.ChargeBucket{
 // granularitySteps is each granularity's bucket width.
 var granularitySteps = map[string]time.Duration{
 	granularityHour: time.Hour,
-	granularityDay:  24 * time.Hour,
-	granularityWeek: daysPerWeek * 24 * time.Hour,
+	granularityDay:  day,
+	granularityWeek: daysPerWeek * day,
 }
 
 // ledgerPage is the page the ledger is read in: the most one page holds.
