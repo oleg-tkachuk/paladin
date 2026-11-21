@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/billingh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
@@ -74,7 +73,7 @@ func (s *BillingServer) GetTenantSummary(
 		TopActors:       topEntriesToProto(sum.UnitCode, sum.TopActors),
 		TopOps:          topEntriesToProto(sum.UnitCode, sum.TopOps),
 	}
-	setSummaryCeiling(out, sum.Ceiling, sum.CeilingUnit)
+	setSummaryCeiling(out, sum)
 	return out, nil
 }
 
@@ -231,13 +230,18 @@ func timeFromPB(t *timestamppb.Timestamp) time.Time {
 	return t.AsTime()
 }
 
-// setSummaryCeiling writes the tenant's budget ceiling, in unit, onto out;
-// a nil ceiling — a tenant with no budget row — leaves it unset.
-func setSummaryCeiling(out *pb.GetTenantSummaryResponse, ceiling *limes.BudgetCeiling, unit string) {
-	if ceiling == nil {
+// setSummaryCeiling writes what sum knows of the tenant's budget onto out:
+// its ceiling, in its unit; budget_unreadable for a budget that could not be
+// read; nothing for a tenant with no budget row.
+func setSummaryCeiling(out *pb.GetTenantSummaryResponse, sum *billingh.Summary) {
+	switch {
+	case sum.Budget == billingh.BudgetUnreadable:
+		out.BudgetCeiling = &pb.GetTenantSummaryResponse_BudgetUnreadable{BudgetUnreadable: &pb.BudgetUnreadable{}}
+		return
+	case sum.Ceiling == nil:
 		return
 	}
-	limit, unlimited := apiutil.BudgetCeilingArms(*ceiling, unit)
+	limit, unlimited := apiutil.BudgetCeilingArms(*sum.Ceiling, sum.CeilingUnit)
 	if unlimited != nil {
 		out.BudgetCeiling = &pb.GetTenantSummaryResponse_UnlimitedBudget{UnlimitedBudget: unlimited}
 		return
