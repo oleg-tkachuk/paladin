@@ -19,6 +19,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -64,6 +65,7 @@ type Handler struct {
 	collections CollectionEnsurer
 	backends    BackendChecker
 	policy      cedar.Authorizer
+	log         *zap.Logger
 }
 
 // NewHandler wires the self-provisioning handler. policy is required — a nil
@@ -72,7 +74,72 @@ func NewHandler(buckets BucketEnsurer, collections CollectionEnsurer, backends B
 	if policy == nil {
 		panic("storagebootstrap: policy authorizer is required")
 	}
-	return &Handler{buckets: buckets, collections: collections, backends: backends, policy: policy}
+	return &Handler{buckets: buckets, collections: collections, backends: backends, policy: policy, log: zap.NewNop()}
+}
+
+// SetLogger sets where the handler says what it provisioned and what it
+// refused. Unset, it says nothing.
+func (h *Handler) SetLogger(l *zap.Logger) {
+	if l != nil {
+		h.log = l
+	}
+}
+
+// requireTarget refuses a request that names no backend or no bucket.
+func requireTarget(backendID, bucket string) error {
+	if backendID == "" {
+		return connect.NewError(connect.CodeInvalidArgument, "backend_id is required")
+	}
+	if bucket == "" {
+		return connect.NewError(connect.CodeInvalidArgument, "bucket is required")
+	}
+	return nil
+}
+
+// checkBackend refuses a backend that is not there or is disabled — a tenant
+// may not create backends — and answers a failing store as internal. Each
+// is logged with the tenant and backend.
+func (h *Handler) checkBackend(ctx context.Context, tenantID uuid.UUID, backendID string) error {
+	fields := []zap.Field{zap.String("tenant_id", tenantID.String()), zap.String("backend_id", backendID)}
+	switch enabled, err := h.backends.BackendEnabled(ctx, backendID); {
+	case errors.Is(err, admindomain.ErrNotFound):
+		h.log.Warn("tenant storage refused: unknown backend", fields...)
+		return connect.Errorf(connect.CodeFailedPrecondition, "unknown storage backend %q", backendID)
+	case err != nil:
+		h.log.Error("tenant storage failed: backend lookup", append(fields, zap.Error(err))...)
+		return connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+	case !enabled:
+		h.log.Warn("tenant storage refused: backend disabled", fields...)
+		return connect.Errorf(connect.CodeFailedPrecondition, "storage backend %q is disabled", backendID)
+	}
+	return nil
+}
+
+// ensureCollections ensures each named object-key on (backendID, bucket),
+// self-scoped to the caller's tenant, and reports each as created or already
+// there in res. An empty name is skipped; the first failure stops the run.
+func (h *Handler) ensureCollections(ctx context.Context, backendID, bucket string, collections []string, res *Result) error {
+	for _, key := range collections {
+		if key == "" {
+			continue
+		}
+		created, err := h.collections.EnsureCollection(ctx, objectkey.CreateCollectionArgs{
+			Collection: key,
+			BackendID:  backendID,
+			BucketName: bucket,
+			// TenantID intentionally left zero — EnsureCollection forces the
+			// caller's tenant.
+		})
+		if err != nil {
+			return err
+		}
+		if created {
+			res.CollectionsCreated = append(res.CollectionsCreated, key)
+		} else {
+			res.CollectionsExisting = append(res.CollectionsExisting, key)
+		}
+	}
+	return nil
 }
 
 // EnsureTenantStorage idempotently ensures the bucket + the requested
@@ -89,11 +156,8 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
-	if backendID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "backend_id is required")
-	}
-	if bucket == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "bucket is required")
+	if err := requireTarget(backendID, bucket); err != nil {
+		return nil, err
 	}
 
 	// A capability can authenticate a data-plane call on its own, and the
@@ -111,15 +175,8 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 	}
 
 	// The backend must already exist — a tenant may not create backends.
-	switch enabled, err := h.backends.BackendEnabled(ctx, backendID); {
-	case errors.Is(err, admindomain.ErrNotFound):
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"unknown storage backend %q", backendID)
-	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	case !enabled:
-		return nil, connect.Errorf(connect.CodeFailedPrecondition,
-			"storage backend %q is disabled", backendID)
+	if err := h.checkBackend(ctx, tenantID, backendID); err != nil {
+		return nil, err
 	}
 
 	// Ensure the bucket, owned by the caller's tenant (ADR-0032). An existing
@@ -139,27 +196,17 @@ func (h *Handler) EnsureTenantStorage(ctx context.Context, backendID, bucket str
 	}
 
 	res := &Result{BucketCreated: bucketCreated}
-	// Ensure each object-key, self-scoped to the caller's tenant.
-	for _, key := range collections {
-		if key == "" {
-			continue
-		}
-		created, err := h.collections.EnsureCollection(ctx, objectkey.CreateCollectionArgs{
-			Collection: key,
-			BackendID:  backendID,
-			BucketName: bucket,
-			// TenantID intentionally left zero — EnsureCollection forces the
-			// caller's tenant.
-		})
-		if err != nil {
-			return nil, err
-		}
-		if created {
-			res.CollectionsCreated = append(res.CollectionsCreated, key)
-		} else {
-			res.CollectionsExisting = append(res.CollectionsExisting, key)
-		}
+	if err := h.ensureCollections(ctx, backendID, bucket, collections, res); err != nil {
+		return nil, err
 	}
+	h.log.Info("tenant storage ensured",
+		zap.String("tenant_id", tenantID.String()),
+		zap.String("backend_id", backendID),
+		zap.String("bucket_name", bucket),
+		zap.Bool("bucket_created", res.BucketCreated),
+		zap.Strings("collections_created", res.CollectionsCreated),
+		zap.Strings("collections_existing", res.CollectionsExisting),
+		zap.String("actor", p.Subject))
 	return res, nil
 }
 

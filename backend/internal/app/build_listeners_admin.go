@@ -66,6 +66,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	bucketV2H := wire.ProvideBucketV2Handler(repos, storage, polEngine, cfg)
 	quotaH := wire.ProvideQuotaHandler(repos, polEngine)
 	auditH := wire.ProvideAuditHandler(repos, polEngine)
+	auditH.SetLogger(l.Named("audit-log"))
 	eventSubH := wire.ProvideEventSubHandler(repos, polEngine, cfg.Dispatcher.Sinks)
 	// The admin plane's Dispatcher serves only the synchronous
 	// TestSubscription RPC (DeliverOne), which bypasses the outbox: the
@@ -350,9 +351,11 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 	// upstreams, transport state). Always mounted; the admin's Cedar
 	// gate keeps it platform-admin only.
 	oauthClients := oauth.NewPgxStore(deps.Pool)
-	paladinadminv1connect.RegisterMCPInspectServiceHandler(adminServer, mcpinspecth.NewHandler(cfg.MCP, polEngine).
+	mcpInspectH := mcpinspecth.NewHandler(cfg.MCP, polEngine).
 		WithOAuth(cfg.Auth.OAuth).
-		WithOAuthClients(oauthClients))
+		WithOAuthClients(oauthClients)
+	mcpInspectH.SetLogger(l.Named("mcp-inspect"))
+	paladinadminv1connect.RegisterMCPInspectServiceHandler(adminServer, mcpInspectH)
 	// OAuthClientService — deleting an OAuth client, its codes and grants.
 	// The admin pool is enough: oauth_clients has no row-level security, and
 	// the cascade to refresh_tokens is the foreign key's, which RLS does not

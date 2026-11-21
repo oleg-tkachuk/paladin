@@ -52,7 +52,7 @@ func subFields(ctx context.Context, s admindomain.EventSubscription) []zap.Field
 func (h *Handler) failed(ctx context.Context, msg string, s admindomain.EventSubscription, err error) error {
 	mapped := apiutil.MapError(err)
 	level := zapcore.WarnLevel
-	if connect.CodeOf(mapped) == connect.CodeInternal {
+	if apiutil.ServerFault(connect.CodeOf(mapped)) {
 		level = zapcore.ErrorLevel
 	}
 	h.log.Log(level, msg, append(subFields(ctx, s), zap.Error(err))...)
@@ -180,7 +180,8 @@ func (h *Handler) Get(ctx context.Context, tenantID, id uuid.UUID) (*admindomain
 	}
 	s, err := h.repo.Get(ctx, id)
 	if err != nil {
-		return nil, apiutil.MapError(err)
+		return nil, h.failed(ctx, "event subscription read failed",
+			admindomain.EventSubscription{TenantID: tenantID, SubscriptionID: id}, err)
 	}
 	return &s, nil
 }
@@ -262,7 +263,12 @@ func (h *Handler) List(ctx context.Context, args admindomain.ListEventSubscripti
 	if ctx, err = h.authorize(ctx, cedar.ActionReadSubscription, args.TenantID); err != nil {
 		return nil, "", err
 	}
-	return h.repo.List(ctx, args)
+	page, next, err := h.repo.List(ctx, args)
+	if err != nil {
+		return nil, "", h.failed(ctx, "event subscription list failed",
+			admindomain.EventSubscription{TenantID: args.TenantID}, err)
+	}
+	return page, next, nil
 }
 
 // Dispatcher delivers a synthetic event to the subscription's sink for

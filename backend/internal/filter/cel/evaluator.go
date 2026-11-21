@@ -292,33 +292,34 @@ var AuditLogSchema = &Schema{
 	},
 }
 
+// registered is every schema SchemaByName resolves, in the order
+// SchemaNames lists them.
+var registered = []*Schema{
+	ObjectSchema, CollectionSchema, TenantSchema, StorageBackendSchema,
+	PhysicalBucketSchema, OperationSchema, UserSchema, AuditLogSchema,
+	EventEnvelopeSchema,
+}
+
 // SchemaByName resolves a registered schema by its public name. Used by
 // the admin CEL validation RPC to pick the right schema for the caller's
-// context (Object | Collection | AuditLogEntry | EventEnvelope). Returns
-// nil for unknown names so callers can map to InvalidArgument.
+// context. Returns nil for unknown names so callers can map to
+// InvalidArgument.
 func SchemaByName(name string) *Schema {
-	switch name {
-	case ObjectSchema.Name:
-		return ObjectSchema
-	case CollectionSchema.Name:
-		return CollectionSchema
-	case TenantSchema.Name:
-		return TenantSchema
-	case StorageBackendSchema.Name:
-		return StorageBackendSchema
-	case PhysicalBucketSchema.Name:
-		return PhysicalBucketSchema
-	case OperationSchema.Name:
-		return OperationSchema
-	case UserSchema.Name:
-		return UserSchema
-	case AuditLogSchema.Name:
-		return AuditLogSchema
-	case EventEnvelopeSchema.Name:
-		return EventEnvelopeSchema
-	default:
-		return nil
+	for _, s := range registered {
+		if s.Name == name {
+			return s
+		}
 	}
+	return nil
+}
+
+// SchemaNames lists the name of every schema SchemaByName resolves.
+func SchemaNames() []string {
+	names := make([]string, 0, len(registered))
+	for _, s := range registered {
+		names = append(names, s.Name)
+	}
+	return names
 }
 
 // CompileError carries the first compile diagnostic with 1-indexed source

@@ -121,7 +121,7 @@ func (r *UserRepo) Update(ctx context.Context, u authstore.User, expectedVersion
 		return authstore.User{}, fmt.Errorf("update user: %w", err)
 	}
 	if rows == 0 {
-		return authstore.User{}, authstore.ErrVersionMismatch
+		return authstore.User{}, r.missingOrStale(ctx, u.UserID)
 	}
 	return r.GetByID(ctx, u.UserID)
 }
@@ -132,13 +132,33 @@ func (r *UserRepo) Delete(ctx context.Context, id uuid.UUID, expectedVersion int
 		return err
 	}
 	if rows == 0 {
-		return authstore.ErrVersionMismatch
+		return r.missingOrStale(ctx, id)
 	}
 	return nil
 }
 
+// missingOrStale says why a guarded write touched no row: the user is gone
+// (ErrNotFound), or it is there at another resource_version. Both used to come
+// back as a version mismatch, which tells a caller to re-read and retry what
+// can never succeed.
+func (r *UserRepo) missingOrStale(ctx context.Context, id uuid.UUID) error {
+	if _, err := r.GetByID(ctx, id); err != nil {
+		return err
+	}
+	return authstore.ErrVersionMismatch
+}
+
+// UpdatePasswordHash sets the user's password hash; ErrNotFound when there is
+// no such user, so a reset never reports a password nobody can log in with.
 func (r *UserRepo) UpdatePasswordHash(ctx context.Context, id uuid.UUID, hash []byte) error {
-	return r.q.UpdateUserPasswordHash(ctx, pgUUID(id), hash)
+	rows, err := r.q.UpdateUserPasswordHash(ctx, pgUUID(id), hash)
+	if err != nil {
+		return fmt.Errorf("update password hash: %w", err)
+	}
+	if rows == 0 {
+		return authstore.ErrNotFound
+	}
+	return nil
 }
 
 func (r *UserRepo) TouchLogin(ctx context.Context, id uuid.UUID, at time.Time) error {
@@ -154,7 +174,7 @@ func (r *UserRepo) List(ctx context.Context, args authstore.ListUsersArgs) ([]au
 	if args.PageToken != "" {
 		id, err := uuid.Parse(args.PageToken)
 		if err != nil {
-			return nil, "", fmt.Errorf("invalid page_token: %w", err)
+			return nil, "", fmt.Errorf("%w: %w", authstore.ErrInvalidPageToken, err)
 		}
 		afterID = id
 	}

@@ -424,14 +424,17 @@ func (q *Queries) UpdateUser(ctx context.Context, displayName *string, disabled 
 	return result.RowsAffected(), nil
 }
 
-const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec
+const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :execrows
 UPDATE users
 SET password_hash = $2,
     updated_at    = now()
 WHERE id = $1
 `
 
-func (q *Queries) UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error {
-	_, err := q.db.Exec(ctx, updateUserPasswordHash, iD, passwordHash)
-	return err
+func (q *Queries) UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserPasswordHash, iD, passwordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

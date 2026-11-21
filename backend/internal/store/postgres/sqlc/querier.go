@@ -1040,7 +1040,7 @@ type Querier interface {
 	// resolve.
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
-	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) error
+	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) (int64, error)
 	// Same OCC contract as UpsertTenantQuota. bucket_quotas has no RLS
 	// (044_bucket_quotas.sql): the handler's role and Cedar checks gate the write.
 	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64, expectedVersion int64) (int64, error)

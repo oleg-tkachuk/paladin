@@ -3,10 +3,12 @@ package celh
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect/v2"
 
+	celfilter "github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -91,4 +93,18 @@ func asConnectError(err error, target **connect.Error) bool {
 		return true
 	}
 	return false
+}
+
+// The refusal of an unknown schema names every schema the server accepts,
+// not a hand-kept subset of them.
+func TestValidate_UnknownSchemaNamesEverySchema(t *testing.T) {
+	_, err := NewHandler().Validate(context.Background(), &pb.ValidateCELRequest{Schema: "Nope"})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
+	}
+	for _, name := range celfilter.SchemaNames() {
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("refusal %q does not name schema %s", err.Error(), name)
+		}
+	}
 }

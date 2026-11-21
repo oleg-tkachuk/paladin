@@ -52,6 +52,8 @@ type fakeRepo struct {
 	getFailsFrom int
 	getErrLate   error
 	getCalls     int
+	// listErr is what List fails with.
+	listErr error
 }
 
 func (f *fakeRepo) Create(_ context.Context, s *admindomain.EventSubscription) error {
@@ -74,7 +76,7 @@ func (f *fakeRepo) Get(context.Context, uuid.UUID) (admindomain.EventSubscriptio
 func (f *fakeRepo) List(_ context.Context, args admindomain.ListEventSubscriptionsArgs) ([]admindomain.EventSubscription, string, error) {
 	f.listArgs = args
 	f.listCalls++
-	return nil, "", nil
+	return nil, "", f.listErr
 }
 func (f *fakeRepo) Update(context.Context, admindomain.EventSubscription, int64, []string) error {
 	f.updateCalls++

@@ -265,6 +265,7 @@ func assembleDataMux(ctx context.Context, deps *SharedDeps, shared planeShared) 
 	collectionBootstrapH.SetEventProducer(apiEvents)
 	collectionBootstrapH.SetLogger(l.Named("collections"))
 	storageBootstrapH := storagebootstraph.NewHandler(bucketBootstrapH, collectionBootstrapH, repos.BucketV2, polEngine)
+	storageBootstrapH.SetLogger(l.Named("storage-bootstrap"))
 
 	// The session key is in memory only where IAM is co-hosted; otherwise
 	// BuildVerifier verifies by the IAM role's JWKS.
@@ -461,6 +462,7 @@ func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, share
 		WithReuseAudit(repos.Audit, l).
 		WithCollectionRoutes(wire.ProvideCollectionRouteLister(repos, polEngine, cfg))
 	userH := wire.ProvideUserHandler(repos, polEngine)
+	userH.SetLogger(l.Named("users"))
 	if deps.Capability != nil {
 		userH.WithSessionRevoker(deps.Capability.Auth.BulkRevocation).
 			WithCapabilities(deps.Capability.Records)
