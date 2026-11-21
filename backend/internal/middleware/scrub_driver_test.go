@@ -62,6 +62,14 @@ func TestScrubDropsDriverTextFromARefusal(t *testing.T) {
 			"lookup",
 		},
 		{
+			// Unavailable keeps its message, unlike the server faults, but
+			// not the driver's part of it: a store's outage wrapped into a
+			// "retry" still reaches the caller as the sentence alone.
+			"an outage", connect.CodeUnavailable,
+			fmt.Errorf("tenant state unreadable: %w", &pgconn.PgError{Severity: "FATAL", Code: "57P01", Message: "terminating connection due to administrator command"}),
+			"tenant state unreadable",
+		},
+		{
 			"no driver error", connect.CodeNotFound,
 			fmt.Errorf("%w: %q", errCollectionMissing, "docs"),
 			`collection not found: "docs"`,

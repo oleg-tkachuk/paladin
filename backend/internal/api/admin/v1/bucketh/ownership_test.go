@@ -87,6 +87,15 @@ func TestCreateBucketRefusesWhenTheStoreCannotSay(t *testing.T) {
 	if code(err) != connect.CodeUnavailable {
 		t.Fatalf("code = %v (%v), want unavailable", code(err), err)
 	}
+	// The backend's own answer is the cause, for the log; the caller is told
+	// what could not be done.
+	cerr, _ := errors.AsType[*connect.Error](err)
+	if want := msgBucketUnchecked; cerr.Message() != want {
+		t.Errorf("message %q, want %q", cerr.Message(), want)
+	}
+	if !errors.Is(err, errStoreDown) {
+		t.Errorf("the backend's error is not the cause: %v", err)
+	}
 }
 
 // A tenant ensures the shared bucket it names: creating it is self-service,

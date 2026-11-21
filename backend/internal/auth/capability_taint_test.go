@@ -70,6 +70,16 @@ func TestAssertCapabilityOpFailsClosedWhenTheLookupFails(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeUnavailable {
 		t.Fatalf("lookup failure: err = %v, want Unavailable", err)
 	}
+	assertUncheckedText(t, err)
+}
+
+// assertUncheckedText fails unless err tells the caller the capability could
+// not be checked, and nothing of the store that failed.
+func assertUncheckedText(t *testing.T, err error) {
+	t.Helper()
+	if cerr, ok := errors.AsType[*connect.Error](err); !ok || cerr.Message() != capabilityUnchecked {
+		t.Errorf("err = %v, want the message %q", err, capabilityUnchecked)
+	}
 }
 
 // The lookup costs a query, so a request the other caveats already refuse

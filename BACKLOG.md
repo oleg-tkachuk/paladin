@@ -555,9 +555,9 @@ the same commit. Treat this file like a runtime invariant.
 - **Reason:** the registered sentinels and the API token refusals were cleaned
   of package prefixes; the JWT verifier's and the capability gate's were not:
   `jwt: malformed token`, `jwt: token expired`, `jwt: audience mismatch`,
-  `capability: invalid signature`, `capability: revoked`, and the delegated
-  principal's `auth: user …`. Both SDK fakes copy the first four word for word,
-  and the MCP bridge matches on `audience mismatch`.
+  `capability: invalid signature`, `capability: revoked`. Both SDK fakes copy
+  all but the third word for word, and the MCP bridge matches on `audience
+  mismatch`.
 - **Definition of Done:** each names the credential and the reason without a
   package prefix; the Go and Python SDK fakes follow, and the bridge's match
   still finds the phrase it looks for.

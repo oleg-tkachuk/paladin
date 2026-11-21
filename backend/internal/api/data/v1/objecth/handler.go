@@ -2616,8 +2616,16 @@ func headFailure(err error) error {
 	if errors.Is(err, ErrStoredObjectNotFound) {
 		return connect.NewError(connect.CodeFailedPrecondition, ErrNotUploaded.Error()).WithCause(errors.Join(ErrNotUploaded, err))
 	}
-	return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check the uploaded bytes: %w", err))
+	return connect.NewError(connect.CodeUnavailable, msgUploadUnchecked).WithCause(fmt.Errorf("check the uploaded bytes: %w", err))
 }
+
+// What a caller is told when the backend could not be asked about an
+// object's bytes. The backend's answer names its URL and request id; it stays
+// the cause, which the RPC log line carries.
+const (
+	msgUploadUnchecked = "the uploaded bytes could not be checked; retry"
+	msgBytesUnchecked  = "the object's bytes could not be checked; retry"
+)
 
 // assertBytesPresent HEADs a trashed object before it is restored. Its bytes
 // may have been deleted straight from the bucket, which moves it to the trash
@@ -2635,7 +2643,7 @@ func (h *Handler) assertBytesPresent(ctx context.Context, tenantID uuid.UUID, ob
 	case errors.Is(err, ErrStoredObjectNotFound):
 		return apiutil.MapError(ErrObjectBytesMissing)
 	default:
-		return rpcerr.New(connect.CodeUnavailable, fmt.Errorf("check the object's bytes: %w", err))
+		return connect.NewError(connect.CodeUnavailable, msgBytesUnchecked).WithCause(fmt.Errorf("check the object's bytes: %w", err))
 	}
 }
 
