@@ -57,7 +57,7 @@ func withLogContext(ctx context.Context, base *zap.Logger, requestID, procedure 
 		ctx = reqctx.WithTenantID(ctx, p.TenantID.String())
 	}
 	if base != nil {
-		ctx = logger.WithContext(ctx, base.With(zap.String("rpc", procedure)))
+		ctx = logger.WithContext(ctx, base.With(zap.String(fieldRPC, procedure)))
 	}
 	return ctx
 }
@@ -109,6 +109,13 @@ func withTrace(ctx context.Context, base *zap.Logger) *zap.Logger {
 	return logger.WithTrace(ctx, base)
 }
 
+// The fields an RPC's log lines name it, its outcome and its request by.
+const (
+	fieldRPC       = "rpc"
+	fieldCode      = "code"
+	fieldRequestID = "request_id"
+)
+
 // fieldCause is the field holding what a failure's message withheld.
 const fieldCause = "cause"
 
@@ -135,12 +142,12 @@ func logFailure(base *zap.Logger, procedure, requestID string, took time.Duratio
 	}
 	code := connect.CodeOf(err)
 	fields := []zap.Field{
-		zap.String("rpc", procedure),
-		zap.String("code", code.String()),
+		zap.String(fieldRPC, procedure),
+		zap.String(fieldCode, code.String()),
 		zap.Int64("took_ms", took.Milliseconds()),
 	}
 	if requestID != "" {
-		fields = append(fields, zap.String("request_id", requestID))
+		fields = append(fields, zap.String(fieldRequestID, requestID))
 	}
 	// The message the server already sent to this caller. Logging it discloses
 	// nothing the caller does not have; it is the difference between "an RPC

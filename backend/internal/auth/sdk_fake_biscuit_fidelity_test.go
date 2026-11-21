@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/memstore"
@@ -154,7 +155,7 @@ func serverCopySide(t *testing.T, tenant string, tc attenuationCase, fill func(s
 	client := unarytest.Client(func(s *connect.Server) {
 		paladindatav1connect.RegisterObjectServiceHandler(s, h)
 		paladindatav1connect.RegisterStorageBootstrapServiceHandler(s, h)
-	}, middleware.ScrubInternal(), auth.CapabilityEstablishingInterceptor(m.Verifier, auth.TokenPlaneData, usage, 0, nil))
+	}, middleware.ScrubInternal(zap.NewNop()), auth.CapabilityEstablishingInterceptor(m.Verifier, auth.TokenPlaneData, usage, 0, nil))
 	objects := paladindatav1connect.NewObjectServiceClient(client)
 	storage := paladindatav1connect.NewStorageBootstrapServiceClient(client)
 	var errs []error

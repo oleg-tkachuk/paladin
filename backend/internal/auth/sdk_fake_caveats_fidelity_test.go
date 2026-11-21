@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connectproto"
+	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/oleg-tkachuk/limes"
@@ -228,7 +229,7 @@ func serverSide(t *testing.T, tenant string, tc fidelityCase) ([]error, string) 
 	client := unarytest.Client(func(s *connect.Server) {
 		paladindatav1connect.RegisterObjectServiceHandler(s, h)
 		paladindatav1connect.RegisterStorageBootstrapServiceHandler(s, h)
-	}, middleware.ScrubInternal(), auth.CapabilityEstablishingInterceptor(m.Verifier, auth.TokenPlaneData, usage, 0, nil))
+	}, middleware.ScrubInternal(zap.NewNop()), auth.CapabilityEstablishingInterceptor(m.Verifier, auth.TokenPlaneData, usage, 0, nil))
 	objects := paladindatav1connect.NewObjectServiceClient(client)
 	storage := paladindatav1connect.NewStorageBootstrapServiceClient(client)
 	var errs []error

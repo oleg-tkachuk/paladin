@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/memstore"
@@ -72,7 +73,7 @@ func TestTheSDKFakeRefusesAnUnknownCapabilityAsTheServerDoes(t *testing.T) {
 	}
 	server := paladindatav1connect.NewObjectServiceClient(unarytest.Client(func(s *connect.Server) {
 		paladindatav1connect.RegisterObjectServiceHandler(s, caveatHandlers{tenant: "t"})
-	}, middleware.ScrubInternal(), auth.CapabilityEstablishingInterceptor(m.Verifier, auth.TokenPlaneData, usage, 0, nil)))
+	}, middleware.ScrubInternal(zap.NewNop()), auth.CapabilityEstablishingInterceptor(m.Verifier, auth.TokenPlaneData, usage, 0, nil)))
 	fake := paladintest.New(t, paladintest.WithStrictAuth())
 	obj := fake.Put(fake.Collection(), fidelityKey, "text/plain", []byte("x"))
 
