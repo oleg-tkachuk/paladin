@@ -5,6 +5,7 @@ package components
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -14,9 +15,9 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
-// A collection the tenant does not have is ErrCollectionNotFound, still
-// wrapping pgx.ErrNoRows for a caller matching that; it used to be the bare
-// driver error, which the handler could not tell from a store failure.
+// A collection the tenant does not have is ErrCollectionNotFound, and its text
+// names the collection only: the handler sends that text to the caller, so the
+// driver's "no rows in result set" must not be in it.
 func TestCollectionReadOfAMissingCollection(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -25,8 +26,11 @@ func TestCollectionReadOfAMissingCollection(t *testing.T) {
 	repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
 
 	_, err := repo.Get(ctx, f.tenantID, "no-such-collection")
-	if !errors.Is(err, objectkey.ErrCollectionNotFound) || !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("get missing = %v, want ErrCollectionNotFound wrapping pgx.ErrNoRows", err)
+	if !errors.Is(err, objectkey.ErrCollectionNotFound) {
+		t.Fatalf("get missing = %v, want ErrCollectionNotFound", err)
+	}
+	if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), pgx.ErrNoRows.Error()) {
+		t.Errorf("get missing = %q, carries the driver's error to the caller", err)
 	}
 	if _, err := repo.Get(ctx, f.tenantID, f.collection); err != nil {
 		t.Fatalf("get existing: %v", err)

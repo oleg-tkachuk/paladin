@@ -124,8 +124,9 @@ func (r *CollectionRepo) Get(ctx context.Context, tenantID uuid.UUID, collection
 func (r *CollectionRepo) getWith(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, collection string) (objectkey.Collection, error) {
 	row, err := q.GetCollection(ctx, pgUUID(tenantID), collection)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Wraps pgx.ErrNoRows too, for a caller still matching it.
-		return objectkey.Collection{}, fmt.Errorf("%w: %q: %w", objectkey.ErrCollectionNotFound, collection, err)
+		// The handler sends this text to the caller: it names the collection,
+		// not the driver's "no rows in result set".
+		return objectkey.Collection{}, fmt.Errorf("%w: %q", objectkey.ErrCollectionNotFound, collection)
 	}
 	if err != nil {
 		return objectkey.Collection{}, fmt.Errorf("get collection: %w", err)
@@ -179,7 +180,7 @@ func (r *CollectionRepo) guarded(ctx context.Context, q *sqlc.Queries, tenantID 
 	}
 	_, err := r.getWith(ctx, q, tenantID, collection)
 	switch {
-	case isNoRows(err):
+	case errors.Is(err, objectkey.ErrCollectionNotFound):
 		return fmt.Errorf("collection %q %w", collection, apiutil.ErrNotFound)
 	case err != nil:
 		return fmt.Errorf("probe collection: %w", err)
