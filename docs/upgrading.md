@@ -89,6 +89,71 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## sdk/python/v0.151.5, sdk/go/v0.151.5 — a capability names a nested collection as one segment
+
+- The resource a capability names an object by is
+  `object://{tenant-id}/{collection segment}/{key}`: a nested collection's
+  `/` is written `.`, as in the bucket path. Collection `invoices/2026` with
+  key `r.pdf` is `object://{tenant-id}/invoices.2026/r.pdf`. Collections
+  without a `/` keep their resources.
+- A resource prefix on a collection now covers that collection's objects
+  only. It used to cover every collection nested under it too, and a
+  collection `a/b` with key `c` shared its resource with collection `a` and
+  key `b/c`.
+- `paladin.ObjectResource` (Go) and `paladin.object_resource` (Python) build
+  the new form, and both SDKs' fakes match on it; `sdk/testdata/object_resources.json`
+  holds the server and both SDKs to the same resources and coverage.
+- Capabilities issued before this release keep their resources as written,
+  and the server reads them in the new form. A resource that named a nested
+  collection, such as `object://{tenant-id}/a/b/`, now covers the keys under
+  `b/` of collection `a` and none of collection `a/b`'s objects: for a
+  resource written in the old form, every object it reaches now it reached
+  before. The exception is a resource with a `.` where the collection goes
+  (`object://{tenant-id}/a.b/`): it matched no object before and now covers
+  collection `a/b`. Revoke capabilities and delegations scoped to a nested
+  collection, or holding such a resource, and issue them again with the SDK
+  helpers; where the data is disposable, revoke them all.
+- An SDK older than this release still builds the old form for a nested
+  collection, which the server reads as described above. Upgrade the SDK
+  with the server.
+
+## Unreleased — the console checks an object key before sending it
+
+- The console holds every key it sends to the object key rule first
+  (`frontend/src/lib/objects/objectKey.ts`, tested against
+  `sdk/testdata/object_keys.json`): the copy and move dialog and the bulk
+  copy prefix name the problem beside the field and keep the confirm button
+  disabled, and an upload whose folder and file name make a refused key
+  fails in the upload list without a request.
+
+## sdk/python/v0.151.5, sdk/go/v0.151.5 — an object key is bounded in length and text
+
+- An object key is at most 731 bytes of UTF-8, in segments of at most 255
+  bytes, without control characters (Unicode category Cc: U+0000–U+001F,
+  U+007F, U+0080–U+009F). `UploadObject`, `InitiateMultipartUpload` and
+  `CopyObject` (`destination_key`) refuse any other key as
+  `INVALID_ARGUMENT`, naming the rule and the reason with the limit. Such a
+  key used to be accepted and then fail at the store, after the object's
+  row was written.
+- 731 is S3's 1024-byte path less the tenant id, the longest collection a
+  name may be, and the two separators, so a key fits in every collection
+  and stays valid wherever it is copied. 255 is the longest file name a
+  filer-backed store (SeaweedFS) takes; it refuses a longer segment with
+  `KeyTooLongError` whatever the path's length.
+- `BatchCopyObjects` refuses a `destination_key_prefix` that leaves no room
+  for a key: 731 bytes or more, a segment before its last `/` over 255
+  bytes, or 255 bytes or more after it. A copy whose prefix and source key
+  together break the rule fails that item, with the reason in the
+  operation's failures.
+- Objects stored before this release under a key that breaks only these
+  rules stay readable and deletable, and storage ingest still promotes them:
+  the storage path refuses only what would share another object's path or
+  what the store cannot hold (over 1024 bytes, or not UTF-8). A copy of one
+  needs a `destination_key` that keeps the rule.
+- Both SDKs' fakes (`paladintest`, `paladin.testing`) refuse the same keys,
+  held to the server by `max_key_bytes`, `max_segment_bytes` and the
+  `lengths` cases of `sdk/testdata/object_keys.json`.
+
 ## Unreleased — every object has a storage path of its own
 
 - A nested collection occupies one segment of the bucket path: its `/` is
