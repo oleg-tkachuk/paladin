@@ -7,6 +7,7 @@ import { create, fromJson } from "@bufbuild/protobuf";
 import { anyPack, StructSchema } from "@bufbuild/protobuf/wkt";
 import { OperationSchema } from "@/gen/paladin/admin/v1/operation_service_pb";
 import { OperationState } from "@/gen/paladin/common/v1/operation_pb";
+import { ROLES } from "@/constants/roles";
 
 const h = vi.hoisted(() => ({
   audit: vi.fn(),
@@ -14,6 +15,10 @@ const h = vi.hoisted(() => ({
   budget: vi.fn(),
   tenants: vi.fn(),
   series: vi.fn(),
+  roles: ["platform.admin"] as string[],
+}));
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ user: { roles: h.roles } }),
 }));
 vi.mock("@/lib/connect/client", () => ({
   auditClient: { listAuditLog: h.audit },
@@ -40,8 +45,25 @@ describe("DashboardWidgets", () => {
     h.tenants.mockResolvedValue({ tenants: [], page: {} });
     h.series.mockReset();
     h.series.mockResolvedValue({ series: [] });
+    h.roles = [ROLES.platformAdmin];
   });
   afterEach(() => onlineManager.setOnline(true));
+
+  // Every tenant's budget is the platform admin's to read: a tenant admin's
+  // dashboard neither asks for the summary nor shows its card.
+  it("leaves the budget alerts out for a tenant admin", async () => {
+    h.roles = [ROLES.tenantAdmin];
+    h.audit.mockResolvedValue({ entries: [] });
+    h.ops.mockResolvedValue({ operations: [] });
+
+    render(<DashboardWidgets />);
+
+    expect(await screen.findByText("No recent activity.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No tenants are approaching their cap."),
+    ).toBeNull();
+    expect(h.budget).not.toHaveBeenCalled();
+  });
 
   // How each tenant near its budget got there: one read for every row's
   // trend, a line where it spent, none where it did not.

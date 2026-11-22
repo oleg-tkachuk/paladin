@@ -75,15 +75,21 @@ import { cn } from "@/lib/utils";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { CAPABILITIES_DOCS_URL } from "@/constants";
 import { errorMessage } from "@/hooks/errorContract";
+import { canManageTenantBudgets } from "@/constants/roles";
+import { useAuth } from "@/context/AuthContext";
 
 export function DashboardWidgets() {
+  const { user } = useAuth();
+  // Every tenant's budget is the platform admin's to read; a tenant admin
+  // reads its own on the tenant's budget page.
+  const budgets = canManageTenantBudgets(user?.roles ?? []);
   return (
     <div className="space-y-3">
       <TrashRetentionNotice />
       <div className="grid grid-cols-1 gap-3 lg:auto-cols-fr lg:grid-flow-col">
         <RecentActivityWidget />
         <FailedOpsWidget />
-        <BudgetAlertsWidget />
+        {budgets && <BudgetAlertsWidget />}
       </div>
     </div>
   );
