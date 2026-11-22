@@ -1,4 +1,4 @@
-## Unreleased — lease and Delegate refusals name the presented capability
+## sdk/python/v0.151.2, sdk/go/v0.151.2 — lease and Delegate refusals name the presented capability
 
 Codes and reasons are unchanged; only the message text moved. A client that
 matches on the text should match on the code and the reason instead.
