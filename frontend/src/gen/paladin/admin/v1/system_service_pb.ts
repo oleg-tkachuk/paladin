@@ -831,7 +831,7 @@ export type BackendStats = Message<"paladin.admin.v1.BackendStats"> & {
   disabled: bigint;
 
   /**
-   * read_only = drained (reads served, writes refused); maintenance is
+   * read_only = drained (reads served, writes of bytes refused); maintenance is
    * the advisory operator flag. Both counted across all backends.
    *
    * @generated from field: int64 read_only = 4;
