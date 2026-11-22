@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"connectrpc.com/connect/v2"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -84,8 +86,8 @@ func TestRequireBearerLogsWhy(t *testing.T) {
 		t.Fatalf("status = %d, want 401", rec.Code)
 	}
 	got := logs.FilterMessage(tokenRefusedMessage).All()
-	if len(got) != 1 || got[0].ContextMap()["error"] != errExpired.Error() {
-		t.Fatalf("logged %v, want the verifier's reason", got)
+	if len(got) != 1 || got[0].Level != zapcore.WarnLevel || got[0].ContextMap()["error"] != errExpired.Error() {
+		t.Fatalf("logged %v, want the verifier's reason at Warn", got)
 	}
 	for _, e := range logs.All() {
 		for k, v := range e.ContextMap() {
@@ -93,6 +95,34 @@ func TestRequireBearerLogsWhy(t *testing.T) {
 				t.Errorf("field %s carries the token", k)
 			}
 		}
+	}
+}
+
+// A key set that would not load is not the token's fault: the edge answers
+// 503 without a challenge, so the agent retries rather than re-authorizing,
+// and logs the cause at Error rather than as a refused token.
+func TestRequireBearerAnswersAKeySetThatWillNotLoad(t *testing.T) {
+	keysDown := fmt.Errorf("%w: refresh on miss: dial tcp: connection refused", auth.ErrKeySetUnavailable)
+	core, logs := observer.New(zap.DebugLevel)
+	h := RequireBearer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("an unchecked token reached the server")
+	}), fakeVerifier{err: keysDown}, "https://mcp.example/.well-known/oauth-protected-resource")
+	req := httptest.NewRequestWithContext(logger.WithContext(context.Background(), zap.New(core)), http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer eyJhbGciOiJIUzI1NiJ9.e30.sig")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
+	}
+	if c := rec.Header().Get("WWW-Authenticate"); c != "" {
+		t.Errorf("WWW-Authenticate = %q, want none", c)
+	}
+	if logs.FilterMessage(tokenRefusedMessage).Len() != 0 {
+		t.Error("a key set that would not load was logged as a refused token")
+	}
+	if errs := logs.FilterLevelExact(zapcore.ErrorLevel).All(); len(errs) != 1 || errs[0].ContextMap()["error"] != keysDown.Error() {
+		t.Fatalf("Error lines = %v, want one with the cause", errs)
 	}
 }
 

@@ -1,7 +1,10 @@
 package app
 
 import (
+	"context"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,8 +15,10 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/health"
+	"github.com/oleg-tkachuk/paladin/backend/internal/session"
 )
 
 func sessionConfig() config.Config {
@@ -27,6 +32,43 @@ func sessionConfig() config.Config {
 		IAMURL: "http://iam:8085", DataURL: "http://api:8080", AdminURL: "http://admin:8090",
 	}
 	return cfg
+}
+
+// verifierFunc is an auth.TokenVerifier answering with f.
+type verifierFunc func() (*auth.Principal, error)
+
+func (f verifierFunc) Verify(context.Context, string) (*auth.Principal, error) { return f() }
+
+// The session role holds no internal/auth, so refreshAges tells it a key set
+// that would not load apart from a token that does not verify.
+func TestRefreshAgesTellsAKeySetThatWillNotLoad(t *testing.T) {
+	issued := time.Unix(1_700_000_000, 0)
+	keysDown := fmt.Errorf("%w: refresh on miss", auth.ErrKeySetUnavailable)
+	for name, tc := range map[string]struct {
+		verify   verifierFunc
+		keysDown bool
+		refused  bool
+	}{
+		"verified":     {func() (*auth.Principal, error) { return &auth.Principal{IssuedAt: issued}, nil }, false, false},
+		"key set down": {func() (*auth.Principal, error) { return nil, keysDown }, true, false},
+		"refused":      {func() (*auth.Principal, error) { return nil, auth.ErrBearerExpired }, false, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			at, err := refreshAges{tc.verify}.IssuedAt(t.Context(), "refresh")
+			if got := errors.Is(err, session.ErrRefreshKeysUnavailable); got != tc.keysDown {
+				t.Errorf("keys unavailable = %v, want %v (err %v)", got, tc.keysDown, err)
+			}
+			if tc.keysDown && !errors.Is(err, auth.ErrKeySetUnavailable) {
+				t.Errorf("err = %v, want the cause kept", err)
+			}
+			if tc.refused != (err != nil && !tc.keysDown) {
+				t.Errorf("err = %v, want refused %v", err, tc.refused)
+			}
+			if err == nil && !at.Equal(issued) {
+				t.Errorf("issued at %v, want %v", at, issued)
+			}
+		})
+	}
 }
 
 func TestBuildSessionHandlerRefusesWhatCannotRun(t *testing.T) {

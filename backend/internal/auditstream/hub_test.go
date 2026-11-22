@@ -5,12 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 	"uuid"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
@@ -162,6 +167,68 @@ func TestSSEHandler_AuthGates(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("POST status = %d, want 405", res.StatusCode)
+	}
+}
+
+// Each stream the handler turns away is answered as what went wrong and
+// logged at the level it deserves: a key set that would not load is the
+// server's dependency failing — 503, no challenge, an Error line — and a
+// token refused is the caller's — 401 with a challenge, a Warn line.
+func TestSSEHandler_RefusalsAnswerAndLog(t *testing.T) {
+	keysDown := fmt.Errorf("%w: refresh on miss: dial tcp: connection refused", auth.ErrKeySetUnavailable)
+	cases := map[string]struct {
+		verifier  stubVerifier
+		authz     string
+		status    int
+		challenge bool
+		level     zapcore.Level
+	}{
+		"no bearer":    {stubVerifier{p: &auth.Principal{TenantID: uuid.New()}}, "", http.StatusUnauthorized, true, zapcore.WarnLevel},
+		"refused":      {stubVerifier{err: errors.New("token is expired")}, "Bearer x", http.StatusUnauthorized, true, zapcore.WarnLevel},
+		"key set down": {stubVerifier{err: keysDown}, "Bearer x", http.StatusServiceUnavailable, false, zapcore.ErrorLevel},
+		"no tenant":    {stubVerifier{p: &auth.Principal{}}, "Bearer x", http.StatusForbidden, false, zapcore.WarnLevel},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			core, logs := observer.New(zapcore.DebugLevel)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/audit/stream", nil)
+			if c.authz != "" {
+				req.Header.Set("Authorization", c.authz)
+			}
+
+			NewHub(zap.New(core)).SSEHandler(c.verifier).ServeHTTP(rec, req)
+
+			if rec.Code != c.status {
+				t.Errorf("status = %d, want %d", rec.Code, c.status)
+			}
+			if got := rec.Header().Get("WWW-Authenticate") != ""; got != c.challenge {
+				t.Errorf("challenge sent = %v, want %v", got, c.challenge)
+			}
+			if got := logs.All(); len(got) != 1 || got[0].Level != c.level {
+				t.Errorf("logged %v, want one line at %s", got, c.level)
+			}
+		})
+	}
+}
+
+// noFlushWriter is a ResponseWriter that cannot stream.
+type noFlushWriter struct{ http.ResponseWriter }
+
+// A writer that cannot flush is the server's wiring: 500 and an Error line.
+func TestSSEHandler_AWriterThatCannotFlushIsLogged(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/audit/stream", nil)
+	req.Header.Set("Authorization", "Bearer x")
+
+	NewHub(zap.New(core)).SSEHandler(stubVerifier{p: &auth.Principal{TenantID: uuid.New()}}).ServeHTTP(noFlushWriter{rec}, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rec.Code)
+	}
+	if got := logs.FilterMessage(msgNoFlusher).All(); len(got) != 1 || got[0].Level != zapcore.ErrorLevel {
+		t.Errorf("logged %v, want one Error line", logs.All())
 	}
 }
 

@@ -399,6 +399,10 @@ func httpMethod(ctx context.Context) string {
 	return http.MethodPost
 }
 
+// errCapabilityNoTenant is a verified capability whose subject names no
+// tenant: the verifier's fault, never the caller's.
+var errCapabilityNoTenant = errors.New("a verified capability names no tenant")
+
 // withCapabilityPrincipal derives a Principal from a verified capability and
 // stamps it on the context, unless one is already there.
 //
@@ -423,11 +427,13 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 		return ctx, nil
 	}
 	if cap.Subject.TenantID == uuid.Nil() {
-		// The verifier rejects a tenant-less capability, so this is a
-		// belt-and-braces refusal rather than an expected path: establishing a
+		// The verifier refuses a tenant-less capability (limes verifier.go,
+		// readSignedClaims), and a Biscuit's attenuation keeps its sealed
+		// token's subject (sealed_form.go, unsealedGrant), so this is a
+		// broken invariant rather than an expected path: establishing a
 		// principal with no tenant would produce a caller the tenant gate
 		// cannot scope.
-		return ctx, errors.New("capability: subject has no tenant")
+		return ctx, errCapabilityNoTenant
 	}
 
 	return WithPrincipal(ctx, &Principal{

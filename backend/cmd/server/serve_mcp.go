@@ -384,14 +384,13 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	// so the middleware records Mcp-Session-Id activity into a process-local
 	// registry. A reaper (below) evicts idle sessions.
 	//
-	// agent_subject enrichment: the agent's bearer JWT rides in X-Paladin-Token.
-	// subjectFn verifies its signature (NOT its audience — an agent token
-	// targets whichever plane it calls: admin/data/iam) and reads the `sub`
-	// claim for the session's display label. Degrades to blank when no signing
-	// key is configured (a thin bridge) or the token is absent/invalid.
+	// agent_subject enrichment: the session's display label is the subject of
+	// the token the edge below verified. tracked sits inside that edge, so
+	// every JWT reaching it was verified there; a credential the edge cannot
+	// open — an API token, or any token on a thin bridge with no verifier —
+	// leaves the column blank rather than being trusted unverified.
 	sessions := mcp.NewSessionRegistry()
-	subjectFn := agentSubjectFn(ctx, cfg.Auth, keys, l)
-	tracked := mcp.TrackSessions(handler, sessions, subjectFn)
+	tracked := mcp.TrackSessions(handler, sessions, mcp.SessionSubject)
 
 	mux := http.NewServeMux()
 
@@ -570,38 +569,8 @@ func runHTTP(ctx context.Context, cfg config.Config, l *zap.Logger, modeLabel st
 	return nil
 }
 
-// agentSubjectFn returns a TrackSessions subjectFn that extracts the verified
-// `sub` claim from the agent's X-Paladin-Token for the session display label. It is
-// audience-agnostic on purpose (ExpectedAudience left empty) — an agent token
-// targets whichever plane it calls (admin/data/iam). Returns a no-op (blank
-// subject) when no usable verifier can be built (e.g. a thin bridge with no
-// signing key), so the column stays empty rather than trusting an unverified
-// token.
-func agentSubjectFn(ctx context.Context, a config.Auth, keys *sessionkey.Set, l *zap.Logger) func(*http.Request) string {
-	verifier := buildAgentVerifier(ctx, a, keys, l)
-	if verifier == nil {
-		return func(*http.Request) string { return "" }
-	}
-	return func(r *http.Request) string {
-		// The edge has verified the token already, and with delegation it
-		// is no longer on the request (ADR-0041).
-		if subject := mcp.SessionSubject(r); subject != "" {
-			return subject
-		}
-		tok := mcp.BearerToken(r)
-		if tok == "" {
-			return ""
-		}
-		p, err := verifier.Verify(r.Context(), tok)
-		if err != nil {
-			return ""
-		}
-		return p.Subject
-	}
-}
-
 // buildAgentVerifier constructs the audience-agnostic JWT verifier the MCP
-// edge uses for both session-subject enrichment and the OAuth bearer
+// edge uses for the OAuth bearer
 // challenge (ADR-0008). Signature + issuer + expiry are checked;
 // ExpectedAudience is deliberately left empty because an agent token targets
 // whichever plane it calls (admin/data/iam) — the planes enforce audience

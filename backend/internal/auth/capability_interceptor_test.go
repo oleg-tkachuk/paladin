@@ -2,11 +2,17 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
 	"github.com/oleg-tkachuk/limes"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // TestExtractCapabilityToken covers the header parsing branches:
@@ -129,8 +135,27 @@ func TestWithCapabilityPrincipal_RefusesATenantlessCapability(t *testing.T) {
 	_, err := i.withCapabilityPrincipal(context.Background(),
 		&limes.Capability{ID: uuid.New(), Subject: limes.Principal{}})
 
-	if err == nil {
-		t.Fatal("want an error for a capability with no tenant")
+	if !errors.Is(err, errCapabilityNoTenant) {
+		t.Fatalf("err = %v, want errCapabilityNoTenant for a capability with no tenant", err)
+	}
+}
+
+// A verified capability with no tenant is the verifier's broken invariant,
+// not the caller's fault: Internal with the server-fault sentence and an
+// Error line, never the error's own text.
+func TestWithPrincipal_ATenantlessCapabilityIsTheServersFault(t *testing.T) {
+	i := &capabilityInterceptor{audience: "paladin-data", establishPrincipal: true}
+	core, logs := observer.New(zapcore.DebugLevel)
+	ctx := logger.WithContext(context.Background(), zap.New(core))
+
+	_, err := i.withPrincipal(ctx, &limes.Capability{ID: uuid.New(), Subject: limes.Principal{}})
+
+	ce, ok := errors.AsType[*connect.Error](err)
+	if !ok || ce.Code() != connect.CodeInternal || ce.Message() != capabilityServerFault {
+		t.Fatalf("err = %v, want Internal %q", err, capabilityServerFault)
+	}
+	if got := logs.FilterMessage(msgCapabilityPrincipalFault).All(); len(got) != 1 || got[0].Level != zapcore.ErrorLevel {
+		t.Fatalf("logged %v, want one Error line", logs.All())
 	}
 }
 

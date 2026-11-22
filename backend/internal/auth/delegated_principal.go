@@ -28,10 +28,10 @@ type DelegatingUserLookup func(ctx context.Context, id uuid.UUID) (DelegatingUse
 
 // ErrDelegatingUserGone is a delegated capability's user that is no longer
 // there.
-var ErrDelegatingUserGone = errors.New("auth: the user a delegated capability acts for is gone")
+var ErrDelegatingUserGone = errors.New("the user a delegated capability acts for is gone")
 
 // errDelegationRefused is a delegated capability whose user may not act.
-var errDelegationRefused = errors.New("auth: delegated capability refused")
+var errDelegationRefused = errors.New("delegated capability refused")
 
 // delegation is how an interceptor recognises a delegated capability and
 // finds its user.
@@ -48,6 +48,10 @@ func WithDelegation(issuer string, users DelegatingUserLookup) CapabilityOption 
 	return func(i *capabilityInterceptor) { i.delegation = &delegation{issuer: issuer, users: users} }
 }
 
+// msgCapabilityPrincipalFault is the line of a verified capability no
+// principal could be established for.
+const msgCapabilityPrincipalFault = "capability: no principal for a verified capability"
+
 // withPrincipal establishes the principal a verified capability stands for:
 // its user's when the MCP server issued it, and otherwise its own, where the
 // plane lets a capability be an identity. An existing principal wins.
@@ -55,7 +59,9 @@ func (i *capabilityInterceptor) withPrincipal(ctx context.Context, c *limes.Capa
 	if i.delegation == nil || c.Issuer != i.delegation.issuer {
 		ctx, err := i.withCapabilityPrincipal(ctx, c)
 		if err != nil {
-			return ctx, capabilityError(connect.CodePermissionDenied, err)
+			// Its one failure is a broken invariant: the server's fault.
+			logger.FromContext(ctx).Error(msgCapabilityPrincipalFault, zap.String(logKeyCapabilityID, c.ID.String()), zap.Error(err))
+			return ctx, capabilityServerFaultError(err)
 		}
 		return ctx, nil
 	}

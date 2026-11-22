@@ -73,6 +73,10 @@ func NewHandler(clients oauthpkg.ClientDeleter, as config.OAuthAS, policy cedar.
 	return &Handler{clients: clients, seeded: seeded, policy: policy, log: zap.NewNop()}
 }
 
+// msgDeleteFailed is what a caller is told of a client the store failed to
+// delete; the store's error is logged instead.
+const msgDeleteFailed = "the OAuth client could not be deleted"
+
 // DeleteOAuthClient removes a client, its codes and its grants, then revokes
 // every capability exchanged under it, in every tenant: a client spans them
 // all. The client goes first, so none is exchanged meanwhile; the revocation
@@ -92,7 +96,7 @@ func (h *Handler) DeleteOAuthClient(ctx context.Context, req *adminv1.DeleteOAut
 	gone := errors.Is(err, oauthpkg.ErrClientNotFound)
 	if err != nil && !gone {
 		h.log.Error("oauth client delete failed", append(h.fields(ctx, id), zap.Error(err))...)
-		return nil, connect.NewError(connect.CodeInternal, "delete oauth client: "+err.Error()).WithCause(err)
+		return nil, connect.NewError(connect.CodeInternal, msgDeleteFailed).WithCause(err)
 	}
 	revoked, err := h.revocation.RevokeMatching(ctx, limes.RevokeMatchingRequest{
 		AllTenants: true, ClientID: id, Note: noteClientDeleted, Actor: callerSubject(ctx),

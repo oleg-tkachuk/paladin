@@ -134,17 +134,14 @@ describe("TenantBilling", () => {
   });
 
   it("says billing is unavailable instead of reporting no charges", async () => {
-    const err = new ConnectError(
-      "billing: handler not wired",
-      Code.Unavailable,
-    );
+    const err = new ConnectError("billing handler not wired", Code.Unavailable);
     h.summary.mockRejectedValue(err);
     h.series.mockRejectedValue(err);
     render(<Harness />);
     expect(
       await screen.findByText("Billing is unavailable"),
     ).toBeInTheDocument();
-    expect(screen.getByText("billing: handler not wired")).toBeInTheDocument();
+    expect(screen.getByText("billing handler not wired")).toBeInTheDocument();
     expect(screen.queryByText("Spend over time")).toBeNull();
   });
 

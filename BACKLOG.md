@@ -614,33 +614,41 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### The HTTP edges answer a key set that will not load as a refused token
+### The session role answers a key set that will not load as 204
 
 - **Status:** Deferred.
-- **Reason:** the planes answer `auth.ErrKeySetUnavailable` Unavailable, but
-  the edges that verify a bearer token outside Connect — the MCP bridge's
-  `RequireBearer` (`mcp/oauth.go`, logged at Info), `authorizePlatformAdmin`
-  (`mcp/sessions.go`), the audit stream's `SSEHandler` (`auditstream/sse.go`),
-  the bridge's session-subject lookup (`cmd/server/serve_mcp.go`) and the
-  session role's `refreshAges` (`app/build_session.go`) — still answer it as
-  a token refused, 401, with no Error line.
-- **Definition of Done:** each edge answers 503 with a retry sentence for an
-  error wrapping `auth.ErrKeySetUnavailable` and logs it at Error with the
-  cause, a refused token stays 401; a test per edge covers both.
+- **Reason:** every other HTTP edge answers `auth.ErrKeySetUnavailable` with
+  503, but the session role's rotation (`session/handler.go`, `rotate`) still
+  answers 204 when `refreshAges` returns `session.ErrRefreshKeysUnavailable`:
+  the console's `rehydrate` (`frontend/src/context/AuthContext.tsx`) treats
+  any answer other than a rotation as signed out, so a 503 would log every
+  user out during an IdP outage. The cause is logged at Error.
+- **Definition of Done:** the console's session client
+  (`frontend/src/lib/session/client.ts`) tells a 503 apart from a refused
+  session, keeps the user signed in and retries with backoff (showing that
+  sign-in could not be checked), and only then the role answers 503 with the
+  retry sentence for a key set that will not load; a refused token stays the
+  role's sign-out answer. Tests on both sides cover the outage and the refusal.
 - **Blockers:** none.
 
-### The bridge's upstream probe errors reach the admin verbatim
+### The OAuth endpoints and `unary.newMessage` quote Go errors to the caller
 
 - **Status:** Deferred.
-- **Reason:** `GetBridgeStatus` now answers a classified verdict for a bridge
-  it could not ask, but each upstream's `error` is still the MCP process's own
-  `err.Error()` from its `/livez` probe (`mcp.ProbeUpstreams`), passed through
-  untouched. Those texts are what an operator debugs an mTLS failure by
-  (`x509: certificate signed by unknown authority`), and the bridge logs none
-  of them, so classifying them in place would lose the only copy.
-- **Definition of Done:** the bridge logs each failed probe with its full
-  error; the upstream `error` is a fixed verdict (unreachable, timed out, bad
-  status N, certificate refused), with the plane's URL left to its own field.
+- **Reason:** the RPC refusals are held to the no-package-prefix rule
+  (`apiutil/sentinel_text_test.go`), but the OAuth HTTP endpoints answer
+  `invalid_client` with the client authentication's own `err.Error()`
+  (`auth/oauth/handler.go` token and introspection paths, `revoke.go`), which
+  starts `oauth: bad credentials: …`; and `auth.ErrNoConsent` (`auth: the
+  grant consents to neither …`) is wrapped into the token exchange's
+  `ErrInvalidScope` (`auth/delegation/policy.go`), whose answer has not been
+  checked for it.
+  Alike, `unary.newMessage` (`api/unary/unary.go`) answers a procedure whose
+  message type is not registered with the registry's own error after the
+  procedure's name — a build fault, unreachable with generated stubs.
+- **Definition of Done:** each OAuth refusal's `error_description` is a fixed
+  sentence the package exports for the guard test, the cause logged at Warn;
+  a test per endpoint pins the text. `newMessage` answers a fixed sentence and
+  logs the registry's error at Error.
 - **Blockers:** none.
 
 ## Database

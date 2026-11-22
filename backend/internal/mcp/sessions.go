@@ -10,8 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // mcpSessionIDHeader is the header the MCP streamable-HTTP transport uses to
@@ -297,8 +300,7 @@ func SessionsHandler(reg *SessionRegistry, verifier auth.TokenVerifier) http.Han
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if code := authorizePlatformAdmin(r, verifier); code != 0 {
-			http.Error(w, http.StatusText(code), code)
+		if !authorizePlatformAdmin(w, r, verifier) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -306,26 +308,51 @@ func SessionsHandler(reg *SessionRegistry, verifier auth.TokenVerifier) http.Han
 	})
 }
 
+// The log keys authorizePlatformAdmin writes: the endpoint asked, and the
+// verified subject that lacked the role.
+const (
+	fieldPath    = "path"
+	fieldSubject = "subject"
+)
+
+// The lines authorizePlatformAdmin leaves for a request it turns away.
+const (
+	msgOperatorNoBearer   = "mcp operator endpoint refused: no bearer token" // #nosec G101 -- a log message, not a credential
+	msgOperatorRefused    = "mcp operator endpoint refused: bearer token refused"
+	msgOperatorNotAnAdmin = "mcp operator endpoint refused: not a platform admin"
+)
+
 // authorizePlatformAdmin gates the bridge's operator endpoints: a Bearer JWT
 // the verifier accepts, carrying the platform-admin role — the same gate as
-// the admin service they back. Returns 0 when the request may proceed, or the
-// HTTP status to answer with.
+// the admin service they back. It reports whether the request may proceed,
+// having answered it otherwise: 401 for no token or one refused, 403 for a
+// caller without the role, and 503 for a key set that would not load, which
+// says nothing of the token.
 //
 // Shared by /sessions and /status so the two cannot drift apart: an operator
 // endpoint that quietly acquired a weaker gate than its sibling is the kind of
 // difference nobody notices until it matters.
-func authorizePlatformAdmin(r *http.Request, verifier auth.TokenVerifier) int {
+func authorizePlatformAdmin(w http.ResponseWriter, r *http.Request, verifier auth.TokenVerifier) bool {
 	const bearer = "Bearer "
+	l := logger.FromContext(r.Context()).With(zap.String(fieldPath, r.URL.Path))
 	authz := r.Header.Get("Authorization")
 	if verifier == nil || !strings.HasPrefix(authz, bearer) {
-		return http.StatusUnauthorized
+		l.Warn(msgOperatorNoBearer)
+		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		return false
 	}
 	p, err := verifier.Verify(r.Context(), strings.TrimSpace(authz[len(bearer):]))
 	if err != nil {
-		return http.StatusUnauthorized
+		if !auth.AnswerKeySetUnavailable(w, l, err) {
+			l.Warn(msgOperatorRefused, zap.Error(err))
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		}
+		return false
 	}
 	if !p.HasRole(apiutil.RolePlatformAdmin) {
-		return http.StatusForbidden
+		l.Warn(msgOperatorNotAnAdmin, zap.String(fieldSubject, p.Subject))
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return false
 	}
-	return 0
+	return true
 }

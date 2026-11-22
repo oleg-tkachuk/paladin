@@ -6,6 +6,8 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/capabilityh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	admin "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 
 	// Links every handler and store package, so each one's init has
@@ -43,6 +45,24 @@ func TestBearerRefusalsNameNoPackage(t *testing.T) {
 	for _, msg := range auth.BearerRefusals() {
 		if packagePrefix.MatchString(msg) {
 			t.Errorf("%q starts with a package name", msg)
+		}
+	}
+}
+
+// A call with no principal or no tenant, a delegated capability refused for
+// its user, a handler built without a dependency, and a server built with no
+// handler are answered with their packages' own messages, not MapError: held
+// to the same rule here.
+func TestOwnRefusalsNameNoPackage(t *testing.T) {
+	for name, msgs := range map[string][]string{
+		"principal": auth.PrincipalRefusals(),
+		"batch":     batchh.FaultMessages(),
+		"unwired":   admin.UnwiredMessages(),
+	} {
+		for _, msg := range msgs {
+			if packagePrefix.MatchString(msg) {
+				t.Errorf("%s: %q starts with a package name", name, msg)
+			}
 		}
 	}
 }

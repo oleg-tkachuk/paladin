@@ -96,7 +96,7 @@ export function MCPOverview({
               <Badge
                 key={u.name}
                 variant={u.reachable ? planeTone(u.name) : "destructive"}
-                title={u.url}
+                title={u.reachable || !u.error ? u.url : `${u.url}: ${u.error}`}
               >
                 {u.reachable ? null : (
                   <ExclamationTriangleIcon className="size-3" />

@@ -32,6 +32,19 @@ type BillingServer struct {
 	Tenants tenanth.Names
 }
 
+// What a caller is told by a server built with no handler: the deployment
+// runs without the subsystem (the capability subsystem off, for billing).
+const (
+	msgBillingNotWired = "billing handler not wired"
+	msgSystemNotWired  = "system handler not wired"
+)
+
+// UnwiredMessages is every message a server built with no handler answers
+// with, outside MapError.
+func UnwiredMessages() []string {
+	return []string{msgBillingNotWired, msgSystemNotWired}
+}
+
 // NewBillingServer wires the handler. h may be nil — callers that
 // reach a nil-H server get CodeUnavailable (matches the
 // TenantBudgetServer disabled-subsystem shape).
@@ -52,7 +65,7 @@ func (s *BillingServer) GetTenantSummary(
 	req *pb.GetTenantSummaryRequest,
 ) (*pb.GetTenantSummaryResponse, error) {
 	if s.H == nil {
-		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgBillingNotWired)
 	}
 	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
@@ -82,7 +95,7 @@ func (s *BillingServer) GetTenantTimeSeries(
 	req *pb.GetTenantTimeSeriesRequest,
 ) (*pb.GetTenantTimeSeriesResponse, error) {
 	if s.H == nil {
-		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgBillingNotWired)
 	}
 	tenantID, err := uuid.Parse(req.GetTenantId())
 	if err != nil {
@@ -105,7 +118,7 @@ func (s *BillingServer) GetPlatformTimeSeries(
 	req *pb.GetPlatformTimeSeriesRequest,
 ) (*pb.GetPlatformTimeSeriesResponse, error) {
 	if s.H == nil {
-		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgBillingNotWired)
 	}
 	ts, err := s.H.GetPlatformTimeSeries(ctx,
 		timeFromPB(req.GetPeriodStart()),
@@ -125,7 +138,7 @@ func (s *BillingServer) ListTenantTimeSeries(
 	req *pb.ListTenantTimeSeriesRequest,
 ) (*pb.ListTenantTimeSeriesResponse, error) {
 	if s.H == nil {
-		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgBillingNotWired)
 	}
 	ids := make([]uuid.UUID, 0, len(req.GetTenantIds()))
 	for _, raw := range req.GetTenantIds() {
@@ -174,7 +187,7 @@ func (s *BillingServer) ListTenantSpend(
 	req *pb.ListTenantSpendRequest,
 ) (*pb.ListTenantSpendResponse, error) {
 	if s.H == nil {
-		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgBillingNotWired)
 	}
 	spend, truncated, err := s.H.ListTenantSpend(ctx,
 		timeFromPB(req.GetPeriodStart()), timeFromPB(req.GetPeriodEnd()), int(req.GetLimit()))
@@ -254,7 +267,7 @@ func (s *BillingServer) GetBillingSettings(
 	_ *pb.GetBillingSettingsRequest,
 ) (*pb.GetBillingSettingsResponse, error) {
 	if s.H == nil {
-		return nil, connect.Errorf(connect.CodeUnavailable, "billing: handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgBillingNotWired)
 	}
 	currency, err := s.H.Currency(ctx)
 	if err != nil {

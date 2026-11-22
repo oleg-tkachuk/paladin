@@ -65,6 +65,12 @@ type RefreshAges interface {
 	IssuedAt(ctx context.Context, token string) (time.Time, error)
 }
 
+// ErrRefreshKeysUnavailable is a RefreshAges error that says nothing of the
+// token: the keys that verify it could not be loaded. The role logs it at
+// Error, as its dependency failing; any other error is the token's, and is
+// logged at Warn.
+var ErrRefreshKeysUnavailable = errors.New("the keys that verify a refresh token could not be loaded")
+
 // Options builds a Handler.
 type Options struct {
 	// IAM mints and revokes the session's tokens.
@@ -250,6 +256,12 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// The lines rotate leaves when it cannot read the refresh token's age.
+const (
+	msgAgeKeysUnavailable = "session: the keys that verify the refresh token could not be loaded; not rotating"
+	msgAgeUnreadable      = "session: cannot read the refresh token's age; not rotating"
+)
+
 // rotate rotates the session's refresh token once it is RotateAfter old.
 // A younger one is left alone: rotation is the one step whose answer cannot
 // be lost, so it is kept off the quick path every navigation takes.
@@ -264,7 +276,8 @@ func (h *Handler) rotate(w http.ResponseWriter, r *http.Request) {
 		// Not a verdict on the session: the JWKS may not be fetched yet, as
 		// when iam restarts. IAM judges the token on the session's next call,
 		// and signs it out then if it must; rotation waits for a later try.
-		h.log.Warn("session: cannot read the refresh token's age; not rotating", zap.Error(err))
+		// Answering anything but 204 would sign the console out on load.
+		h.logAgeUnreadable(err)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -275,6 +288,23 @@ func (h *Handler) rotate(w http.ResponseWriter, r *http.Request) {
 	ctx, info := connect.NewClientContext(r.Context())
 	h.upstreamHeaders(info.RequestHeader(), r)
 	res, err := h.iam.RefreshToken(ctx, &pbiam.RefreshTokenRequest{RefreshToken: refresh, RequestedAudience: paladin.AudienceIAM})
+	h.answerRotation(w, res, err, issuedAt)
+}
+
+// logAgeUnreadable logs why rotate could not read a refresh token's age:
+// at Error for keys that would not load, the role's dependency failing, and
+// at Warn for a token that does not verify.
+func (h *Handler) logAgeUnreadable(err error) {
+	if errors.Is(err, ErrRefreshKeysUnavailable) {
+		h.log.Error(msgAgeKeysUnavailable, zap.Error(err))
+		return
+	}
+	h.log.Warn(msgAgeUnreadable, zap.Error(err))
+}
+
+// answerRotation answers the browser with IAM's answer to a rotation of a
+// refresh token issued at issuedAt.
+func (h *Handler) answerRotation(w http.ResponseWriter, res *pbiam.RefreshTokenResponse, err error, issuedAt time.Time) {
 	switch {
 	case err == nil:
 		setCookie(w, res.GetTokens().GetRefreshToken(), seconds(res.GetTokens().GetRefreshExpiresInSeconds()))

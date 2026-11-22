@@ -7,6 +7,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"github.com/oleg-tkachuk/limes"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -140,15 +141,32 @@ func TestBatchCopyReadsADrainingSource(t *testing.T) {
 	}
 }
 
-// A write with no bucket resolver wired is refused rather than authorized on
-// an empty binding.
-func TestBatchWriteWithoutAResolverIsRefused(t *testing.T) {
-	sub := &fakeSubmitter{id: uuid.New()}
-	_, err := NewHandler(sub, allowAll(), nil, &fakeObjects{}).
-		BatchDelete(authedCtx(uuid.New()), BatchDeleteArgs{Collection: "docs", ObjectIDs: ids(1)})
-	wantCode(t, err, connect.CodeUnavailable)
-	if sub.called {
-		t.Fatal("a batch with no resolver was submitted")
+// A handler wired without a bucket resolver or an object finder is the
+// server's fault: the write is refused rather than authorized on an empty
+// binding, as Internal with a fixed sentence, never the wiring's own words.
+func TestBatchWithoutADependencyIsTheServersFault(t *testing.T) {
+	for name, h := range map[string]*Handler{
+		"no resolver":      NewHandler(&fakeSubmitter{id: uuid.New()}, allowAll(), nil, &fakeObjects{}),
+		"no object finder": NewHandler(&fakeSubmitter{id: uuid.New()}, allowAll(), fakeBuckets{}, nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			core, logs := observer.New(zapcore.DebugLevel)
+			h.SetLogger(zap.New(core))
+			// A copy under a capability reads its sources' objects and writes
+			// its destination: it needs both.
+			ctx := authedCtxWithCap(t, uuid.New(), limes.OpGet, limes.OpPut)
+			_, err := h.BatchCopy(ctx, BatchCopyArgs{ObjectIDs: ids(1), SrcCollection: "src", DstCollection: "dst"})
+			wantCode(t, err, connect.CodeInternal)
+			if ce, ok := errors.AsType[*connect.Error](err); !ok || ce.Message() != msgServerFault {
+				t.Errorf("err = %v, want %q", err, msgServerFault)
+			}
+			if h.submitter.(*fakeSubmitter).called {
+				t.Fatal("a batch with a dependency missing was submitted")
+			}
+			if errs := logs.FilterLevelExact(zapcore.ErrorLevel).All(); len(errs) != 1 {
+				t.Fatalf("logged %v, want one Error line", logs.All())
+			}
+		})
 	}
 }
 

@@ -257,6 +257,28 @@ describe("MCP sessions", () => {
     ).toBeInTheDocument();
   });
 
+  it("names why a plane is unreachable on its badge", async () => {
+    h.status.mockResolvedValue({
+      reachable: true,
+      error: "",
+      upstreams: [
+        {
+          name: "data",
+          url: "https://data",
+          reachable: false,
+          error: "the plane's certificate was refused",
+        },
+      ],
+      sessions: 0,
+    });
+    render(<MCPInspectPage />);
+    expect(
+      await screen.findByTitle(
+        "https://data: the plane's certificate was refused",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("says an empty list is unknown when the status call itself fails", async () => {
     h.status.mockRejectedValue(
       new ConnectError("admin plane down", Code.Unavailable),

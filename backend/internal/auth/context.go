@@ -175,10 +175,20 @@ func TenantFromContext(ctx context.Context) (uuid.UUID, error) {
 	return p.TenantID, nil
 }
 
+// The errors of a context with no principal, or one with no tenant. A
+// handler answers them as they are (apiutil.ActingContext), so they speak of
+// the caller, not of this package.
 var (
-	ErrNoPrincipal = errors.New("auth: no authenticated principal")
-	ErrNoTenant    = errors.New("auth: principal is not bound to a tenant")
+	ErrNoPrincipal = errors.New("no authenticated principal")
+	ErrNoTenant    = errors.New("the principal is not bound to a tenant")
 )
+
+// PrincipalRefusals is every fixed text a caller is refused with for the
+// principal on its call or the delegated capability it presents; a
+// delegation refused is errDelegationRefused followed by its reason.
+func PrincipalRefusals() []string {
+	return []string{ErrNoPrincipal.Error(), ErrNoTenant.Error(), errDelegationRefused.Error(), ErrDelegatingUserGone.Error()}
+}
 
 // ─── Acting on another tenant's behalf ──────────────────────────────────────
 

@@ -482,6 +482,13 @@ _TITLE_TOKEN_INVALID = "The access token is invalid"
 _TITLE_NOT_ALLOWED = "The token does not allow this request"
 _TITLE_LIMIT_EXHAUSTED = "The token's request or budget limit is exhausted"
 _TITLE_DELEGATION_TOO_WIDE = "The delegation asks for more than its parent holds"
+_TITLE_NOT_FOUND = "Not found"
+_TITLE_INVALID_REQUEST = "The request is invalid"
+_TITLE_LEASE_NOT_FOUND = "The capability holds no lease"
+_TITLE_LEASE_NESTED = "An ancestor of the capability holds a lease"
+
+# limes's detail of a lease of nothing, which the server tells after its title.
+_DETAIL_LEASE_OF_NOTHING = "lease of no amount and no requests"
 
 # What joins a limes problem's title to its detail, as the server joins them
 # (backend/internal/auth capabilityMessage).
@@ -956,7 +963,9 @@ def _wider_rule(
     if p.resource_prefixes or p.resource_uris:
         if not c.resource_prefixes and not c.resource_uris:
             return "resources_unrestricted"
-        if any(not any(_match_resource(q, x) for q in p.resource_prefixes) for x in c.resource_prefixes):
+        if any(
+            not any(_match_resource(q, x) for q in p.resource_prefixes) for x in c.resource_prefixes
+        ):
             return "resource_prefix"
         if any(not _allows_resource(p, uri) for uri in c.resource_uris):
             return "resource_uri"
@@ -1118,7 +1127,7 @@ class _CapabilityService(CapabilityServiceSync):
                 raise _limes_refusal(
                     Code.INVALID_ARGUMENT,
                     _LIMES_INVALID_REQUEST,
-                    f"lease {request.id}: limes: invalid request: lease of no amount and no requests",
+                    _TITLE_INVALID_REQUEST + _PROBLEM_DETAIL_SEPARATOR + _DETAIL_LEASE_OF_NOTHING,
                 )
             ancestor = fake._capabilities.get(record.msg.parent_id)
             while ancestor is not None:
@@ -1126,8 +1135,7 @@ class _CapabilityService(CapabilityServiceSync):
                     raise _limes_refusal(
                         Code.FAILED_PRECONDITION,
                         _LIMES_LEASE_NESTED,
-                        f"lease {request.id}: limes: an ancestor holds a lease: "
-                        f"{ancestor.msg.id} holds one above it",
+                        _TITLE_LEASE_NESTED,
                     )
                 ancestor = fake._capabilities.get(ancestor.msg.parent_id)
             now = datetime.now(UTC)
@@ -1193,9 +1201,7 @@ class _CapabilityService(CapabilityServiceSync):
             fake._lease_target_locked(request.id, ctx)
             held = fake._leases.get(request.id)
             if held is None:
-                raise _limes_refusal(
-                    Code.NOT_FOUND, _LIMES_LEASE_NOT_FOUND, "limes: lease not found"
-                )
+                raise _limes_refusal(Code.NOT_FOUND, _LIMES_LEASE_NOT_FOUND, _TITLE_LEASE_NOT_FOUND)
             out = capability_service_pb2.CapabilityLease()
             out.CopyFrom(held)
         return capability_service_pb2.CapabilityServiceGetLeaseResponse(lease=out)
@@ -1212,7 +1218,7 @@ class _CapabilityService(CapabilityServiceSync):
             raise _limes_refusal(
                 Code.NOT_FOUND,
                 _LIMES_LEASE_NOT_FOUND,
-                f"settle lease {request.id}: limes: lease not found",
+                _TITLE_LEASE_NOT_FOUND,
             )
         return capability_service_pb2.CapabilityServiceSettleLeaseResponse(lease=held)
 
@@ -1843,7 +1849,9 @@ class FakePaladin(
             r = self._capabilities.get(r.msg.parent_id)
         return chain
 
-    def _settle_lease_locked(self, capability: str) -> capability_service_pb2.CapabilityLease | None:
+    def _settle_lease_locked(
+        self, capability: str
+    ) -> capability_service_pb2.CapabilityLease | None:
         """End ``capability``'s lease, if it holds one, and return it: what it
         holds is released from the leaseholder and its ancestors, and the
         requests made under it are counted on the ancestors, as limes's store
@@ -1930,16 +1938,14 @@ class FakePaladin(
         holder = self._lease_holder_locked(presented) if presented else None
         record = self._capabilities.get(capability)
         if record is None:
-            raise _limes_refusal(
-                Code.NOT_FOUND, _LIMES_NOT_FOUND, f"limes: not found: capability {capability}"
-            )
+            raise _limes_refusal(Code.NOT_FOUND, _LIMES_NOT_FOUND, _TITLE_NOT_FOUND)
         if holder is None or capability == holder.msg.id:
             return record
         if self._stopped_by(record) is not None:
             raise _capability_refusal(
                 Code.PERMISSION_DENIED,
                 error_reason_pb2.ERROR_REASON_CAPABILITY_REVOKED,
-                f"lease {capability}: limes: capability revoked",
+                _TITLE_TOKEN_INVALID,
             )
         ancestor = self._capabilities.get(record.msg.parent_id)
         while ancestor is not None:
