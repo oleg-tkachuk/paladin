@@ -6,6 +6,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   listPlatformStatsTenants: vi.fn(),
   summarize: vi.fn(),
+  roles: ["platform.admin"] as string[],
+}));
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ user: { roles: h.roles } }),
 }));
 vi.mock("@/lib/connect/client", () => ({
   adminSystemClient: { listPlatformStatsTenants: h.listPlatformStatsTenants },
@@ -54,9 +58,23 @@ function quotaBySignal(
 beforeEach(() => {
   h.listPlatformStatsTenants.mockReset();
   h.summarize.mockReset();
+  h.roles = ["platform.admin"];
 });
 
 describe("useTenantLimitSignals", () => {
+  // Every tenant's budget is the platform admin's: for a tenant admin the
+  // summary is not asked for, and the signals settle without it.
+  it("does not ask a tenant admin's session for every tenant's budget", async () => {
+    h.roles = ["tenant.admin"];
+    quotaBySignal({});
+    const { result } = renderHook(() => useTenantLimitSignals(), {
+      wrapper: wrap(),
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(h.summarize).not.toHaveBeenCalled();
+    expect(result.current.error).toBeNull();
+  });
+
   it("joins every page of each read per tenant", async () => {
     quotaBySignal({
       [PlatformStatsSignal.QUOTA_AT_LIMIT]: [

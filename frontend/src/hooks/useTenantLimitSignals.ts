@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { canManageTenantBudgets } from "@/constants/roles";
+import { useAuth } from "@/context/AuthContext";
 import { errorMessage } from "@/hooks/errorContract";
 import {
   budgetAlertsQuery,
@@ -38,9 +40,14 @@ export function useTenantLimitSignals(): {
     ...quotaSignalTenantsQuery(QUOTA_LIMIT_SIGNALS.nearLimit),
     retry: false,
   });
+  // Every tenant's budget is the platform admin's to read; for anyone else
+  // the summary is not asked for, and adds nothing.
+  const { user } = useAuth();
+  const budgetsReadable = canManageTenantBudgets(user?.roles ?? []);
   const budgets = useQuery({
     ...budgetAlertsQuery(BUDGET_ALERT_THRESHOLD),
     retry: false,
+    enabled: budgetsReadable,
   });
 
   const signals = useMemo(
@@ -55,7 +62,10 @@ export function useTenantLimitSignals(): {
   const failed = atLimit.error ?? nearLimit.error ?? budgets.error;
   return {
     signals,
-    loading: atLimit.isPending || nearLimit.isPending || budgets.isPending,
+    loading:
+      atLimit.isPending ||
+      nearLimit.isPending ||
+      (budgetsReadable && budgets.isPending),
     error: failed ? errorMessage(failed) : null,
   };
 }

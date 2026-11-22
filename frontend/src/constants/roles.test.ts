@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 
-import { ROLES, canUseAdminPlane, isPlatformAdmin } from "./roles";
+import {
+  ROLES,
+  canManageTenantBudgets,
+  canUseAdminPlane,
+  isPlatformAdmin,
+} from "./roles";
+
+describe("canManageTenantBudgets", () => {
+  it("is the platform admin's alone", () => {
+    expect(canManageTenantBudgets([ROLES.platformAdmin])).toBe(true);
+  });
+
+  it.each([
+    [[ROLES.tenantAdmin]],
+    [[ROLES.bucketAdmin]],
+    [[ROLES.iamAdmin]],
+    [[ROLES.tenantProvisioner]],
+    [[ROLES.capabilityIssuer]],
+    [[]],
+  ])("refuses %j", (roles) => {
+    expect(canManageTenantBudgets(roles)).toBe(false);
+  });
+});
 
 describe("canUseAdminPlane", () => {
   it.each([

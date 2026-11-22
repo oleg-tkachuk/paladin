@@ -76,3 +76,14 @@ export function canUseAdminPlane(roles: readonly string[]): boolean {
 export function isPlatformAdmin(roles: readonly string[]): boolean {
   return roles.includes(ROLES.platformAdmin);
 }
+
+/**
+ * Whether these roles may set a tenant's budget (TenantBudgetService.Set),
+ * or summarize every tenant's (Summarize): the platform admin's alone, as
+ * the cap bounds what a tenant may spend. A tenant admin still reads its own
+ * tenant's budget. The console uses it to leave out what would only be
+ * refused; the server still decides every call.
+ */
+export function canManageTenantBudgets(roles: readonly string[]): boolean {
+  return isPlatformAdmin(roles);
+}

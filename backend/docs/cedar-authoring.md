@@ -94,7 +94,7 @@ use:
 | `platform.admin` | built-in | everything |
 | `platform.tenant-provisioner` | built-in | create tenants, their buckets and collections, and publish them |
 | `platform.capability-issuer` | built-in | issue, revoke and read capabilities for any tenant |
-| `tenant.admin` | default policy | users, user settings, quotas, audit, subscriptions in its own tenant; `InspectPolicy` |
+| `tenant.admin` | default policy; built-in for `ReadTenantBudget` | users, user settings, quotas, audit, subscriptions in its own tenant; `InspectPolicy`; reading its own tenant's budget |
 | `bucket.admin` | default policy | bucket configuration |
 | `compliance.officer` | default policy | `ConfigureLock` |
 | `secrets.rotator` | default policy | `RotateBackendCredentials` |
@@ -123,7 +123,7 @@ is checked against the most specific one the request names — for example,
 | `ManageBackend` `RotateBackendCredentials` | `StorageBackend` |
 | `ReadBackend` | `StorageBackend`, `Tenant` |
 | `ManageQuota` `ReadQuota` | `Tenant`, `Bucket` |
-| `ManageTenant` `ReadTenant` `ResetQuotaUsage` `ReadAuditLog` `ExportAuditLog` `ManageSubscription` `ReadSubscription` `TestSubscription` `ReadOperation` `CancelOperation` `ReadBilling` `EnsureTenantStorage` `AuthorizeOAuth` | `Tenant` |
+| `ManageTenant` `ReadTenant` `ResetQuotaUsage` `ReadAuditLog` `ExportAuditLog` `ManageSubscription` `ReadSubscription` `TestSubscription` `ReadOperation` `CancelOperation` `ReadBilling` `ReadTenantBudget` `ManageTenantBudget` `EnsureTenantStorage` `AuthorizeOAuth` | `Tenant` |
 | `InspectPolicy` | `Tenant`, `Collection` |
 | `IssueCapability` `DelegateCapability` `RevokeCapability` `ReadCapability` `CreateAPIToken` `RevokeAPIToken` `ReadAPIToken` `InspectMCP` `ManageOAuthClient` | `Tenant` (the caller's own) |
 | `ManageUser` `ResetPassword` `GrantScopes` `ManageUserSettings` | `User` |

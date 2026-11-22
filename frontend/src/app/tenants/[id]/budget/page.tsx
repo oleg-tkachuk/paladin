@@ -63,6 +63,8 @@ import { Select } from "@/components/ui/Select";
 import { isAbortError, errorMessage } from "@/hooks/errorContract";
 
 import { useTenant, useTenantChangesBlocked } from "../tenant-context";
+import { canManageTenantBudgets } from "@/constants/roles";
+import { useAuth } from "@/context/AuthContext";
 import { Timestamp } from "@/components/Timestamp";
 import { usePlatformCurrency } from "@/hooks/usePlatformCurrency";
 import { Duration } from "@/components/Duration";
@@ -82,6 +84,8 @@ function progressColour(
 
 export default function TenantBudgetPage() {
   const changesBlocked = useTenantChangesBlocked();
+  const { user } = useAuth();
+  const canSet = canManageTenantBudgets(user?.roles ?? []);
   const tenant = useTenant();
   const tenantId = tenant.tenantId;
   const { showNotification } = useNotification();
@@ -301,8 +305,11 @@ export default function TenantBudgetPage() {
             <div>
               <p className="font-medium">No budget configured.</p>
               <p className="text-muted-foreground">
-                Set a cap below to activate server-side enforcement. While
-                unlimited, capability charges still accumulate but never reject.
+                {canSet
+                  ? "Set a cap below to activate server-side enforcement. "
+                  : ""}
+                While unlimited, capability charges still accumulate but never
+                reject.
               </p>
             </div>
           </div>
@@ -412,159 +419,171 @@ export default function TenantBudgetPage() {
         />
       )}
 
-      {/* Set form */}
-      <Card>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {/* The heading says what the form does, so it stands while the
+      {/* Set form: the platform admin's alone. Anyone else reads the
+          budget above and is told who sets it, rather than offered a form
+          the server refuses. */}
+      {!canSet ? (
+        <Card className="p-6">
+          <p className={T.helper}>
+            The budget is set by a platform admin: the cap bounds what this
+            tenant may spend.
+          </p>
+        </Card>
+      ) : (
+        <Card>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {/* The heading says what the form does, so it stands while the
               budget loads; only the fields wait for it. */}
-          <CardHeader>
-            <CardTitle
-              level={3}
-              className="text-base font-medium"
-              icon={BanknotesIcon}
-            >
-              Update budget
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Set a new cap. Capabilities issued under this tenant see the new
-              limit on their next charge attempt.
-            </p>
-          </CardHeader>
-          <CardContent>
-            {/* Not shown until the first snapshot lands. Rendered early, it
+            <CardHeader>
+              <CardTitle
+                level={3}
+                className="text-base font-medium"
+                icon={BanknotesIcon}
+              >
+                Update budget
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Set a new cap. Capabilities issued under this tenant see the new
+                limit on their next charge attempt.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {/* Not shown until the first snapshot lands. Rendered early, it
               showed a new budget's defaults — Unlimited on, no cap — for a
               budget that had one, and a click on that toggle as the snapshot
               arrived flipped the loaded cap off. Earlier still, a value typed
               before the snapshot marked the form edited, which kept the
               snapshot and its version from seeding, so Apply sent version
               "0" and the server refused it as a conflict. */}
-            {initialising ? (
-              <div
-                aria-busy="true"
-                aria-label="Loading budget"
-                className="space-y-4"
-              >
-                <Skeleton className="h-9 w-full" />
-              </div>
-            ) : (
-              <fieldset className="space-y-4">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="max-budget">Max budget</Label>
-                    <LimitInput
-                      id="max-budget"
-                      // Amounts are exact to the nano; a coarser step would have
-                      // the browser refuse a finer one before handleSubmit sees it.
-                      step="any"
-                      placeholder="0 allows no spend"
-                      value={maxBudget}
-                      onChange={(v) => {
-                        setEdited(true);
-                        setMaxBudget(v);
-                      }}
-                      unlimited={unlimited}
-                      onUnlimitedChange={(next) => {
-                        setEdited(true);
-                        setUnlimited(next);
-                      }}
-                    />
-                    <p className={T.hint}>
-                      Unlimited keeps the counter accumulating without
-                      rejecting; 0 rejects every charge.
-                    </p>
-                  </div>
+              {initialising ? (
+                <div
+                  aria-busy="true"
+                  aria-label="Loading budget"
+                  className="space-y-4"
+                >
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              ) : (
+                <fieldset className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="max-budget">Max budget</Label>
+                      <LimitInput
+                        id="max-budget"
+                        // Amounts are exact to the nano; a coarser step would have
+                        // the browser refuse a finer one before handleSubmit sees it.
+                        step="any"
+                        placeholder="0 allows no spend"
+                        value={maxBudget}
+                        onChange={(v) => {
+                          setEdited(true);
+                          setMaxBudget(v);
+                        }}
+                        unlimited={unlimited}
+                        onUnlimitedChange={(next) => {
+                          setEdited(true);
+                          setUnlimited(next);
+                        }}
+                      />
+                      <p className={T.hint}>
+                        Unlimited keeps the counter accumulating without
+                        rejecting; 0 rejects every charge.
+                      </p>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="unit-code">Currency / Unit</Label>
-                    <Select
-                      id="unit-code"
-                      options={UNIT_CODES.map((u) => ({
-                        value: u,
-                        label: u,
-                      }))}
-                      value={shownUnit}
-                      placeholder="Platform currency"
-                      onChange={(v) => {
-                        setEdited(true);
-                        setUnitCode(v);
-                      }}
-                      className="w-full"
-                    />
-                    <p className={T.hint}>
-                      ISO 4217 fiat, or XXX for metering that is not money. Left
-                      alone, a new budget is in the platform&apos;s currency
-                      {platformCurrency ? ` (${platformCurrency})` : ""}.
-                    </p>
-                  </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="unit-code">Currency / Unit</Label>
+                      <Select
+                        id="unit-code"
+                        options={UNIT_CODES.map((u) => ({
+                          value: u,
+                          label: u,
+                        }))}
+                        value={shownUnit}
+                        placeholder="Platform currency"
+                        onChange={(v) => {
+                          setEdited(true);
+                          setUnitCode(v);
+                        }}
+                        className="w-full"
+                      />
+                      <p className={T.hint}>
+                        ISO 4217 fiat, or XXX for metering that is not money.
+                        Left alone, a new budget is in the platform&apos;s
+                        currency
+                        {platformCurrency ? ` (${platformCurrency})` : ""}.
+                      </p>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Period</Label>
-                    <label className="flex cursor-pointer items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={resetSpend}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Period</Label>
+                      <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={resetSpend}
+                          onChange={(e) => {
+                            setEdited(true);
+                            setResetSpend(e.target.checked);
+                          }}
+                          className="size-4 accent-primary"
+                        />
+                        <span>
+                          Reset spend (roll the period — typical at billing
+                          close).
+                        </span>
+                      </label>
+                      <p className={T.hint}>
+                        Off: change the cap mid-cycle without affecting
+                        accumulated spend.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="period-end">Period close</Label>
+                      <Input
+                        id="period-end"
+                        type="date"
+                        value={periodEnd}
                         onChange={(e) => {
                           setEdited(true);
-                          setResetSpend(e.target.checked);
+                          setPeriodEnd(e.target.value);
                         }}
-                        className="size-4 accent-primary"
+                        className="w-full"
                       />
-                      <span>
-                        Reset spend (roll the period — typical at billing
-                        close).
-                      </span>
-                    </label>
-                    <p className={T.hint}>
-                      Off: change the cap mid-cycle without affecting
-                      accumulated spend.
-                    </p>
+                      <p className={T.hint}>
+                        Optional. Pins when the billing window closes; blank
+                        leaves the server default.
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="period-end">Period close</Label>
-                    <Input
-                      id="period-end"
-                      type="date"
-                      value={periodEnd}
-                      onChange={(e) => {
-                        setEdited(true);
-                        setPeriodEnd(e.target.value);
-                      }}
-                      className="w-full"
-                    />
-                    <p className={T.hint}>
-                      Optional. Pins when the billing window closes; blank
-                      leaves the server default.
-                    </p>
+                  <div className="flex justify-end">
+                    <Button
+                      type="submit"
+                      title={changesBlocked ?? undefined}
+                      disabled={
+                        Boolean(changesBlocked) ||
+                        submitting ||
+                        budgetQuery.isError ||
+                        (!unlimited && !maxBudget.trim())
+                      }
+                    >
+                      {submitting ? (
+                        "Updating…"
+                      ) : (
+                        <>
+                          <CheckCircleIcon className="size-4" />
+                          {notFound ? "Create budget" : "Apply changes"}
+                        </>
+                      )}
+                    </Button>
                   </div>
-                </div>
-
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    title={changesBlocked ?? undefined}
-                    disabled={
-                      Boolean(changesBlocked) ||
-                      submitting ||
-                      budgetQuery.isError ||
-                      (!unlimited && !maxBudget.trim())
-                    }
-                  >
-                    {submitting ? (
-                      "Updating…"
-                    ) : (
-                      <>
-                        <CheckCircleIcon className="size-4" />
-                        {notFound ? "Create budget" : "Apply changes"}
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </fieldset>
-            )}
-          </CardContent>
-        </form>
-      </Card>
+                </fieldset>
+              )}
+            </CardContent>
+          </form>
+        </Card>
+      )}
     </div>
   );
 }

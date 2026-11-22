@@ -12,9 +12,11 @@ import (
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/meter"
 	"github.com/oleg-tkachuk/limes/pgstore"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -175,9 +177,11 @@ func TestTenantReservationsAreListedUnderRowLevelSecurity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reserve: %v", err)
 	}
-	srv := admin.NewTenantBudgetServer(f.usage, nil)
+	srv := admin.NewTenantBudgetServer(f.usage, nil, cedartest.Engine(""))
+	tenantAdmin := auth.WithPrincipal(ctx, &auth.Principal{TenantID: f.tenant, Subject: "admin@tenant", Roles: []string{apiutil.RoleTenantAdmin}})
+	platformAdmin := auth.WithPrincipal(ctx, &auth.Principal{TenantID: uuid.New(), Subject: "root@platform", Roles: []string{apiutil.RolePlatformAdmin}})
 
-	resp, err := srv.ListReservations(ctx, &pb.TenantBudgetServiceListReservationsRequest{TenantId: f.tenant.String()})
+	resp, err := srv.ListReservations(tenantAdmin, &pb.TenantBudgetServiceListReservationsRequest{TenantId: f.tenant.String()})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -185,7 +189,7 @@ func TestTenantReservationsAreListedUnderRowLevelSecurity(t *testing.T) {
 		got[0].GetCapabilityId() != f.child.String() || got[0].GetAmount().GetUnits() != 15 || got[0].GetActor() != "agent" {
 		t.Errorf("listed %v, want the one hold %s of 15 by agent", got, r.ID)
 	}
-	other, err := srv.ListReservations(ctx, &pb.TenantBudgetServiceListReservationsRequest{TenantId: uuid.New().String()})
+	other, err := srv.ListReservations(platformAdmin, &pb.TenantBudgetServiceListReservationsRequest{TenantId: uuid.New().String()})
 	if err != nil || len(other.GetReservations()) != 0 {
 		t.Errorf("another tenant: %v, %v; want no hold", other.GetReservations(), err)
 	}

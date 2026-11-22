@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@/test/utils";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -12,6 +12,10 @@ const h = vi.hoisted(() => ({
   listReservations: vi.fn(() =>
     Promise.resolve({ reservations: [], nextPageToken: "" }),
   ),
+  roles: ["platform.admin"] as string[],
+}));
+vi.mock("@/context/AuthContext", () => ({
+  useAuth: () => ({ user: { roles: h.roles } }),
 }));
 vi.mock("@/lib/connect/client", () => ({
   tenantBudgetClient: {
@@ -456,5 +460,31 @@ describe("TenantBudgetPage holds", () => {
     await waitFor(() =>
       expect(h.listReservations.mock.calls.length).toBe(before + 2),
     );
+  });
+});
+
+// Setting a budget is the platform admin's: a tenant admin reads its own
+// tenant's budget and holds, and is told who sets the cap instead of being
+// offered a form the server refuses.
+describe("TenantBudgetPage for a tenant admin", () => {
+  beforeEach(() => {
+    h.roles = ["tenant.admin"];
+    h.get.mockReset();
+    h.set.mockReset();
+  });
+  afterEach(() => {
+    h.roles = ["platform.admin"];
+  });
+
+  it("shows the budget and its holds without the form", async () => {
+    h.get.mockResolvedValue({ budget });
+    render(<BudgetPage />);
+
+    expect(await screen.findByText("Spent")).toBeInTheDocument();
+    expect(await screen.findByText("Open holds")).toBeInTheDocument();
+    expect(screen.getByText(/set by a platform admin/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/max budget/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /apply changes/i })).toBeNull();
+    expect(h.set).not.toHaveBeenCalled();
   });
 });
