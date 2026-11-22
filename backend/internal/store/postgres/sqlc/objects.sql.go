@@ -672,7 +672,8 @@ const lookupObjectByID = `-- name: LookupObjectByID :one
 SELECT o.id, o.tenant_id, o.path, o.state, o.checksum_algorithm,
        c.name  AS collection_name,
        sb.name AS backend_name,
-       bk.name AS bucket_name
+       bk.name AS bucket_name,
+       sb.enabled, sb.read_only, bk.provision_state
 FROM objects o
 JOIN collections c       ON c.id = o.collection_id
 JOIN buckets bk          ON bk.id = c.bucket_id
@@ -689,12 +690,17 @@ type LookupObjectByIDRow struct {
 	CollectionName    string      `json:"collection_name"`
 	BackendName       string      `json:"backend_name"`
 	BucketName        string      `json:"bucket_name"`
+	Enabled           bool        `json:"enabled"`
+	ReadOnly          bool        `json:"read_only"`
+	ProvisionState    string      `json:"provision_state"`
 }
 
 // Reads an object by id alone. Used by background workers (reconciler,
 // replicator) that don't carry a tenant context. Joins collections to
 // materialize the bucket binding so the caller can call S3 in one trip.
 // checksum_algorithm tells a HEAD which stored checksum is the object's.
+// enabled, read_only and provision_state are the bucket gate's state
+// (bucketgate.State), for a worker that deletes the object's bytes.
 func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error) {
 	row := q.db.QueryRow(ctx, lookupObjectByID, id)
 	var i LookupObjectByIDRow
@@ -707,6 +713,9 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 		&i.CollectionName,
 		&i.BackendName,
 		&i.BucketName,
+		&i.Enabled,
+		&i.ReadOnly,
+		&i.ProvisionState,
 	)
 	return i, err
 }

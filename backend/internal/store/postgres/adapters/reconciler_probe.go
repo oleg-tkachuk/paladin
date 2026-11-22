@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -67,6 +68,10 @@ func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID
 // DeleteByObjectID removes an object's stored bytes — the reconciler's
 // answer to bytes that broke the object's registration. A row that is gone
 // has nothing left to delete for.
+//
+// The delete is a write of bytes, so it asks the bucket gate as the request
+// path does: on a draining or disabled backend, or a bucket not ready, it
+// answers the gate's refusal (bucketgate.Refused) and calls nothing.
 func (r *ReconcilerProbe) DeleteByObjectID(ctx context.Context, objectID uuid.UUID) error {
 	row, err := r.q.LookupObjectByID(ctx, pgUUID(objectID))
 	if err != nil {
@@ -74,6 +79,11 @@ func (r *ReconcilerProbe) DeleteByObjectID(ctx context.Context, objectID uuid.UU
 			return nil
 		}
 		return fmt.Errorf("lookup object: %w", err)
+	}
+	if err := bucketgate.Check(bucketgate.BytesWrite, bucketgate.State{
+		Enabled: row.Enabled, ReadOnly: row.ReadOnly, ProvisionState: row.ProvisionState,
+	}); err != nil {
+		return err
 	}
 	return r.head.DeleteObject(ctx, row.BackendName, row.BucketName, uuidFrom(row.TenantID), row.CollectionName, row.Path)
 }

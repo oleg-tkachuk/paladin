@@ -37,10 +37,13 @@ WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[]);
 -- replicator) that don't carry a tenant context. Joins collections to
 -- materialize the bucket binding so the caller can call S3 in one trip.
 -- checksum_algorithm tells a HEAD which stored checksum is the object's.
+-- enabled, read_only and provision_state are the bucket gate's state
+-- (bucketgate.State), for a worker that deletes the object's bytes.
 SELECT o.id, o.tenant_id, o.path, o.state, o.checksum_algorithm,
        c.name  AS collection_name,
        sb.name AS backend_name,
-       bk.name AS bucket_name
+       bk.name AS bucket_name,
+       sb.enabled, sb.read_only, bk.provision_state
 FROM objects o
 JOIN collections c       ON c.id = o.collection_id
 JOIN buckets bk          ON bk.id = c.bucket_id

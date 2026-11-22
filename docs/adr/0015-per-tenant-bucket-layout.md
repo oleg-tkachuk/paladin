@@ -274,6 +274,7 @@ it admits (`internal/worker/bucket_gate.go`):
 | `PurgeDrainer` | `BytesWrite` | the debt stays due, no attempt counted, no backoff grown |
 | `MultipartReaper` | `Read` | the session stays open |
 | `MultipartAbortDrainer` | `Read` | the debt stays due, no attempt counted |
+| `ReconcilerV2` (bytes that broke their registration) | `BytesWrite` | the row stays `PENDING` |
 
 The work is deferred, never failed or dropped, and each sweep logs every
 bucket it defers once, at Warn, with the gate's reason. The first sweep whose

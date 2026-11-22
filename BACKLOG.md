@@ -566,6 +566,23 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a column or event that marks a write of bytes apart from a
   row change.
 
+### Background workers that write rows or read bytes skip the bucket gate
+
+- **Status:** Deferred.
+- **Reason:** the workers that delete bytes or abort uploads ask the gate
+  (`internal/worker/bucket_gate.go`), but three others still act on a
+  disabled backend's buckets: the lifecycle expiry trashes objects
+  (`lifecycle.go`, a metadata write the API refuses there), the reconciler
+  HEADs and promotes or discards PENDING objects (`reconciler.go`, a read),
+  and the replication worker will copy bytes to its destination bucket once
+  its `StorageReplicator` is wired (`build_jobs.go` runs it dry today).
+- **Definition of Done:** each asks `bucketgate.Check` with its access —
+  `MetadataWrite` for the expiry, `Read` for the reconciler's HEAD, `Read` on
+  the source and `BytesWrite` on the destination for replication — and defers
+  a refused bucket's work, logged once per tick; a test disables the backend
+  under each.
+- **Blockers:** the replicator implementation, for the third.
+
 ### AbortMultipartUpload skips the bucket gate for an anchored session
 
 - **Status:** Deferred.

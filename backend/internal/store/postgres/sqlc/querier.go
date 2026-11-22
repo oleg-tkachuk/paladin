@@ -622,6 +622,8 @@ type Querier interface {
 	// replicator) that don't carry a tenant context. Joins collections to
 	// materialize the bucket binding so the caller can call S3 in one trip.
 	// checksum_algorithm tells a HEAD which stored checksum is the object's.
+	// enabled, read_only and provision_state are the bucket gate's state
+	// (bucketgate.State), for a worker that deletes the object's bytes.
 	LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error)
 	// Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
 	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, name string, path string) (LookupObjectByKeyRow, error)

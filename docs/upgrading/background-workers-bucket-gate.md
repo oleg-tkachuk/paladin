@@ -14,3 +14,7 @@
   disabled backend; the sessions and abort debts stay until it is enabled
   again. A draining backend still takes the abort: parts were never an
   object, and aborting them frees storage.
+- The reconciler no longer deletes the bytes of an upload that broke its
+  registration on a draining or disabled backend; the object stays `PENDING`
+  until the backend takes writes again, and each tick logs the deferral at
+  Warn.
