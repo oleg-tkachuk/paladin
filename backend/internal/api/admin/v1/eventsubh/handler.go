@@ -47,15 +47,39 @@ func subFields(ctx context.Context, s admindomain.EventSubscription) []zap.Field
 	return fields
 }
 
-// failed logs a store failure on s and maps it for the caller: refusals the
-// caller can act on keep their code, and anything internal is an error line.
-func (h *Handler) failed(ctx context.Context, msg string, s admindomain.EventSubscription, err error) error {
+// The store operations a subscription call makes, as its log lines name them.
+const (
+	opCreate  = "create"
+	opRead    = "read"
+	opUpdate  = "update"
+	opDelete  = "delete"
+	opList    = "list"
+	opRedrive = "redrive"
+)
+
+// How a store operation's log line ends: a refusal the caller can act on, or
+// the server's own fault.
+const (
+	outcomeRefused = "refused"
+	outcomeFailed  = "failed"
+)
+
+// subscriptionLogPrefix opens the line of every store operation on a
+// subscription: "event subscription read refused".
+const subscriptionLogPrefix = "event subscription "
+
+// answer maps a store error of op on s for the caller and logs it by what it
+// is: a refusal the caller can act on — not found, a version conflict — at
+// warn as refused, a server fault at error as failed.
+func (h *Handler) answer(ctx context.Context, op string, s admindomain.EventSubscription, err error) error {
 	mapped := apiutil.MapError(err)
-	level := zapcore.WarnLevel
-	if apiutil.ServerFault(connect.CodeOf(mapped)) {
-		level = zapcore.ErrorLevel
+	code := connect.CodeOf(mapped)
+	level, outcome := zapcore.WarnLevel, outcomeRefused
+	if apiutil.ServerFault(code) {
+		level, outcome = zapcore.ErrorLevel, outcomeFailed
 	}
-	h.log.Log(level, msg, append(subFields(ctx, s), zap.Error(err))...)
+	fields := append(subFields(ctx, s), zap.String("op", op), zap.String("code", code.String()), zap.Error(err))
+	h.log.Log(level, subscriptionLogPrefix+op+" "+outcome, fields...)
 	return mapped
 }
 
@@ -136,7 +160,7 @@ func (h *Handler) Create(ctx context.Context, s admindomain.EventSubscription) (
 		return nil, err
 	}
 	if err := h.repo.Create(ctx, &s); err != nil {
-		return nil, h.failed(ctx, "event subscription create failed", s, err)
+		return nil, h.answer(ctx, opCreate, s, err)
 	}
 	// repo.Create stamps the generated SubscriptionID onto s; without
 	// the pointer receiver this Get would look up the caller's zero
@@ -180,7 +204,7 @@ func (h *Handler) Get(ctx context.Context, tenantID, id uuid.UUID) (*admindomain
 	}
 	s, err := h.repo.Get(ctx, id)
 	if err != nil {
-		return nil, h.failed(ctx, "event subscription read failed",
+		return nil, h.answer(ctx, opRead,
 			admindomain.EventSubscription{TenantID: tenantID, SubscriptionID: id}, err)
 	}
 	return &s, nil
@@ -208,7 +232,7 @@ func (h *Handler) Update(ctx context.Context, tenantID uuid.UUID, s admindomain.
 		return nil, err
 	}
 	if err := h.repo.Update(ctx, s, expectedVersion, mask); err != nil {
-		return nil, h.failed(ctx, "event subscription update failed", *current, err)
+		return nil, h.answer(ctx, opUpdate, *current, err)
 	}
 	got, err := h.readBack(ctx, *current)
 	if err != nil {
@@ -246,7 +270,7 @@ func (h *Handler) Delete(ctx context.Context, tenantID, id uuid.UUID, expectedVe
 		return err
 	}
 	if err := h.repo.Delete(ctx, id, expectedVersion); err != nil {
-		return h.failed(ctx, "event subscription delete failed", *current, err)
+		return h.answer(ctx, opDelete, *current, err)
 	}
 	h.log.Info("event subscription deleted", subFields(ctx, *current)...)
 	return nil
@@ -265,7 +289,7 @@ func (h *Handler) List(ctx context.Context, args admindomain.ListEventSubscripti
 	}
 	page, next, err := h.repo.List(ctx, args)
 	if err != nil {
-		return nil, "", h.failed(ctx, "event subscription list failed",
+		return nil, "", h.answer(ctx, opList,
 			admindomain.EventSubscription{TenantID: args.TenantID}, err)
 	}
 	return page, next, nil
@@ -303,7 +327,7 @@ func (h *Handler) RedriveFailedDeliveries(ctx context.Context, tenantID, id uuid
 	}
 	n, err := h.repo.RequeueFailedDeliveries(ctx, sub.SubscriptionID)
 	if err != nil {
-		return 0, h.failed(ctx, "event subscription redrive failed", *sub, err)
+		return 0, h.answer(ctx, opRedrive, *sub, err)
 	}
 	h.log.Info("event subscription failed deliveries requeued", append(subFields(ctx, *sub), zap.Int64("deliveries", n))...)
 	return n, nil
