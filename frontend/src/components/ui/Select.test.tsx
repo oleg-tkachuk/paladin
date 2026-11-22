@@ -29,6 +29,26 @@ describe("legacy Select", () => {
       screen.getByRole("combobox", { name: "Granularity" }),
     ).toBeInTheDocument();
   });
+
+  // What a FormField hands its control: the error below the field is the
+  // trigger's description, so a screen reader hears why it is refused.
+  it("takes a field's note as its description and its invalid state", () => {
+    render(
+      <>
+        <Select
+          aria-label="Collection"
+          aria-describedby="collection-note"
+          aria-invalid
+          options={[{ value: "a", label: "A" }]}
+          onChange={vi.fn()}
+        />
+        <p id="collection-note">Choose a collection.</p>
+      </>,
+    );
+    const trigger = screen.getByRole("combobox", { name: "Collection" });
+    expect(trigger).toHaveAccessibleDescription("Choose a collection.");
+    expect(trigger).toHaveAttribute("aria-invalid", "true");
+  });
 });
 
 // A select with neither is announced by its current value alone — "All
