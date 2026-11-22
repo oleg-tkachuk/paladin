@@ -645,9 +645,11 @@ type Querier interface {
 	// tenant rebound. Every object written into the dedicated bucket has an
 	// updated_at at or after it.
 	MarkStorageMigrationRebound(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// The objects MigrationListTenantObjects walks: public collections' excluded.
+	// The objects MigrationListTenantObjects walks: live and trashed, public
+	// collections' excluded.
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	// The objects the rollback copies back: AVAILABLE, in a private collection
+	// The objects the rollback copies back: live or trashed (a trashed object's
+	// bytes are what a later RestoreObject reads), in a private collection
 	// (public ones never moved, ADR-0027), and written at or after the cursor —
 	// keyset on (updated_at, id), which the worker starts at (rebound_at, the
 	// nil uuid). updated_at, not created_at: the bump_resource_version trigger
@@ -664,6 +666,13 @@ type Querier interface {
 	// size_bytes feeds the physical (HEAD size) verify after copy. A public
 	// collection's objects stay in their bucket (ADR-0027), so the copy, verify
 	// and cleanup never see them.
+	//
+	// Live and trashed objects: a trashed object keeps its bytes until the purge,
+	// and RestoreObject reads them from the bucket its collection is bound to, so
+	// they move with the collection. PENDING rows do not: no bytes are confirmed
+	// under them, and the upload URL they were handed names the source bucket.
+	// Versions and delete markers are rows only, all under the object's one key,
+	// so they need nothing copied.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// Whether any object MigrationListObjectsWrittenSince would still return past
 	// the cursor. The rebind back asks it under its lock: an object written since

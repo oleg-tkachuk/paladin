@@ -441,10 +441,11 @@ const migrationCountTenantObjects = `-- name: MigrationCountTenantObjects :one
 SELECT count(*)
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = $1 AND o.state = 'AVAILABLE' AND NOT c.public_read
+WHERE o.tenant_id = $1 AND o.state IN ('AVAILABLE', 'DELETED') AND NOT c.public_read
 `
 
-// The objects MigrationListTenantObjects walks: public collections' excluded.
+// The objects MigrationListTenantObjects walks: live and trashed, public
+// collections' excluded.
 func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, migrationCountTenantObjects, tenantID)
 	var count int64
@@ -458,7 +459,7 @@ SELECT o.id, o.updated_at, c.name AS collection_name, o.path,
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.state = 'AVAILABLE'
+  AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
   AND ROW(o.updated_at, o.id) > ROW($2::timestamptz,
                                     $3::uuid)
@@ -474,7 +475,8 @@ type MigrationListObjectsWrittenSinceRow struct {
 	SizeBytes      int64              `json:"size_bytes"`
 }
 
-// The objects the rollback copies back: AVAILABLE, in a private collection
+// The objects the rollback copies back: live or trashed (a trashed object's
+// bytes are what a later RestoreObject reads), in a private collection
 // (public ones never moved, ADR-0027), and written at or after the cursor —
 // keyset on (updated_at, id), which the worker starts at (rebound_at, the
 // nil uuid). updated_at, not created_at: the bump_resource_version trigger
@@ -540,11 +542,12 @@ func (q *Queries) MigrationListTenantCollections(ctx context.Context, tenantID p
 }
 
 const migrationListTenantObjects = `-- name: MigrationListTenantObjects :many
-SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes
+SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
+       (o.state = 'DELETED')::bool AS trashed
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.state = 'AVAILABLE'
+  AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
   AND ROW(c.name, o.path) > ROW($2::text,
                                 $3::text)
@@ -556,6 +559,7 @@ type MigrationListTenantObjectsRow struct {
 	CollectionName string `json:"collection_name"`
 	Path           string `json:"path"`
 	SizeBytes      int64  `json:"size_bytes"`
+	Trashed        bool   `json:"trashed"`
 }
 
 // Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
@@ -563,6 +567,13 @@ type MigrationListTenantObjectsRow struct {
 // size_bytes feeds the physical (HEAD size) verify after copy. A public
 // collection's objects stay in their bucket (ADR-0027), so the copy, verify
 // and cleanup never see them.
+//
+// Live and trashed objects: a trashed object keeps its bytes until the purge,
+// and RestoreObject reads them from the bucket its collection is bound to, so
+// they move with the collection. PENDING rows do not: no bytes are confirmed
+// under them, and the upload URL they were handed names the source bucket.
+// Versions and delete markers are rows only, all under the object's one key,
+// so they need nothing copied.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
 	rows, err := q.db.Query(ctx, migrationListTenantObjects,
 		tenantID,
@@ -577,7 +588,12 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 	var items []MigrationListTenantObjectsRow
 	for rows.Next() {
 		var i MigrationListTenantObjectsRow
-		if err := rows.Scan(&i.CollectionName, &i.Path, &i.SizeBytes); err != nil {
+		if err := rows.Scan(
+			&i.CollectionName,
+			&i.Path,
+			&i.SizeBytes,
+			&i.Trashed,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -594,7 +610,7 @@ SELECT EXISTS (
     FROM objects o
     JOIN collections c ON c.id = o.collection_id
     WHERE o.tenant_id = $1
-      AND o.state = 'AVAILABLE'
+      AND o.state IN ('AVAILABLE', 'DELETED')
       AND NOT c.public_read
       AND ROW(o.updated_at, o.id) > ROW($2::timestamptz,
                                         $3::uuid)

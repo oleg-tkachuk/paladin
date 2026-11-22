@@ -147,6 +147,13 @@ type ObjectRef struct {
 	Collection string
 	Key        string
 	SizeBytes  int64
+	// Trashed: the row is in the trash (DELETED). Its bytes stay in the
+	// bucket until the lifecycle purge, so RestoreObject can bring it back,
+	// and they move with the collection like a live object's. Unlike a live
+	// object's they may be gone already: deleting the bytes straight from the
+	// bucket trashes the row through a storage event, and such an object has
+	// nothing to move.
+	Trashed bool
 }
 
 // WrittenObject is an object written since a point in time, as the rollback
@@ -187,7 +194,7 @@ type MigrationRepo interface {
 	// StartRollback moves verifying -> rolling_back, recording reason as the
 	// migration's error and counting the failure.
 	StartRollback(ctx context.Context, at MigrationRead, reason string) error
-	// ListWrittenSince lists the tenant's AVAILABLE private objects whose
+	// ListWrittenSince lists the tenant's live and trashed private objects whose
 	// (updated_at, id) is after (afterAt, afterID), in that order.
 	ListWrittenSince(ctx context.Context, tenantID uuid.UUID, afterAt time.Time, afterID uuid.UUID, limit int) ([]WrittenObject, error)
 	// AdvanceRollback records the rollback cursor; it only moves forward.
@@ -245,7 +252,10 @@ const (
 	reasonVerifyUnlisted    = "the objects to verify could not be listed"
 	verifyProblemUnreadable = "could not be read from the target bucket"
 	verifyProblemMissing    = "missing in the target bucket"
-	verifyProblemSize       = "size mismatch: target %d != source %d"
+	// verifyProblemSourceUnreadable: a trashed object missing from the target,
+	// and the source could not say whether it ever had bytes to move.
+	verifyProblemSourceUnreadable = "missing in the target bucket and could not be read from the source"
+	verifyProblemSize             = "size mismatch: target %d != source %d"
 )
 
 // rebindReason is the recorded reason for a rebind the schema refused.
@@ -424,9 +434,7 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 		if ctx.Err() != nil {
 			break
 		}
-		src := CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, Collection: o.Collection, Key: o.Key}
-		dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
-		if err := w.Copier.CopyObject(ctx, src, dst); err != nil {
+		if err := w.copyOne(ctx, m, o); err != nil {
 			// Persist progress so far, then bubble — the batch retries from here.
 			_ = w.Repo.AdvanceCopy(ctx, m.Read(), copied, curOK, curKey)
 			return fmt.Errorf("copy %s/%s: %w", o.Collection, o.Key, err)
@@ -435,6 +443,50 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 		curOK, curKey = o.Collection, o.Key
 	}
 	return w.Repo.AdvanceCopy(ctx, m.Read(), copied, curOK, curKey)
+}
+
+// copyOne copies o's bytes from the source to the target bucket, under the
+// same key. A trashed object whose bytes are already gone from the source is
+// skipped: there is nothing to move, and RestoreObject refuses it wherever
+// the collection is bound.
+func (w *StorageMigrationWorker) copyOne(ctx context.Context, m StorageMigration, o ObjectRef) error {
+	src := m.sourceLoc(o)
+	if o.Trashed {
+		gone, err := w.bytesGone(ctx, src)
+		if err != nil {
+			return fmt.Errorf("head source: %w", err)
+		}
+		if gone {
+			w.log().Warn("trashed object has no bytes in the source; nothing to copy",
+				zap.String("tenant_id", m.TenantID.String()),
+				zap.String("collection", o.Collection), zap.String("key", o.Key))
+			return nil
+		}
+	}
+	return w.Copier.CopyObject(ctx, src, m.targetLoc(o))
+}
+
+// bytesGone reports whether the backend confirms there is no object at loc.
+// Without a Header nothing is confirmed, and the copy is attempted.
+func (w *StorageMigrationWorker) bytesGone(ctx context.Context, loc CopyLocation) (bool, error) {
+	if w.Header == nil {
+		return false, nil
+	}
+	_, err := w.Header.HeadObject(ctx, loc)
+	if errors.Is(err, ErrObjectMissing) {
+		return true, nil
+	}
+	return false, err
+}
+
+// sourceLoc is o's address in the migration's source bucket.
+func (m StorageMigration) sourceLoc(o ObjectRef) CopyLocation {
+	return CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, Collection: o.Collection, Key: o.Key}
+}
+
+// targetLoc is o's address in the migration's target bucket.
+func (m StorageMigration) targetLoc(o ObjectRef) CopyLocation {
+	return CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
 }
 
 // stepRebinding atomically repoints the tenant's collections at the dedicated
@@ -505,12 +557,15 @@ func (w *StorageMigrationWorker) verifyPhysical(ctx context.Context, m StorageMi
 }
 
 // verifyObject HEADs o in the TARGET bucket: a *verifyFailure when it is
-// missing, unreadable, or not the size the source recorded.
+// missing, unreadable, or not the size the source recorded. A trashed object
+// missing from the target passes only when the source has no bytes for it
+// either — the copy skipped it, having nothing to move.
 func (w *StorageMigrationWorker) verifyObject(ctx context.Context, m StorageMigration, o ObjectRef) error {
-	dst := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
 	object := o.Collection + "/" + o.Key
-	got, err := w.Header.HeadObject(ctx, dst)
+	got, err := w.Header.HeadObject(ctx, m.targetLoc(o))
 	switch {
+	case errors.Is(err, ErrObjectMissing) && o.Trashed:
+		return w.verifyTrashedMissing(ctx, m, o, err)
 	case errors.Is(err, ErrObjectMissing):
 		return &verifyFailure{object: object, problem: verifyProblemMissing, cause: err}
 	case err != nil:
@@ -521,11 +576,31 @@ func (w *StorageMigrationWorker) verifyObject(ctx context.Context, m StorageMigr
 	return nil
 }
 
+// verifyTrashedMissing decides a trashed object the target has no bytes for:
+// sound when the source has none either, a *verifyFailure when the source
+// still holds bytes the copy should have moved, or cannot say.
+func (w *StorageMigrationWorker) verifyTrashedMissing(ctx context.Context, m StorageMigration, o ObjectRef, targetErr error) error {
+	object := o.Collection + "/" + o.Key
+	gone, err := w.bytesGone(ctx, m.sourceLoc(o))
+	switch {
+	case err != nil:
+		return &verifyFailure{object: object, problem: verifyProblemSourceUnreadable, cause: err}
+	case !gone:
+		return &verifyFailure{object: object, problem: verifyProblemMissing, cause: targetErr}
+	}
+	w.log().Info("verify: trashed object has no bytes in either bucket; nothing to verify",
+		zap.String("tenant_id", m.TenantID.String()),
+		zap.String("collection", o.Collection), zap.String("key", o.Key))
+	return nil
+}
+
 // stepCompleted runs the retention-gated cleanup (slice 2): once the window has
 // elapsed, delete the old copies from the SOURCE bucket, then mark cleaned. The
 // object rows are unchanged by the migration, so we keyset-scan them and delete
 // each physical blob at its source location; the loop terminates because the
-// cursor advances past the stable object list.
+// cursor advances past the stable object list. The list is the copy's — live
+// and trashed objects alike — so a trashed object's old copy goes too, rather
+// than staying in the source once the purge deletes the one in the target.
 func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMigration) error {
 	if m.CleanupAfter.IsZero() || w.now().Before(m.CleanupAfter) {
 		return nil // still inside the retention window
@@ -546,8 +621,7 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 			break
 		}
 		for _, o := range objs {
-			loc := CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, Collection: o.Collection, Key: o.Key}
-			if err := w.Deleter.DeleteObject(ctx, loc); err != nil {
+			if err := w.Deleter.DeleteObject(ctx, m.sourceLoc(o)); err != nil {
 				return fmt.Errorf("cleanup delete %s/%s: %w", o.Collection, o.Key, err)
 			}
 			curOK, curKey = o.Collection, o.Key
@@ -569,7 +643,7 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 // rolled-back migration never gets there: the source copies are the live
 // data again).
 //
-//  1. Copy back, one batch per tick, every AVAILABLE private object written
+//  1. Copy back, one batch per tick, every live or trashed private object written
 //     at or after rebound_at, resumable by the (updated_at, id) cursor. Why
 //     updated_at: every write that puts bytes under an object's key changes
 //     its row (a new object is inserted; a promote, a storage-event
@@ -587,10 +661,12 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 //     copied first, next tick). The tenant is shared again and the
 //     migration 'failed' — retryable as any failure before a rebind.
 //
-// Deletions need nothing: an object row's state is what makes an object
-// visible, not the bytes in a bucket, so a row deleted after the rebind stays
-// deleted after the rollback whatever bytes the source still holds — and
-// only AVAILABLE rows are copied, so a deleted one is never written back.
+// Trashed objects are copied back like live ones: an object uploaded after
+// the rebind and then trashed has bytes only in the target, and RestoreObject
+// on the source would find none. Copying it back makes nothing visible — an
+// object row's state is what does that, not the bytes in a bucket — so it
+// stays in the trash, restorable. A row purged since has no row to list and
+// is not copied.
 //
 // Any error leaves the migration in rolling_back for the next tick: the
 // tenant keeps serving from the target meanwhile, never from a half-rebound

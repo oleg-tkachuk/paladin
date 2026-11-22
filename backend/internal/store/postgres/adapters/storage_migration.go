@@ -120,7 +120,7 @@ func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UU
 		}
 		out = make([]worker.ObjectRef, 0, len(rows))
 		for _, o := range rows {
-			out = append(out, worker.ObjectRef{Collection: o.CollectionName, Key: o.Path, SizeBytes: o.SizeBytes})
+			out = append(out, worker.ObjectRef{Collection: o.CollectionName, Key: o.Path, SizeBytes: o.SizeBytes, Trashed: o.Trashed})
 		}
 		return nil
 	})

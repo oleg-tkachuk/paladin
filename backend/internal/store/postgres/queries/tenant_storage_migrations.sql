@@ -119,11 +119,19 @@ FOR UPDATE;
 -- size_bytes feeds the physical (HEAD size) verify after copy. A public
 -- collection's objects stay in their bucket (ADR-0027), so the copy, verify
 -- and cleanup never see them.
-SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes
+--
+-- Live and trashed objects: a trashed object keeps its bytes until the purge,
+-- and RestoreObject reads them from the bucket its collection is bound to, so
+-- they move with the collection. PENDING rows do not: no bytes are confirmed
+-- under them, and the upload URL they were handed names the source bucket.
+-- Versions and delete markers are rows only, all under the object's one key,
+-- so they need nothing copied.
+SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
+       (o.state = 'DELETED')::bool AS trashed
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.state = 'AVAILABLE'
+  AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
   AND ROW(c.name, o.path) > ROW(sqlc.arg('after_collection')::text,
                                 sqlc.arg('after_path')::text)
@@ -131,11 +139,12 @@ ORDER BY c.name, o.path
 LIMIT sqlc.arg('limit_count')::int;
 
 -- name: MigrationCountTenantObjects :one
--- The objects MigrationListTenantObjects walks: public collections' excluded.
+-- The objects MigrationListTenantObjects walks: live and trashed, public
+-- collections' excluded.
 SELECT count(*)
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = $1 AND o.state = 'AVAILABLE' AND NOT c.public_read;
+WHERE o.tenant_id = $1 AND o.state IN ('AVAILABLE', 'DELETED') AND NOT c.public_read;
 
 -- name: SetTenantStorageLayout :execrows
 UPDATE tenants
@@ -276,7 +285,8 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
 -- name: MigrationListObjectsWrittenSince :many
--- The objects the rollback copies back: AVAILABLE, in a private collection
+-- The objects the rollback copies back: live or trashed (a trashed object's
+-- bytes are what a later RestoreObject reads), in a private collection
 -- (public ones never moved, ADR-0027), and written at or after the cursor —
 -- keyset on (updated_at, id), which the worker starts at (rebound_at, the
 -- nil uuid). updated_at, not created_at: the bump_resource_version trigger
@@ -289,7 +299,7 @@ SELECT o.id, o.updated_at, c.name AS collection_name, o.path,
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = sqlc.arg('tenant_id')
-  AND o.state = 'AVAILABLE'
+  AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
   AND ROW(o.updated_at, o.id) > ROW(sqlc.arg('after_at')::timestamptz,
                                     sqlc.arg('after_id')::uuid)
@@ -306,7 +316,7 @@ SELECT EXISTS (
     FROM objects o
     JOIN collections c ON c.id = o.collection_id
     WHERE o.tenant_id = sqlc.arg('tenant_id')
-      AND o.state = 'AVAILABLE'
+      AND o.state IN ('AVAILABLE', 'DELETED')
       AND NOT c.public_read
       AND ROW(o.updated_at, o.id) > ROW(sqlc.arg('after_at')::timestamptz,
                                         sqlc.arg('after_id')::uuid)
