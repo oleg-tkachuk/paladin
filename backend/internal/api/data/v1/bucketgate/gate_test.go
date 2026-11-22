@@ -134,6 +134,15 @@ func TestRefusalsListsEveryRefusalOnce(t *testing.T) {
 	}
 }
 
+func TestDeleteAccess(t *testing.T) {
+	if got := DeleteAccess(true); got != BytesWrite {
+		t.Errorf("DeleteAccess(permanent) = %v, want %v", got, BytesWrite)
+	}
+	if got := DeleteAccess(false); got != MetadataWrite {
+		t.Errorf("DeleteAccess(trash) = %v, want %v", got, MetadataWrite)
+	}
+}
+
 // String names every access the way the package table does.
 func TestAccessString(t *testing.T) {
 	for _, a := range accesses {

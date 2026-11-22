@@ -75,6 +75,15 @@ var (
 	Protective = Access{kindProtective}
 )
 
+// DeleteAccess is what a delete touches: a permanent one removes bytes from
+// the backend, a move to the trash only changes the object's row.
+func DeleteAccess(permanent bool) Access {
+	if permanent {
+		return BytesWrite
+	}
+	return MetadataWrite
+}
+
 // The names String gives the accesses, as logs and test output print them.
 const (
 	nameBytesWrite    = "bytes-write"

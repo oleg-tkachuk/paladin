@@ -287,8 +287,8 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 	if err != nil {
 		return out, objectLookupError(err)
 	}
-	// Setting a lock is a write, through the write gate; reading one is a
-	// read, which a draining backend still serves.
+	// Setting a lock writes only its row (object_locks), so a draining
+	// backend takes it as it serves a read of one.
 	meta, err := h.objects.LookupBucketMeta(ctx, tenantID, collection, lockAccess(action))
 	if err != nil {
 		return out, MapResolveErr(err)
@@ -315,12 +315,13 @@ func (h *LockHandler) resolve(ctx context.Context, collection, objectID string, 
 }
 
 // lockAccess is what a lock RPC touches: reading a lock is a read, and
-// anything else sets one.
+// anything else sets one, which writes the object_locks row and nothing on
+// the backend.
 func lockAccess(action cedar.Action) bucketgate.Access {
 	if action == cedar.ActionReadObjectLock {
 		return bucketgate.Read
 	}
-	return bucketgate.BytesWrite
+	return bucketgate.MetadataWrite
 }
 
 // lockedVersion is the version a lock on the object attaches to: its current

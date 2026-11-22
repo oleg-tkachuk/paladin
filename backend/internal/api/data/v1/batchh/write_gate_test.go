@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
@@ -33,44 +34,49 @@ func (g gatedBuckets) LookupBucket(_ context.Context, _ uuid.UUID, _ string, acc
 	return "backend-def", "bucket-def", nil
 }
 
-// The batch RPCs that write, with the Cedar action of the write they submit.
+// The batch RPCs that write, with the Cedar action of the write they submit
+// and what that write touches on the backend.
 var batchWrites = []struct {
 	name   string
 	action cedar.Action
+	access bucketgate.Access
 	call   func(h *Handler, ctx context.Context) error
 }{
-	{"BatchDelete", cedar.ActionDeleteObject, func(h *Handler, ctx context.Context) error {
+	{"BatchDelete (trash)", cedar.ActionDeleteObject, bucketgate.MetadataWrite, func(h *Handler, ctx context.Context) error {
 		_, err := h.BatchDelete(ctx, BatchDeleteArgs{Collection: "docs", ObjectIDs: ids(1)})
 		return err
 	}},
-	{"BatchCopy", cedar.ActionPutObject, func(h *Handler, ctx context.Context) error {
+	{"BatchDelete (permanent)", cedar.ActionDeleteObject, bucketgate.BytesWrite, func(h *Handler, ctx context.Context) error {
+		_, err := h.BatchDelete(ctx, BatchDeleteArgs{Collection: "docs", ObjectIDs: ids(1), Permanent: true})
+		return err
+	}},
+	{"BatchCopy", cedar.ActionPutObject, bucketgate.BytesWrite, func(h *Handler, ctx context.Context) error {
 		_, err := h.BatchCopy(ctx, BatchCopyArgs{ObjectIDs: ids(1), SrcCollection: "src", DstCollection: "dst"})
 		return err
 	}},
-	{"BatchUpdateTags", cedar.ActionUpdateObject, func(h *Handler, ctx context.Context) error {
+	{"BatchUpdateTags", cedar.ActionUpdateObject, bucketgate.MetadataWrite, func(h *Handler, ctx context.Context) error {
 		_, err := h.BatchUpdateTags(ctx, BatchUpdateTagsArgs{Collection: "docs", ObjectIDs: ids(1)})
 		return err
 	}},
-	{"BatchRestoreObjects", cedar.ActionRestoreObject, func(h *Handler, ctx context.Context) error {
+	{"BatchRestoreObjects", cedar.ActionRestoreObject, bucketgate.MetadataWrite, func(h *Handler, ctx context.Context) error {
 		_, err := h.BatchRestoreObjects(ctx, BatchRestoreObjectsArgs{Collection: "docs", ObjectIDs: ids(1)})
 		return err
 	}},
 }
 
 // A batch that writes answers the bucket's state as the single-object write
-// does, and is never authorized — let alone submitted — on a binding the gate
-// refused or could not read. It used to resolve its binding best-effort and
-// submit with an empty one.
+// of the same access does (bucketgate.Check), and is never authorized — let
+// alone submitted — on a binding the gate refused or could not read. One the
+// gate lets through is submitted.
 func TestBatchWritesAnswerTheBucketGate(t *testing.T) {
 	states := []struct {
 		name    string
 		buckets gatedBuckets
-		want    connect.Code
 	}{
-		{"draining", gatedBuckets{state: bucketgate.State{Enabled: true, ReadOnly: true, ProvisionState: bucketgate.ProvisionReady}}, connect.CodeFailedPrecondition},
-		{"provisioning", gatedBuckets{state: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionPending}}, connect.CodeUnavailable},
-		{"disabled", gatedBuckets{state: bucketgate.State{ProvisionState: bucketgate.ProvisionReady}}, connect.CodeFailedPrecondition},
-		{"store unreachable", gatedBuckets{lookupErr: errors.New("connection reset")}, connect.CodeInternal},
+		{"draining", gatedBuckets{state: bucketgate.State{Enabled: true, ReadOnly: true, ProvisionState: bucketgate.ProvisionReady}}},
+		{"provisioning", gatedBuckets{state: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionPending}}},
+		{"disabled", gatedBuckets{state: bucketgate.State{ProvisionState: bucketgate.ProvisionReady}}},
+		{"store unreachable", gatedBuckets{lookupErr: errors.New("connection reset")}},
 	}
 	for _, rpc := range batchWrites {
 		for _, st := range states {
@@ -78,7 +84,17 @@ func TestBatchWritesAnswerTheBucketGate(t *testing.T) {
 				sub := &fakeSubmitter{id: uuid.New()}
 				az := allowAll()
 				err := rpc.call(NewHandler(sub, az, st.buckets, &fakeObjects{}), authedCtx(uuid.New()))
-				wantCode(t, err, st.want)
+				want := st.buckets.lookupErr
+				if want == nil {
+					want = bucketgate.Check(rpc.access, st.buckets.state)
+				}
+				if want == nil {
+					if err != nil || !sub.called {
+						t.Fatalf("%s = %v (submitted %v), want it submitted", rpc.name, err, sub.called)
+					}
+					return
+				}
+				wantCode(t, err, connect.CodeOf(objecth.MapResolveErr(want)))
 				if sub.called {
 					t.Fatal("a refused batch was submitted")
 				}
@@ -147,7 +163,8 @@ func (p perCollection) LookupBucket(_ context.Context, _ uuid.UUID, collection s
 }
 
 // Each way the write gate stops a batch leaves one line saying so: a store
-// failure at Error, a refusal at Warn, both naming the collection.
+// failure at Error, a refusal at Warn, both naming the collection. The batch
+// deletes for good, which a draining backend refuses.
 func TestBatchWriteGateIsLogged(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -163,7 +180,7 @@ func TestBatchWriteGateIsLogged(t *testing.T) {
 			core, logs := observer.New(zapcore.DebugLevel)
 			h := NewHandler(&fakeSubmitter{id: uuid.New()}, allowAll(), tc.buckets, &fakeObjects{})
 			h.SetLogger(zap.New(core))
-			if _, err := h.BatchDelete(authedCtx(uuid.New()), BatchDeleteArgs{Collection: "docs", ObjectIDs: ids(1)}); err == nil {
+			if _, err := h.BatchDelete(authedCtx(uuid.New()), BatchDeleteArgs{Collection: "docs", ObjectIDs: ids(1), Permanent: true}); err == nil {
 				t.Fatal("a gated batch was accepted")
 			}
 			lines := logs.FilterMessage(tc.msg).All()

@@ -1821,10 +1821,10 @@ func (h *Handler) updateTarget(ctx context.Context, tenantID uuid.UUID, in Updat
 //
 // It resolves the collection→bucket binding through the write gate, so
 // bucket:/collection: PAT scopes enforce on metadata/tag writes (this backs
-// PutObjectTags / DeleteObjectTags) and the update answers the bucket's state
-// as every other write does.
+// PutObjectTags / DeleteObjectTags). An update changes only the object's row,
+// so it is a metadata write: a draining backend takes it.
 func (h *Handler) updateResource(ctx context.Context, tenantID uuid.UUID, collection string, cur Object) (*cedar.Resource, error) {
-	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, collection, bucketgate.BytesWrite)
+	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, collection, bucketgate.MetadataWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1918,9 +1918,10 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	if err := auth.AssertCapabilityOp(ctx, limes.OpDelete, objectURI); err != nil {
 		return err
 	}
-	// A delete, to the trash or for good, is a write: it goes through the
-	// write gate, and Cedar decides on the binding it resolves.
-	authBackendID, authBucket, err := writeBinding(ctx, h.repo, tenantID, collection, bucketgate.BytesWrite)
+	// A delete goes through the write gate, and Cedar decides on the binding
+	// it resolves. A move to the trash changes only the row; a permanent
+	// delete removes bytes, and PermanentDelete resolves it as such again.
+	authBackendID, authBucket, err := writeBinding(ctx, h.repo, tenantID, collection, bucketgate.DeleteAccess(permanent))
 	if err != nil {
 		return err
 	}
@@ -2247,9 +2248,10 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	// A restore puts an object back in the bucket: a write, through the write
-	// gate, and Cedar decides on the binding it resolves.
-	rsBackendID, rsBucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection, bucketgate.BytesWrite)
+	// A restore takes the row out of the trash; its bytes never left the
+	// bucket (assertBytesPresent reads them), so it is a metadata write
+	// through the write gate, and Cedar decides on the binding it resolves.
+	rsBackendID, rsBucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection, bucketgate.MetadataWrite)
 	if err != nil {
 		return nil, err
 	}

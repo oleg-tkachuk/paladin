@@ -104,19 +104,19 @@ func writeRPCs() []writeRPC {
 			})
 			return err
 		}},
-		{"UpdateObject", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"UpdateObject", bucketgate.MetadataWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := handler(repo, authz).UpdateObject(ctx, UpdateObjectInput{
 				Collection: gateTestCollection, ObjectID: objectID, Tags: map[string]string{"k": "v"},
 			})
 			return err
 		}},
-		{"DeleteObject (trash)", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"DeleteObject (trash)", bucketgate.MetadataWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			return handler(repo, authz).DeleteObject(ctx, gateTestCollection, objectID, "1", false, false)
 		}},
 		{"DeleteObject (permanent)", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			return handler(repo, authz).DeleteObject(ctx, gateTestCollection, objectID, "1", true, false)
 		}},
-		{"RestoreObject", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"RestoreObject", bucketgate.MetadataWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := handler(repo, authz).RestoreObject(ctx, gateTestCollection, objectID, "1")
 			return err
 		}},
@@ -126,13 +126,13 @@ func writeRPCs() []writeRPC {
 			_, err := h.RestoreVersion(ctx, versionName(tenantID, uuid.NewV7(), uuid.NewV7()), "1")
 			return err
 		}},
-		{"SetRetention", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"SetRetention", bucketgate.MetadataWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := NewLockHandler(repo, nil, nil, authz).SetRetention(ctx, SetRetentionInput{
 				Collection: gateTestCollection, ObjectID: objectID, Mode: LockModeGovernance, RetainUntil: time.Now().Add(gateTestRetention),
 			})
 			return err
 		}},
-		{"SetLegalHold", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"SetLegalHold", bucketgate.MetadataWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := NewLockHandler(repo, nil, nil, authz).SetLegalHold(ctx, gateTestCollection, objectID, true)
 			return err
 		}},
