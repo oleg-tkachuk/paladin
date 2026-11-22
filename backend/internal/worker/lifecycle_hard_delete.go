@@ -194,6 +194,9 @@ func (w *LifecycleHardDeleter) deleteOne(ctx context.Context, r sqlc.ListHardDel
 		logger.Info("a new object is being written at this path; the purge drainer retries it")
 		return nil
 	}
+	if verdict == objectpath.Unaddressable {
+		logger.Warn("the key predates the key contract and names no bytes of its own; settling without a delete")
+	}
 	if err := w.settleAndAnnounce(ctx, r, tenantID, purgeID); err != nil {
 		logger.Warn("settling the purge failed; the purge drainer retries it", zap.Error(err))
 		return err

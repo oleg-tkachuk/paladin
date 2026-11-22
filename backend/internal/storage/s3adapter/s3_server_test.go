@@ -543,7 +543,7 @@ func TestClientHead(t *testing.T) {
 	if len(heads) != 1 {
 		t.Fatalf("want one HEAD, got %d", len(heads))
 	}
-	wantKey := composeKey(testTenant, "ok", "k1")
+	wantKey := mustComposeKey(t, testTenant, "ok", "k1")
 	if heads[0].Key != wantKey {
 		t.Errorf("key = %q, want %q", heads[0].Key, wantKey)
 	}
@@ -658,14 +658,14 @@ func TestClientCopyObject(t *testing.T) {
 		t.Fatal("CopyObject must send x-amz-copy-source")
 	}
 	// A wrong copy-source silently copies the wrong bytes, so pin it exactly.
-	wantSrc := "src-b/" + composeKey(testTenant, "ok1", "k1")
+	wantSrc := "src-b/" + mustComposeKey(t, testTenant, "ok1", "k1")
 	if got := copyReq.Header.Get("x-amz-copy-source"); got != wantSrc {
 		t.Errorf("copy-source = %q, want %q", got, wantSrc)
 	}
 	if copyReq.Bucket != "dst-b" {
 		t.Errorf("destination bucket = %q, want dst-b", copyReq.Bucket)
 	}
-	if want := composeKey(testTenant, "ok2", "k2"); copyReq.Key != want {
+	if want := mustComposeKey(t, testTenant, "ok2", "k2"); copyReq.Key != want {
 		t.Errorf("destination key = %q, want %q", copyReq.Key, want)
 	}
 }
@@ -734,7 +734,7 @@ func TestClientDeleteObject(t *testing.T) {
 	if err := c.DeleteObject(testCtx, "b", testTenant, "ok", "k"); err != nil {
 		t.Fatalf("DeleteObject: %v", err)
 	}
-	dels := f.requestsFor(http.MethodDelete, composeKey(testTenant, "ok", "k"))
+	dels := f.requestsFor(http.MethodDelete, mustComposeKey(t, testTenant, "ok", "k"))
 	if len(dels) != 1 {
 		t.Fatalf("want one keyed DELETE, got %d", len(dels))
 	}
@@ -769,7 +769,7 @@ func TestClientInitiateMultipart(t *testing.T) {
 	if id != fakeUploadID {
 		t.Errorf("uploadID = %q, want %q", id, fakeUploadID)
 	}
-	posts := f.requestsFor(http.MethodPost, composeKey(testTenant, "ok", "k"))
+	posts := f.requestsFor(http.MethodPost, mustComposeKey(t, testTenant, "ok", "k"))
 	if len(posts) != 1 {
 		t.Fatalf("want one initiate POST, got %d", len(posts))
 	}
@@ -810,7 +810,7 @@ func TestClientCompleteMultipart(t *testing.T) {
 	if size != fakeHeadSize {
 		t.Errorf("size = %d, want %d (from the HEAD after complete)", size, fakeHeadSize)
 	}
-	posts := f.requestsFor(http.MethodPost, composeKey(testTenant, "ok", "k"))
+	posts := f.requestsFor(http.MethodPost, mustComposeKey(t, testTenant, "ok", "k"))
 	if len(posts) != 1 {
 		t.Fatalf("want one complete POST, got %d", len(posts))
 	}
@@ -870,7 +870,7 @@ func TestClientAbortMultipart(t *testing.T) {
 	if err := c.AbortMultipart(testCtx, "b", testTenant, fakeUploadID, "ok", "k"); err != nil {
 		t.Fatalf("AbortMultipart: %v", err)
 	}
-	dels := f.requestsFor(http.MethodDelete, composeKey(testTenant, "ok", "k"))
+	dels := f.requestsFor(http.MethodDelete, mustComposeKey(t, testTenant, "ok", "k"))
 	if len(dels) != 1 {
 		t.Fatalf("want one abort DELETE, got %d", len(dels))
 	}
@@ -1083,7 +1083,7 @@ func TestStreamWriterAbort(t *testing.T) {
 	if err := w.Abort(); err != nil {
 		t.Fatalf("Abort: %v", err)
 	}
-	if len(f.requestsFor(http.MethodDelete, composeKey(testTenant, "ok", "k"))) != 1 {
+	if len(f.requestsFor(http.MethodDelete, mustComposeKey(t, testTenant, "ok", "k"))) != 1 {
 		t.Error("Abort must issue AbortMultipartUpload")
 	}
 	// Second abort is a no-op.
@@ -1139,7 +1139,7 @@ func TestClientPresignPutGetPost(t *testing.T) {
 	f := newFakeS3(t)
 	c := newTestClient(t, f.srv.URL)
 	ttl := 15 * time.Minute
-	wantKey := composeKey(testTenant, "ok", "k")
+	wantKey := mustComposeKey(t, testTenant, "ok", "k")
 
 	t.Run("put", func(t *testing.T) {
 		url, hdrs, exp, err := c.PresignPut(testCtx, objecth.PresignPutArgs{
@@ -1199,7 +1199,7 @@ func TestPresignPart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PresignPart: %v", err)
 	}
-	assertPresigned(t, url, composeKey(testTenant, "ok", "k"), "b")
+	assertPresigned(t, url, mustComposeKey(t, testTenant, "ok", "k"), "b")
 	// Part number and upload id are what bind the URL to one slot of one upload.
 	if !strings.Contains(url, "partNumber=3") {
 		t.Errorf("partNumber missing: %s", url)
@@ -1348,7 +1348,7 @@ func TestObjectRouterCrossBackendStreamsThrough(t *testing.T) {
 		t.Fatalf("cross-backend CopyObject: %v", err)
 	}
 
-	if len(fSrc.requestsFor(http.MethodGet, composeKey(testTenant, "o1", "k1"))) != 1 {
+	if len(fSrc.requestsFor(http.MethodGet, mustComposeKey(t, testTenant, "o1", "k1"))) != 1 {
 		t.Error("source backend should have been read once")
 	}
 	// The destination must receive the source bytes verbatim.
@@ -1361,7 +1361,7 @@ func TestObjectRouterCrossBackendStreamsThrough(t *testing.T) {
 	if string(assembled) != fakeBodyText {
 		t.Errorf("destination received %q, want %q", assembled, fakeBodyText)
 	}
-	if len(fDst.requestsFor(http.MethodPost, composeKey(testTenant, "o2", "k2"))) < 2 {
+	if len(fDst.requestsFor(http.MethodPost, mustComposeKey(t, testTenant, "o2", "k2"))) < 2 {
 		t.Error("destination should see both an initiate and a complete POST")
 	}
 }
@@ -1636,4 +1636,14 @@ func TestNewDefaultChainBuilds(t *testing.T) {
 	if c == nil {
 		t.Fatal("New returned a nil client")
 	}
+}
+
+// mustComposeKey is composeKey for inputs a test knows to be canonical.
+func mustComposeKey(t *testing.T, tenantID uuid.UUID, collection, key string) string {
+	t.Helper()
+	path, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		t.Fatalf("composeKey(%q, %q): %v", collection, key, err)
+	}
+	return path
 }

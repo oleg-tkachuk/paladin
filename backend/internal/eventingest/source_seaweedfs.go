@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 	"uuid"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 )
 
 // SeaweedFS source adapter.
@@ -154,7 +156,7 @@ const seaweedFSBucketsDir = "buckets/"
 // parseSeaweedFSPath extracts (tenant_id, collection, key) from the
 // full filer path. Layout (s3adapter.composeKey under the bucket):
 //
-//	/buckets/<bucket>/<tenant_uuid>/<collection>/<key...>
+//	/buckets/<bucket>/<tenant_uuid>/<collection segment>/<key...>
 //
 // The leading "/" and "buckets/" are optional: the webhook and the
 // gocdk_pub_sub-over-NATS publishers both observe the full filer namespace,
@@ -165,24 +167,24 @@ const seaweedFSBucketsDir = "buckets/"
 func parseSeaweedFSPath(path, bucket string) (SubjectFields, bool) {
 	trimmed := strings.TrimPrefix(strings.TrimPrefix(path, "/"), seaweedFSBucketsDir)
 
-	// trimmed is now: <bucket>/<tenant_uuid>/<collection>/<key...>
-	// Split into 4 parts max — key may contain / and we want it whole.
-	parts := strings.SplitN(trimmed, "/", 4)
-	if len(parts) < 4 || parts[2] == "" || parts[3] == "" {
+	// trimmed is now: <bucket>/<tenant_uuid>/<collection segment>/<key...>
+	gotBucket, path, found := strings.Cut(trimmed, storagepath.Separator)
+	if !found || (bucket != "" && gotBucket != bucket) {
 		return SubjectFields{}, false
 	}
-	if bucket != "" && parts[0] != bucket {
+	tenant, collection, key, ok := splitStoragePath(path)
+	if !ok {
 		return SubjectFields{}, false
 	}
-	if _, err := uuid.Parse(parts[1]); err != nil {
+	if _, err := uuid.Parse(tenant); err != nil {
 		return SubjectFields{}, false
 	}
 
 	return SubjectFields{
-		Bucket:     parts[0],
-		TenantID:   parts[1],
-		Collection: parts[2],
-		Key:        parts[3],
+		Bucket:     gotBucket,
+		TenantID:   tenant,
+		Collection: collection,
+		Key:        key,
 	}, true
 }
 

@@ -15,6 +15,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 )
 
 // ─── fakes (only the methods copyOne touches do real work) ───────────────
@@ -149,7 +150,7 @@ func TestCopyOneCompensatesOnStorageFailure(t *testing.T) {
 		Storage:     &copyFakeStorage{copyErr: errors.New("s3 down")},
 		Transitions: tr,
 	}
-	err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc()})
+	err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc(), dstKey: "k"})
 	if err == nil || !strings.Contains(err.Error(), "storage copy") {
 		t.Fatalf("want storage copy error, got %v", err)
 	}
@@ -170,7 +171,7 @@ func TestCopyOneDoubleFailureSurfacesBoth(t *testing.T) {
 		Storage:     &copyFakeStorage{copyErr: errors.New("s3 down")},
 		Transitions: tr,
 	}
-	err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc()})
+	err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc(), dstKey: "k"})
 	if err == nil {
 		t.Fatal("want error")
 	}
@@ -201,4 +202,17 @@ func (*copyFakeStorage) PublicURL(context.Context, string, string, string, uuid.
 
 func (*copyFakeRepo) TallyObjects(context.Context, objecth.TallyObjectsArgs) (objecth.ObjectTally, error) {
 	return objecth.ObjectTally{}, nil
+}
+
+// A destination key that is not canonical — a prefix joined to a source key
+// from before the key contract — fails that item before any row or byte is
+// written: CreateObject would panic on the nil repository.
+func TestCopyOneRefusesANonCanonicalDestinationKey(t *testing.T) {
+	e := &BatchCopyExecutor{}
+	for _, key := range []string{"backup//k", "backup/../k", "k/"} {
+		err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc(), dstKey: key})
+		if !errors.Is(err, storagepath.ErrNotCanonical) {
+			t.Errorf("dstKey %q: err = %v, want a key refusal", key, err)
+		}
+	}
 }

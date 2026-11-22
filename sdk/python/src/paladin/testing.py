@@ -213,6 +213,31 @@ class _Binding:
         return ""
 
 
+# The server's object key rule (sdk/testdata/object_keys.json): segments
+# separated by "/", none of them empty, "." or "..".
+_KEY_SEP = "/"
+_CURRENT_SEGMENT = "."
+_PARENT_SEGMENT = ".."
+_KEY_RULE = 'an object key is segments separated by "/", none of them empty, "." or ".."'
+
+
+def _key_refusal(key: str) -> str:
+    """Why the server refuses ``key`` where an object is created, or "" when
+    it stores an object under it."""
+    if key.startswith(_KEY_SEP):
+        return 'it starts with "/"'
+    if key.endswith(_KEY_SEP):
+        return 'it ends with "/"'
+    for segment in key.split(_KEY_SEP):
+        if segment == "":
+            return "it holds an empty segment"
+        if segment == _CURRENT_SEGMENT:
+            return 'it holds a "." segment'
+        if segment == _PARENT_SEGMENT:
+            return 'it holds a ".." segment'
+    return ""
+
+
 def _environ_key(header: str) -> str:
     """Where WSGI puts a request header."""
     upper = header.upper().replace("-", "_")
@@ -2119,6 +2144,10 @@ class FakePaladin(
         """The object an upload registers, refusing a key another object
         holds — in any state, the trash included — as the server's unique path
         does."""
+        if request.key:
+            reason = _key_refusal(request.key)
+            if reason:
+                raise ConnectError(Code.INVALID_ARGUMENT, f"key: {_KEY_RULE}: {reason}")
         key = self._public_key(request.parent, request.key)
         if key:
             prefix = request.parent + _OBJECTS_SEP

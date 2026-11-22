@@ -183,6 +183,10 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 		keepFirst(failed, w.reschedule(ctx, tx, r, logger, errPathInUse))
 		return nil
 	}
+	if verdict == objectpath.Unaddressable {
+		logger.Warn("purge drainer: the key predates the key contract and names no bytes of its own; settling without a delete",
+			zap.String("collection", r.CollectionName))
+	}
 	if verdict == objectpath.Delete {
 		if err := w.Storage.DeleteObject(ctx, r.BackendName, r.BucketName, tenantID, r.CollectionName, r.Path); err != nil {
 			keepFirst(failed, err)

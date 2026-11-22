@@ -421,11 +421,6 @@ type Querier interface {
 	// lifecycle + replication workers to scope their object scans.
 	// A tenant in the trash is frozen: its rows wait for a restore or a purge.
 	ListCollectionBindingsForBucket(ctx context.Context, name string, name_2 string) ([]ListCollectionBindingsForBucketRow, error)
-	// Every registered collection name for the tenant. Backs the in-process
-	// longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
-	// not a per-event query on the ingest hot path. collections is small per tenant
-	// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
-	ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
 	// tenant_id is optional: NULL lists every tenant's collections, which the
 	// handler allows only a platform admin reading across tenants. Rows and the
 	// cursor run in (tenant_id, name) order, so a page boundary between two
@@ -814,15 +809,6 @@ type Querier interface {
 	// out rather than refused, so zero rows is the only sign the reset missed.
 	ResetQuotaDaily(ctx context.Context, iD pgtype.UUID, lastResetAt pgtype.Timestamptz) (int64, error)
 	ResolveCollectionID(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error)
-	// Longest registered collection name that is a prefix of the candidate (the
-	// recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment
-	// collections (the schema baseline (001_initial_schema.sql)) make the naive "the OK is the first path
-	// segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
-	// collection `invoices` + path `2026/q1/report.pdf`, OR collection
-	// `invoices/2026/q1` + path `report.pdf`. Longest-prefix is deterministic (the
-	// more specific one wins). name is constrained to `[a-z0-9-]` path segments
-	// (the schema baseline (001_initial_schema.sql)) — no LIKE metacharacters — so `|| '/%'` is safe.
-	ResolveCollectionPrefix(ctx context.Context, tenantID pgtype.UUID, candidate string) (string, error)
 	// Undeletes a soft-deleted object iff no live row exists with the same
 	// (tenant, collection_id, path). Caller is expected to verify uniqueness first;
 	// a UNIQUE partial index still catches the race at commit time.

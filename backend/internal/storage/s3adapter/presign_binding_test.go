@@ -166,7 +166,7 @@ func TestPresignPostIsAPolicyBindingTheBody(t *testing.T) {
 			if !hasCondition(conds, contentTypeField, "image/png") || !hasCondition(conds, tc.field, tc.value) {
 				t.Errorf("Content-Type or checksum not a condition: %v", conds)
 			}
-			if !hasCondition(conds, "key", composeKey(testTenant, "ok", "k")) {
+			if !hasCondition(conds, "key", mustComposeKey(t, testTenant, "ok", "k")) {
 				t.Errorf("key not bound: %v", conds)
 			}
 			if fields[contentTypeField] != "image/png" || fields[tc.field] != tc.value {

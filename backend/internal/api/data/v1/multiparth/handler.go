@@ -296,6 +296,9 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if err != nil {
 		return nil, err
 	}
+	if err := objecth.AdmitOptionalKey(objecth.FieldKey, args.Key); err != nil {
+		return nil, err
+	}
 	args.TenantID = tenantID
 	// Attribution comes from the caller's principal, never from the request:
 	// a client must not be able to name someone else as the initiator.
@@ -319,6 +322,8 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	if err := objecth.AdmitPublicUpload(meta, &args.Key, args.ContentType); err != nil {
 		return nil, err
 	}
+	// A key left empty is named by the server, as an upload's is.
+	args.Key = objecth.UploadKey(args.Key)
 	objectURI := paladin.ObjectResource(tenantID.String(), args.Collection, args.Key)
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err

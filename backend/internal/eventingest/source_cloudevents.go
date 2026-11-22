@@ -161,8 +161,8 @@ func (s *CloudEventsSource) parseEvent(raw []byte) (CloudEvent, error) {
 //
 //  1. Paladin canonical:
 //     tenants/<uuid>/collections/<ok>/objects-by-key/<key...>
-//  2. Bare triple:
-//     <uuid>/<collection>/<key...>
+//  2. Bare triple, a bucket path (splitStoragePath):
+//     <uuid>/<collection segment>/<key...>
 //
 // Both yield the same SubjectFields. Anything else returns ok=false
 // and the caller treats the event as ignored.
@@ -194,10 +194,10 @@ func parseCloudEventsSubject(subject string) (SubjectFields, bool) {
 		return SubjectFields{TenantID: tenantID, Collection: collection, Key: key}, true
 	}
 
-	// Form 2: bare <uuid>/<ok>/<key...>
-	parts := strings.SplitN(subject, "/", 3)
-	if len(parts) < 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	// Form 2: a bucket path, <uuid>/<collection segment>/<key...>
+	tenant, collection, key, ok := splitStoragePath(subject)
+	if !ok {
 		return SubjectFields{}, false
 	}
-	return SubjectFields{TenantID: parts[0], Collection: parts[1], Key: parts[2]}, true
+	return SubjectFields{TenantID: tenant, Collection: collection, Key: key}, true
 }

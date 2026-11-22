@@ -86,13 +86,17 @@ backend, not one Paladin controls — a backend upgrade that changes the shape
 silently stops promotions. After per-source normalisation the key is always:
 
 ```
-<tenant_uuid>/<collection>/<key...>
+<tenant_uuid>/<collection segment>/<key...>
 ```
 
 - `tenant_uuid` — owning tenant (UUID). All three segments must be non-empty.
-- `collection` — the Paladin collection namespace.
+- `collection segment` — the Paladin collection, as **one** segment: a
+  nested collection's `/` is written `.` (`invoices/2026/q1` →
+  `invoices.2026.q1`). The collection grammar has no `.`, so the encoding is
+  reversible and the split exact (`storagepath.Compose`).
 - `key` — the object key; **may contain `/`** (parsed with `SplitN(…, 3)`
-  so the remainder is kept whole).
+  so the remainder is kept whole). A key with an empty, `.` or `..` segment,
+  or a leading or trailing `/`, is no Paladin object's: the event is skipped.
 
 A path that doesn't match (a non-Paladin object dropped in the same bucket) is
 **ignored** — logged, no dedup row, no error — so junk never fills the dedup
@@ -163,7 +167,7 @@ Both publishers send the full filer namespace, where the S3 gateway keeps a
 bucket's objects under `/buckets/<bucket>/…`:
 
 ```
-/buckets/<bucket>/<tenant>/<collection>/<key>
+/buckets/<bucket>/<tenant>/<collection segment>/<key>
 ```
 
 `parseSeaweedFSPath` strips the leading `/` and `buckets/` (both optional),

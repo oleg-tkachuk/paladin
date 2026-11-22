@@ -6,7 +6,10 @@
 // `storage.backends.<name>.bucket`. The Paladin "Collection" is a tenant-scoped
 // prefix inside that bucket; the full S3 key for any Paladin object is:
 //
-//	<tenant_id>/<collection>/<storage_key>
+//	<tenant_id>/<collection segment>/<storage_key>
+//
+// composed by storagepath.Compose, which writes a nested collection as one
+// segment and refuses a key outside the key contract.
 //
 // CompletionMode is sourced from the bundled config: when that backend has
 // S3 event notifications enabled, handlers return Implicit; otherwise
@@ -257,10 +260,12 @@ func buildAWSConfig(ctx context.Context, backend config.StorageBackend) (aws.Con
 	}
 }
 
-// composeKey builds the full S3 key, "<tenant_id>/<collection>/<key>", with
-// path-traversal components stripped (storagepath.Compose — shared with the
-// data plane, which reports this path as an object's placement).
-func composeKey(tenantID uuid.UUID, collection, key string) string {
+// composeKey builds the full S3 key, "<tenant_id>/<collection segment>/<key>"
+// (storagepath.Compose — shared with the data plane, which reports this path
+// as an object's placement). A key or collection outside the contract is
+// refused, never rewritten, so no call reaches the store at another object's
+// path.
+func composeKey(tenantID uuid.UUID, collection, key string) (string, error) {
 	return storagepath.Compose(tenantID, collection, key)
 }
 
@@ -396,9 +401,13 @@ func (c *Client) TagBucketOwner(ctx context.Context, backendID, bucketName strin
 // Every bound header comes back in the headers map; the object store refuses
 // a request that omits or alters any of them.
 func (c *Client) PresignPut(ctx context.Context, args objecth.PresignPutArgs) (string, map[string]string, time.Time, error) {
+	key, err := composeKey(args.TenantID, args.Collection, args.Key)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	in := &s3.PutObjectInput{
 		Bucket:        aws.String(c.resolveBucket(args.Bucket)),
-		Key:           aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
+		Key:           aws.String(key),
 		ContentType:   aws.String(args.ContentType),
 		ContentLength: aws.Int64(args.SizeBytes),
 		IfNoneMatch:   aws.String(ifNoneMatchAny),
@@ -433,24 +442,9 @@ func (c *Client) PresignPut(ctx context.Context, args objecth.PresignPutArgs) (s
 // condition comes from the presigner itself. POST has no If-None-Match, so
 // unlike PUT it cannot refuse to overwrite.
 func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) (string, map[string]string, time.Time, error) {
-	field, err := postChecksumField(args.ChecksumAlgo)
+	extra, err := c.postBoundFields(args)
 	if err != nil {
 		return "", nil, time.Time{}, err
-	}
-	extra := map[string]string{
-		contentTypeField: args.ContentType,
-		field:            args.ChecksumValue,
-	}
-	if args.CacheControl != "" {
-		extra[cacheControlField] = args.CacheControl
-	}
-	sse := &s3.PutObjectInput{}
-	c.applySSE(sse)
-	if sse.ServerSideEncryption != "" {
-		extra[sseField] = string(sse.ServerSideEncryption)
-	}
-	if sse.SSEKMSKeyId != nil {
-		extra[sseKMSKeyField] = *sse.SSEKMSKeyId
 	}
 	conditions := []any{[]any{contentLengthRange, args.SizeBytes, args.SizeBytes}}
 	for k, v := range extra {
@@ -460,9 +454,13 @@ func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) 
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
+	key, err := composeKey(args.TenantID, args.Collection, args.Key)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	req, err := c.presign.PresignPostObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(c.resolveBucket(args.Bucket)),
-		Key:    aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
+		Key:    aws.String(key),
 	}, func(o *s3.PresignPostOptions) {
 		o.Expires = ttl
 		o.Conditions = conditions
@@ -484,13 +482,43 @@ func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) 
 	return req.URL, fields, exp, nil
 }
 
+// postBoundFields are the form fields a presigned POST binds besides the key
+// and size: the Content-Type, the checksum, the collection's Cache-Control
+// and the encryption the adapter applies.
+func (c *Client) postBoundFields(args objecth.PresignPostArgs) (map[string]string, error) {
+	field, err := postChecksumField(args.ChecksumAlgo)
+	if err != nil {
+		return nil, err
+	}
+	extra := map[string]string{
+		contentTypeField: args.ContentType,
+		field:            args.ChecksumValue,
+	}
+	if args.CacheControl != "" {
+		extra[cacheControlField] = args.CacheControl
+	}
+	sse := &s3.PutObjectInput{}
+	c.applySSE(sse)
+	if sse.ServerSideEncryption != "" {
+		extra[sseField] = string(sse.ServerSideEncryption)
+	}
+	if sse.SSEKMSKeyId != nil {
+		extra[sseKMSKeyField] = *sse.SSEKMSKeyId
+	}
+	return extra, nil
+}
+
 // PresignGet signs a download. With IfMatch set the URL is bound to that
 // ETag: it serves only those bytes, and answers 412 once the key holds
 // anything else.
 func (c *Client) PresignGet(ctx context.Context, args objecth.PresignGetArgs) (string, map[string]string, time.Time, error) {
+	key, err := composeKey(args.TenantID, args.Collection, args.Key)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	in := &s3.GetObjectInput{
 		Bucket: aws.String(c.resolveBucket(args.Bucket)),
-		Key:    aws.String(composeKey(args.TenantID, args.Collection, args.Key)),
+		Key:    aws.String(key),
 	}
 	if args.ContentDisposition != "" {
 		in.ResponseContentDisposition = aws.String(args.ContentDisposition)
@@ -523,9 +551,13 @@ func (c *Client) PresignGet(ctx context.Context, args objecth.PresignGetArgs) (s
 // is empty.
 func (c *Client) Head(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (string, int64, string, string, error) {
 	resolved := c.resolveBucket(bucket)
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return "", 0, "", "", err
+	}
 	out, err := c.s3.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket:       aws.String(resolved),
-		Key:          aws.String(composeKey(tenantID, collection, key)),
+		Key:          aws.String(fullKey),
 		ChecksumMode: s3types.ChecksumModeEnabled,
 	})
 	if err != nil {
@@ -584,10 +616,18 @@ func (c *Client) confirmBucket(ctx context.Context, resolvedBucket string) error
 func (c *Client) CopyObject(ctx context.Context, src, dst objecth.Location) error {
 	srcBucket := c.resolveBucket(src.Bucket)
 	dstBucket := c.resolveBucket(dst.Bucket)
+	dstKey, err := composeKey(dst.TenantID, dst.Collection, dst.Key)
+	if err != nil {
+		return fmt.Errorf("copy destination: %w", err)
+	}
+	srcKey, err := composeKey(src.TenantID, src.Collection, src.Key)
+	if err != nil {
+		return fmt.Errorf("copy source: %w", err)
+	}
 	in := &s3.CopyObjectInput{
 		Bucket:     aws.String(dstBucket),
-		Key:        aws.String(composeKey(dst.TenantID, dst.Collection, dst.Key)),
-		CopySource: aws.String(srcBucket + "/" + composeKey(src.TenantID, src.Collection, src.Key)),
+		Key:        aws.String(dstKey),
+		CopySource: aws.String(srcBucket + "/" + srcKey),
 	}
 	if dst.CacheControl != "" {
 		// A copy into a public collection takes its Cache-Control. Replacing
@@ -596,7 +636,7 @@ func (c *Client) CopyObject(ctx context.Context, src, dst objecth.Location) erro
 		in.CacheControl = aws.String(dst.CacheControl)
 		in.ContentType = aws.String(dst.ContentType)
 	}
-	_, err := c.s3.CopyObject(ctx, in)
+	_, err = c.s3.CopyObject(ctx, in)
 	if err != nil {
 		return fmt.Errorf("copy: %w", err)
 	}
@@ -608,9 +648,13 @@ func (c *Client) CopyObject(ctx context.Context, src, dst objecth.Location) erro
 // pipes it into another backend's Open writer). The caller MUST Close the
 // reader.
 func (c *Client) GetStream(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key string) (io.ReadCloser, string, error) {
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return nil, "", err
+	}
 	out, err := c.s3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(c.resolveBucket(bucket)),
-		Key:    aws.String(composeKey(tenantID, collection, key)),
+		Key:    aws.String(fullKey),
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("get stream: %w", err)
@@ -619,9 +663,13 @@ func (c *Client) GetStream(ctx context.Context, bucket string, tenantID uuid.UUI
 }
 
 func (c *Client) DeleteObject(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key string) error {
-	_, err := c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return err
+	}
+	_, err = c.s3.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(c.resolveBucket(bucket)),
-		Key:    aws.String(composeKey(tenantID, collection, key)),
+		Key:    aws.String(fullKey),
 	})
 	if err != nil {
 		return fmt.Errorf("delete: %w", err)
@@ -638,9 +686,13 @@ func (c *Client) CompletionMode(collection string) objecth.CompletionMode {
 // ─── multipart.Storage (methods; MultipartRouter satisfies the interface) ───
 
 func (c *Client) InitiateMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType, cacheControl, checksumAlgo string) (string, error) {
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return "", err
+	}
 	in := &s3.CreateMultipartUploadInput{
 		Bucket:            aws.String(c.resolveBucket(bucket)),
-		Key:               aws.String(composeKey(tenantID, collection, key)),
+		Key:               aws.String(fullKey),
 		ContentType:       aws.String(contentType),
 		ChecksumAlgorithm: multipartChecksumAlgorithm(checksumAlgo),
 	}
@@ -666,7 +718,10 @@ func (c *Client) CompleteMultipart(ctx context.Context, bucket string, tenantID 
 		completed = append(completed, cp)
 	}
 	resolvedBucket := c.resolveBucket(bucket)
-	fullKey := composeKey(tenantID, collection, key)
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return "", 0, err
+	}
 	out, err := c.s3.CompleteMultipartUpload(ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:          aws.String(resolvedBucket),
 		Key:             aws.String(fullKey),
@@ -710,9 +765,13 @@ func (c *Client) ListMultipartParts(
 	maxParts int32,
 	afterPartNumber int32,
 ) ([]multiparth.Part, int32, error) {
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return nil, 0, err
+	}
 	in := &s3.ListPartsInput{
 		Bucket:   aws.String(c.resolveBucket(bucket)),
-		Key:      aws.String(composeKey(tenantID, collection, key)),
+		Key:      aws.String(fullKey),
 		UploadId: aws.String(storageUploadID),
 	}
 	if maxParts > 0 {
@@ -756,9 +815,13 @@ func (c *Client) ListMultipartParts(
 }
 
 func (c *Client) AbortMultipart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error {
-	_, err := c.s3.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return err
+	}
+	_, err = c.s3.AbortMultipartUpload(ctx, &s3.AbortMultipartUploadInput{
 		Bucket:   aws.String(c.resolveBucket(bucket)),
-		Key:      aws.String(composeKey(tenantID, collection, key)),
+		Key:      aws.String(fullKey),
 		UploadId: aws.String(storageUploadID),
 	})
 	if err != nil {
@@ -771,9 +834,13 @@ func (c *Client) AbortMultipart(ctx context.Context, bucket string, tenantID uui
 // *Client satisfies multiparth.Storage through it. The URL is bound to the
 // part's exact length and checksum, as a single PUT is to the object's.
 func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, part multiparth.PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return "", nil, time.Time{}, err
+	}
 	in := &s3.UploadPartInput{
 		Bucket:        aws.String(c.resolveBucket(bucket)),
-		Key:           aws.String(composeKey(tenantID, collection, key)),
+		Key:           aws.String(fullKey),
 		PartNumber:    aws.Int32(part.Number),
 		UploadId:      aws.String(storageUploadID),
 		ContentLength: aws.Int64(part.SizeBytes),
@@ -781,7 +848,7 @@ func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.U
 	if err := setPartChecksum(in, part.ChecksumAlgo, part.ChecksumValue); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	ttl, err := c.presignTTL(ctx, ttl)
+	ttl, err = c.presignTTL(ctx, ttl)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -802,7 +869,10 @@ func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.U
 // 8 MiB parts are a reasonable default that balances memory vs S3 minimums.
 func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (*StreamWriter, error) {
 	resolvedBucket := c.resolveBucket(bucket)
-	fullKey := composeKey(tenantID, collection, key)
+	fullKey, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return nil, err
+	}
 	in := &s3.CreateMultipartUploadInput{
 		Bucket:      aws.String(resolvedBucket),
 		Key:         aws.String(fullKey),

@@ -885,6 +885,21 @@ export async function objectState(name: string): Promise<ObjectState> {
   return (await client.getObject({ name })).state;
 }
 
+/**
+ * The object's path inside its bucket, as the server composes it and the
+ * store holds it (Object.placement.storage_path). A spec that stands in for
+ * the store reads it here rather than spelling the layout itself: a nested
+ * collection occupies one segment of it, not one per "/" of its name.
+ */
+export async function objectStoragePath(name: string): Promise<string> {
+  const client = createClient(ObjectService, dataTransport());
+  const path = (await client.getObject({ name })).placement?.storagePath;
+  if (!path) {
+    throw new Error(`seed.ts: GetObject reported no placement for ${name}`);
+  }
+  return path;
+}
+
 export async function softDeleteObject(name: string): Promise<void> {
   const client = createClient(ObjectService, dataTransport());
   const current = await client.getObject({ name });

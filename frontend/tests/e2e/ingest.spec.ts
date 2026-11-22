@@ -15,6 +15,7 @@ import {
   INGEST_URL,
   adminTransport,
   objectState,
+  objectStoragePath,
   seedAdminTenantID,
   seedPendingObject,
   seedPhysicalBucket,
@@ -67,10 +68,12 @@ test.describe("Event ingest", () => {
 
     // The shape SeaweedFS's filer posts: the full filer path, and the new
     // entry with the bytes' size, which must match the registration. A fresh
-    // commit time keeps the event's dedup id its own.
+    // commit time keeps the event's dedup id its own. The path is the one the
+    // server composed for the object, where the upload put its bytes.
+    const storagePath = await objectStoragePath(obj.name);
     const posted = await request.post(`${INGEST_URL}${SEAWEEDFS_ROUTE}`, {
       data: {
-        key: `${SEAWEEDFS_BUCKETS_DIR}/${bucket.bucketId}/${tenantId}/${obj.collection}/${obj.key}`,
+        key: `${SEAWEEDFS_BUCKETS_DIR}/${bucket.bucketId}/${storagePath}`,
         event_type: SEAWEEDFS_CREATE,
         message: {
           new_entry: {

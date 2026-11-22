@@ -156,36 +156,6 @@ func (q *Queries) GetEffectivePolicy(ctx context.Context, iD pgtype.UUID, collec
 	return i, err
 }
 
-const listCollectionNamesForTenant = `-- name: ListCollectionNamesForTenant :many
-SELECT name
-FROM collections
-WHERE tenant_id = $1
-`
-
-// Every registered collection name for the tenant. Backs the in-process
-// longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
-// not a per-event query on the ingest hot path. collections is small per tenant
-// (bounded by the tenant's namespace layout), so the unbounded read is cheap.
-func (q *Queries) ListCollectionNamesForTenant(ctx context.Context, tenantID pgtype.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, listCollectionNamesForTenant, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		items = append(items, name)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listCollections = `-- name: ListCollections :many
 SELECT collections.id, collections.tenant_id, collections.name, collections.display_name, collections.bucket_id, collections.constraints, collections.lifecycle_rules, collections.cedar_policy, collections.cedar_policy_hash, collections.resource_version, collections.created_at, collections.updated_at, collections.public_read, collections.cache_control,
        sb.name AS backend_name,
@@ -289,31 +259,6 @@ func (q *Queries) ListCollections(ctx context.Context, tenantID pgtype.UUID, onB
 		return nil, err
 	}
 	return items, nil
-}
-
-const resolveCollectionPrefix = `-- name: ResolveCollectionPrefix :one
-SELECT name
-FROM collections
-WHERE tenant_id = $1
-  AND ($2::text = name
-       OR $2::text LIKE name || '/%')
-ORDER BY length(name) DESC
-LIMIT 1
-`
-
-// Longest registered collection name that is a prefix of the candidate (the
-// recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment
-// collections (the schema baseline (001_initial_schema.sql)) make the naive "the OK is the first path
-// segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
-// collection `invoices` + path `2026/q1/report.pdf`, OR collection
-// `invoices/2026/q1` + path `report.pdf`. Longest-prefix is deterministic (the
-// more specific one wins). name is constrained to `[a-z0-9-]` path segments
-// (the schema baseline (001_initial_schema.sql)) — no LIKE metacharacters — so `|| '/%'` is safe.
-func (q *Queries) ResolveCollectionPrefix(ctx context.Context, tenantID pgtype.UUID, candidate string) (string, error) {
-	row := q.db.QueryRow(ctx, resolveCollectionPrefix, tenantID, candidate)
-	var name string
-	err := row.Scan(&name)
-	return name, err
 }
 
 const updateCollection = `-- name: UpdateCollection :execrows

@@ -9,6 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 )
 
 // PublicURL is where an object in a public bucket is read unsigned
@@ -17,7 +19,11 @@ import (
 // one when it has none), addressed path- or host-style as presigned URLs
 // are, by the SDK's own endpoint resolver.
 func (c *Client) PublicURL(ctx context.Context, bucket, publicBaseURL string, tenantID uuid.UUID, collection, key string) (string, error) {
-	segments := strings.Split(composeKey(tenantID, collection, key), "/")
+	path, err := composeKey(tenantID, collection, key)
+	if err != nil {
+		return "", err
+	}
+	segments := strings.Split(path, storagepath.Separator)
 	if publicBaseURL != "" {
 		base, err := url.Parse(publicBaseURL)
 		if err != nil {

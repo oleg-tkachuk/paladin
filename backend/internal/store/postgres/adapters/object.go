@@ -11,6 +11,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -76,6 +77,11 @@ func (r *ObjectRepo) read(ctx context.Context, fn func(q sqlc.Querier, db sqlc.D
 var _ objecth.Repository = (*ObjectRepo)(nil)
 
 func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObjectArgs) (objecth.Object, error) {
+	// Every handler admits the key where it enters; a caller that did not is
+	// refused here, before a row claims a path its bytes could not have.
+	if _, err := storagepath.Compose(args.TenantID, args.Collection, args.Key); err != nil {
+		return objecth.Object{}, fmt.Errorf("create object: %w", err)
+	}
 	objectID := uuid.NewV7()
 	// Under the path lock, so a purge of bytes a deleted object left at this
 	// path cannot delete this one's (package objectpath).
@@ -796,7 +802,9 @@ func (r *ObjectRepo) PurgeBytesTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 			return false, err
 		}
 		return true, nil
-	case objectpath.Superseded:
+	case objectpath.Superseded, objectpath.Unaddressable:
+		// Unaddressable: a key from before the key contract; its debt
+		// settles without a delete.
 		return true, nil
 	default:
 		return false, nil
