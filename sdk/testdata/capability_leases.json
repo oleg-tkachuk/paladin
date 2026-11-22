@@ -34,13 +34,15 @@
           "call": "get_lease",
           "of": "child",
           "code": "not_found",
-          "limes_code": "lease_not_found"
+          "limes_code": "lease_not_found",
+          "message": "The capability holds no lease"
         },
         {
           "call": "settle_lease",
           "of": "child",
           "code": "not_found",
-          "limes_code": "lease_not_found"
+          "limes_code": "lease_not_found",
+          "message": "The capability holds no lease"
         }
       ]
     },
@@ -62,7 +64,8 @@
           "call": "get_lease",
           "of": "grandchild",
           "code": "not_found",
-          "limes_code": "lease_not_found"
+          "limes_code": "lease_not_found",
+          "message": "The capability holds no lease"
         }
       ]
     },
@@ -115,7 +118,8 @@
           "of": "child",
           "requests": 1,
           "code": "failed_precondition",
-          "limes_code": "lease_nested"
+          "limes_code": "lease_nested",
+          "message": "An ancestor of the capability holds a lease"
         }
       ]
     },
@@ -128,7 +132,8 @@
           "of": "child",
           "requests": 0,
           "code": "invalid_argument",
-          "limes_code": "invalid_request"
+          "limes_code": "invalid_request",
+          "message": "The request is invalid: lease of no amount and no requests"
         }
       ]
     },
@@ -193,7 +198,8 @@
           "of": "revoked",
           "requests": 1,
           "code": "permission_denied",
-          "limes_code": "revoked"
+          "limes_code": "revoked",
+          "message": "The access token is invalid"
         }
       ]
     },
@@ -206,7 +212,8 @@
           "of": "unknown",
           "requests": 1,
           "code": "not_found",
-          "limes_code": "not_found"
+          "limes_code": "not_found",
+          "message": "Not found"
         }
       ]
     },
