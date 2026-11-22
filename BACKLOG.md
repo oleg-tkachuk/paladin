@@ -608,18 +608,19 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### A bearer token whose key set will not load is answered Unauthenticated
+### The HTTP edges answer a key set that will not load as a refused token
 
 - **Status:** Deferred.
-- **Reason:** when a token's kid is unknown and the forced JWKS refresh fails
-  (`JWKSVerifier.keySetWith`, the IdP unreachable), the planes answer
-  Unauthenticated, "bearer token could not be verified": a fault of the
-  server's dependency told to the caller as a credential problem, logged by
-  the failure log as `rpc rejected` at Info. The message was cleaned of the fetch error; the code was
-  left as it was.
-- **Definition of Done:** a refresh failure is Unavailable, logged at Error,
-  and an unknown kid after a good refresh stays Unauthenticated; a test
-  covers both.
+- **Reason:** the planes answer `auth.ErrKeySetUnavailable` Unavailable, but
+  the edges that verify a bearer token outside Connect — the MCP bridge's
+  `RequireBearer` (`mcp/oauth.go`, logged at Info), `authorizePlatformAdmin`
+  (`mcp/sessions.go`), the audit stream's `SSEHandler` (`auditstream/sse.go`),
+  the bridge's session-subject lookup (`cmd/server/serve_mcp.go`) and the
+  session role's `refreshAges` (`app/build_session.go`) — still answer it as
+  a token refused, 401, with no Error line.
+- **Definition of Done:** each edge answers 503 with a retry sentence for an
+  error wrapping `auth.ErrKeySetUnavailable` and logs it at Error with the
+  cause, a refused token stays 401; a test per edge covers both.
 - **Blockers:** none.
 
 ### Lease refusals of a presented capability still begin with `capability:`

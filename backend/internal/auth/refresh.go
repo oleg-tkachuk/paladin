@@ -24,11 +24,12 @@ const (
 )
 
 // RefreshRefusal is the answer to a refresh token DecodeRefresh refused with
-// err: Unauthenticated, the reason it wraps naming the refresh token, and err
-// as the cause for the failure log.
+// err: Unauthenticated — Unavailable when the key set would not load — the
+// reason it wraps naming the refresh token, and err as the cause for the
+// failure log.
 func RefreshRefusal(err error) *connect.Error {
 	msg := strings.Replace(bearerRefusalText(err), bearerCredentialName, refreshCredentialName, 1)
-	return connect.NewError(connect.CodeUnauthenticated, msg).WithCause(err)
+	return connect.NewError(bearerRefusalCode(err), msg).WithCause(err)
 }
 
 // RefreshDecoder verifies a refresh token's signature against the IAM-audience

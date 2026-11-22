@@ -165,11 +165,11 @@ func TestRefreshRefusalNamesTheRefreshToken(t *testing.T) {
 	}
 }
 
-// A failure that is none of the reasons — a key set that would not load — is
-// answered with a fixed sentence, its cause kept for the log.
+// A failure that is none of the reasons — a key of a kind the verifier does
+// not know — is answered with a fixed sentence, its cause kept for the log.
 func TestUnclassifiedBearerFailureIsAFixedSentence(t *testing.T) {
 	t.Parallel()
-	cause := errors.New("jwks: refresh on miss: Get \"https://idp.internal/jwks\": dial tcp: refused")
+	cause := errors.New("jwk: a key of type oct verifies no signature")
 	got := bearerRefusal(cause)
 	if got.Message() != bearerUnverified {
 		t.Errorf("message %q, want %q", got.Message(), bearerUnverified)
