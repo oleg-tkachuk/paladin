@@ -320,8 +320,10 @@ func (p Policy) PlanMultipart(u Upload) (PartPlan, error) {
 	if minPart > maxPart {
 		return PartPlan{}, invalid("this bucket's part limits are inconsistent: minimum %d above maximum %d", minPart, maxPart)
 	}
+	// Doubling stops at the largest part: past it the size is clamped below
+	// anyway, and doubling on would overflow for an object near int64's limit.
 	partSize := minPart
-	for ceilDiv(u.SizeBytes, partSize) > maxParts {
+	for partSize < maxPart && ceilDiv(u.SizeBytes, partSize) > maxParts {
 		partSize *= 2
 	}
 	if partSize > maxPart {
@@ -337,7 +339,15 @@ func (p Policy) PlanMultipart(u Upload) (PartPlan, error) {
 	return PartPlan{PartSize: partSize, TotalParts: int32(n)}, nil
 }
 
-func ceilDiv(a, b int64) int64 { return (a + b - 1) / b }
+// ceilDiv is a/b rounded up, for a >= 0 and b > 0, without forming a+b, which
+// overflows for a near int64's limit.
+func ceilDiv(a, b int64) int64 {
+	q := a / b
+	if a%b != 0 {
+		q++
+	}
+	return q
+}
 
 // PutTTLCeiling and GetTTLCeiling are the bucket's presign TTL ceilings;
 // zero when the bucket sets none and the global max_ttl alone applies.
