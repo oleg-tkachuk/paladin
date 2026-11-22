@@ -1,4 +1,4 @@
-## Unreleased — the Python fake's lease refusals speak as the server does
+## sdk/python/v0.151.3, sdk/go/v0.151.3 — the Python fake's lease refusals speak as the server does
 
 `paladin.testing`'s `Lease`, `GetLease` and `SettleLease` refuse with the
 server's messages, which are limes's problem titles: `The capability holds no
