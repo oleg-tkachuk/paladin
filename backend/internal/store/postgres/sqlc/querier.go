@@ -57,7 +57,7 @@ type Querier interface {
 	// One drainer tick's worth. FOR UPDATE SKIP LOCKED so replicas take disjoint
 	// rows; the join resolves the backend the parts actually live on, which is
 	// why bucket_id carries a RESTRICT foreign key.
-	ClaimDueMultipartAborts(ctx context.Context, batchSize int32) ([]ClaimDueMultipartAbortsRow, error)
+	ClaimDueMultipartAborts(ctx context.Context, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ClaimDueMultipartAbortsRow, error)
 	// Idempotency / dedup for the ingest plane. Every CloudEvent the worker
 	// claims passes through ClaimIngestedEvent — INSERT ... ON CONFLICT
 	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
@@ -436,7 +436,11 @@ type Querier interface {
 	// the same claim discipline the event-delivery outbox uses.
 	// Backend and bucket come back by NAME: the storage adapter addresses S3 by
 	// name, and the bucket still exists even though the object row does not.
-	ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurgesRow, error)
+	// Each row carries its bucket's id and the state the bucket gate decides on
+	// (bucketgate.State): the drainer asks the gate in Go and claims again without
+	// the buckets it refused, whose debt stays due, untouched, for a tick whose
+	// gate admits it.
+	ListDuePurges(ctx context.Context, limit int32, deferredBucketIds []pgtype.UUID) ([]ListDuePurgesRow, error)
 	// Tombstones for permanently deleted objects (migration 074).
 	// HardDeleteObject writes them, in the statement that removes the row.
 	// Which of these ids were permanently deleted from this collection.
@@ -462,7 +466,13 @@ type Querier interface {
 	// and any active retention window block the purge; the worker has no
 	// governance bypass, so GOVERNANCE is honoured here exactly like COMPLIANCE.
 	// Locked rows are skipped until the lock lapses.
-	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error)
+	//
+	// Each row carries its bucket's id and the state the bucket gate decides on
+	// (bucketgate.State): the worker asks the gate in Go, never here, and passes
+	// back the buckets it refused so the next claim leaves their rows out. One
+	// capped query both bounds the work and keeps a refused bucket's trash from
+	// heading every batch.
+	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListHardDeletableRow, error)
 	// Every tenant this subject belongs to, for the tenant switcher. Ordered by
 	// creation so the list is stable across calls rather than whatever the
 	// planner returns.
@@ -554,7 +564,7 @@ type Querier interface {
 	// Names, not ids: the reaper aborts the upload against the storage backend,
 	// which addresses buckets by name, and the collection name is a segment of the
 	// object's storage path.
-	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
+	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
 	// Keyed by backend NAME, for a page of backends at once.
 	ListStorageBackendFeatures(ctx context.Context, backendNames []string) ([]ListStorageBackendFeaturesRow, error)
 	// Cursor pagination on the backend NAME, which is what the domain calls
@@ -612,6 +622,8 @@ type Querier interface {
 	// replicator) that don't carry a tenant context. Joins collections to
 	// materialize the bucket binding so the caller can call S3 in one trip.
 	// checksum_algorithm tells a HEAD which stored checksum is the object's.
+	// enabled, read_only and provision_state are the bucket gate's state
+	// (bucketgate.State), for a worker that deletes the object's bytes.
 	LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error)
 	// Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
 	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, name string, path string) (LookupObjectByKeyRow, error)

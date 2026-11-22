@@ -20,13 +20,20 @@ DELETE FROM pending_purges WHERE id = $1;
 -- name: ListDuePurges :many
 -- Backend and bucket come back by NAME: the storage adapter addresses S3 by
 -- name, and the bucket still exists even though the object row does not.
+-- Each row carries its bucket's id and the state the bucket gate decides on
+-- (bucketgate.State): the drainer asks the gate in Go and claims again without
+-- the buckets it refused, whose debt stays due, untouched, for a tick whose
+-- gate admits it.
 SELECT p.id, p.tenant_id, p.object_id, p.collection_name, p.path, p.attempts,
        sb.name AS backend_name,
-       b.name  AS bucket_name
+       b.name  AS bucket_name,
+       b.id    AS bucket_id,
+       sb.enabled, sb.read_only, b.provision_state
   FROM pending_purges p
   JOIN buckets b           ON b.id = p.bucket_id
   JOIN storage_backends sb ON sb.id = b.backend_id
  WHERE p.next_attempt_at <= now()
+   AND NOT (p.bucket_id = ANY(coalesce(sqlc.arg('deferred_bucket_ids')::uuid[], '{}')))
  ORDER BY p.next_attempt_at
  LIMIT $1
  FOR UPDATE OF p SKIP LOCKED;

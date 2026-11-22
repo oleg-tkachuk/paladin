@@ -367,7 +367,9 @@ const listHardDeletable = `-- name: ListHardDeletable :many
 SELECT o.id, o.tenant_id, o.path, o.resource_version,
        sb.name AS backend_name,
        b.name  AS bucket_name,
-       k.name  AS collection_name
+       k.name  AS collection_name,
+       b.id    AS bucket_id,
+       sb.enabled, sb.read_only, b.provision_state
 FROM objects o
 JOIN collections k     ON k.id = o.collection_id
 JOIN buckets b         ON b.id = k.bucket_id
@@ -382,8 +384,10 @@ WHERE o.state = 'DELETED'
          AND (l.legal_hold OR l.retain_until > now()))
   -- A tenant in the trash is frozen: its trash is not emptied meanwhile.
   AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = o.tenant_id AND t.deleted_at IS NOT NULL)
+  -- Not the buckets the gate refused earlier in this sweep.
+  AND NOT (b.id = ANY(coalesce($2::uuid[], '{}')))
 ORDER BY o.terminated_at
-LIMIT $2
+LIMIT $3
 `
 
 type ListHardDeletableRow struct {
@@ -394,6 +398,10 @@ type ListHardDeletableRow struct {
 	BackendName     string      `json:"backend_name"`
 	BucketName      string      `json:"bucket_name"`
 	CollectionName  string      `json:"collection_name"`
+	BucketID        pgtype.UUID `json:"bucket_id"`
+	Enabled         bool        `json:"enabled"`
+	ReadOnly        bool        `json:"read_only"`
+	ProvisionState  string      `json:"provision_state"`
 }
 
 // Picks DELETED objects past the cooling-off window for the
@@ -411,8 +419,14 @@ type ListHardDeletableRow struct {
 // and any active retention window block the purge; the worker has no
 // governance bypass, so GOVERNANCE is honoured here exactly like COMPLIANCE.
 // Locked rows are skipped until the lock lapses.
-func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error) {
-	rows, err := q.db.Query(ctx, listHardDeletable, terminatedAt, batchSize)
+//
+// Each row carries its bucket's id and the state the bucket gate decides on
+// (bucketgate.State): the worker asks the gate in Go, never here, and passes
+// back the buckets it refused so the next claim leaves their rows out. One
+// capped query both bounds the work and keeps a refused bucket's trash from
+// heading every batch.
+func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListHardDeletableRow, error) {
+	rows, err := q.db.Query(ctx, listHardDeletable, terminatedAt, deferredBucketIds, batchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -428,6 +442,10 @@ func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Tim
 			&i.BackendName,
 			&i.BucketName,
 			&i.CollectionName,
+			&i.BucketID,
+			&i.Enabled,
+			&i.ReadOnly,
+			&i.ProvisionState,
 		); err != nil {
 			return nil, err
 		}
@@ -657,7 +675,8 @@ const lookupObjectByID = `-- name: LookupObjectByID :one
 SELECT o.id, o.tenant_id, o.path, o.state, o.checksum_algorithm,
        c.name  AS collection_name,
        sb.name AS backend_name,
-       bk.name AS bucket_name
+       bk.name AS bucket_name,
+       sb.enabled, sb.read_only, bk.provision_state
 FROM objects o
 JOIN collections c       ON c.id = o.collection_id
 JOIN buckets bk          ON bk.id = c.bucket_id
@@ -674,12 +693,17 @@ type LookupObjectByIDRow struct {
 	CollectionName    string      `json:"collection_name"`
 	BackendName       string      `json:"backend_name"`
 	BucketName        string      `json:"bucket_name"`
+	Enabled           bool        `json:"enabled"`
+	ReadOnly          bool        `json:"read_only"`
+	ProvisionState    string      `json:"provision_state"`
 }
 
 // Reads an object by id alone. Used by background workers (reconciler,
 // replicator) that don't carry a tenant context. Joins collections to
 // materialize the bucket binding so the caller can call S3 in one trip.
 // checksum_algorithm tells a HEAD which stored checksum is the object's.
+// enabled, read_only and provision_state are the bucket gate's state
+// (bucketgate.State), for a worker that deletes the object's bytes.
 func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error) {
 	row := q.db.QueryRow(ctx, lookupObjectByID, id)
 	var i LookupObjectByIDRow
@@ -692,6 +716,9 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 		&i.CollectionName,
 		&i.BackendName,
 		&i.BucketName,
+		&i.Enabled,
+		&i.ReadOnly,
+		&i.ProvisionState,
 	)
 	return i, err
 }

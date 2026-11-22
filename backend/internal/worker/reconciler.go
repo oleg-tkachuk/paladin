@@ -20,6 +20,8 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
@@ -144,9 +146,19 @@ func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) error 
 // registration: the bytes are deleted, then the row discarded. A failed delete
 // leaves the row PENDING, so the next tick tries again rather than failing a
 // row over bytes nothing will remove.
+//
+// A delete the bucket gate refuses — a draining or disabled backend — is
+// deferred the same way, and is not a failure: the row stays PENDING until a
+// tick whose gate takes the delete.
 func (r *ReconcilerV2) discardMismatched(ctx context.Context, objectID uuid.UUID, cause error) error {
 	log := r.log.With(zap.String("object_id", objectID.String()), zap.NamedError("mismatch", cause))
-	if err := r.probe.DeleteByObjectID(ctx, objectID); err != nil {
+	err := r.probe.DeleteByObjectID(ctx, objectID)
+	if bucketgate.Refused(err) {
+		log.Warn("the bucket gate refuses deleting the mismatched bytes; the object stays pending until it admits it",
+			zap.String("reason", err.Error()))
+		return nil
+	}
+	if err != nil {
 		log.Warn("failed to delete mismatched object bytes", zap.Error(err))
 		return err
 	}

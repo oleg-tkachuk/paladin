@@ -53,11 +53,14 @@ func (q *Queries) InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenant
 const listDuePurges = `-- name: ListDuePurges :many
 SELECT p.id, p.tenant_id, p.object_id, p.collection_name, p.path, p.attempts,
        sb.name AS backend_name,
-       b.name  AS bucket_name
+       b.name  AS bucket_name,
+       b.id    AS bucket_id,
+       sb.enabled, sb.read_only, b.provision_state
   FROM pending_purges p
   JOIN buckets b           ON b.id = p.bucket_id
   JOIN storage_backends sb ON sb.id = b.backend_id
  WHERE p.next_attempt_at <= now()
+   AND NOT (p.bucket_id = ANY(coalesce($2::uuid[], '{}')))
  ORDER BY p.next_attempt_at
  LIMIT $1
  FOR UPDATE OF p SKIP LOCKED
@@ -72,6 +75,10 @@ type ListDuePurgesRow struct {
 	Attempts       int32       `json:"attempts"`
 	BackendName    string      `json:"backend_name"`
 	BucketName     string      `json:"bucket_name"`
+	BucketID       pgtype.UUID `json:"bucket_id"`
+	Enabled        bool        `json:"enabled"`
+	ReadOnly       bool        `json:"read_only"`
+	ProvisionState string      `json:"provision_state"`
 }
 
 // ListDuePurges claims work for one drainer tick. FOR UPDATE SKIP LOCKED so
@@ -79,8 +86,12 @@ type ListDuePurgesRow struct {
 // the same claim discipline the event-delivery outbox uses.
 // Backend and bucket come back by NAME: the storage adapter addresses S3 by
 // name, and the bucket still exists even though the object row does not.
-func (q *Queries) ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurgesRow, error) {
-	rows, err := q.db.Query(ctx, listDuePurges, limit)
+// Each row carries its bucket's id and the state the bucket gate decides on
+// (bucketgate.State): the drainer asks the gate in Go and claims again without
+// the buckets it refused, whose debt stays due, untouched, for a tick whose
+// gate admits it.
+func (q *Queries) ListDuePurges(ctx context.Context, limit int32, deferredBucketIds []pgtype.UUID) ([]ListDuePurgesRow, error) {
+	rows, err := q.db.Query(ctx, listDuePurges, limit, deferredBucketIds)
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +108,10 @@ func (q *Queries) ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurg
 			&i.Attempts,
 			&i.BackendName,
 			&i.BucketName,
+			&i.BucketID,
+			&i.Enabled,
+			&i.ReadOnly,
+			&i.ProvisionState,
 		); err != nil {
 			return nil, err
 		}
