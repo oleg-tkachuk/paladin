@@ -89,6 +89,81 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## sdk/python/v0.151.3, sdk/go/v0.151.3 — the Python fake's lease refusals speak as the server does
+
+`paladin.testing`'s `Lease`, `GetLease` and `SettleLease` refuse with the
+server's messages, which are limes's problem titles: `The capability holds no
+lease`, `An ancestor of the capability holds a lease`, `Not found`, `The
+access token is invalid` for a revoked capability, and `The request is
+invalid: lease of no amount and no requests`. They used to be limes's own
+error texts, such as `limes: lease not found`. Codes and `ErrorInfo` are
+unchanged; a test matching the old text should match the limes code instead.
+
+## Unreleased — refusals no longer name the package that wrote them
+
+- A call with no principal is refused `UNAUTHENTICATED` with `no
+  authenticated principal`, and one whose principal has no tenant with `the
+  principal is not bound to a tenant`; both used to start with `auth: `.
+- A delegated capability refused for its user starts `delegated capability
+  refused`, and a user gone is `the user a delegated capability acts for is
+  gone`, where both started with `auth: `.
+- `BillingService` on a deployment without the capability subsystem answers
+  `UNAVAILABLE` with `billing handler not wired`, where it was `billing:
+  handler not wired`.
+- A batch the server could not check for want of its own wiring is
+  `INTERNAL`, `the batch could not be submitted: the server is at fault`,
+  where it was `UNAVAILABLE`, `batch: bucket lookup not wired` or `batch:
+  object lookup not wired`; no deployment is wired so.
+- `DeleteOAuthClient` failing in the store is `INTERNAL`, `the OAuth client
+  could not be deleted`, where the message was `delete oauth client: ` and the
+  store's own error.
+
+## Unreleased — the HTTP edges answer a key set that will not load with 503
+
+- The MCP server's `/mcp`, `/sessions` and `/status` endpoints and the audit
+  stream answer a bearer token whose signing key could not be fetched with
+  `503 Service Unavailable` and the body `the keys that verify a bearer
+  token could not be loaded; retry the call`, as the RPCs answer it
+  `UNAVAILABLE`. They used to answer `401`, which told an OAuth client to
+  re-authorize a token that may be good. The 503 carries no
+  `WWW-Authenticate` challenge: retry the request instead.
+- A token refused — expired, forged, another audience — is still `401` with
+  the challenge it had.
+
+## Unreleased — background deletes wait for a backend that takes writes
+
+- The lifecycle hard delete and the purge drainer no longer delete bytes on a
+  draining (read-only) or disabled backend, as `DeleteObject` with `permanent`
+  is refused there. A trashed object past its retention stays in the trash,
+  restorable, and a purge debt stays in `pending_purges`, unchanged, until
+  the backend takes writes again; the first sweep after that removes them.
+  Each sweep logs every bucket it defers at Warn, with the gate's reason.
+- A tenant purged while its bytes sit on a draining backend keeps those bytes
+  until the drain ends. A backend disabled for good rather than returned to
+  service keeps its purge debts on record, and its buckets cannot be deleted
+  while they are there.
+- The multipart reaper and the abort drainer no longer abort uploads on a
+  disabled backend; the sessions and abort debts stay until it is enabled
+  again. A draining backend still takes the abort: parts were never an
+  object, and aborting them frees storage.
+- The reconciler no longer deletes the bytes of an upload that broke its
+  registration on a draining or disabled backend; the object stays `PENDING`
+  until the backend takes writes again, and each tick logs the deferral at
+  Warn.
+
+## Unreleased — a storage migration moves the trash with the tenant
+
+- A shared→dedicated storage migration now copies, verifies and cleans up
+  trashed objects as well as live ones, so `RestoreObject` works on an object
+  trashed before the migration. It used to answer `FAILED_PRECONDITION` with
+  `ERROR_REASON_OBJECT_BYTES_MISSING`, the bytes having stayed in the old
+  bucket.
+- `objects_total` and `objects_copied` on `GetTenantStorageMigration` count
+  trashed objects too. A trashed object whose bytes were already gone from the
+  bucket is counted as copied: there was nothing to move.
+- A rollback copies back objects trashed after the rebind as well, so they
+  stay restorable on the source bucket. They stay in the trash.
+
 ## sdk/python/v0.151.2, sdk/go/v0.151.2 — lease and Delegate refusals name the presented capability
 
 Codes and reasons are unchanged; only the message text moved. A client that
@@ -186,7 +261,15 @@ When no MCP replica answered, `error` is one of `the MCP server is
 unreachable`, `the MCP server timed out`, `the MCP server answered HTTP <n>` or
 `the MCP server's answer could not be read`. It used to be the HTTP client's
 error, naming the replica's URL. The full error is in the admin plane's
-`mcp bridge unreachable` log line. Each upstream's `error` is unchanged.
+`mcp bridge unreachable` log line.
+
+Each upstream's `error` is a verdict too: `the plane is unreachable`, `the
+plane timed out`, `the plane's certificate was refused`, `the TLS handshake
+with the plane failed` (the plane ended it, as when it refuses the MCP
+server's client certificate) or `the plane answered HTTP <n>`. It used to be
+the MCP server's own probe error. The full error, x509 detail included, is in
+the MCP server's `mcp upstream probe failed` log line. The console names the
+verdict on the unreachable plane's badge.
 
 ## Unreleased — refused deletes name resources, not tables
 
