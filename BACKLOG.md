@@ -606,21 +606,6 @@ the same commit. Treat this file like a runtime invariant.
   test rebinds the collection mid-session.
 - **Blockers:** a store query by (backend, bucket) for the gate's state.
 
-### The RPC failure log counts a provisioning bucket as a server fault
-
-- **Status:** Deferred.
-- **Reason:** the handlers' own outcome lines (objecth, multiparth, batchh) log
-  the bucket gate's provisioning refusal as a refusal at Warn, but
-  `middleware.LogOutcome` decides by code alone and logs every Unavailable as
-  `rpc failed` at Error, so the same call still leaves an Error line on every
-  plane.
-- **Definition of Done:** the failure log reads the refusal's reason (or a
-  marker the gate sets) and logs a gate refusal as `rpc refused` at Warn,
-  while an Unavailable from a failing dependency stays at Error; a test
-  covers both.
-- **Blockers:** the middleware cannot import `bucketgate` without pulling a
-  handler concern into it; the marker needs a home both can import.
-
 ## API error messages
 
 ### A bearer token whose key set will not load is answered Unauthenticated

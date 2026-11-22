@@ -9,11 +9,13 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/reqctx"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // LogContext puts a request-scoped logger on the context.
@@ -199,22 +201,44 @@ func logFailure(base *zap.Logger, procedure, requestID string, took time.Duratio
 		fields = append(fields, zap.String(fieldCause, cause))
 	}
 
+	msg, level := outcomeOf(code, err)
+	base.Log(level, msg, fields...)
+}
+
+// The messages of the failure log's three outcomes.
+const (
+	msgRPCFailed   = "rpc failed"
+	msgRPCRefused  = "rpc refused"
+	msgRPCRejected = "rpc rejected"
+)
+
+// outcomeOf is how a failed call is logged: its message and its level, by
+// its code — and, for a code that reports the server failing, by whether err
+// is a refusal all the same (rpcerr.Refusal), which nothing on the server
+// failed to decide.
+func outcomeOf(code connect.Code, err error) (string, zapcore.Level) {
 	switch code {
-	// The server is broken. Someone should be woken up by a rate of these.
+	// The server is broken. Someone should be woken up by a rate of these —
+	// unless the server decided and said no, as the bucket gate does to a
+	// bucket still provisioning: Unavailable, so the caller retries, and a
+	// refusal all the same.
 	case connect.CodeInternal, connect.CodeUnknown,
 		connect.CodeDataLoss, connect.CodeUnavailable:
-		base.Error("rpc failed", fields...)
+		if rpcerr.Refused(err) {
+			return msgRPCRefused, zapcore.WarnLevel
+		}
+		return msgRPCFailed, zapcore.ErrorLevel
 	// The request was refused by a policy or a precondition. Not a defect, but
 	// a burst of them means something changed — a quota, a Cedar policy, a
 	// concurrent writer taking every OCC race.
 	case connect.CodePermissionDenied, connect.CodeResourceExhausted,
 		connect.CodeAborted, connect.CodeFailedPrecondition:
-		base.Warn("rpc refused", fields...)
+		return msgRPCRefused, zapcore.WarnLevel
 	// An ordinary client mistake: a bad filter, a name that is not there, a
 	// token that expired. Info because these are normal traffic and an
 	// operator still has to be able to find them; Warn would cry wolf on every
 	// browser that probes an endpoint without a token.
 	default:
-		base.Info("rpc rejected", fields...)
+		return msgRPCRejected, zapcore.InfoLevel
 	}
 }
