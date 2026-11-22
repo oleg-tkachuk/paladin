@@ -614,6 +614,23 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
+### The session role answers a key set that will not load as 204
+
+- **Status:** Deferred.
+- **Reason:** every other HTTP edge answers `auth.ErrKeySetUnavailable` with
+  503, but the session role's rotation (`session/handler.go`, `rotate`) still
+  answers 204 when `refreshAges` returns `session.ErrRefreshKeysUnavailable`:
+  the console's `rehydrate` (`frontend/src/context/AuthContext.tsx`) treats
+  any answer other than a rotation as signed out, so a 503 would log every
+  user out during an IdP outage. The cause is logged at Error.
+- **Definition of Done:** the console's session client
+  (`frontend/src/lib/session/client.ts`) tells a 503 apart from a refused
+  session, keeps the user signed in and retries with backoff (showing that
+  sign-in could not be checked), and only then the role answers 503 with the
+  retry sentence for a key set that will not load; a refused token stays the
+  role's sign-out answer. Tests on both sides cover the outage and the refusal.
+- **Blockers:** none.
+
 ### The OAuth endpoints and `unary.newMessage` quote Go errors to the caller
 
 - **Status:** Deferred.
