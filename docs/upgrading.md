@@ -89,6 +89,143 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — every object has a storage path of its own
+
+- A nested collection occupies one segment of the bucket path: its `/` is
+  written `.`. Collection `invoices/2026/q1` stores key `report.pdf` at
+  `<tenant>/invoices.2026.q1/report.pdf`, where it used to share
+  `<tenant>/invoices/2026/q1/report.pdf` with key `2026/q1/report.pdf` of
+  collection `invoices`. Collections without a `/` keep their layout.
+  `Object.placement.storage_path` reports the new path.
+- Objects of nested collections uploaded before this release are still
+  listed, but their bytes are where the old layout put them, so reading them
+  fails. Delete such objects and upload them again; on a cluster whose data
+  is disposable, delete the nested collections and create them again. Their
+  old bytes are not removed by Paladin, and they sit where the parent
+  collection now keeps its own keys: an upload to the parent at such a key
+  is refused by the store (`If-None-Match: *`) until they are removed from
+  the bucket. The nested collections are
+  `SELECT tenant_id, name FROM collections WHERE name LIKE '%/%'`.
+- An object key is segments separated by `/`, none of them empty, `.` or
+  `..`: no leading or trailing `/`, no `//`. `UploadObject`,
+  `InitiateMultipartUpload` and `CopyObject` (`destination_key`) refuse any
+  other key as `INVALID_ARGUMENT`, naming the rule and the reason. Such keys
+  used to be stored as given while their storage path was normalised, so
+  two objects of one tenant could share a path. A key ending in `/` is
+  refused too: a filer-backed store keeps it as a directory and drops the
+  bytes written to it.
+- `BatchCopyObjects` refuses a `destination_key_prefix` with a leading `/`,
+  or an empty, `.` or `..` segment before its last `/`, as
+  `INVALID_ARGUMENT`. A copy whose prefix and source key together are not a
+  canonical key fails that item, with the reason in the operation's
+  failures.
+- `CopyObject` without a `destination_key` keeps the source's key only if
+  it is canonical; otherwise it is `INVALID_ARGUMENT`, and the copy needs a
+  key of its own.
+- `InitiateMultipartUpload` without a `key` names one, as `UploadObject`
+  does. It used to store the object at the collection's own prefix.
+- Both SDKs' fakes (`paladintest`, `paladin.testing`) refuse the same keys
+  on `UploadObject` and `InitiateMultipartUpload`, held to the server by
+  `sdk/testdata/object_keys.json`.
+- Objects stored under a key that breaks the rule before this release stay
+  listed, but reading their bytes fails, and their placement is not
+  reported. Deleting them settles without deleting bytes, which may belong
+  to the object whose key the old composer rewrote theirs to. Find them
+  with:
+
+  ```sql
+  SELECT tenant_id, collection_id, id, path FROM objects
+  WHERE path = '' OR path LIKE '/%' OR path LIKE '%/'
+     OR path LIKE '%//%' OR path ~ '(^|/)\.\.?(/|$)'
+  ```
+
+  then delete each through the API, or, where the data is disposable,
+  delete the rows.
+
+## Unreleased — TenantBudgetService authorizes each call
+
+`TenantBudgetService` now asks the policy engine on every call, under two new
+Cedar actions on the `Tenant` resource: `ReadTenantBudget` and
+`ManageTenantBudget`.
+
+| RPC | Allowed to |
+|-----|------------|
+| `Get`, `ListReservations` | `platform.admin` for any tenant; `tenant.admin` for its own tenant |
+| `Set` | `platform.admin` |
+| `Summarize` | `platform.admin` |
+
+- Any other caller is `PERMISSION_DENIED`, and a call with no principal is
+  `UNAUTHENTICATED`. `bucket.admin`, `iam.admin`,
+  `platform.tenant-provisioner` and `platform.capability-issuer` hold no
+  budget grant.
+- The tenant admin's read is a built-in permit, so it reaches every tenant
+  whatever policy it was created with. A tenant policy can still `forbid`
+  `ReadTenantBudget`.
+- `Set` and `Summarize` need the `platform.admin` role in addition to the
+  Cedar decision: the budget is a spend ceiling the platform sets, and
+  `Summarize` reads every tenant's.
+- A caller the gate refuses is answered before the capability subsystem's
+  state, so `UNAVAILABLE` for a disabled subsystem now reaches only callers
+  allowed the call.
+- The console shows a tenant admin its tenant's budget and holds without the
+  form to change them, and leaves the dashboard's budget alerts to platform
+  admins.
+
+## Unreleased — a tenant's audit trail holds only what was admitted to it
+
+- An audit entry is filed in the trail of the tenant its resource names only
+  when the call was admitted to that tenant: it is the caller's own, or the
+  call's authorization admitted it there — a policy decision on that tenant,
+  or a role that spans tenants. A call refused before that, and one that
+  named a tenant it was never admitted to, is in the caller's trail alone,
+  with `resource_name` recording the resource it named.
+- `ListAuditLog` with a `tenant_id`, and its facet counts, no longer return
+  entries of other tenants' callers that named a resource of that tenant.
+- A call admitted to a tenant that then fails, a version conflict say, is
+  still in that tenant's trail.
+- Migration 112 applies the rule to existing entries: a refused entry filed
+  under a tenant other than its actor's is taken out of that tenant's trail.
+
+## Unreleased — inputs the server misread are refused
+
+- A checksum must be its digest's one base64 spelling. A value with a line
+  break, or with unused trailing bits set (`AAAAAB==` for `AAAAAA==`), is
+  `INVALID_ARGUMENT` wherever a checksum is declared; it used to pass and
+  then fail the comparison with the store's checksum.
+- A canonical collection name whose backend or bucket holds a `/`
+  (`storageBackends/a/b/buckets/…`) is `INVALID_ARGUMENT`. No backend or
+  bucket can be addressed by such a name elsewhere in the API.
+- A user settings name with anything after `/settings`
+  (`users/{id}/settings/x`) is `INVALID_ARGUMENT`; it used to address
+  `users/{id}`.
+- `ListObjectVersions` with a malformed `page_token` is `INVALID_ARGUMENT`,
+  as every other list is, not `INTERNAL`.
+- A list filter whose evaluation costs more than the server's bound — nested
+  comprehensions over literal lists, say — is `INVALID_ARGUMENT` on the list
+  RPCs, matches nothing on `ListObjects`, and skips the row in subscriptions
+  and lifecycle rules. Filters of ordinary shape stay orders of magnitude
+  below it.
+- A `trusted_proxies` entry written with an IPv6 zone (`fe80::1%eth0`) is
+  refused when a role builds its listener, and the role does not start. Such
+  an entry never trusted anything; write the address without its zone.
+
+## Unreleased — the compose stack and the test suites run Postgres 19
+
+`backend/deploy/docker-compose.yaml`, the e2e stack and the testcontainers
+suites move from Postgres 18.7 to 19.0. A major cannot read the previous
+major's data directory; the image keeps its data under
+`/var/lib/postgresql/19/docker`, so an existing `paladin_pg_data` volume starts
+empty under 19 with the 18 data left beside it. The local stack's data is
+disposable, so drop the volume and let the stack recreate it:
+
+```
+docker compose -f backend/deploy/docker-compose.yaml down -v
+```
+
+A deployment on its own Postgres needs a major upgrade (`pg_upgrade`, or a
+CloudNativePG major upgrade) before it runs against 19; Paladin's migrations
+run unchanged on both majors.
+
 ## sdk/python/v0.151.3, sdk/go/v0.151.3 — the Python fake's lease refusals speak as the server does
 
 `paladin.testing`'s `Lease`, `GetLease` and `SettleLease` refuse with the
