@@ -2,7 +2,7 @@ version: "3"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # k8s — the cluster-side half: rolling a deployment, tailing it, looking at what
-# is running, installing the chart from disk.
+# is running and which images it runs, installing the chart from disk.
 #
 #   includes:
 #     k8s:
@@ -13,7 +13,7 @@ version: "3"
 # only operates a cluster it does not build for needs this one alone. Include
 # both when a component does both; they share the same input names.
 #
-# Every task addresses the Deployment by name directly — `deploy/<name>` — not
+# Every task but `images` addresses the Deployment by name directly — `deploy/<name>` — not
 # by discovering it through a selector (rollout:wait alone takes one, for a
 # release that brings several). That name must be exactly
 # K8S_DEPLOYMENT_NAME (PROJECT_NAME by default): `helm create`'s own scaffold
@@ -50,6 +50,8 @@ version: "3"
 #   LOG_TAIL             line count for k8s:logs          (default 100)
 #   PORT                 local port for k8s:port-forward  (default 8080)
 #   TARGET_PORT          pod-side port, when it differs   (default PORT)
+#   IMAGES_SCOPE         what k8s:images lists: "namespace", K8S_NAMESPACE,
+#                        or "cluster", every namespace (default namespace)
 #
 # Nothing here is declared under a bare knob name: a var declared in an included
 # file shadows the including file's value of the same name, so every input is
@@ -86,6 +88,22 @@ vars:
   _K8S_MATCH_CHART: chart
   # Seconds between two looks at the Deployments while rollout:wait waits.
   _K8S_POLL_SECONDS: "5"
+  # What IMAGES_SCOPE may be.
+  _K8S_SCOPE_NAMESPACE: namespace
+  _K8S_SCOPE_CLUSTER: cluster
+  # The pods `images` reads: the ones running or about to. A pod that has
+  # finished — a Job's, a CronJob's last run — runs nothing now.
+  _K8S_LIVE_PODS: status.phase!=Succeeded,status.phase!=Failed
+  # What `images` prints of each pod, as a kubectl go-template: one line per
+  # container, tab-separated — namespace, the controller that owns the pod
+  # (the pod itself where nothing does), container, image.
+  _K8S_POD_IMAGES_TEMPLATE: >-
+    {{`{{range .items}}{{$ns := .metadata.namespace}}{{$owner := printf "Pod/%s" .metadata.name}}{{range .metadata.ownerReferences}}{{if .controller}}{{$owner = printf "%s/%s" .kind .name}}{{end}}{{end}}{{range .spec.initContainers}}{{$ns}}{{"\t"}}{{$owner}}{{"\t"}}{{.name}} (init){{"\t"}}{{.image}}{{"\n"}}{{end}}{{range .spec.containers}}{{$ns}}{{"\t"}}{{$owner}}{{"\t"}}{{.name}}{{"\t"}}{{.image}}{{"\n"}}{{end}}{{end}}`}}
+  # The controllers a pod's own controller may belong to: a ReplicaSet to its
+  # Deployment, a Job to its CronJob. Tab-separated — namespace, kind/name,
+  # the owning controller's kind/name or nothing.
+  _K8S_OWNERS_TEMPLATE: >-
+    {{`{{range .items}}{{.metadata.namespace}}{{"\t"}}{{.kind}}/{{.metadata.name}}{{"\t"}}{{range .metadata.ownerReferences}}{{if .controller}}{{.kind}}/{{.name}}{{end}}{{end}}{{"\n"}}{{end}}`}}
   # Where each kind of match is read from, as kubectl jsonpath.
   _K8S_IMAGES_PATH: '{range .spec.template.spec.containers[*]}{.image}{"\n"}{end}'
   _K8S_CHART_PATH: '{.metadata.labels.helm\.sh/chart}'
@@ -318,6 +336,69 @@ tasks:
             {{._K8S_KUBECTL}} -n "$ns" rollout status "$d" --timeout="${left}s"
           done
           printf '%s %s · k8s · %s rolled out\n' "{{._K8S_OK}}" "$svc" "$version"
+
+  images:
+    desc: "List the images the pods in K8S_NAMESPACE run, by workload (IMAGES_SCOPE=cluster for every namespace)"
+    # Read from the pods rather than from Deployments and StatefulSets: what
+    # an operator runs — a database cluster, a broker — has pods and no
+    # workload of a kind this could know. Each pod is shown under the
+    # controller that owns it, followed up one step where that controller is
+    # owned in turn — a ReplicaSet's Deployment, a Job's CronJob — and its
+    # replicas collapse into one line. A lookup the cluster refuses, or a
+    # cluster that does not answer, fails: an empty list would read as
+    # "nothing is running".
+    vars:
+      _K8S_SVC: '{{or .PROJECT_NAME ._K8S_SVC}}'
+      _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
+      _K8S_SCOPE: '{{.IMAGES_SCOPE | default ._K8S_SCOPE_NAMESPACE}}'
+    preconditions:
+      - sh: '{{if or (eq ._K8S_SCOPE ._K8S_SCOPE_NAMESPACE) (eq ._K8S_SCOPE ._K8S_SCOPE_CLUSTER)}}true{{else}}false{{end}}'
+        msg: "IMAGES_SCOPE is {{.IMAGES_SCOPE}} — set it to {{._K8S_SCOPE_NAMESPACE}} (K8S_NAMESPACE alone, the default) or {{._K8S_SCOPE_CLUSTER}} (every namespace)"
+    cmds:
+      - cmd: |-
+          set -eu
+          svc={{._K8S_SVC | q}}
+          if [ {{._K8S_SCOPE | q}} = {{._K8S_SCOPE_CLUSTER | q}} ]; then
+            set -- --all-namespaces
+            where='every namespace'
+          else
+            set -- -n {{._K8S_NS | q}}
+            where={{._K8S_NS | q}}
+          fi
+          pods=$(mktemp)
+          owners=$(mktemp)
+          trap 'rm -f "$pods" "$owners"' EXIT
+          if ! {{._K8S_KUBECTL}} get pods "$@" --field-selector={{._K8S_LIVE_PODS | q}} -o go-template={{._K8S_POD_IMAGES_TEMPLATE | q}} > "$pods"; then
+            printf '%s %s · k8s · could not list the pods in %s — the output above says why\n' "{{._K8S_ERR}}" "$svc" "$where" >&2
+            exit 1
+          fi
+          if [ ! -s "$pods" ]; then
+            printf '%s %s · k8s · no running pod in %s, or no such namespace\n' "{{._K8S_SKIP}}" "$svc" "$where"
+            exit 0
+          fi
+          if ! {{._K8S_KUBECTL}} get replicasets,jobs "$@" -o go-template={{._K8S_OWNERS_TEMPLATE | q}} > "$owners"; then
+            printf '%s %s · k8s · could not look up what owns the pods in %s — the output above says why\n' "{{._K8S_ERR}}" "$svc" "$where" >&2
+            exit 1
+          fi
+          # Owners first: a controller with an owner of its own is shown as
+          # that owner. Then one line per namespace, workload, container and
+          # image, sorted, in columns as wide as their widest value.
+          awk -F '\t' '
+            FNR == NR { if ($3 != "") up[$1 FS $2] = $3; next }
+            {
+              if (($1 FS $2) in up) $2 = up[$1 FS $2]
+              key = $1 FS $2 FS $3 FS $4
+              if (!(key in seen)) { seen[key] = 1; print key }
+            }' OFS='\t' "$owners" "$pods" \
+            | LC_ALL=C sort \
+            | awk -F '\t' '
+                BEGIN { split("NAMESPACE WORKLOAD CONTAINER IMAGE", head, " "); for (i = 1; i <= 4; i++) w[i] = length(head[i]) }
+                { n++; for (i = 1; i <= 4; i++) { cell[n, i] = $i; if (length($i) > w[i]) w[i] = length($i) } }
+                END {
+                  fmt = "%-" w[1] "s  %-" w[2] "s  %-" w[3] "s  %s\n"
+                  printf fmt, head[1], head[2], head[3], head[4]
+                  for (r = 1; r <= n; r++) printf fmt, cell[r, 1], cell[r, 2], cell[r, 3], cell[r, 4]
+                }'
 
   upgrade:
     desc: "helm upgrade --install the release from the local chart directory"

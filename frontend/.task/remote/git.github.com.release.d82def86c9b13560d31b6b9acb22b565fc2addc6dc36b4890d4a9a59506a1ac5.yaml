@@ -321,7 +321,7 @@ tasks:
       - >-
         printf 'APP_VERSION=%s\nBUILD_KIND=%s\nGIT_COMMIT_HASH=%s\nBUILD_TIME=%s\n'
         {{._REL_VERSION | q}} {{._REL_KIND | q}} {{._REL_SHA | q}} {{._REL_BUILD_TIME | q}} > {{._REL_INFO_ENV | q}}
-      - printf '%s %s · version · %s → %s\n' "{{._REL_RUN}}" {{._REL_SVC | q}} {{._REL_VERSION | q}} {{._REL_INFO_ENV | q}}
+      - printf '%s %s · version · %s → %s\n' "{{._REL_OK}}" {{._REL_SVC | q}} {{._REL_VERSION | q}} {{._REL_INFO_ENV | q}}
 
   doctor:
     desc: "Check that everything this component declares actually resolves"
@@ -741,7 +741,7 @@ tasks:
       - >-
         helm package {{._REL_HELM_PKG_FLAGS}} {{._REL_CHART_DIR | q}} --version {{._REL_VERSION | q}}
         --app-version {{.CHART_APP_VERSION | default ._REL_VERSION | q}} >/dev/null
-      - printf '%s %s · chart · packaged %s-%s.tgz\n' "{{._REL_RUN}}" {{._REL_SVC | q}} {{._REL_CHART | q}} {{._REL_VERSION | q}}
+      - printf '%s %s · chart · packaged %s-%s.tgz\n' "{{._REL_OK}}" {{._REL_SVC | q}} {{._REL_CHART | q}} {{._REL_VERSION | q}}
 
   chart:push:
     desc: "Package and push the chart (skipped when that version is already published)"
