@@ -13,3 +13,6 @@
   `INTERNAL`, `the batch could not be submitted: the server is at fault`,
   where it was `UNAVAILABLE`, `batch: bucket lookup not wired` or `batch:
   object lookup not wired`; no deployment is wired so.
+- `DeleteOAuthClient` failing in the store is `INTERNAL`, `the OAuth client
+  could not be deleted`, where the message was `delete oauth client: ` and the
+  store's own error.
