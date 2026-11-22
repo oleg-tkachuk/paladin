@@ -517,6 +517,32 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
+### An object key has no length bound
+
+- **Status:** Deferred.
+- **Reason:** the key contract (`storagepath.ValidateKey`) refuses keys that
+  would alias another object's path, but not keys too long to store: S3
+  takes at most 1024 bytes for the whole bucket path, tenant and collection
+  segment included, so an over-long key passes the upload and fails at the
+  store, after its row was written.
+- **Definition of Done:** the composed path's length is bounded where the
+  key enters, as `INVALID_ARGUMENT` with the limit in the message, on every
+  path `AdmitKey` guards; the batch copy prefix leaves room for the source
+  key or fails the item.
+- **Blockers:** none.
+
+### The console and the SDKs do not check an object key before sending it
+
+- **Status:** Deferred.
+- **Reason:** the server refuses a non-canonical key with the rule and the
+  reason, which the console shows, but the upload dialog, the copy dialog
+  and the SDKs' `ObjectURI` parsers accept any non-empty key, so a user
+  learns of the rule only from a refused request.
+- **Definition of Done:** one table of keys and verdicts in `sdk/testdata`
+  that `storagepath`'s tests, both SDKs and the console's key helper read;
+  the console disables submit with the rule beside the field.
+- **Blockers:** none.
+
 ### Batch executors do not re-check the bucket gate when they run
 
 - **Status:** Deferred.

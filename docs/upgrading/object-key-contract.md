@@ -15,11 +15,10 @@
   `..`: no leading or trailing `/`, no `//`. `UploadObject`,
   `InitiateMultipartUpload` and `CopyObject` (`destination_key`) refuse any
   other key as `INVALID_ARGUMENT`, naming the rule and the reason. Such keys
-  used to be stored as given and composed onto the path of another key —
-  `a//b`, `a/./b` and `/a/b` onto `a/b`, `..` onto the collection itself — so
-  two objects shared bytes and deleting one deleted the other's. A key
-  ending in `/` is refused too: a filer-backed store keeps it as a
-  directory and drops the bytes written to it.
+  used to be stored as given while their storage path was normalised, so
+  two objects of one tenant could share a path. A key ending in `/` is
+  refused too: a filer-backed store keeps it as a directory and drops the
+  bytes written to it.
 - `BatchCopyObjects` refuses a `destination_key_prefix` with a leading `/`,
   or an empty, `.` or `..` segment before its last `/`, as
   `INVALID_ARGUMENT`. A copy whose prefix and source key together are not a
@@ -39,7 +38,7 @@
   ```sql
   SELECT tenant_id, collection_id, id, path FROM objects
   WHERE path = '' OR path LIKE '/%' OR path LIKE '%/'
-     OR path LIKE '%//%' OR path ~ '(^|/)\.\.?(/|$)';
+     OR path LIKE '%//%' OR path ~ '(^|/)\.\.?(/|$)'
   ```
 
   then delete each through the API, or, where the data is disposable,
