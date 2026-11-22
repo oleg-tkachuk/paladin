@@ -2,12 +2,22 @@ package mcp
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logfield"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // UpstreamStatus is one plane's reachability as the bridge sees it.
@@ -15,7 +25,9 @@ type UpstreamStatus struct {
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 	Reachable bool   `json:"reachable"`
-	// Error carries why, when Reachable is false. Empty otherwise.
+	// Error carries why, when Reachable is false: one of a fixed set of
+	// verdicts (upstreamVerdict), the probe's own error going to the log.
+	// Empty otherwise.
 	Error string `json:"error,omitempty"`
 	// LatencyMs is the probe's round trip. Present either way — a slow
 	// reachable upstream is worth seeing before it becomes an unreachable one.
@@ -108,13 +120,110 @@ func ProbeUpstreams(ctx context.Context, targets []UpstreamTarget, probe func(ct
 				LatencyMs: time.Since(start).Milliseconds(),
 			}
 			if err != nil {
-				st.Error = err.Error()
+				st.Error = upstreamVerdict(err)
+				logUpstreamFailure(ctx, t, st.Error, err)
 			}
 			out[i] = st
 		}()
 	}
 	wg.Wait()
 	return out
+}
+
+// The verdicts an upstream's Error is one of. The probe's own error names
+// the plane's URL, which UpstreamStatus carries in its own field, and the
+// TLS stack's detail; it goes to the log line instead.
+const (
+	msgUpstreamUnreachable = "the plane is unreachable"
+	msgUpstreamTimedOut    = "the plane timed out"
+	msgUpstreamCertificate = "the plane's certificate was refused"
+	msgUpstreamHandshake   = "the TLS handshake with the plane failed"
+	msgUpstreamBadStatus   = "the plane answered HTTP %d"
+)
+
+// msgUpstreamProbeFailed is the line a failed probe leaves, with its error.
+const msgUpstreamProbeFailed = "mcp upstream probe failed"
+
+// The log keys a failed probe's line carries.
+const (
+	fieldUpstream = "upstream"
+	fieldURL      = "url"
+	fieldVerdict  = "verdict"
+)
+
+// upstreamVerdict is why a probe failed, as the admin is told it, read from
+// the error's types: the status a plane answered, a certificate the bridge
+// refused (an unknown authority, an expired or misnamed certificate), a
+// handshake the plane ended (its alert, as when it refuses the bridge's
+// client certificate), a deadline, else a plane that could not be reached.
+// HealthProbe reads no body, so no answer is ever unreadable.
+func upstreamVerdict(err error) string {
+	if se, ok := errors.AsType[*statusError](err); ok {
+		return fmt.Sprintf(msgUpstreamBadStatus, se.code)
+	}
+	if certificateRefused(err) {
+		return msgUpstreamCertificate
+	}
+	if handshakeFailed(err) {
+		return msgUpstreamHandshake
+	}
+	if te, ok := errors.AsType[timeoutError](err); (ok && te.Timeout()) || errors.Is(err, context.DeadlineExceeded) {
+		return msgUpstreamTimedOut
+	}
+	return msgUpstreamUnreachable
+}
+
+// certificateRefused reports whether err is the bridge refusing the plane's
+// certificate.
+func certificateRefused(err error) bool {
+	if _, ok := errors.AsType[*tls.CertificateVerificationError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[x509.UnknownAuthorityError](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[x509.CertificateInvalidError](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[x509.HostnameError](err)
+	return ok
+}
+
+// tlsRemoteAlertOp is the net.OpError Op crypto/tls reports an alert the
+// peer sent with (crypto/tls conn.go, readRecordOrCCS): the alert itself is
+// of an unexported type, and tls.AlertError wraps it only over QUIC.
+const tlsRemoteAlertOp = "remote error"
+
+// handshakeFailed reports whether err is a TLS handshake the plane ended
+// with an alert, as when it refuses the bridge's client certificate. A plane
+// answering plaintext on an https URL is not told apart: net/http replaces
+// the tls.RecordHeaderError with an untyped error, so it is unreachable.
+func handshakeFailed(err error) bool {
+	oe, ok := errors.AsType[*net.OpError](err)
+	return ok && oe.Op == tlsRemoteAlertOp
+}
+
+// timeoutError is a transport error that can say it timed out, as net.Error
+// and *url.Error do.
+type timeoutError interface {
+	error
+	Timeout() bool
+}
+
+// logUpstreamFailure logs a failed probe at Warn with the error the verdict
+// was read from — the TLS stack's detail is what an mTLS failure is debugged
+// by. The URL is logged with its credentials redacted, and the error without
+// the *url.Error wrapper that repeats it.
+func logUpstreamFailure(ctx context.Context, t UpstreamTarget, verdict string, err error) {
+	if ue, ok := errors.AsType[*url.Error](err); ok {
+		err = ue.Err
+	}
+	logger.FromContext(ctx).Warn(msgUpstreamProbeFailed,
+		zap.String(fieldUpstream, t.Name),
+		logfield.URL(fieldURL, t.URL),
+		zap.String(fieldVerdict, verdict),
+		zap.Error(err),
+	)
 }
 
 // HealthProbe asks a plane's /livez over the supplied client, which every role

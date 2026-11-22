@@ -614,20 +614,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### The bridge's upstream probe errors reach the admin verbatim
-
-- **Status:** Deferred.
-- **Reason:** `GetBridgeStatus` now answers a classified verdict for a bridge
-  it could not ask, but each upstream's `error` is still the MCP process's own
-  `err.Error()` from its `/livez` probe (`mcp.ProbeUpstreams`), passed through
-  untouched. Those texts are what an operator debugs an mTLS failure by
-  (`x509: certificate signed by unknown authority`), and the bridge logs none
-  of them, so classifying them in place would lose the only copy.
-- **Definition of Done:** the bridge logs each failed probe with its full
-  error; the upstream `error` is a fixed verdict (unreachable, timed out, bad
-  status N, certificate refused), with the plane's URL left to its own field.
-- **Blockers:** none.
-
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)
