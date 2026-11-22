@@ -13,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -40,6 +41,11 @@ func (r *MultipartRepo) Object(ctx context.Context, tenantID, objectID uuid.UUID
 const multipartSessionTTL = 24 * time.Hour
 
 func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (multiparth.Session, error) {
+	// As ObjectRepo.CreateObject: the handler admitted the key; this refuses
+	// a caller that did not.
+	if _, err := storagepath.Compose(args.TenantID, args.Collection, args.Key); err != nil {
+		return multiparth.Session{}, fmt.Errorf("initiate multipart session: %w", err)
+	}
 	uploadID := uuid.NewV7().String()
 
 	tx, err := r.pool.Begin(ctx)

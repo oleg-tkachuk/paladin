@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 )
 
 // fakeSubmitter is an in-memory Submitter. It records what the handler
@@ -316,6 +317,22 @@ func TestBatchCopy(t *testing.T) {
 		}
 		if sub.called {
 			t.Fatal("submitter must not be called on authorization failure")
+		}
+	})
+
+	t.Run("a prefix no canonical key can follow → invalid argument", func(t *testing.T) {
+		for _, prefix := range []string{"/archive/", "archive//", "./archive/", "a/../"} {
+			sub := &fakeSubmitter{}
+			_, err := newHandler(sub, allowAll()).BatchCopy(authedCtx(tid), BatchCopyArgs{
+				ObjectIDs: ids(1), SrcCollection: "src", DstCollection: "dst", KeyPrefix: prefix,
+			})
+			wantCode(t, err, connect.CodeInvalidArgument)
+			if !errors.Is(err, storagepath.ErrNotCanonical) {
+				t.Errorf("prefix %q: err = %v, want the prefix refusal", prefix, err)
+			}
+			if sub.called {
+				t.Fatalf("prefix %q was submitted", prefix)
+			}
 		}
 	})
 

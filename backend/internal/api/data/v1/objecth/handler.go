@@ -777,6 +777,9 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
 	}
+	if err := AdmitOptionalKey(FieldKey, in.Key); err != nil {
+		return nil, err
+	}
 	// The checksum is signed into the URL; a malformed one would produce a
 	// URL every upload fails against, so it is refused here instead.
 	if err := checksum.Validate(in.ChecksumAlgo, in.ChecksumValue); err != nil {
@@ -819,7 +822,7 @@ func (h *Handler) UploadObject(ctx context.Context, in UploadObjectInput) (_ *Up
 	//    the resource a Collection entity → "does not have the attribute key"
 	//    eval error → fail-closed deny. A client-omitted key authorizes the
 	//    generated object id, which CreateObject persists below (same value).
-	key := uploadKey(in.Key)
+	key := UploadKey(in.Key)
 
 	// 3. Cedar authorization: may this principal PutObject here?
 	principal, _ := auth.PrincipalFromContext(ctx)
@@ -865,9 +868,11 @@ func (h *Handler) uploadTarget(ctx context.Context, tenantID uuid.UUID, in *Uplo
 	return meta, nil
 }
 
-// uploadKey is the key an upload is stored under: the caller's, or a fresh
-// object id when the caller named none.
-func uploadKey(key string) string {
+// UploadKey is the key an upload is stored under: the caller's, or a fresh
+// id when the caller named none. A multipart upload names its key the same
+// way; without the default an empty key would compose to the collection's
+// own prefix.
+func UploadKey(key string) string {
 	if key == "" {
 		return uuid.NewV7().String()
 	}
@@ -2412,7 +2417,7 @@ func checkCopyInput(in CopyObjectInput) error {
 		return connect.NewError(connect.CodeInvalidArgument,
 			"dest_collection is required")
 	}
-	return nil
+	return AdmitOptionalKey(FieldDestinationKey, in.DestKey)
 }
 
 // copySource reads the object a copy is of; only an AVAILABLE one has bytes
@@ -2445,7 +2450,11 @@ func (h *Handler) copyDestination(ctx context.Context, tenantID uuid.UUID, in Co
 		return BucketMeta{}, "", err
 	}
 	if destKey == "" {
+		// The source's key, which may predate the key contract.
 		destKey = src.Key
+		if err := AdmitKey(FieldDestinationKey, destKey); err != nil {
+			return BucketMeta{}, "", err
+		}
 	}
 	return dstMeta, destKey, nil
 }

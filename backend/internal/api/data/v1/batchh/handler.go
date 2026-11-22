@@ -152,6 +152,13 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 		return uuid.Nil(), connect.Errorf(connect.CodeInvalidArgument,
 			"batch too large: %d > %d", len(args.ObjectIDs), maxBatchSize)
 	}
+	// Each copy's key is checked by the worker; a prefix no key can follow
+	// is refused here, before anything is charged.
+	if err := objecth.AdmitKeyPrefix(objecth.FieldDestinationKeyPrefix, args.KeyPrefix); err != nil {
+		h.log.Warn("batch not submitted", zap.String(fieldOpType, OpBatchCopy),
+			zap.String(fieldTenantID, tenantID.String()), zap.Error(err))
+		return uuid.Nil(), err
+	}
 	if err := h.assertCopy(ctx, tenantID, args); err != nil {
 		return uuid.Nil(), err
 	}

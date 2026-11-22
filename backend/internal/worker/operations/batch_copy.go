@@ -16,6 +16,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
@@ -237,6 +238,15 @@ type copyJob struct {
 func (e *BatchCopyExecutor) copyOne(ctx context.Context, job copyJob) error {
 	if job.src.State != statemachine.StateAvailable {
 		return fmt.Errorf("source state %s; cannot copy", job.src.State)
+	}
+	// The prefix was admitted at submit; the source's key may predate the
+	// key contract, and the two together must still be a canonical key.
+	if err := storagepath.ValidateKey(job.dstKey); err != nil {
+		batchLogger(e.Logger).Warn("batch item refused: its destination key is not canonical",
+			zap.String("operation_id", job.op.OperationID.String()),
+			zap.String("type", job.op.Type),
+			zap.String("object_id", job.src.ObjectID.String()), zap.Error(err))
+		return fmt.Errorf("%s: %w", objecth.FieldDestinationKey, err)
 	}
 
 	dst, err := e.Objects.CreateObject(ctx, objecth.CreateObjectArgs{
