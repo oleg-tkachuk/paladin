@@ -207,6 +207,8 @@ func (h *Handler) actOnCapabilitysTenant(ctx context.Context, caller *auth.Princ
 	case err != nil:
 		return nil, h.answer("resolve tenant", err, nil)
 	}
+	// spansTenants is the gate that admits the caller to the owner's tenant.
+	apiutil.AdmitTenant(ctx, rec.Capability.Subject.TenantID)
 	return auth.WithActingTenant(ctx, rec.Capability.Subject.TenantID), nil
 }
 
@@ -224,6 +226,9 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 	}
 	subj := terms.subject
 
+	// issuanceTerms admitted the subject's tenant: the caller's own, or one a
+	// caller spanning tenants named.
+	apiutil.AdmitTenant(ctx, subj.TenantID)
 	ctx = auth.WithActingTenant(ctx, subj.TenantID)
 	res, err := h.issuer.Issue(ctx, limes.IssueRequest{
 		Subject: subj,

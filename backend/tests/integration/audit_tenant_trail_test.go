@@ -10,16 +10,17 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/migrations"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
 )
 
-// trailEntry is an audit row a platform admin left, or one tenant's own
-// principal when actor is that tenant.
+// trailEntry is an audit row a platform admin left, admitted to the tenant
+// it acted in, or one tenant's own principal when actor is that tenant.
 func trailEntry(actor uuid.UUID, resource string, at time.Time) admindomain.AuditEntry {
-	return admindomain.AuditEntry{
+	e := admindomain.AuditEntry{
 		EntryID:       uuid.NewV7(),
 		At:            at,
 		ActorSubject:  "trail@test",
@@ -28,6 +29,10 @@ func trailEntry(actor uuid.UUID, resource string, at time.Time) admindomain.Audi
 		Action:        "/paladin.admin.v1.Test/Act",
 		ResourceName:  resource,
 	}
+	if named, ok := apiutil.TenantInResourceName(resource); ok {
+		e.AdmittedTenants = []uuid.UUID{named}
+	}
+	return e
 }
 
 // A tenant's trail is what its principals did and what was done to it — a

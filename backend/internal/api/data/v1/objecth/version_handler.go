@@ -104,6 +104,7 @@ func (h *VersionHandler) authorizeParent(
 		return connect.Errorf(connect.CodePermissionDenied,
 			"policy denied %s on %s/%s", action, parent.Collection, parent.Key)
 	}
+	apiutil.AdmitTenant(ctx, tenantID)
 	return nil
 }
 

@@ -187,7 +187,13 @@ func (a *auditInterceptor) unary(next unary.Func) unary.Func {
 		if !skip && read != nil {
 			before = readState(ctx, spec, read, req)
 		}
-		resp, err := next(ctx, spec, req)
+		// The handler's authorization records here the tenants it admitted
+		// the call to (apiutil.AdmitTenant), which decide the trail the row
+		// is filed in. Only the call itself writes it: the state readers run
+		// on ctx without it, so a read the caller may make admits nothing to
+		// the change it is refused.
+		admission := apiutil.WithAdmissionSlot(ctx)
+		resp, err := next(admission, spec, req)
 		if skip {
 			return resp, err
 		}
@@ -209,7 +215,7 @@ func (a *auditInterceptor) unary(next unary.Func) unary.Func {
 		// Error, not Warn. An audit write that fails is a defect with an
 		// external consequence, and the rate of these is something someone
 		// should be paged about.
-		if werr := a.write(ctx, spec, req, err, before, after); werr != nil {
+		if werr := a.write(admission, spec, req, err, before, after); werr != nil {
 			logger.FromContext(ctx).Error("audit entry not written",
 				zap.String("rpc", spec.Procedure), zap.Error(werr))
 		}
@@ -299,6 +305,11 @@ func (a *auditInterceptor) write(ctx context.Context, spec connect.Spec, req pro
 		CapabilityID:  capabilityID(ctx),
 		RelayedBy:     relayedBy(ctx),
 		UserAgent:     userAgent(ctx),
+		// The resource name may be the request's own text; whether it files
+		// the row in the tenant it names is decided on the tenants the
+		// authorization path admitted the call to (AuditEntry.ResourceTenant),
+		// never on the text alone.
+		AdmittedTenants: apiutil.AdmittedTenants(ctx),
 	}
 	if rpcErr != nil {
 		entry.ErrorMessage = rpcErr.Error()

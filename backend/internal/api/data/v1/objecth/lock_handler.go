@@ -375,5 +375,6 @@ func (h *LockHandler) authorizeLock(
 		return connect.Errorf(connect.CodePermissionDenied,
 			"policy denied %s on %s/%s", action, obj.Collection, obj.Key)
 	}
+	apiutil.AdmitTenant(ctx, tenantID)
 	return nil
 }

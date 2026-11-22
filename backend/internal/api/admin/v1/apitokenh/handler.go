@@ -108,6 +108,8 @@ func (h *Handler) Create(ctx context.Context, req *adminv1.APITokenServiceCreate
 	if err := h.checkCreate(caller, tenantID, req); err != nil {
 		return nil, err
 	}
+	// checkCreate is the gate that admits a mint into tenantID.
+	apiutil.AdmitTenant(ctx, tenantID)
 	rateLimit, err := rateLimitOf(req)
 	if err != nil {
 		return nil, err
@@ -266,6 +268,7 @@ func scopeToTenant(ctx context.Context, caller *auth.Principal, tenantID uuid.UU
 		return nil, connect.Errorf(connect.CodePermissionDenied,
 			"cross-tenant api_token %s denied", what)
 	}
+	apiutil.AdmitTenant(ctx, tenantID)
 	return auth.WithActingTenant(ctx, tenantID), nil
 }
 

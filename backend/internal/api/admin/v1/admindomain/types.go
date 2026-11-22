@@ -7,7 +7,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
@@ -257,18 +256,28 @@ type AuditEntry struct {
 	// version, then the application's own suffix. Empty when none was sent.
 	UserAgent string
 
+	// AdmittedTenants are the tenants the call's authorization path admitted
+	// the actor to act in (apiutil.AdmitTenant): a policy decision that
+	// allowed it on a tenant's resource, or a gate that let it cross into
+	// one. Only one of these, or the actor's own, files the entry in the
+	// trail of the tenant its resource names (TrailTenant). Empty for a call
+	// refused before any admission, and for a writer that acts only in its
+	// actor's tenant.
+	AdmittedTenants []uuid.UUID
+
 	// ResourceTenantID is the tenant the action was done to, as read back
-	// from the log. Writers leave it unset; it is derived from ResourceName
-	// on insert (ResourceTenant). uuid.Nil when the name carries none.
+	// from the log. Writers leave it unset; it is decided on insert
+	// (ResourceTenant). uuid.Nil when the name carries none, or names a
+	// tenant the actor was not admitted to.
 	ResourceTenantID uuid.UUID
 }
 
-// ResourceTenant is the tenant this entry's resource sits under, or uuid.Nil.
-// It is what places a platform admin's work inside tenant X in X's trail,
-// whose actor tenant is the platform's.
+// ResourceTenant is the tenant whose trail this entry is filed in besides
+// its actor's, or uuid.Nil (TrailTenant). It is what places a platform
+// admin's work inside tenant X in X's trail, whose actor tenant is the
+// platform's.
 func (e AuditEntry) ResourceTenant() uuid.UUID {
-	id, _ := apiutil.TenantInResourceName(e.ResourceName)
-	return id
+	return TrailTenant(e.ResourceName, e.ActorTenantID, e.AdmittedTenants)
 }
 
 // ─── Quota ──────────────────────────────────────────────────────────────────

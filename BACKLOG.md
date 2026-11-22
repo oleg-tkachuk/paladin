@@ -342,23 +342,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** KMS choice (AWS KMS vs Vault Transit vs cloud-agnostic
   envelope-encryption library).
 
-### A refused request is filed in the trail of any tenant its name mentions
-
-- **Status:** Deferred.
-- **Reason:** a mutation the server refuses is still audited, under the raw
-  request name when no handler stashed a canonical one
-  (`middleware.preferCanonical`), and the row's resource tenant is the first
-  `tenants/{id}` anywhere in that text (`AuditEntry.ResourceTenant`). Any
-  authenticated caller can therefore put rows, carrying its own subject, into
-  another tenant's audit trail by naming one of its resources. Seen while
-  fuzzing the collection-name resolver; refusing the name does not stop it.
-- **Definition of Done:** a refused request's row names a resource tenant only
-  when the name parsed and the caller was admitted to that tenant, else the
-  actor's own; a test refuses a request naming another tenant and reads that
-  tenant's trail.
-- **Blockers:** whether a tenant should see attempts against its resources at
-  all, which is a product call.
-
 ---
 
 ## Performance / Scale

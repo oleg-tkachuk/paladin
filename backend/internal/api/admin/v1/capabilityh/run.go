@@ -59,6 +59,7 @@ func (h *Handler) RevokeRun(ctx context.Context, req *adminv1.CapabilityServiceR
 	if tenant != caller.TenantID && !spansTenants(caller) {
 		return nil, connect.NewError(connect.CodePermissionDenied, errRevokeRunAcrossTenants)
 	}
+	apiutil.AdmitTenant(ctx, tenant)
 	revoked, err := h.runs.RevokeRun(auth.WithActingTenant(ctx, tenant), tenant, run, req.GetReason(), caller.Subject)
 	if err != nil {
 		return nil, h.answer("revoke run", fmt.Errorf("revoke run %s: %w", run, err), nil)
