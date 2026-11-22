@@ -293,6 +293,7 @@ tasks:
       - task: verify:mutate-script
       - task: verify:node-version
       - task: verify:coverage-profile
+      - task: verify:go-fuzz-script
       - task: verify:lefthook-single-thread
       - task: verify:task-offline
       # Every Taskfile pins the library at one ref and loads from its
@@ -548,6 +549,22 @@ tasks:
     desc: "Mutation-test one Go file against its package's tests: task -t Taskfile.dev.yaml quality:mutate -- <file.go>"
     cmds:
       - ./scripts/mutate.sh {{.CLI_ARGS}}
+
+  fuzz:
+    desc: "Run every Go fuzz target of the backend and the Go SDK for FUZZ_TIME each (default 2m): task -t Taskfile.dev.yaml fuzz FUZZ_TIME=30s"
+    # Not in verify-all: the seed corpora already run in every `go test`, and
+    # this is the open-ended search for new inputs, minutes per target. CI
+    # runs it nightly (.github/workflows/fuzz.yaml). A default rather than a
+    # value, so FUZZ_TIME on the command line wins.
+    vars:
+      FUZZ_TIME: '{{.FUZZ_TIME | default "2m"}}'
+    cmds:
+      - ./scripts/go-fuzz.sh {{.FUZZ_TIME}} backend sdk/go
+
+  verify:go-fuzz-script:
+    desc: "scripts/go-fuzz.sh finds every fuzz target, runs past a crash and keeps its input"
+    cmds:
+      - ./scripts/go-fuzz.test.sh
 
   verify:lefthook-single-thread:
     desc: "The git hooks run their jobs one at a time, the Go ones on one thread"
