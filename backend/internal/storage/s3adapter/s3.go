@@ -442,24 +442,9 @@ func (c *Client) PresignPut(ctx context.Context, args objecth.PresignPutArgs) (s
 // condition comes from the presigner itself. POST has no If-None-Match, so
 // unlike PUT it cannot refuse to overwrite.
 func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) (string, map[string]string, time.Time, error) {
-	field, err := postChecksumField(args.ChecksumAlgo)
+	extra, err := c.postBoundFields(args)
 	if err != nil {
 		return "", nil, time.Time{}, err
-	}
-	extra := map[string]string{
-		contentTypeField: args.ContentType,
-		field:            args.ChecksumValue,
-	}
-	if args.CacheControl != "" {
-		extra[cacheControlField] = args.CacheControl
-	}
-	sse := &s3.PutObjectInput{}
-	c.applySSE(sse)
-	if sse.ServerSideEncryption != "" {
-		extra[sseField] = string(sse.ServerSideEncryption)
-	}
-	if sse.SSEKMSKeyId != nil {
-		extra[sseKMSKeyField] = *sse.SSEKMSKeyId
 	}
 	conditions := []any{[]any{contentLengthRange, args.SizeBytes, args.SizeBytes}}
 	for k, v := range extra {
@@ -495,6 +480,32 @@ func (c *Client) PresignPost(ctx context.Context, args objecth.PresignPostArgs) 
 		return "", nil, time.Time{}, err
 	}
 	return req.URL, fields, exp, nil
+}
+
+// postBoundFields are the form fields a presigned POST binds besides the key
+// and size: the Content-Type, the checksum, the collection's Cache-Control
+// and the encryption the adapter applies.
+func (c *Client) postBoundFields(args objecth.PresignPostArgs) (map[string]string, error) {
+	field, err := postChecksumField(args.ChecksumAlgo)
+	if err != nil {
+		return nil, err
+	}
+	extra := map[string]string{
+		contentTypeField: args.ContentType,
+		field:            args.ChecksumValue,
+	}
+	if args.CacheControl != "" {
+		extra[cacheControlField] = args.CacheControl
+	}
+	sse := &s3.PutObjectInput{}
+	c.applySSE(sse)
+	if sse.ServerSideEncryption != "" {
+		extra[sseField] = string(sse.ServerSideEncryption)
+	}
+	if sse.SSEKMSKeyId != nil {
+		extra[sseKMSKeyField] = *sse.SSEKMSKeyId
+	}
+	return extra, nil
 }
 
 // PresignGet signs a download. With IfMatch set the URL is bound to that
