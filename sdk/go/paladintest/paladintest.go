@@ -685,6 +685,11 @@ func checkVersion(o *object, version string) error {
 // holds — in any state, the trash included — as the server's unique path
 // does.
 func (s *Server) claim(parent, key, contentType string, metadata, tags map[string]string) (*object, error) {
+	if key != "" {
+		if reason := keyRefusal(key); reason != "" {
+			return nil, connect.Errorf(connect.CodeInvalidArgument, "key: %s: %s", keyRule, reason)
+		}
+	}
 	key, err := s.publicKey(parent, key)
 	if err != nil {
 		return nil, err

@@ -1,0 +1,26 @@
+{
+  "_comment": "Object keys and whether the server stores an object under them (backend/internal/storage/storagepath, ValidateKey). A key is segments separated by '/', none of them empty, '.' or '..': no leading or trailing '/', no '//'. The server, and both SDKs' fakes, refuse every key under refused as INVALID_ARGUMENT where an object is created; an empty key is not listed, as a caller that names none gets one from the server.",
+  "canonical": [
+    "a.txt",
+    "a/b/c.txt",
+    ".hidden",
+    "a/..b",
+    "...",
+    "a/.b/c",
+    "report 2026.pdf",
+    "0190a3b2-7c4d-7e8f-9a0b-1c2d3e4f5a6b"
+  ],
+  "refused": [
+    "/",
+    "/a",
+    "a/",
+    "a//b",
+    ".",
+    "..",
+    "./a",
+    "a/./b",
+    "a/../b",
+    "a/..",
+    "../a"
+  ]
+}
