@@ -46,6 +46,12 @@ import {
 } from "@/gen/paladin/admin/v1/capability_service_pb";
 
 import { CapabilityOpGrants } from "@/components/features/capabilities/CapabilityOpGrants";
+import { ObjectResourceGrants } from "@/components/features/capabilities/ObjectResourceGrants";
+import {
+  firstObjectGrantProblem,
+  objectResource,
+  type ObjectGrantDraft,
+} from "@/lib/capability/objectResource";
 
 import { ToggleRow } from "./_form-fields";
 import { missingBiscuitReason } from "./_biscuit";
@@ -107,9 +113,9 @@ export function IssueCapabilityDialog({
   const [issueAudience, setIssueAudience] = useState<Set<string>>(
     new Set(["data"]),
   );
-  const [issueResourcePrefixes, setIssueResourcePrefixes] = useState<string[]>(
-    [],
-  );
+  const [issueResourceGrants, setIssueResourceGrants] = useState<
+    ObjectGrantDraft[]
+  >([]);
   const [issueSourceCidr, setIssueSourceCidr] = useState<string[]>([]);
   const [issueMaxRequests, setIssueMaxRequests] = useState("");
   const [issueMaxRequestsUnlimited, setIssueMaxRequestsUnlimited] =
@@ -143,7 +149,7 @@ export function IssueCapabilityDialog({
     setIssuePrincipalKind(String(PrincipalKind.AGENT));
     setIssueOps(new Set(["get", "list"]));
     setIssueAudience(new Set(["data"]));
-    setIssueResourcePrefixes([]);
+    setIssueResourceGrants([]);
     setIssueSourceCidr([]);
     setIssueMaxRequests("");
     setIssueMaxRequestsUnlimited(true);
@@ -193,6 +199,11 @@ export function IssueCapabilityDialog({
       ? `An amount (up to ${NANOS_DECIMALS} decimals; 0 allows no spend), or Unlimited.`
       : null;
 
+  const resourceProblem = firstObjectGrantProblem(
+    tenantId,
+    issueResourceGrants,
+  );
+
   const blockedReason = !tenantId
     ? "Waiting for the tenant."
     : !issueSubject.trim()
@@ -201,16 +212,18 @@ export function IssueCapabilityDialog({
         ? "Allow at least one op."
         : issueAudience.size === 0
           ? "Pick at least one plane."
-          : !issueMaxRequestsUnlimited &&
-              (maxRequestsError !== null || issueMaxRequests === "")
-            ? "Set max requests, or make it Unlimited."
-            : !issueMaxBudgetUnlimited &&
-                (maxBudgetError !== null || issueMaxBudget === "")
-              ? "Set max budget, or make it Unlimited."
-              : !issueMaxCopiesUnlimited &&
-                  (maxCopiesError !== null || issueMaxCopies === "")
-                ? "Set max Biscuit copies, or make it Unlimited."
-                : null;
+          : resourceProblem
+            ? `Resource ${resourceProblem.row}: ${resourceProblem.reason}`
+            : !issueMaxRequestsUnlimited &&
+                (maxRequestsError !== null || issueMaxRequests === "")
+              ? "Set max requests, or make it Unlimited."
+              : !issueMaxBudgetUnlimited &&
+                  (maxBudgetError !== null || issueMaxBudget === "")
+                ? "Set max budget, or make it Unlimited."
+                : !issueMaxCopiesUnlimited &&
+                    (maxCopiesError !== null || issueMaxCopies === "")
+                  ? "Set max Biscuit copies, or make it Unlimited."
+                  : null;
 
   const handleIssue = async () => {
     const ttlSeconds = TTL_OPTIONS.find((o) => o.value === issueTtl)?.seconds;
@@ -226,7 +239,9 @@ export function IssueCapabilityDialog({
         audience: Array.from(issueAudience),
         caveats: {
           ops: Array.from(issueOps),
-          resourcePrefixes: issueResourcePrefixes,
+          resourcePrefixes: issueResourceGrants.map((g) =>
+            objectResource(tenantId, g.collection, g.key),
+          ),
           resourceUris: [],
           requestCeiling: requestCeiling(
             issueMaxRequestsUnlimited,
@@ -418,20 +433,16 @@ export function IssueCapabilityDialog({
       </FormSection>
 
       <FormSection title="Restrictions">
+        <fieldset className="space-y-1.5">
+          <legend className="text-sm font-medium">Object resources</legend>
+          <ObjectResourceGrants
+            tenantId={tenantId}
+            grants={issueResourceGrants}
+            onChange={setIssueResourceGrants}
+            enabled={open}
+          />
+        </fieldset>
         <FormRow>
-          <FormField
-            label="Resource prefixes"
-            hint="Enter, comma or space adds one. Empty means no restriction."
-          >
-            {(control) => (
-              <ChipInput
-                id={control.id}
-                values={issueResourcePrefixes}
-                onChange={setIssueResourcePrefixes}
-                placeholder="objects/contracts/2026/"
-              />
-            )}
-          </FormField>
           <FormField
             label="Source IP ranges"
             hint="Only clients inside one of these CIDRs."

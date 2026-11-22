@@ -20,6 +20,11 @@ import { CopyableId } from "@/components/ui/CopyableId";
 import { ActorName } from "@/components/features/audit/ActorName";
 import { Duration } from "@/components/Duration";
 import { CapabilityOpGrants } from "@/components/features/capabilities/CapabilityOpGrants";
+import {
+  GRANT_REACH,
+  describeObjectGrant,
+  type GrantReach,
+} from "@/lib/capability/objectResource";
 import { capabilityGrant, type CapabilityGrant } from "@/lib/oauthGrants";
 import {
   type CapabilityLeaseEntry,
@@ -39,6 +44,20 @@ export type RecordEntry =
 
 // How much of an ancestor's id names it in a row; the whole is its tooltip.
 const ANCESTOR_ID_SHOWN = 8;
+
+// How a resource prefix's reach is shown: one that reaches nothing in this
+// tenant reads as an error, one that restricts nothing or that the console
+// cannot read as a warning.
+const REACH_TONE: Record<GrantReach, string> = {
+  [GRANT_REACH.allTenants]: "text-warning",
+  [GRANT_REACH.tenant]: "text-muted-foreground",
+  [GRANT_REACH.otherTenant]: "text-destructive",
+  [GRANT_REACH.collection]: "text-muted-foreground",
+  [GRANT_REACH.keys]: "text-muted-foreground",
+  [GRANT_REACH.key]: "text-muted-foreground",
+  [GRANT_REACH.nothing]: "text-destructive",
+  [GRANT_REACH.unknown]: "text-warning",
+};
 
 // recordText is what a field read from the record shows while there is none.
 function recordText(record: RecordEntry): string | undefined {
@@ -208,12 +227,21 @@ export function DetailsBody({
           label="Resource prefixes"
           value={
             (cap.caveats?.resourcePrefixes ?? []).length > 0 ? (
-              <ul className="space-y-0.5 font-mono text-xs">
-                {cap.caveats!.resourcePrefixes.map((p) => (
-                  <li key={p} className="break-all">
-                    {p}
-                  </li>
-                ))}
+              <ul className="space-y-1">
+                {cap.caveats!.resourcePrefixes.map((p) => {
+                  const reach = describeObjectGrant(
+                    p,
+                    cap.subject?.tenantId ?? "",
+                  );
+                  return (
+                    <li key={p}>
+                      <div className="font-mono text-xs break-all">{p}</div>
+                      <div className={cn("text-xs", REACH_TONE[reach.reach])}>
+                        {reach.text}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               "no restriction"

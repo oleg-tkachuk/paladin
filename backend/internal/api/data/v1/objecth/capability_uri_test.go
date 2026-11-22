@@ -21,6 +21,16 @@ const objectResourcesTable = "../../../../../../sdk/testdata/object_resources.js
 // tenantPlaceholder stands for the table's tenant in its URIs.
 const tenantPlaceholder = "{tenant}"
 
+// upperTenantPlaceholder and otherTenantPlaceholder stand, in the reach rows,
+// for the table's tenant in upper case and for another tenant.
+const (
+	upperTenantPlaceholder = "{TENANT}"
+	otherTenantPlaceholder = "{other_tenant}"
+)
+
+// reachNothing is the reach of a row whose prefix covers no object.
+const reachNothing = "nothing"
+
 // resourceRef is an object, or a key prefix, by collection and key.
 type resourceRef struct {
 	Collection string `json:"collection"`
@@ -40,6 +50,25 @@ type objectResources struct {
 		Object resourceRef `json:"object"`
 		Match  bool        `json:"match"`
 	} `json:"covers"`
+	OtherTenant string     `json:"other_tenant"`
+	Reach       []reachRow `json:"reach"`
+}
+
+// reachObject is an object of a reach row, in the table's tenant unless it
+// names another.
+type reachObject struct {
+	resourceRef
+	Tenant string `json:"tenant"`
+}
+
+// reachRow is a stored resource prefix and the objects it does and does not
+// cover.
+type reachRow struct {
+	Name    string        `json:"name"`
+	Prefix  string        `json:"prefix"`
+	Reach   string        `json:"reach"`
+	Matches []reachObject `json:"matches"`
+	Misses  []reachObject `json:"misses"`
 }
 
 func readObjectResources(t *testing.T) objectResources {
@@ -129,6 +158,45 @@ func TestALegacyResourceNeverWidens(t *testing.T) {
 			before := limes.MatchResource(legacy, legacyObjectURI(tenant, obj.Collection, obj.Key))
 			if now && !before {
 				t.Errorf("legacy grant %q now reaches (%q, %q), which it did not before", legacy, obj.Collection, obj.Key)
+			}
+		}
+	}
+}
+
+// The server's match reaches what the console says a stored prefix reaches,
+// partial and refused prefixes included.
+func TestAStoredPrefixReachesWhatTheSharedTableSays(t *testing.T) {
+	table := readObjectResources(t)
+	if len(table.Reach) == 0 {
+		t.Fatal("the table has no reach rows")
+	}
+	tenant := uuid.MustParse(table.Tenant)
+	other := uuid.MustParse(table.OtherTenant)
+	expand := strings.NewReplacer(
+		tenantPlaceholder, tenant.String(),
+		upperTenantPlaceholder, strings.ToUpper(tenant.String()),
+		otherTenantPlaceholder, other.String(),
+	)
+	uriOf := func(o reachObject) string {
+		id := tenant
+		if o.Tenant != "" {
+			id = uuid.MustParse(expand.Replace(o.Tenant))
+		}
+		return CapabilityObjectURI(id, o.Collection, o.Key)
+	}
+	for _, r := range table.Reach {
+		prefix := expand.Replace(r.Prefix)
+		if r.Reach == reachNothing && len(r.Matches) > 0 {
+			t.Errorf("%s: reaches nothing but lists matches", r.Name)
+		}
+		for _, o := range r.Matches {
+			if uri := uriOf(o); !limes.MatchResource(prefix, uri) {
+				t.Errorf("%s: limes.MatchResource(%q, %q) = false, want true", r.Name, prefix, uri)
+			}
+		}
+		for _, o := range r.Misses {
+			if uri := uriOf(o); limes.MatchResource(prefix, uri) {
+				t.Errorf("%s: limes.MatchResource(%q, %q) = true, want false", r.Name, prefix, uri)
 			}
 		}
 	}

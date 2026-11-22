@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@/test/utils";
+import { fireEvent, render, screen, waitFor, within } from "@/test/utils";
 
 const h = vi.hoisted(() => ({
   issue: vi.fn(),
   listOperationGrants: vi.fn(),
   getDefaults: vi.fn(),
   showNotification: vi.fn(),
+  listCollections: vi.fn(),
 }));
 vi.mock("@/lib/connect/client", () => ({
+  collectionClient: { listCollections: h.listCollections },
   capabilityClient: {
     issue: h.issue,
     listOperationGrants: h.listOperationGrants,
@@ -66,15 +68,32 @@ const MANAGE_WARNING = /unlocks nothing on its own:/;
 const PRESIGN_LINE = /adds a check beside/;
 const SHARE_LINE = /is decided by the caveats alone/;
 
+// A tenant id, as the route resolves it: a resource is built from the id.
+const TENANT = "0190a3b2-7c4d-7e8f-9a0b-1c2d3e4f5a6b";
+const NESTED = "invoices/2026/q1";
+
 function open() {
   render(
     <IssueCapabilityDialog
       open
-      tenantId="t-1"
+      tenantId={TENANT}
       onClose={vi.fn()}
       onIssued={vi.fn()}
     />,
   );
+}
+
+const issueButton = () =>
+  screen.getByRole("button", { name: "Issue capability" });
+
+async function addResource(n: number, collection: string, key: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Add resource" }));
+  const row = screen.getByRole("listitem", { name: `Resource ${n}` });
+  fireEvent.click(within(row).getByLabelText("Collection"));
+  fireEvent.click(await screen.findByRole("option", { name: collection }));
+  fireEvent.change(within(row).getByLabelText("Key prefix"), {
+    target: { value: key },
+  });
 }
 
 describe("IssueCapabilityDialog", () => {
@@ -85,6 +104,64 @@ describe("IssueCapabilityDialog", () => {
     h.listOperationGrants.mockResolvedValue({ grants: GRANTS });
     h.getDefaults.mockReset();
     h.getDefaults.mockResolvedValue({ defaultTtl: SERVER_DEFAULT_TTL });
+    h.listCollections.mockReset();
+    h.listCollections.mockResolvedValue({
+      collections: [
+        { tenantId: TENANT, collection: "docs", displayName: "" },
+        { tenantId: TENANT, collection: NESTED, displayName: "" },
+      ],
+      page: { nextPageToken: "" },
+    });
+  });
+
+  // The old field took free text, and its example was no resource at all.
+  it("takes no free-text resource", () => {
+    open();
+    expect(screen.queryByText(/Resource prefixes/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByPlaceholderText("objects/contracts/2026/"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("holds the submit while a resource row is refused, and says which", async () => {
+    open();
+    fireEvent.change(screen.getByLabelText(/Subject/), {
+      target: { value: "agent-7" },
+    });
+    expect(issueButton()).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add resource" }));
+    expect(
+      screen.getByText("Resource 1: Choose a collection."),
+    ).toBeInTheDocument();
+    expect(issueButton()).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove resource 1" }));
+    await addResource(1, "docs", "a//b");
+    expect(
+      screen.getByText(
+        "Resource 1: The key prefix is refused: it holds an empty segment.",
+      ),
+    ).toBeInTheDocument();
+    expect(issueButton()).toBeDisabled();
+  });
+
+  // The resources go out exactly as the SDKs build them: the nested
+  // collection is one segment, not collection "invoices" with key "2026/…".
+  it("sends the picked resources as the SDKs build them", async () => {
+    h.issue.mockRejectedValue(new Error("boom"));
+    open();
+    fireEvent.change(screen.getByLabelText(/Subject/), {
+      target: { value: "agent-7" },
+    });
+    await addResource(1, "docs", "contracts/2026/");
+    await addResource(2, NESTED, "");
+    fireEvent.click(issueButton());
+    await waitFor(() => expect(h.issue).toHaveBeenCalled());
+    expect(h.issue.mock.calls[0][0].caveats.resourcePrefixes).toEqual([
+      `object://${TENANT}/docs/contracts/2026/`,
+      `object://${TENANT}/invoices.2026.q1/`,
+    ]);
   });
 
   // "Server default" sends no TTL; the label says what the server gives one.

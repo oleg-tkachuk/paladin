@@ -164,6 +164,9 @@ interface LegacySelectProps {
   /** For a <Label htmlFor>; without it, pass aria-label. */
   id?: string;
   "aria-label"?: string;
+  /** A FormField's note, so its hint or error is the trigger's description. */
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }
 
 function Select({
@@ -176,12 +179,16 @@ function Select({
   disabled,
   id,
   "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
 }: LegacySelectProps) {
   return (
     <SelectRoot value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
         id={id}
         aria-label={ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
         className={cn(width, className)}
       >
         <SelectValue placeholder={placeholder} />

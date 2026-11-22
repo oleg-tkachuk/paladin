@@ -106,6 +106,48 @@ describe("CapabilityDetailsPanel", () => {
     h.listOperationGrants.mockResolvedValue({ grants: GRANTS });
   });
 
+  // A resource prefix is a URI; the panel says what it reaches beside it.
+  // The panel words each prefix by what the server's match reaches with it,
+  // in the capability's own tenant: a partial prefix still reaches what it
+  // is a prefix of, and another tenant's reaches nothing here.
+  it("says what each resource prefix reaches in the capability's tenant", async () => {
+    const tenant = "0190a3b2-7c4d-7e8f-9a0b-1c2d3e4f5a6b";
+    const other = "0190a3b2-0000-7000-8000-000000000001";
+    const nested = `object://${tenant}/invoices.2026.q1/`;
+    const cap = {
+      ...CAP,
+      subject: { ...CAP.subject, tenantId: tenant },
+      caveats: {
+        ...CAP.caveats,
+        resourcePrefixes: [
+          nested,
+          `object://${tenant}`,
+          `object://${other}/docs/`,
+          "objects/contracts/2026/",
+        ],
+      },
+    } as unknown as Capability;
+    h.get.mockResolvedValue({ capability: cap });
+    open(cap);
+    expect(await screen.findByText(nested)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The whole collection invoices/2026/q1 and every object in it.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Every object in every collection of this tenant."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(`Another tenant (${other}): nothing in this tenant.`),
+    ).toHaveClass("text-destructive");
+    expect(
+      screen.getByText(
+        "Not an object resource: the console cannot say what it reaches.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   describe("what its ops unlock", () => {
     it("lists each op's actions beside the allowed ops", async () => {
       h.get.mockResolvedValue({ capability: CAP });

@@ -842,21 +842,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## UI / Admin Console
 
-### The capability dialog takes resource prefixes as free text
-
-- **Status:** Deferred.
-- **Reason:** the issue dialog's resource prefixes are typed by hand, and
-  its placeholder (`objects/contracts/2026/`) is not an object resource at
-  all. A nested collection is now one segment with its `/` written `.`
-  (`paladin.ObjectResource`), so a prefix typed with the collection's own
-  `/` names collection `a`'s keys under `b/`, not collection `a/b`. The
-  console has no helper that builds an object resource.
-- **Definition of Done:** a pure console helper builds
-  `object://{tenant}/{collection segment}/{key prefix}`, held to
-  `sdk/testdata/object_resources.json` in its tests; the dialog picks a
-  collection and a key prefix and shows the resource it will grant.
-- **Blockers:** none.
-
 ### Console UX programme (2026-10-19)
 
 The entries below are one programme, agreed on 2026-10-19, to make the console
