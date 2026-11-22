@@ -272,6 +272,8 @@ it admits (`internal/worker/bucket_gate.go`):
 |---|---|---|
 | `LifecycleHardDeleter` | `BytesWrite` | the row stays in the trash with its bytes, restorable |
 | `PurgeDrainer` | `BytesWrite` | the debt stays due, no attempt counted, no backoff grown |
+| `MultipartReaper` | `Read` | the session stays open |
+| `MultipartAbortDrainer` | `Read` | the debt stays due, no attempt counted |
 
 The work is deferred, never failed or dropped, and each sweep logs every
 bucket it defers once, at Warn, with the gate's reason. The first sweep whose
@@ -302,6 +304,12 @@ The cost: a purged tenant's bytes outlive its purge for as long as the drain
 runs. A backend whose drain ends in `enabled = false`, not in writes again,
 keeps its debts on record; they are paid if it is ever enabled, and they are
 the list of what it still holds if it is decommissioned instead.
+
+**An abort differs.** Multipart parts were never an object: no copy of the
+backend takes them, and aborting frees storage rather than adding data. The
+abort workers ask as `Read`, as BACKLOG's *AbortMultipartUpload skips the
+bucket gate for an anchored session* settles for the RPC: refused only on a
+disabled backend, which serves no Paladin-mediated operation.
 
 **Provision states do not pin the teardown.** `BytesWrite` is refused on a
 bucket being deleted, but the bucket delete refuses while any debt names the

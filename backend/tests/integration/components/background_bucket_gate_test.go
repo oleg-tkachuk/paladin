@@ -242,6 +242,114 @@ func TestLifecycleHardDeleterLeavesTheTrashOnABackendTheGateRefuses(t *testing.T
 	}
 }
 
+// The multipart workers ask the gate as a read: parts were never an object,
+// so a draining backend takes the abort and only a disabled one defers it.
+var multipartGateCases = []struct {
+	refusal  backendRefusal
+	deferred bool
+}{
+	{backendRefusals[0], false},
+	{backendRefusals[1], true},
+}
+
+func TestMultipartReaperAbortsOnlyWhereTheGateAdmitsARead(t *testing.T) {
+	t.Parallel()
+	for _, tc := range multipartGateCases {
+		t.Run(tc.refusal.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			pool := startPostgres(t)
+			refused, healthy := seedMultipart(t, ctx, pool, 2*staleAge), seedMultipart(t, ctx, pool, staleAge)
+			tc.refusal.apply(t, ctx, pool, refused.backend, true)
+
+			aborter := &recordingAborter{}
+			r := newReaper(pool, aborter)
+			r.BatchSize = gateTestBatch
+			if err := r.Sweep(ctx); err != nil {
+				t.Fatalf("Sweep = %v, want nil: a deferral is not a failure", err)
+			}
+			// A batch of one: an admitted backend's older session is the one
+			// taken; a deferred one leaves the batch to the healthy session.
+			left := countWhere(t, ctx, pool, sessionsByID, refused.upload)
+			if !tc.deferred {
+				if left != 0 {
+					t.Errorf("session rows on a %s backend = %d, want it aborted", tc.refusal.name, left)
+				}
+				return
+			}
+			if left != 1 {
+				t.Fatalf("session rows on a %s backend = %d, want it kept open", tc.refusal.name, left)
+			}
+			if got := countWhere(t, ctx, pool, sessionsByID, healthy.upload); got != 0 {
+				t.Errorf("healthy session rows = %d, want 0: a refused bucket starved the one behind it", got)
+			}
+			for _, c := range aborter.calls {
+				if c.backend == refused.backend {
+					t.Fatalf("aborted on a %s backend", tc.refusal.name)
+				}
+			}
+
+			tc.refusal.apply(t, ctx, pool, refused.backend, false)
+			if err := r.Sweep(ctx); err != nil {
+				t.Fatalf("Sweep once enabled = %v", err)
+			}
+			if got := countWhere(t, ctx, pool, sessionsByID, refused.upload); got != 0 {
+				t.Errorf("session rows once enabled = %d, want 0", got)
+			}
+		})
+	}
+}
+
+func TestMultipartAbortDrainerAbortsOnlyWhereTheGateAdmitsARead(t *testing.T) {
+	t.Parallel()
+	for _, tc := range multipartGateCases {
+		t.Run(tc.refusal.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			pool := startPostgres(t)
+			refused, healthy := seedAbortDebt(t, ctx, pool), seedAbortDebt(t, ctx, pool)
+			mustExec(t, ctx, pool,
+				`UPDATE pending_multipart_aborts SET next_attempt_at = now() - interval '1 hour' WHERE storage_upload_id = $1`,
+				refused.storageID)
+			tc.refusal.apply(t, ctx, pool, refused.backend, true)
+
+			aborter := &recordingAborter{}
+			d := newAbortDrainer(pool, aborter)
+			d.BatchSize = gateTestBatch
+			if err := d.Sweep(ctx); err != nil {
+				t.Fatalf("Sweep = %v, want nil: a deferral is not a failure", err)
+			}
+			left := countWhere(t, ctx, pool, debtByStorage, refused.storageID)
+			if !tc.deferred {
+				if left != 0 {
+					t.Errorf("debt rows on a %s backend = %d, want it paid", tc.refusal.name, left)
+				}
+				return
+			}
+			if got := countWhere(t, ctx, pool, debtByStorage, healthy.storageID); got != 0 {
+				t.Errorf("healthy debt rows = %d, want 0: a refused bucket starved the one behind it", got)
+			}
+			var attempts int32
+			if err := pool.QueryRow(ctx,
+				`SELECT attempts FROM pending_multipart_aborts WHERE storage_upload_id = $1`, refused.storageID).
+				Scan(&attempts); err != nil {
+				t.Fatalf("read deferred debt: %v", err)
+			}
+			if attempts != 0 {
+				t.Errorf("deferred debt attempts = %d, want 0: a deferral is not an attempt", attempts)
+			}
+
+			tc.refusal.apply(t, ctx, pool, refused.backend, false)
+			if err := d.Sweep(ctx); err != nil {
+				t.Fatalf("Sweep once enabled = %v", err)
+			}
+			if got := countWhere(t, ctx, pool, debtByStorage, refused.storageID); got != 0 {
+				t.Errorf("debt rows once enabled = %d, want 0", got)
+			}
+		})
+	}
+}
+
 // rowTracer records, per statement, the rows each SELECT returned, so a test
 // can pin that a sweep reads no more than its batch at a time.
 type rowTracer struct {

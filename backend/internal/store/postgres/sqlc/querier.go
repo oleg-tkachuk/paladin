@@ -57,7 +57,7 @@ type Querier interface {
 	// One drainer tick's worth. FOR UPDATE SKIP LOCKED so replicas take disjoint
 	// rows; the join resolves the backend the parts actually live on, which is
 	// why bucket_id carries a RESTRICT foreign key.
-	ClaimDueMultipartAborts(ctx context.Context, batchSize int32) ([]ClaimDueMultipartAbortsRow, error)
+	ClaimDueMultipartAborts(ctx context.Context, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ClaimDueMultipartAbortsRow, error)
 	// Idempotency / dedup for the ingest plane. Every CloudEvent the worker
 	// claims passes through ClaimIngestedEvent — INSERT ... ON CONFLICT
 	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
@@ -564,7 +564,7 @@ type Querier interface {
 	// Names, not ids: the reaper aborts the upload against the storage backend,
 	// which addresses buckets by name, and the collection name is a segment of the
 	// object's storage path.
-	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
+	ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListStaleMultipartUploadsRow, error)
 	// Keyed by backend NAME, for a page of backends at once.
 	ListStorageBackendFeatures(ctx context.Context, backendNames []string) ([]ListStorageBackendFeaturesRow, error)
 	// Cursor pagination on the backend NAME, which is what the domain calls

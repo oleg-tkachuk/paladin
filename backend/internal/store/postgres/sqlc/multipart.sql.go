@@ -31,13 +31,17 @@ const claimDueMultipartAborts = `-- name: ClaimDueMultipartAborts :many
 SELECT d.id, d.tenant_id, d.object_id, d.collection_name, d.path,
        d.storage_upload_id, d.attempts,
        sb.name AS backend_name,
-       b.name  AS bucket_name
+       b.name  AS bucket_name,
+       b.id    AS bucket_id, sb.enabled, sb.read_only, b.provision_state
 FROM pending_multipart_aborts d
 JOIN buckets b           ON b.id = d.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE d.next_attempt_at <= now()
+  -- Not the buckets the gate refused earlier in this tick (bucketgate.State
+  -- comes back on each row and is decided in Go).
+  AND NOT (d.bucket_id = ANY(coalesce($1::uuid[], '{}')))
 ORDER BY d.next_attempt_at
-LIMIT $1
+LIMIT $2
 FOR UPDATE OF d SKIP LOCKED
 `
 
@@ -51,6 +55,10 @@ type ClaimDueMultipartAbortsRow struct {
 	Attempts        int32       `json:"attempts"`
 	BackendName     string      `json:"backend_name"`
 	BucketName      string      `json:"bucket_name"`
+	BucketID        pgtype.UUID `json:"bucket_id"`
+	Enabled         bool        `json:"enabled"`
+	ReadOnly        bool        `json:"read_only"`
+	ProvisionState  string      `json:"provision_state"`
 }
 
 // ─── Abort debt (010_multipart_abort_debt.sql) ──────────────────────────────
@@ -61,8 +69,8 @@ type ClaimDueMultipartAbortsRow struct {
 // One drainer tick's worth. FOR UPDATE SKIP LOCKED so replicas take disjoint
 // rows; the join resolves the backend the parts actually live on, which is
 // why bucket_id carries a RESTRICT foreign key.
-func (q *Queries) ClaimDueMultipartAborts(ctx context.Context, batchSize int32) ([]ClaimDueMultipartAbortsRow, error) {
-	rows, err := q.db.Query(ctx, claimDueMultipartAborts, batchSize)
+func (q *Queries) ClaimDueMultipartAborts(ctx context.Context, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ClaimDueMultipartAbortsRow, error) {
+	rows, err := q.db.Query(ctx, claimDueMultipartAborts, deferredBucketIds, batchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +88,10 @@ func (q *Queries) ClaimDueMultipartAborts(ctx context.Context, batchSize int32) 
 			&i.Attempts,
 			&i.BackendName,
 			&i.BucketName,
+			&i.BucketID,
+			&i.Enabled,
+			&i.ReadOnly,
+			&i.ProvisionState,
 		); err != nil {
 			return nil, err
 		}
@@ -168,15 +180,19 @@ SELECT m.id, m.storage_upload_id,
        sb.name AS backend_name,
        b.name  AS bucket_name,
        k.name  AS collection_name,
-       o.id AS object_id, o.tenant_id, o.path
+       o.id AS object_id, o.tenant_id, o.path,
+       b.id AS bucket_id, sb.enabled, sb.read_only, b.provision_state
 FROM multipart_uploads m
 JOIN objects o           ON o.id = m.object_id
 JOIN buckets b           ON b.id = m.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
 JOIN collections k       ON k.id = o.collection_id
 WHERE m.created_at < $1
+  -- Each row carries its bucket's gate state (bucketgate.State); the reaper
+  -- asks the gate in Go and claims again without the buckets it refused.
+  AND NOT (m.bucket_id = ANY(coalesce($2::uuid[], '{}')))
 ORDER BY m.created_at
-LIMIT $2
+LIMIT $3
 `
 
 type ListStaleMultipartUploadsRow struct {
@@ -188,6 +204,10 @@ type ListStaleMultipartUploadsRow struct {
 	ObjectID        pgtype.UUID `json:"object_id"`
 	TenantID        pgtype.UUID `json:"tenant_id"`
 	Path            string      `json:"path"`
+	BucketID        pgtype.UUID `json:"bucket_id"`
+	Enabled         bool        `json:"enabled"`
+	ReadOnly        bool        `json:"read_only"`
+	ProvisionState  string      `json:"provision_state"`
 }
 
 // Sessions whose client never Completed/Aborted, past the cooling-off
@@ -202,8 +222,8 @@ type ListStaleMultipartUploadsRow struct {
 // Names, not ids: the reaper aborts the upload against the storage backend,
 // which addresses buckets by name, and the collection name is a segment of the
 // object's storage path.
-func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, batchSize int32) ([]ListStaleMultipartUploadsRow, error) {
-	rows, err := q.db.Query(ctx, listStaleMultipartUploads, createdAt, batchSize)
+func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListStaleMultipartUploadsRow, error) {
+	rows, err := q.db.Query(ctx, listStaleMultipartUploads, createdAt, deferredBucketIds, batchSize)
 	if err != nil {
 		return nil, err
 	}
@@ -220,6 +240,10 @@ func (q *Queries) ListStaleMultipartUploads(ctx context.Context, createdAt pgtyp
 			&i.ObjectID,
 			&i.TenantID,
 			&i.Path,
+			&i.BucketID,
+			&i.Enabled,
+			&i.ReadOnly,
+			&i.ProvisionState,
 		); err != nil {
 			return nil, err
 		}

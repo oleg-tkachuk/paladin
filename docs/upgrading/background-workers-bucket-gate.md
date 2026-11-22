@@ -10,3 +10,7 @@
   until the drain ends. A backend disabled for good rather than returned to
   service keeps its purge debts on record, and its buckets cannot be deleted
   while they are there.
+- The multipart reaper and the abort drainer no longer abort uploads on a
+  disabled backend; the sessions and abort debts stay until it is enabled
+  again. A draining backend still takes the abort: parts were never an
+  object, and aborting them frees storage.

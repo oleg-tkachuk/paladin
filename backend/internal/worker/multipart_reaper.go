@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -68,49 +69,71 @@ func (r *MultipartReaper) Run(ctx context.Context) error {
 // Sweep reaps one batch of sessions older than TTL. Exported so a test can
 // drive a single tick without the ticker.
 //
+// Sessions are claimed only from the buckets the bucket gate admits as a read
+// (bucket_gate.go): an abort frees parts that were never an object, so a
+// draining backend takes it, as the abort RPC's resolution does, and only a
+// disabled one, which serves no Paladin-mediated operation, keeps its
+// sessions open until it is enabled again.
+//
 // A session that fails is logged and left for the next sweep; the rest of the
-// batch still runs, and the first failure is returned.
+// batch still runs, and the first failure is returned. A session deferred by
+// the gate is not a failure.
 func (r *MultipartReaper) Sweep(ctx context.Context) error {
 	cutoff := pgtype.Timestamptz{Time: time.Now().UTC().Add(-r.TTL), Valid: true}
-	rows, err := r.Q.ListStaleMultipartUploads(ctx, cutoff, r.BatchSize)
-	if err != nil {
-		r.log().Warn("list stale multipart uploads failed", zap.Error(err))
-		return err
-	}
+	gate := newBucketDeferrals(r.log(), bucketgate.Read)
 	var first error
-	for _, row := range rows {
-		if ctx.Err() != nil {
-			return first
-		}
-		tenantID := uuid.UUID(row.TenantID.Bytes)
-		// Abort the S3 session first. If it fails we keep the DB row so
-		// the next sweep retries — deleting it would orphan the S3
-		// session with no record to reclaim it from.
-		if err := r.Storage.AbortMultipart(ctx, row.BackendName, row.BucketName, tenantID,
-			row.StorageUploadID, row.CollectionName, row.Path); err != nil {
-			r.log().Warn("abort multipart failed; will retry next sweep",
-				zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()),
-				zap.String("tenant_id", tenantID.String()),
-				zap.Error(err),
-			)
-			keepFirst(&first, err)
-			continue
-		}
-		// Through the repo, not the queries: the delete has to run in a
-		// transaction that sets `paladin.multipart_aborted`, or the abort-debt
-		// trigger files a debt against the upload we have just aborted.
-		if err := r.Sessions.DeleteSession(ctx, uuid.UUID(row.ID.Bytes).String()); err != nil {
-			r.log().Warn("delete multipart session row failed",
-				zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()), zap.Error(err))
-			keepFirst(&first, err)
-			continue
-		}
-		r.log().Info("reaped abandoned multipart upload",
-			zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()),
-			zap.String("tenant_id", tenantID.String()),
-		)
+	_, err := claimAdmitted(ctx, gate, r.BatchSize,
+		func(limit int32, deferred []pgtype.UUID) ([]sqlc.ListStaleMultipartUploadsRow, error) {
+			return r.Q.ListStaleMultipartUploads(ctx, cutoff, deferred, limit)
+		},
+		staleUploadBucket,
+		func(row sqlc.ListStaleMultipartUploadsRow) error {
+			keepFirst(&first, r.reapOne(ctx, row))
+			return nil
+		})
+	if err != nil {
+		keepFirst(&first, tickCutShort(ctx, r.log(), "list stale multipart uploads failed", err))
 	}
 	return first
+}
+
+// reapOne aborts one stale session on its backend, then deletes its row, and
+// returns the failure it logged.
+func (r *MultipartReaper) reapOne(ctx context.Context, row sqlc.ListStaleMultipartUploadsRow) error {
+	tenantID := uuid.UUID(row.TenantID.Bytes)
+	// Abort the S3 session first. If it fails we keep the DB row so
+	// the next sweep retries — deleting it would orphan the S3
+	// session with no record to reclaim it from.
+	if err := r.Storage.AbortMultipart(ctx, row.BackendName, row.BucketName, tenantID,
+		row.StorageUploadID, row.CollectionName, row.Path); err != nil {
+		r.log().Warn("abort multipart failed; will retry next sweep",
+			zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()),
+			zap.String("tenant_id", tenantID.String()),
+			zap.Error(err),
+		)
+		return err
+	}
+	// Through the repo, not the queries: the delete has to run in a
+	// transaction that sets `paladin.multipart_aborted`, or the abort-debt
+	// trigger files a debt against the upload we have just aborted.
+	if err := r.Sessions.DeleteSession(ctx, uuid.UUID(row.ID.Bytes).String()); err != nil {
+		r.log().Warn("delete multipart session row failed",
+			zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()), zap.Error(err))
+		return err
+	}
+	r.log().Info("reaped abandoned multipart upload",
+		zap.String("upload_id", uuid.UUID(row.ID.Bytes).String()),
+		zap.String("tenant_id", tenantID.String()),
+	)
+	return nil
+}
+
+// staleUploadBucket is the bucket a stale session's parts are on.
+func staleUploadBucket(row sqlc.ListStaleMultipartUploadsRow) bucketGateRow {
+	return bucketGateRow{
+		ID: row.BucketID, BackendName: row.BackendName, BucketName: row.BucketName,
+		Enabled: row.Enabled, ReadOnly: row.ReadOnly, ProvisionState: row.ProvisionState,
+	}
 }
 
 func (r *MultipartReaper) log() *zap.Logger {

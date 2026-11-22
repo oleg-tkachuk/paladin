@@ -5,9 +5,11 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -72,8 +74,12 @@ func (w *MultipartAbortDrainer) Run(ctx context.Context) error {
 // as in PurgeDrainer: that is what stops a second replica from issuing a
 // duplicate abort while this one is in flight.
 //
+// Debt is claimed only from the buckets the bucket gate admits as a read, as
+// MultipartReaper's sessions are: a disabled backend keeps its debt, due and
+// untouched, until it is enabled again.
+//
 // A debt that fails is logged and kept; the rest of the batch still runs, and
-// the first failure is returned.
+// the first failure is returned. A debt deferred by the gate is not a failure.
 func (w *MultipartAbortDrainer) Sweep(ctx context.Context) error {
 	tx, err := w.Pool.Begin(ctx)
 	if err != nil {
@@ -83,50 +89,66 @@ func (w *MultipartAbortDrainer) Sweep(ctx context.Context) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	q := w.Q.WithTx(tx)
-	rows, err := q.ClaimDueMultipartAborts(ctx, w.BatchSize)
-	if err != nil {
-		w.log().Warn("multipart abort drainer: claim", zap.Error(err))
-		return err
-	}
+	gate := newBucketDeferrals(w.log(), bucketgate.Read)
 	var first error
-	for _, r := range rows {
-		if ctx.Err() != nil {
-			return first
-		}
-		tenantID := uuid.UUID(r.TenantID.Bytes)
-		if err := w.Storage.AbortMultipart(ctx, r.BackendName, r.BucketName, tenantID,
-			r.StorageUploadID, r.CollectionName, r.Path); err != nil {
-			w.log().Warn("multipart abort drainer: abort failed; debt kept",
-				zap.String("storage_upload_id", r.StorageUploadID),
-				zap.String("tenant_id", tenantID.String()),
-				zap.Int32("attempts", r.Attempts),
-				zap.Error(err))
-			keepFirst(&first, err)
-			msg := err.Error()
-			if berr := q.BackoffMultipartAbortDebt(ctx, r.ID,
-				&msg, w.backoff(r.Attempts).Microseconds()); berr != nil {
-				w.log().Warn("multipart abort drainer: backoff", zap.Error(berr))
-				keepFirst(&first, berr)
-			}
-			continue
-		}
-		if err := q.DeleteMultipartAbortDebt(ctx, r.ID); err != nil {
-			// The abort landed but the row stayed. Harmless: the next tick
-			// aborts an upload S3 no longer has, which it reports as success,
-			// and the row goes then.
-			w.log().Warn("multipart abort drainer: settle", zap.Error(err))
-			keepFirst(&first, err)
-			continue
-		}
-		w.log().Info("aborted an orphaned multipart upload",
-			zap.String("storage_upload_id", r.StorageUploadID),
-			zap.String("tenant_id", tenantID.String()))
+	_, err = claimAdmitted(ctx, gate, w.BatchSize,
+		func(limit int32, deferred []pgtype.UUID) ([]sqlc.ClaimDueMultipartAbortsRow, error) {
+			return q.ClaimDueMultipartAborts(ctx, deferred, limit)
+		},
+		abortDebtBucket,
+		func(r sqlc.ClaimDueMultipartAbortsRow) error {
+			keepFirst(&first, w.abortOne(ctx, q, r))
+			return nil
+		})
+	if err != nil {
+		// Cut short: nothing this tick did is committed.
+		keepFirst(&first, tickCutShort(ctx, w.log(), "multipart abort drainer: claim", err))
+		return first
 	}
 	if err := tx.Commit(ctx); err != nil {
 		w.log().Warn("multipart abort drainer: commit", zap.Error(err))
 		keepFirst(&first, err)
 	}
 	return first
+}
+
+// abortOne aborts one debt's upload and settles the debt, or records why it
+// could not; it returns the failure it logged.
+func (w *MultipartAbortDrainer) abortOne(ctx context.Context, q *sqlc.Queries, r sqlc.ClaimDueMultipartAbortsRow) error {
+	tenantID := uuid.UUID(r.TenantID.Bytes)
+	if err := w.Storage.AbortMultipart(ctx, r.BackendName, r.BucketName, tenantID,
+		r.StorageUploadID, r.CollectionName, r.Path); err != nil {
+		w.log().Warn("multipart abort drainer: abort failed; debt kept",
+			zap.String("storage_upload_id", r.StorageUploadID),
+			zap.String("tenant_id", tenantID.String()),
+			zap.Int32("attempts", r.Attempts),
+			zap.Error(err))
+		msg := err.Error()
+		if berr := q.BackoffMultipartAbortDebt(ctx, r.ID,
+			&msg, w.backoff(r.Attempts).Microseconds()); berr != nil {
+			w.log().Warn("multipart abort drainer: backoff", zap.Error(berr))
+		}
+		return err
+	}
+	if err := q.DeleteMultipartAbortDebt(ctx, r.ID); err != nil {
+		// The abort landed but the row stayed. Harmless: the next tick
+		// aborts an upload S3 no longer has, which it reports as success,
+		// and the row goes then.
+		w.log().Warn("multipart abort drainer: settle", zap.Error(err))
+		return err
+	}
+	w.log().Info("aborted an orphaned multipart upload",
+		zap.String("storage_upload_id", r.StorageUploadID),
+		zap.String("tenant_id", tenantID.String()))
+	return nil
+}
+
+// abortDebtBucket is the bucket an abort debt's parts are on.
+func abortDebtBucket(r sqlc.ClaimDueMultipartAbortsRow) bucketGateRow {
+	return bucketGateRow{
+		ID: r.BucketID, BackendName: r.BackendName, BucketName: r.BucketName,
+		Enabled: r.Enabled, ReadOnly: r.ReadOnly, ProvisionState: r.ProvisionState,
+	}
 }
 
 // backoff grows with the attempt count and is capped by MaxBackoff.
