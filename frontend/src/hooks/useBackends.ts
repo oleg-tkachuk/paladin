@@ -221,8 +221,9 @@ export function useBackends({
 
   // setBackendReadOnly — flips a backend's read-only "drain" state via
   // BackendService.SetBackendReadOnly (`001_initial_schema.sql`). OCC-guarded on
-  // resourceVersion. Draining keeps reads working while refusing mutations,
-  // so an operator can migrate data off before disabling. Unlike disable,
+  // resourceVersion. Draining keeps reads and row-only writes (tags, taint,
+  // locks, trash) working while refusing writes of bytes, so an operator can
+  // migrate data off before disabling. Unlike disable,
   // the default backend may be drained.
   const setBackendReadOnly = useCallback(
     async (
