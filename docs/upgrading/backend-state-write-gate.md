@@ -9,7 +9,7 @@
 - A draining (read-only) or disabled backend's refusal now carries its
   reason, `ERROR_REASON_BACKEND_READ_ONLY` or `ERROR_REASON_BACKEND_DISABLED`,
   in the error's `ErrorInfo`. It came with the code alone before.
-- `RestoreVersion` and `CompleteObject` — its already-completed no-op
+- `RestoreObjectVersion` and `CompleteObject` — its already-completed no-op
   included — used to proceed on a draining or provisioning backend. They are
   now refused there like every other write of bytes.
 - A write that changes only Paladin's rows and leaves the backend's bytes as

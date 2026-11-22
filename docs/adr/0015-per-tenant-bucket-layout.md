@@ -232,7 +232,7 @@ By RPC:
 
 | Access | RPCs |
 |---|---|
-| `BytesWrite` | `UploadObject`, `CompleteObject`, `CopyObject` (destination), `DeleteObject` with `permanent`, `RestoreVersion`, presigned PUT, multipart initiate / complete / part URLs, batch copy (destination), permanent batch delete |
+| `BytesWrite` | `UploadObject`, `CompleteObject`, `CopyObject` (destination), `DeleteObject` with `permanent`, `RestoreObjectVersion`, presigned PUT, multipart initiate / complete / part URLs, batch copy (destination), permanent batch delete |
 | `Read` | `GetObject`, `DownloadObject`, list, presigned GET, `GetObjectLock`, `CopyObject` and batch copy (source), the HEAD `RestoreObject` makes |
 | `MetadataWrite` | `UpdateObject` and the tag RPCs on it, `DeleteObject` to the trash, `RestoreObject`, `SetObjectRetention`, `SetObjectLegalHold`, the tag, restore and trash batches |
 | `Protective` | `SetObjectTaint`, setting or clearing |
@@ -251,9 +251,11 @@ What makes the `MetadataWrite` RPCs safe while a backend drains:
   migration. It copies bytes under the same key and rebinds
   `collections.bucket_id`, and the object row, with its tags, locks and
   taint, stays where it was. A restore that lands after the copy has passed
-  its key is caught by the physical verify, which rolls the migration back.
-- What the migration does to the trash is a separate gap, recorded in
-  BACKLOG.
+  its key is caught by the physical verify (its `Header` is wired in
+  `build_jobs.go`), which rolls the migration back.
+- Two gaps in the migration itself do not depend on the gate and are
+  recorded in BACKLOG: it leaves the trash behind, and its rollback copies
+  back any object whose row changed after the rebind.
 
 ## Consequences
 
