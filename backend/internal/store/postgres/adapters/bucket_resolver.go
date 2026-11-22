@@ -42,7 +42,7 @@ const resolveBucketQuery = `
 // resolveBucket returns the (backend, bucket) pair bound to a collection, or
 // the gate error refusing the operation.
 func resolveBucket(
-	ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, collection string, write bool,
+	ctx context.Context, pool *pgxpool.Pool, tenantID uuid.UUID, collection string, access bucketgate.Access,
 ) (string, string, error) {
 	var (
 		backendID string
@@ -56,7 +56,7 @@ func resolveBucket(
 		}
 		return "", "", fmt.Errorf("lookup bucket: %w", err)
 	}
-	if err := bucketgate.Check(bucketgate.AccessOf(write), state); err != nil {
+	if err := bucketgate.Check(access, state); err != nil {
 		return "", "", err
 	}
 	return backendID, bucket, nil

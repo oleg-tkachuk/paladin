@@ -5,6 +5,7 @@ import (
 	"testing"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -26,7 +27,7 @@ func (r *listRepo) ListObjects(context.Context, ListObjectsArgs) ([]Object, stri
 
 // ListObjects now resolves the collection→bucket binding before authz so
 // bucket:/collection: scopes enforce; supply a stable binding here.
-func (r *listRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
+func (r *listRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 	return "backend-list", "bucket-list", nil
 }
 

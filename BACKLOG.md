@@ -523,14 +523,62 @@ the same commit. Treat this file like a runtime invariant.
 - **Reason:** a batch that writes is refused at submit time by the write gate
   (`batchh.binding`), but the worker's soft-delete, restore and tag executors
   (`internal/worker/operations/batch_{delete,restore,update_tags}.go`) write
-  rows without asking it again. A backend that starts draining between submit
-  and run still has the batch applied. Copy (`batch_copy.go`) and permanent
-  delete (through `PermanentDelete`) already resolve with `write=true`.
+  rows without asking it again. They are metadata writes, which a draining
+  backend takes, but a backend disabled between submit and run still has the
+  batch applied. Copy (`batch_copy.go`) and permanent delete (through
+  `PermanentDelete`) already resolve as `BytesWrite`.
 - **Definition of Done:** each executor resolves its collection through the
-  write gate before its first item and fails the operation with the gate's
-  refusal; a test drains the backend between submit and run.
-- **Blockers:** deciding whether a drain that starts mid-batch fails the rest
+  write gate, as `MetadataWrite`, before its first item and fails the
+  operation with the gate's refusal; a test disables the backend between
+  submit and run.
+- **Blockers:** deciding whether a backend disabled mid-batch fails the rest
   of the batch or only the items not yet written.
+
+### A storage migration leaves the trash behind
+
+- **Status:** Deferred.
+- **Reason:** the shared→dedicated migration copies, verifies and cleans up
+  only `AVAILABLE` objects (`MigrationListTenantObjects`). A trashed object's
+  bytes stay in the source bucket while its collection is rebound to the
+  target, so after the migration `RestoreObject` finds no bytes
+  (`assertBytesPresent`) and refuses it, and the lifecycle hard delete
+  removes the bytes from the target, where they never were, orphaning them
+  in the source. Found while classifying trash moves as metadata writes; the
+  gap does not depend on the gate.
+- **Definition of Done:** the migration copies and verifies trashed objects
+  too (or the trash is purged or restored before it starts), and a test
+  trashes an object, migrates the tenant and restores it.
+- **Blockers:** deciding whether the trash moves with the tenant or is
+  settled before the move.
+
+### A storage migration's rollback copies back objects only their rows changed
+
+- **Status:** Deferred.
+- **Reason:** the rollback copies back every object whose `updated_at` is at
+  or after `rebound_at` (`MigrationListObjectsWrittenSince`), and every row
+  UPDATE bumps it. A tag, taint, lock or restore after the rebind copies that
+  object's target copy over its source copy, though its bytes never changed,
+  and the target copy may be the one the verify failed on.
+- **Definition of Done:** the rollback selects objects whose bytes were
+  written since the rebind (a promote, an overwrite, a version restore), not
+  any row change, and a test tags an object after the rebind and checks its
+  source copy is left alone.
+- **Blockers:** a column or event that marks a write of bytes apart from a
+  row change.
+
+### The lifecycle hard delete ignores a draining backend
+
+- **Status:** Deferred.
+- **Reason:** a draining backend refuses `DeleteObject` with `permanent`,
+  a write of bytes, but `LifecycleHardDeleter` and `PurgeDrainer` delete
+  bytes from it without asking the gate; neither reads `read_only`.
+  A trash move is a metadata write a draining backend takes, so an object
+  trashed during a drain can have its bytes deleted from that backend once
+  its retention ends.
+- **Definition of Done:** both workers ask the gate as `BytesWrite` before
+  deleting bytes and leave the debt for later on a draining or disabled
+  backend, logged at Warn; a test drains the backend under a due purge.
+- **Blockers:** none.
 
 ### AbortMultipartUpload skips the bucket gate for an anchored session
 

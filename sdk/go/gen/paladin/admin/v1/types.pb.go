@@ -563,11 +563,12 @@ type StorageBackend struct {
 	PreviousCredentialsSecretRef  string                 `protobuf:"bytes,17,opt,name=previous_credentials_secret_ref,json=previousCredentialsSecretRef,proto3" json:"previous_credentials_secret_ref,omitempty"`
 	PreviousCredentialsValidUntil *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=previous_credentials_valid_until,json=previousCredentialsValidUntil,proto3" json:"previous_credentials_valid_until,omitempty"`
 	// Read-only "drain" state (`001_initial_schema.sql`). Only meaningful when enabled=true:
-	// reads / presign-GET / HEAD / list still resolve, but mutations
-	// (PUT / POST / multipart-init / copy-dest / update / delete / version
-	// writes) are refused (FailedPrecondition) so an operator can migrate data
-	// off before disabling. Operator-managed via SetBackendReadOnly; NOT
-	// mirrored from static config.
+	// reads / presign-GET / HEAD / list still resolve, and so do writes that
+	// change only Paladin's rows (tags, trash and restore, Object Lock, taint),
+	// but writes of bytes (PUT / POST / multipart / copy-dest / permanent
+	// delete / version restore) are refused (FailedPrecondition) so an operator
+	// can migrate data off before disabling. Operator-managed via
+	// SetBackendReadOnly; NOT mirrored from static config.
 	ReadOnly bool `protobuf:"varint,19,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	// Derived, advisory health from the last TestBackend probe (`001_initial_schema.sql`).
 	// "unknown" | "ok" | "error". Surfaced in the UI; NOT a gate. health_message

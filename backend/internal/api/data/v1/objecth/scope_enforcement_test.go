@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -122,7 +123,7 @@ type getRepo struct {
 func (r *getRepo) FindByName(_ context.Context, _ uuid.UUID, collection, _ string) (Object, error) {
 	return Object{ObjectID: uuid.NewV7(), Collection: collection, Key: "k"}, nil
 }
-func (r *getRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bool) (string, string, error) {
+func (r *getRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bucketgate.Access) (string, string, error) {
 	return "be", r.bucket, nil
 }
 

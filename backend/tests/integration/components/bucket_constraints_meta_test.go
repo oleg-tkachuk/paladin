@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
@@ -47,7 +48,7 @@ func TestLookupBucketMetaReturnsBucketConstraints(t *testing.T) {
 	}
 
 	objects := adapters.NewObjectRepo(q, pool)
-	meta, err := objects.LookupBucketMeta(ctx, f.tenantID, f.collection, true)
+	meta, err := objects.LookupBucketMeta(ctx, f.tenantID, f.collection, bucketgate.BytesWrite)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,11 +62,11 @@ func TestLookupBucketMetaReturnsBucketConstraints(t *testing.T) {
 	// The multipart and presign repositories resolve through the same query.
 	for name, lookup := range map[string]func() (uploadpolicy.BucketConstraints, error){
 		"multipart": func() (uploadpolicy.BucketConstraints, error) {
-			m, err := adapters.NewMultipartRepo(q, pool).LookupBucketMeta(ctx, f.tenantID, f.collection, true)
+			m, err := adapters.NewMultipartRepo(q, pool).LookupBucketMeta(ctx, f.tenantID, f.collection, bucketgate.BytesWrite)
 			return m.Constraints, err
 		},
 		"presign": func() (uploadpolicy.BucketConstraints, error) {
-			m, err := adapters.NewPresignRepo(q, pool).LookupBucketMeta(ctx, f.tenantID, f.collection, false)
+			m, err := adapters.NewPresignRepo(q, pool).LookupBucketMeta(ctx, f.tenantID, f.collection, bucketgate.Read)
 			return m.Constraints, err
 		},
 	} {
@@ -77,7 +78,7 @@ func TestLookupBucketMetaReturnsBucketConstraints(t *testing.T) {
 
 	// A document that does not decode is refused, not read as "no limits".
 	mustExec(t, ctx, pool, `UPDATE buckets SET constraints = '{"MaxObjectSizeBytes": "lots"}'::jsonb WHERE name = $1`, bucketName)
-	if _, err := objects.LookupBucketMeta(ctx, f.tenantID, f.collection, true); err == nil {
+	if _, err := objects.LookupBucketMeta(ctx, f.tenantID, f.collection, bucketgate.BytesWrite); err == nil {
 		t.Fatal("an undecodable constraints document was read as no constraints")
 	}
 }

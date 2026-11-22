@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
@@ -116,7 +117,7 @@ func (h *VersionHandler) parentBinding(ctx context.Context, rpc string, tenantID
 		backendID, bucket = scopeBucket(ctx, h.log, h.objects, rpc, tenantID, collection)
 		return backendID, bucket, nil
 	}
-	return writeBinding(ctx, h.objects, tenantID, collection)
+	return writeBinding(ctx, h.objects, tenantID, collection, bucketgate.BytesWrite)
 }
 
 // CapabilityObjectURI is the resource a capability names an object by.
@@ -344,7 +345,7 @@ func (h *VersionHandler) OnPromote(ctx context.Context, obj Object) error {
 	if !h.wired() {
 		return nil
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, bucketgate.Read) // versioning-config read; primary op already gated
 	if err != nil {
 		// Best-effort: a missing bucket-meta lookup must not abort the
 		// already-successful promote. Log via the caller.
@@ -406,7 +407,7 @@ func (h *VersionHandler) UnsetDeleteMarkerCurrent(ctx context.Context, obj Objec
 	// None of these reads is best-effort: a restore that went on without one
 	// would leave a visible object whose current version is its delete
 	// marker, and nothing moves the pointer back later.
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, bucketgate.Read) // versioning-config read; primary op already gated
 	if err != nil {
 		return fmt.Errorf("read versioning config: %w", err)
 	}
@@ -472,7 +473,7 @@ func (h *VersionHandler) OnSoftDelete(ctx context.Context, obj Object) error {
 	if !h.wired() {
 		return nil
 	}
-	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, false) // versioning-config read; primary op already gated
+	meta, err := h.objects.LookupBucketMeta(ctx, obj.TenantID, obj.Collection, bucketgate.Read) // versioning-config read; primary op already gated
 	if err != nil {
 		return fmt.Errorf("on soft delete: lookup meta: %w", err)
 	}

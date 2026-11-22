@@ -191,11 +191,12 @@ export type StorageBackend = Message<"paladin.admin.v1.StorageBackend"> & {
 
   /**
    * Read-only "drain" state (`001_initial_schema.sql`). Only meaningful when enabled=true:
-   * reads / presign-GET / HEAD / list still resolve, but mutations
-   * (PUT / POST / multipart-init / copy-dest / update / delete / version
-   * writes) are refused (FailedPrecondition) so an operator can migrate data
-   * off before disabling. Operator-managed via SetBackendReadOnly; NOT
-   * mirrored from static config.
+   * reads / presign-GET / HEAD / list still resolve, and so do writes that
+   * change only Paladin's rows (tags, trash and restore, Object Lock, taint),
+   * but writes of bytes (PUT / POST / multipart / copy-dest / permanent
+   * delete / version restore) are refused (FailedPrecondition) so an operator
+   * can migrate data off before disabling. Operator-managed via
+   * SetBackendReadOnly; NOT mirrored from static config.
    *
    * @generated from field: bool read_only = 19;
    */

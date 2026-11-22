@@ -22,6 +22,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
@@ -189,10 +190,10 @@ type Repository interface {
 	// bound to the Collection. Used to route storage calls to the right
 	// (backend, bucket); callers that don't route on backend yet may discard
 	// backendID (docs/backend-registry.md).
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (backendID, bucket string, err error)
 	// LookupBucketMeta is LookupBucket plus the bucket's upload constraints,
 	// for the paths that admit an upload or mint its URLs.
-	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error)
+	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error)
 	// Object reads the object a completed upload produced, to answer
 	// CompleteMultipartUpload with it as CompleteObject answers with its own.
 	Object(ctx context.Context, tenantID, objectID uuid.UUID) (objecth.Object, error)
@@ -310,7 +311,7 @@ func (h *Handler) InitiateMultipartUpload(ctx context.Context, args InitiateArgs
 	// InitiateMultipart and anchors the session below. Before the capability
 	// check too: a public collection names the object itself, and the check
 	// is of the object it will create.
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, args.Collection, true) // multipart init (mutation)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, args.Collection, bucketgate.BytesWrite) // multipart init (mutation)
 	if err != nil {
 		return nil, objecth.MapResolveErr(err)
 	}
@@ -427,7 +428,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 // bucket as every other write does; meta is the collection's binding, for the
 // bucket's constraints.
 func (h *Handler) writeTarget(ctx context.Context, tenantID uuid.UUID, sess Session) (meta objecth.BucketMeta, backendID, bucket string, err error) {
-	meta, err = h.repo.LookupBucketMeta(ctx, tenantID, sess.Collection, true) // multipart write (mutation)
+	meta, err = h.repo.LookupBucketMeta(ctx, tenantID, sess.Collection, bucketgate.BytesWrite) // multipart write (mutation)
 	if err != nil {
 		return objecth.BucketMeta{}, "", "", objecth.MapResolveErr(err)
 	}
@@ -444,7 +445,7 @@ func (h *Handler) route(ctx context.Context, tenantID uuid.UUID, sess Session) (
 	if sess.Bucket != "" {
 		return sess.BackendID, sess.Bucket, nil
 	}
-	backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, true) // multipart complete / abort (mutation)
+	backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, bucketgate.BytesWrite) // multipart complete / abort (mutation)
 	if err != nil {
 		return "", "", objecth.MapResolveErr(err)
 	}

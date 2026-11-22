@@ -326,16 +326,15 @@ type Repository interface {
 	// configured default in that case. backendID is the physical-location
 	// half the multi-backend routing keys on (docs/backend-registry.md);
 	// callers that don't route yet may discard it.
-	// `write` classifies the operation for the read-only (drain) gate
-	// (the schema baseline (001_initial_schema.sql)): pass true for mutations (PUT/POST/multipart-init/
-	// copy-dest/delete/version-write), false for reads (GET/HEAD/list). A
-	// write against a read-only backend returns ErrBackendReadOnly.
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
+	// access is what the operation touches, which decides how the bucket's and
+	// backend's state answer it (bucketgate's table): a bytes-write against a
+	// read-only backend returns ErrBackendReadOnly, a read does not.
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (backendID, bucket string, err error)
 	// LookupBucketMeta returns the bucket binding plus the metadata needed for
 	// versioning / lock decisions on the hot path. Implementations should
 	// satisfy this with a single query — handlers call it on every promote.
-	// `write` gates the read-only drain state as in LookupBucket.
-	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (BucketMeta, error)
+	// access gates the bucket's and backend's state as in LookupBucket.
+	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (BucketMeta, error)
 	// ObjectLock returns the object row's lock state so the delete path
 	// can refuse (and report) a locked object before touching storage.
 	ObjectLock(ctx context.Context, tenantID, objectID uuid.UUID) (ObjectLock, error)
@@ -675,7 +674,7 @@ func objectResourceName(tenantID uuid.UUID, collection, key string) string {
 // tx. On a lookup miss it returns "" and the caller falls back to the C-shape
 // name; a transient resolve blip must never block the event.
 func (h *Handler) canonicalObjectPrefix(ctx context.Context, op string, tenantID uuid.UUID, collection string) string {
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, false) // naming read
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, bucketgate.Read) // naming read
 	if err != nil {
 		warnBestEffort(ctx, h.log, op, readCanonicalPrefix, tenantID, collection, err)
 		return ""
@@ -856,7 +855,7 @@ func uploadPresignOp(post bool) string {
 // admits it there: a public collection names the object itself, which is
 // what the capability check that follows is of.
 func (h *Handler) uploadTarget(ctx context.Context, tenantID uuid.UUID, in *UploadObjectInput) (BucketMeta, error) {
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.Collection, true) // upload (mutation)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.Collection, bucketgate.BytesWrite) // upload (mutation)
 	if err != nil {
 		return BucketMeta{}, MapResolveErr(err)
 	}
@@ -1020,7 +1019,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 	// A completion is a write, the already-AVAILABLE no-op included: it goes
 	// through the write gate, so it answers a draining or provisioning bucket
 	// as every other write does, and Cedar decides on the resolved binding.
-	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection)
+	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection, bucketgate.BytesWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1711,7 +1710,7 @@ func (h *Handler) downloadTarget(ctx context.Context, tenantID uuid.UUID, collec
 		return BucketMeta{}, 0, connect.Errorf(connect.CodeFailedPrecondition,
 			"object state %s does not allow download", obj.State)
 	}
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, false) // download (read)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, bucketgate.Read) // download (read)
 	if err != nil {
 		return BucketMeta{}, 0, MapResolveErr(err)
 	}
@@ -1822,10 +1821,10 @@ func (h *Handler) updateTarget(ctx context.Context, tenantID uuid.UUID, in Updat
 //
 // It resolves the collection→bucket binding through the write gate, so
 // bucket:/collection: PAT scopes enforce on metadata/tag writes (this backs
-// PutObjectTags / DeleteObjectTags) and the update answers the bucket's state
-// as every other write does.
+// PutObjectTags / DeleteObjectTags). An update changes only the object's row,
+// so it is a metadata write: a draining backend takes it.
 func (h *Handler) updateResource(ctx context.Context, tenantID uuid.UUID, collection string, cur Object) (*cedar.Resource, error) {
-	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, collection)
+	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, collection, bucketgate.MetadataWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1919,9 +1918,10 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	if err := auth.AssertCapabilityOp(ctx, limes.OpDelete, objectURI); err != nil {
 		return err
 	}
-	// A delete, to the trash or for good, is a write: it goes through the
-	// write gate, and Cedar decides on the binding it resolves.
-	authBackendID, authBucket, err := writeBinding(ctx, h.repo, tenantID, collection)
+	// A delete goes through the write gate, and Cedar decides on the binding
+	// it resolves. A move to the trash changes only the row; a permanent
+	// delete removes bytes, and PermanentDelete resolves it as such again.
+	authBackendID, authBucket, err := writeBinding(ctx, h.repo, tenantID, collection, bucketgate.DeleteAccess(permanent))
 	if err != nil {
 		return err
 	}
@@ -2083,7 +2083,7 @@ func (h *Handler) PermanentDelete(
 	// first means a failed/blocked delete never touches storage; the
 	// only residual failure mode is an orphaned object in S3 (a
 	// reclaimable cost leak), never a live row with missing bytes.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, true) // permanent delete (mutation)
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, bucketgate.BytesWrite) // permanent delete (mutation)
 	if err != nil {
 		return MapResolveErr(err)
 	}
@@ -2248,9 +2248,10 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	if err := auth.AssertCapabilityOp(ctx, limes.OpPut, objectURI); err != nil {
 		return nil, err
 	}
-	// A restore puts an object back in the bucket: a write, through the write
-	// gate, and Cedar decides on the binding it resolves.
-	rsBackendID, rsBucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection)
+	// A restore takes the row out of the trash; its bytes never left the
+	// bucket (assertBytesPresent reads them), so it is a metadata write
+	// through the write gate, and Cedar decides on the binding it resolves.
+	rsBackendID, rsBucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection, bucketgate.MetadataWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -2435,7 +2436,7 @@ func (h *Handler) copySource(ctx context.Context, tenantID uuid.UUID, in CopyObj
 // is resolved after authz. A public destination names the copy itself;
 // elsewhere an empty key keeps the source's.
 func (h *Handler) copyDestination(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput, src Object) (BucketMeta, string, error) {
-	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, true) // copy dest (mutation)
+	dstMeta, err := h.repo.LookupBucketMeta(ctx, tenantID, in.DestCollection, bucketgate.BytesWrite) // copy dest (mutation)
 	if err != nil {
 		return BucketMeta{}, "", MapResolveErr(err)
 	}
@@ -2453,7 +2454,7 @@ func (h *Handler) copyDestination(ctx context.Context, tenantID uuid.UUID, in Co
 // storage copy, and the promotion with its event.
 func (h *Handler) copyBytes(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput, src Object, dstMeta BucketMeta, destKey string) (*Object, error) {
 	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
-	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceCollection, false) // copy source (read)
+	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceCollection, bucketgate.Read) // copy source (read)
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
@@ -2618,7 +2619,7 @@ const (
 // through a storage event; a HEAD that cannot reach the backend is
 // unavailable, not a refusal.
 func (h *Handler) assertBytesPresent(ctx context.Context, tenantID uuid.UUID, obj Object) error {
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, false) // a HEAD; RestoreObject passed the write gate already
+	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, bucketgate.Read) // a HEAD; RestoreObject passed the write gate already
 	if err != nil {
 		return MapResolveErr(err)
 	}

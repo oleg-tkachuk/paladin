@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	cedar "github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
@@ -44,7 +45,7 @@ func (r *purgeRepo) FindByName(context.Context, uuid.UUID, string, string) (Obje
 	return r.obj, nil
 }
 
-func (r *purgeRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
+func (r *purgeRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 	return "backend-1", "bucket-1", nil
 }
 

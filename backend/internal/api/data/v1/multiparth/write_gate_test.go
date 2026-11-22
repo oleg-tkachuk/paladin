@@ -29,11 +29,11 @@ func (a *recordingAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal
 func gatedRepo(session Session, state bucketgate.State, lookupErr error) *fakeRepo {
 	return &fakeRepo{
 		getSessionFn: func(context.Context, string) (Session, error) { return session, nil },
-		lookupBucketFn: func(_ context.Context, _ uuid.UUID, _ string, write bool) (string, string, error) {
+		lookupBucketFn: func(_ context.Context, _ uuid.UUID, _ string, access bucketgate.Access) (string, string, error) {
 			if lookupErr != nil {
 				return "", "", lookupErr
 			}
-			if err := bucketgate.Check(bucketgate.AccessOf(write), state); err != nil {
+			if err := bucketgate.Check(access, state); err != nil {
 				return "", "", err
 			}
 			return "backend-x", "bucket-x", nil

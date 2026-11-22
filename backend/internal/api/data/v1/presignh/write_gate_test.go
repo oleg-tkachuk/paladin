@@ -14,12 +14,12 @@ import (
 
 // gatedLookup resolves through bucketgate.Check against state, as the store
 // adapter does; lookupErr, when set, is the lookup itself failing.
-func gatedLookup(state bucketgate.State, lookupErr error) func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
-	return func(_ context.Context, _ uuid.UUID, _ string, write bool) (objecth.BucketMeta, error) {
+func gatedLookup(state bucketgate.State, lookupErr error) func(context.Context, uuid.UUID, string, bucketgate.Access) (objecth.BucketMeta, error) {
+	return func(_ context.Context, _ uuid.UUID, _ string, access bucketgate.Access) (objecth.BucketMeta, error) {
 		if lookupErr != nil {
 			return objecth.BucketMeta{}, lookupErr
 		}
-		if err := bucketgate.Check(bucketgate.AccessOf(write), state); err != nil {
+		if err := bucketgate.Check(access, state); err != nil {
 			return objecth.BucketMeta{}, err
 		}
 		return objecth.BucketMeta{BackendID: "backend-1", BucketName: "bucket-1"}, nil

@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
@@ -35,7 +36,7 @@ type QuotaReader interface {
 // because turning bucket caps from decorative into load-bearing changes
 // what a deployment rejects.
 type BucketBindingLookup interface {
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (backendID, bucket string, err error)
 }
 
 // QuotaSoftCheck is a Connect interceptor that rejects upload requests when
@@ -228,7 +229,7 @@ func (q *QuotaSoftCheck) bucketQuota(ctx context.Context, msg any) (admindomain.
 		// the Collection's binding. write=true matches what this request is
 		// about to do, so a disabled or draining backend surfaces as an
 		// error here — which we swallow, leaving the handler to report it.
-		backendID, bucketName, err = q.Bindings.LookupBucket(ctx, ref.TenantID, ref.Collection, true)
+		backendID, bucketName, err = q.Bindings.LookupBucket(ctx, ref.TenantID, ref.Collection, bucketgate.BytesWrite)
 		if err != nil {
 			return admindomain.Quota{}, false
 		}

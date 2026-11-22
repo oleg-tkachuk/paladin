@@ -205,6 +205,58 @@ Everything else — `owner_tenant_id`, `provision_state`, `region`,
 Component-level design for the Phase 2 machinery:
 [docs/backend-registry.md](../../backend/docs/backend-registry.md).
 
+## Addendum (2026-11-22): the state gate asks what an operation touches
+
+The mutation gate on `provision_state` grew into one gate over the bucket's
+and the backend's state, `bucketgate.Check`. It first classified every
+operation as a read or a write, and refused every write on a draining
+(read-only) backend. That was the wrong question. A draining backend still
+holds and serves its bytes, so refusing a change to a Paladin row there buys
+nothing, and refusing `SetObjectTaint` did harm: content flagged as unsafe
+stayed readable, and could not be flagged, for the whole drain.
+
+Each operation now names its access (`bucketgate.Access`, a closed set whose
+zero value is the strictest):
+
+| Access | What it touches | Disabled | Draining | Bucket pending | Bucket failed / deleting |
+|---|---|---|---|---|---|
+| `BytesWrite` | bytes on the backend | refused | refused | refused (retryable) | refused |
+| `Read` | reads bytes, or resolves a bucket to scope a read | refused | served | served | served |
+| `MetadataWrite` | Paladin rows only | refused | served | served | served |
+| `Protective` | a control that keeps content from being served | served | served | served | served |
+
+A binding that cannot be read refuses every write, `Protective` included: no
+write is authorized on an empty binding.
+
+By RPC:
+
+| Access | RPCs |
+|---|---|
+| `BytesWrite` | `UploadObject`, `CompleteObject`, `CopyObject` (destination), `DeleteObject` with `permanent`, `RestoreObjectVersion`, presigned PUT, multipart initiate / complete / part URLs, batch copy (destination), permanent batch delete |
+| `Read` | `GetObject`, `DownloadObject`, list, presigned GET, `GetObjectLock`, `CopyObject` and batch copy (source), the HEAD `RestoreObject` makes |
+| `MetadataWrite` | `UpdateObject` and the tag RPCs on it, `DeleteObject` to the trash, `RestoreObject`, `SetObjectRetention`, `SetObjectLegalHold`, the tag, restore and trash batches |
+| `Protective` | `SetObjectTaint`, setting or clearing |
+
+What makes the `MetadataWrite` RPCs safe while a backend drains:
+
+- They write Postgres alone. Tags and metadata go through
+  `UpdateObjectMetadata`, guarded by `resource_version`; a trash move and a
+  restore flip `objects.state`; retention and legal hold are rows in
+  `object_locks` (`ObjectLockRepo`), and Paladin never calls S3 Object Lock;
+  a taint is `objects.taint`. None calls the storage client, apart from the
+  HEAD a restore makes to check the bytes are still there.
+- Nothing that moves objects writes object rows, so a change made during a
+  move cannot be overwritten. `read_only` is set by an operator and read by
+  the gate alone; no worker acts on it. The one mover is this ADR's storage
+  migration. It copies bytes under the same key and rebinds
+  `collections.bucket_id`, and the object row, with its tags, locks and
+  taint, stays where it was. A restore that lands after the copy has passed
+  its key is caught by the physical verify (its `Header` is wired in
+  `build_jobs.go`), which rolls the migration back.
+- Two gaps in the migration itself do not depend on the gate and are
+  recorded in BACKLOG: it leaves the trash behind, and its rollback copies
+  back any object whose row changed after the rebind.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

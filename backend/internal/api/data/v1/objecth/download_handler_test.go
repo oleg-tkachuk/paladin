@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -58,11 +59,11 @@ func (r *downloadRepo) FindByName(_ context.Context, tenantID uuid.UUID, collect
 	}, nil
 }
 
-func (r *downloadRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bool) (string, string, error) {
+func (r *downloadRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bucketgate.Access) (string, string, error) {
 	return "backend-7", r.bucket, nil
 }
 
-func (r *downloadRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string, _ bool) (BucketMeta, error) {
+func (r *downloadRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string, _ bucketgate.Access) (BucketMeta, error) {
 	return BucketMeta{BackendID: "backend-7", BucketName: r.bucket, Constraints: r.constraints}, nil
 }
 

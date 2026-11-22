@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
@@ -46,15 +47,15 @@ func testConfig(t *testing.T) Config {
 // healthy default so tests only wire the methods they exercise.
 type fakeRepo struct {
 	lookupObjectFn func(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (ObjectRef, error)
-	lookupMetaFn   func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error)
+	lookupMetaFn   func(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error)
 	extendErr      error
 
 	// captured args.
-	lastBucketWrite bool
-	extendCalled    bool
-	extendTenant    uuid.UUID
-	extendObject    uuid.UUID
-	extendTo        time.Time
+	lastBucketAccess bucketgate.Access
+	extendCalled     bool
+	extendTenant     uuid.UUID
+	extendObject     uuid.UUID
+	extendTo         time.Time
 }
 
 func (f *fakeRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (ObjectRef, error) {
@@ -64,12 +65,12 @@ func (f *fakeRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, collect
 	return f.lookupObjectFn(ctx, tenantID, collection, objectID)
 }
 
-func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
-	f.lastBucketWrite = write
+func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error) {
+	f.lastBucketAccess = access
 	if f.lookupMetaFn == nil {
 		return objecth.BucketMeta{BackendID: "backend-1", BucketName: "bucket-1"}, nil
 	}
-	return f.lookupMetaFn(ctx, tenantID, collection, write)
+	return f.lookupMetaFn(ctx, tenantID, collection, access)
 }
 
 func (f *fakeRepo) ExtendPendingPresign(_ context.Context, tenantID, objectID uuid.UUID, expiresAt time.Time) error {
@@ -260,7 +261,7 @@ func TestPresignGet(t *testing.T) {
 	})
 
 	t.Run("bucket resolve error → not found", func(t *testing.T) {
-		repo := &fakeRepo{lookupMetaFn: func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+		repo := &fakeRepo{lookupMetaFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (objecth.BucketMeta, error) {
 			return objecth.BucketMeta{}, fmt.Errorf("route missing: %w", apiutil.ErrNotFound)
 		}}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
@@ -269,7 +270,7 @@ func TestPresignGet(t *testing.T) {
 	})
 
 	t.Run("disabled backend → failed precondition", func(t *testing.T) {
-		repo := &fakeRepo{lookupMetaFn: func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+		repo := &fakeRepo{lookupMetaFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (objecth.BucketMeta, error) {
 			return objecth.BucketMeta{}, objecth.ErrBackendDisabled
 		}}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
@@ -356,7 +357,7 @@ func TestPresignGet(t *testing.T) {
 		if st.gotDisposition != "inline" {
 			t.Fatalf("disposition not forwarded: got %q", st.gotDisposition)
 		}
-		if repo.lastBucketWrite {
+		if repo.lastBucketAccess != bucketgate.Read {
 			t.Fatal("GET must resolve bucket with write=false")
 		}
 		// Read-scoped tokens need the bucket on the authz Resource too —
@@ -413,7 +414,7 @@ func TestRegenerateUploadURL(t *testing.T) {
 
 	t.Run("bucket resolve error → not found", func(t *testing.T) {
 		repo := pendingRepo()
-		repo.lookupMetaFn = func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+		repo.lookupMetaFn = func(context.Context, uuid.UUID, string, bucketgate.Access) (objecth.BucketMeta, error) {
 			return objecth.BucketMeta{}, fmt.Errorf("route missing: %w", apiutil.ErrNotFound)
 		}
 		h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
@@ -506,7 +507,7 @@ func TestRegenerateUploadURL(t *testing.T) {
 	for _, tc := range completion {
 		t.Run("completion mode: "+tc.name, func(t *testing.T) {
 			repo := pendingRepo()
-			repo.lookupMetaFn = func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+			repo.lookupMetaFn = func(context.Context, uuid.UUID, string, bucketgate.Access) (objecth.BucketMeta, error) {
 				return objecth.BucketMeta{BackendID: "backend-1", BucketName: "bucket-1", EventsEnabled: tc.events}, nil
 			}
 			h := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg)
@@ -535,7 +536,7 @@ func TestRegenerateUploadURL(t *testing.T) {
 		if st.gotTTL != testPutTTL {
 			t.Fatalf("TTL = %v, want put_ttl %v", st.gotTTL, testPutTTL)
 		}
-		if !repo.lastBucketWrite {
+		if repo.lastBucketAccess != bucketgate.BytesWrite {
 			t.Fatal("PUT must resolve bucket with write=true")
 		}
 		if pol.gotAction != cedar.ActionPresignPut {
@@ -556,7 +557,7 @@ func TestBucketTTLCeilings(t *testing.T) {
 	cfg := testConfig(t)
 	const ceiling = 3 * time.Minute // below every test default
 	ceilingRepo := func(base *fakeRepo, c uploadpolicy.BucketConstraints) *fakeRepo {
-		base.lookupMetaFn = func(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+		base.lookupMetaFn = func(context.Context, uuid.UUID, string, bucketgate.Access) (objecth.BucketMeta, error) {
 			return objecth.BucketMeta{BackendID: "backend-1", BucketName: "bucket-1", Constraints: c}, nil
 		}
 		return base

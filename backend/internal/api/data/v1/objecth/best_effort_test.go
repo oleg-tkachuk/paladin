@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
@@ -33,7 +34,7 @@ func (r *unresolvedRepo) FindByPath(ctx context.Context, tenantID uuid.UUID, col
 	return r.FindByName(ctx, tenantID, collection, key)
 }
 
-func (*unresolvedRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
+func (*unresolvedRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 	return "", "", errBucketStore
 }
 

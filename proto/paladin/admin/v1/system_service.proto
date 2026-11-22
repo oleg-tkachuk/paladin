@@ -325,7 +325,7 @@ message BackendStats {
   int64 total = 1;
   int64 enabled = 2;
   int64 disabled = 3;
-  // read_only = drained (reads served, writes refused); maintenance is
+  // read_only = drained (reads served, writes of bytes refused); maintenance is
   // the advisory operator flag. Both counted across all backends.
   int64 read_only = 4;
   int64 maintenance = 5;

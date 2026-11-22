@@ -79,7 +79,7 @@ type Submitter interface {
 // bucket:/collection:-scoped PAT is fail-closed on its own object-keys. The
 // object repository (object.Repository) satisfies this.
 type BucketResolver interface {
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (backendID, bucket string, err error)
 }
 
 // ObjectFinder reads the objects a batch names by id, as the worker does.
@@ -128,7 +128,7 @@ func (h *Handler) BatchDelete(ctx context.Context, args BatchDeleteArgs) (uuid.U
 	// row, so per-row Cedar buys defence in depth at a latency cost across up
 	// to 10k objects. Saying it happens when it does not is worse than either
 	// choice, because a reader counts on a second line of defence.
-	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionDeleteObject, bucketgate.Write); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionDeleteObject, bucketgate.DeleteAccess(args.Permanent)); err != nil {
 		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
@@ -159,7 +159,7 @@ func (h *Handler) BatchCopy(ctx context.Context, args BatchCopyArgs) (uuid.UUID,
 	if err := h.authorize(ctx, p, tenantID, args.SrcCollection, cedar.ActionCopyObject, bucketgate.Read); err != nil {
 		return uuid.Nil(), err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.DstCollection, cedar.ActionPutObject, bucketgate.Write); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.DstCollection, cedar.ActionPutObject, bucketgate.BytesWrite); err != nil {
 		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
@@ -186,7 +186,7 @@ func (h *Handler) BatchUpdateTags(ctx context.Context, args BatchUpdateTagsArgs)
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, auth.OpTag); err != nil {
 		return uuid.Nil(), err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject, bucketgate.Write); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionUpdateObject, bucketgate.MetadataWrite); err != nil {
 		return uuid.Nil(), err
 	}
 	md, err := json.Marshal(args)
@@ -215,7 +215,7 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 	if err := h.assertOnObjects(ctx, tenantID, args.Collection, args.ObjectIDs, limes.OpPut); err != nil {
 		return uuid.Nil(), err
 	}
-	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionRestoreObject, bucketgate.Write); err != nil {
+	if err := h.authorize(ctx, p, tenantID, args.Collection, cedar.ActionRestoreObject, bucketgate.MetadataWrite); err != nil {
 		return uuid.Nil(), err
 	}
 	md, _ := json.Marshal(args)
@@ -370,7 +370,7 @@ func (h *Handler) binding(ctx context.Context, tenantID uuid.UUID, collection st
 		if h.buckets == nil {
 			return "", "", nil
 		}
-		backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, false)
+		backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, bucketgate.Read)
 		if err != nil {
 			h.log.Warn(msgSourceUnresolved, append(bindingFields(tenantID, collection), zap.Error(err))...)
 			return "", "", nil
@@ -381,7 +381,7 @@ func (h *Handler) binding(ctx context.Context, tenantID uuid.UUID, collection st
 		h.log.Error(msgNoBucketResolver, bindingFields(tenantID, collection)...)
 		return "", "", connect.NewError(connect.CodeUnavailable, msgNoBucketResolver)
 	}
-	backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, true)
+	backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, access)
 	if err != nil {
 		mapped := objecth.MapResolveErr(err)
 		code := connect.CodeOf(mapped)

@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -47,8 +48,8 @@ func (r *completeRepo) FindByName(context.Context, uuid.UUID, string, string) (O
 	return r.obj, nil
 }
 
-func (r *completeRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, write bool) (string, string, error) {
-	if write && r.writeErr != nil {
+func (r *completeRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, access bucketgate.Access) (string, string, error) {
+	if access != bucketgate.Read && r.writeErr != nil {
 		return "", "", r.writeErr
 	}
 	if r.bucketErr != nil {
@@ -60,13 +61,13 @@ func (r *completeRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, wr
 // LookupBucketMeta answers the embedded meta (versioning flags), falling back
 // to LookupBucket's binding when the test set none, plus the test's
 // constraints.
-func (r *completeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (BucketMeta, error) {
-	meta, err := r.fakeObjectRepo.LookupBucketMeta(ctx, tenantID, collection, write)
+func (r *completeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (BucketMeta, error) {
+	meta, err := r.fakeObjectRepo.LookupBucketMeta(ctx, tenantID, collection, access)
 	if err != nil {
 		return BucketMeta{}, err
 	}
 	if meta.BucketName == "" {
-		if meta.BackendID, meta.BucketName, err = r.LookupBucket(ctx, tenantID, collection, write); err != nil {
+		if meta.BackendID, meta.BucketName, err = r.LookupBucket(ctx, tenantID, collection, access); err != nil {
 			return BucketMeta{}, err
 		}
 	}

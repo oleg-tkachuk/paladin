@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/presignh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -51,10 +52,10 @@ func (r *PresignRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, coll
 }
 
 // LookupBucketMeta is the object repository's resolution, so presign shares
-// its disabled-backend and read-only-drain gates: `write` is false for a GET
-// URL and true for a PUT URL.
-func (r *PresignRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
-	return NewObjectRepo(r.q, r.pool).LookupBucketMeta(ctx, tenantID, collection, write)
+// its disabled-backend and read-only-drain gates: access is Read for a GET
+// URL and BytesWrite for a PUT URL.
+func (r *PresignRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error) {
+	return NewObjectRepo(r.q, r.pool).LookupBucketMeta(ctx, tenantID, collection, access)
 }
 
 func (r *PresignRepo) ExtendPendingPresign(ctx context.Context, tenantID, objectID uuid.UUID, expiresAt time.Time) error {

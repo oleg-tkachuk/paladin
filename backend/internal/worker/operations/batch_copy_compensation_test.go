@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -55,10 +56,10 @@ func (*copyFakeRepo) CountObjects(context.Context, objecth.CountObjectsArgs) (in
 func (*copyFakeRepo) ListDistinctTags(context.Context, uuid.UUID, string, string, int32, int32) (objecth.DistinctTagPage, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
+func (*copyFakeRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 	panic("unused")
 }
-func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+func (*copyFakeRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bucketgate.Access) (objecth.BucketMeta, error) {
 	panic("unused")
 }
 func (*copyFakeRepo) UpdateMetadataTx(context.Context, pgx.Tx, objecth.UpdateMetadataArgs) (objecth.Object, error) {

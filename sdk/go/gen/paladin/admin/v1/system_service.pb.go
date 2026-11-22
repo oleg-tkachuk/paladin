@@ -1467,7 +1467,7 @@ type BackendStats struct {
 	Total    int64                  `protobuf:"varint,1,opt,name=total,proto3" json:"total,omitempty"`
 	Enabled  int64                  `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	Disabled int64                  `protobuf:"varint,3,opt,name=disabled,proto3" json:"disabled,omitempty"`
-	// read_only = drained (reads served, writes refused); maintenance is
+	// read_only = drained (reads served, writes of bytes refused); maintenance is
 	// the advisory operator flag. Both counted across all backends.
 	ReadOnly    int64 `protobuf:"varint,4,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
 	Maintenance int64 `protobuf:"varint,5,opt,name=maintenance,proto3" json:"maintenance,omitempty"`

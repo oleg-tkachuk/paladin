@@ -21,6 +21,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/metrics"
@@ -74,7 +75,7 @@ type Repository interface {
 	// LookupBucketMeta returns the physical (backend, bucket) bound to a
 	// Collection plus the backend's events flag, which decides the upload's
 	// completion mode.
-	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error)
+	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error)
 	// ExtendPendingPresign moves a PENDING row's presign_expires_at to at
 	// least expiresAt. The reaper fails PENDING rows past that deadline, so a
 	// regenerated URL that did not move it would be failed under a client
@@ -324,19 +325,20 @@ func (h *Handler) logOutcome(ctx context.Context, op, collection string, err err
 }
 
 // presignKind is what a presign of one direction checks: the capability op
-// the URL grants, the Cedar action, whether it writes, and the TTL ceiling.
+// the URL grants, the Cedar action, what it touches on the backend, and the
+// TTL ceiling.
 type presignKind struct {
 	capOp   limes.Op
 	ttlOp   presignttl.Op
 	action  cedar.Action
-	write   bool
+	access  bucketgate.Access
 	ceiling func(uploadpolicy.Policy) time.Duration
 }
 
 var (
-	presignGet = presignKind{capOp: limes.OpGet, ttlOp: presignttl.OpGet, action: cedar.ActionPresignGet,
+	presignGet = presignKind{capOp: limes.OpGet, ttlOp: presignttl.OpGet, action: cedar.ActionPresignGet, access: bucketgate.Read,
 		ceiling: uploadpolicy.Policy.GetTTLCeiling}
-	presignPut = presignKind{capOp: limes.OpPut, ttlOp: presignttl.OpPut, action: cedar.ActionPresignPut, write: true,
+	presignPut = presignKind{capOp: limes.OpPut, ttlOp: presignttl.OpPut, action: cedar.ActionPresignPut, access: bucketgate.BytesWrite,
 		ceiling: uploadpolicy.Policy.PutTTLCeiling}
 )
 
@@ -345,7 +347,7 @@ var (
 // collection-scoped credential is enforced against the resolved bucket; the
 // same resolution routes the presign.
 func (h *Handler) resolve(ctx context.Context, tenantID uuid.UUID, collection string, kind presignKind, ttl time.Duration) (objecth.BucketMeta, time.Duration, error) {
-	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, kind.write)
+	meta, err := h.repo.LookupBucketMeta(ctx, tenantID, collection, kind.access)
 	if err != nil {
 		return objecth.BucketMeta{}, 0, objecth.MapResolveErr(err)
 	}

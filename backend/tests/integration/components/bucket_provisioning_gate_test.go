@@ -56,15 +56,15 @@ func TestBucketProvisioningGate(t *testing.T) {
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
 
 	// Mutation is gated while the bucket is provisioning.
-	if _, _, err := repo.LookupBucket(ctx, tid, collection, true); !errors.Is(err, objecth.ErrBucketProvisioning) {
+	if _, _, err := repo.LookupBucket(ctx, tid, collection, bucketgate.BytesWrite); !errors.Is(err, objecth.ErrBucketProvisioning) {
 		t.Fatalf("write LookupBucket on a pending bucket: err = %v, want ErrBucketProvisioning", err)
 	}
 	// Reads still resolve (nothing to read yet, but resolution succeeds).
-	if _, _, err := repo.LookupBucket(ctx, tid, collection, false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tid, collection, bucketgate.Read); err != nil {
 		t.Fatalf("read LookupBucket on a pending bucket: %v, want success", err)
 	}
 	// A client is told to retry: provisioning is temporary.
-	_, _, err := repo.LookupBucket(ctx, tid, collection, true)
+	_, _, err := repo.LookupBucket(ctx, tid, collection, bucketgate.BytesWrite)
 	if got := connect.CodeOf(objecth.MapResolveErr(err)); got != connect.CodeUnavailable {
 		t.Fatalf("pending write answers %v, want Unavailable", got)
 	}
@@ -74,7 +74,7 @@ func TestBucketProvisioningGate(t *testing.T) {
 		`UPDATE buckets SET provision_state = $3 WHERE id = (SELECT b.id FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id
 			  WHERE sb.name = $1 AND b.name = $2)`,
 		backendID, bucket, bucketgate.ProvisionFailed)
-	_, _, err = repo.LookupBucket(ctx, tid, collection, true)
+	_, _, err = repo.LookupBucket(ctx, tid, collection, bucketgate.BytesWrite)
 	if !errors.Is(err, bucketgate.ErrBucketNotReady) {
 		t.Fatalf("write LookupBucket on a failed bucket: err = %v, want ErrBucketNotReady", err)
 	}
@@ -87,7 +87,7 @@ func TestBucketProvisioningGate(t *testing.T) {
 		`UPDATE buckets SET provision_state = 'ready' WHERE id = (SELECT b.id FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id
 			  WHERE sb.name = $1 AND b.name = $2)`,
 		backendID, bucket)
-	if _, _, err := repo.LookupBucket(ctx, tid, collection, true); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tid, collection, bucketgate.BytesWrite); err != nil {
 		t.Fatalf("write LookupBucket after ready: %v, want success", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -37,11 +38,11 @@ func (r *placementRepo) FindByPath(context.Context, uuid.UUID, string, string) (
 	return r.obj, nil
 }
 
-func (r *placementRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
+func (r *placementRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (string, string, error) {
 	if r.bucketErr != nil {
 		return "", "", r.bucketErr
 	}
-	return r.listRepo.LookupBucket(ctx, tenantID, collection, write)
+	return r.listRepo.LookupBucket(ctx, tenantID, collection, access)
 }
 
 // grantOperatorPlacement is a tenant rule handing ReadObjectPlacement to a

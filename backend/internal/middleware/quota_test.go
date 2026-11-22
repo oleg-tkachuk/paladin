@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
@@ -309,7 +310,7 @@ type fakeBindings struct {
 	askedKey  string
 }
 
-func (f *fakeBindings) LookupBucket(_ context.Context, _ uuid.UUID, collection string, _ bool) (string, string, error) {
+func (f *fakeBindings) LookupBucket(_ context.Context, _ uuid.UUID, collection string, _ bucketgate.Access) (string, string, error) {
 	f.calls++
 	f.askedKey = collection
 	return f.backendID, f.bucket, f.err

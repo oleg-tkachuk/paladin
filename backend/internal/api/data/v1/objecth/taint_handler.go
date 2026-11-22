@@ -13,6 +13,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
@@ -102,9 +103,12 @@ func (h *TaintHandler) SetTaint(ctx context.Context, collection, objectID string
 		CapabilityObjectURI(tenantID, obj.Collection, obj.Key)); err != nil {
 		return nil, err
 	}
-	// Setting a taint is a write on the object: it answers the bucket's state
-	// as every other write does, and Cedar decides on the resolved binding.
-	backendID, bucket, err := writeBinding(ctx, h.objects, tenantID, obj.Collection)
+	// A taint is a protective control and touches only the object's row: no
+	// state of the bucket or backend refuses it, since refusing it on a
+	// draining backend that still serves reads would leave the content
+	// readable and unflaggable. Cedar decides it on the resolved binding, and
+	// a binding that cannot be read still fails closed.
+	backendID, bucket, err := writeBinding(ctx, h.objects, tenantID, obj.Collection, bucketgate.Protective)
 	if err != nil {
 		return nil, err
 	}

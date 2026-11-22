@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	objecth "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
@@ -190,18 +191,18 @@ func TestAdversarial_ProvisionGateOnUploadPath(t *testing.T) {
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
 
 	// Upload path (LookupBucketMeta, write=true) must be gated while pending.
-	if _, err := repo.LookupBucketMeta(ctx, tid, "docs", true); !errors.Is(err, objecth.ErrBucketProvisioning) {
+	if _, err := repo.LookupBucketMeta(ctx, tid, "docs", bucketgate.BytesWrite); !errors.Is(err, objecth.ErrBucketProvisioning) {
 		t.Fatalf("upload-path meta lookup on pending bucket: err = %v, want ErrBucketProvisioning", err)
 	}
 	// Read path resolves.
-	if _, err := repo.LookupBucketMeta(ctx, tid, "docs", false); err != nil {
+	if _, err := repo.LookupBucketMeta(ctx, tid, "docs", bucketgate.Read); err != nil {
 		t.Fatalf("read-path meta lookup on pending bucket: %v, want success", err)
 	}
 	// After ready, writes resolve.
 	mustExec(t, ctx, pool, `UPDATE buckets SET provision_state='ready' WHERE id = (SELECT b.id FROM buckets b
 			  JOIN storage_backends sb ON sb.id = b.backend_id
 			 WHERE sb.name = $1 AND b.name = $2)`, backendID, bucket)
-	if _, err := repo.LookupBucketMeta(ctx, tid, "docs", true); err != nil {
+	if _, err := repo.LookupBucketMeta(ctx, tid, "docs", bucketgate.BytesWrite); err != nil {
 		t.Fatalf("upload-path meta lookup after ready: %v, want success", err)
 	}
 }
