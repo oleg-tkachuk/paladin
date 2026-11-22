@@ -612,6 +612,24 @@ the same commit. Treat this file like a runtime invariant.
   test rebinds the collection mid-session.
 - **Blockers:** a store query by (backend, bucket) for the gate's state.
 
+### Object keys that alias one storage path
+
+- **Status:** Deferred.
+- **Reason:** `storagepath.Compose` drops empty, `.` and `..` segments, so the
+  keys `a/./b`, `a//b`, `/a/b` and `a/b` of one collection share a bucket key,
+  and `..` alone lands on the collection's own prefix (`<tenant>/<collection>/`).
+  A nested collection aliases its parent the same way: collection `a/b` with
+  key `c` and collection `a` with key `b/c`. Two objects then share bytes, and
+  deleting one deletes the other's. Found by `FuzzCompose`; it stays within
+  one tenant. The data plane accepts any key today, so the fix is a contract
+  change on every path that creates an object.
+- **Definition of Done:** UploadObject, multipart, copy and batch refuse a key
+  with an empty, `.` or `..` segment as InvalidArgument; the bucket layout
+  separates a collection from its keys unambiguously (or nested collections
+  are refused); `FuzzCompose` asserts that Compose is injective.
+- **Blockers:** a decision on existing objects with such keys, and on whether
+  nested collections stay.
+
 ## API error messages
 
 ### The session role answers a key set that will not load as 204
