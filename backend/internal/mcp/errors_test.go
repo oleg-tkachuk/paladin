@@ -11,8 +11,21 @@ import (
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
+
+// accessTokenInvalidTitle is the limes problem title the planes answer a
+// refused capability with (auth capabilityMessage).
+const accessTokenInvalidTitle = "The access token is invalid"
+
+// The bridge tells a token issued for another plane by audienceMismatch in
+// the planes' refusal, so the phrase must be in the text they send.
+func TestAudienceMatchFindsTheVerifiersRefusal(t *testing.T) {
+	if !strings.Contains(auth.ErrBearerAudienceMismatch.Error(), audienceMismatch) {
+		t.Errorf("%q does not contain %q: the bridge would not recognise it", auth.ErrBearerAudienceMismatch, audienceMismatch)
+	}
+}
 
 // limesRefusal is a Connect error as the planes answer the capability
 // library's refusal: its limes code in the Paladin ErrorInfo.
@@ -39,7 +52,7 @@ func TestToolError(t *testing.T) {
 		{
 			name: "a token for another plane says which one is needed",
 			tool: "paladin_query_objects",
-			err:  connect.NewError(connect.CodeUnauthenticated, "jwt: audience mismatch"),
+			err:  connect.NewError(connect.CodeUnauthenticated, auth.ErrBearerAudienceMismatch.Error()),
 			want: []string{"data plane", "paladin-data", "API token"},
 		},
 		{
@@ -58,13 +71,13 @@ func TestToolError(t *testing.T) {
 		{
 			name: "a capability refused names why, as a token's refusal does not",
 			tool: "paladin_get_tenant",
-			err:  limesRefusal(t, connect.CodeUnauthenticated, "capability: revoked", "revoked"),
+			err:  limesRefusal(t, connect.CodeUnauthenticated, accessTokenInvalidTitle, "revoked"),
 			want: []string{"capability", "revoked"},
 		},
 		{
 			name: "an expired token says so",
 			tool: "paladin_get_tenant",
-			err:  connect.NewError(connect.CodeUnauthenticated, "jwt: token expired"),
+			err:  connect.NewError(connect.CodeUnauthenticated, auth.ErrBearerExpired.Error()),
 			want: []string{"refused", "expired"},
 		},
 	}
@@ -99,7 +112,7 @@ func TestToolCallsReportTheExplainedError(t *testing.T) {
 	plane := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"code":"unauthenticated","message":"jwt: audience mismatch"}`))
+		_, _ = w.Write([]byte(`{"code":"unauthenticated","message":"` + auth.ErrBearerAudienceMismatch.Error() + `"}`))
 	}))
 	t.Cleanup(plane.Close)
 	cs := dialInProcess(t, mustClients(t)(NewClients(plane.Client(), plane.URL, plane.URL, plane.URL, "tok")))

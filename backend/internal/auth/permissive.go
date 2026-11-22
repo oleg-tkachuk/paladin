@@ -66,7 +66,7 @@ func (p *PermissiveInterceptor) attach(ctx context.Context, authz, procedure str
 	}
 	principal, err := p.Verifier.Verify(ctx, token)
 	if err != nil {
-		return ctx, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+		return ctx, bearerRefusal(err)
 	}
 	return WithPrincipal(ctx, principal), nil
 }

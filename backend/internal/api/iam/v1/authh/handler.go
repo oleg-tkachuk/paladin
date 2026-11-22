@@ -264,7 +264,7 @@ func (h *Handler) RefreshToken(ctx context.Context, in RefreshInput) (*RefreshOu
 	}
 	jti, userID, tenantID, err := h.parseRefresh(in.RefreshToken)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+		return nil, auth.RefreshRefusal(err)
 	}
 
 	stored, err := h.refresh.Get(ctx, jti)
@@ -355,7 +355,7 @@ func (h *Handler) ExchangeAudience(ctx context.Context, in ExchangeAudienceInput
 
 	jti, userID, tenantID, err := h.parseRefresh(in.RefreshToken)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+		return nil, auth.RefreshRefusal(err)
 	}
 	stored, err := h.refresh.Get(ctx, jti)
 	if errors.Is(err, authstore.ErrTokenRevoked) {

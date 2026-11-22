@@ -164,22 +164,34 @@ def test_fail_rpc_if_refuses_a_mistake(
 
 MISSING_AUTHORIZATION = (Code.UNAUTHENTICATED, "missing Authorization header")
 EXPECTED_BEARER = (Code.UNAUTHENTICATED, "expected Bearer token")
-JWT_MALFORMED = (Code.UNAUTHENTICATED, "jwt: malformed token")
-JWT_EXPIRED = (Code.UNAUTHENTICATED, "jwt: token expired")
+JWT_MALFORMED = (Code.UNAUTHENTICATED, "malformed bearer token")
+JWT_EXPIRED = (Code.UNAUTHENTICATED, "bearer token expired")
 API_TOKEN_NOT_FOUND = (Code.UNAUTHENTICATED, "API token not found")
 API_TOKEN_REVOKED = (Code.UNAUTHENTICATED, "API token revoked")
-CAPABILITY_REVOKED = (Code.UNAUTHENTICATED, "capability: revoked")
+# A revoked capability is the verifier's refusal: its title, and its reason.
+CAPABILITY_REVOKED = (Code.UNAUTHENTICATED, "The access token is invalid")
+CAPABILITY_REVOKED_REASON = error_reason_pb2.ERROR_REASON_CAPABILITY_REVOKED
+# So is one the fake did not issue as a capability.
+CAPABILITY_NOT_ISSUED = (Code.UNAUTHENTICATED, "The access token is invalid")
+CAPABILITY_NOT_ISSUED_REASON = error_reason_pb2.ERROR_REASON_CAPABILITY_INVALID_TOKEN
 TENANT_MISMATCH = (Code.PERMISSION_DENIED, "URL tenant does not match token tenant")
 UPLOAD_TENANT_MISMATCH = (Code.PERMISSION_DENIED, "tenant mismatch")
+# The reason of every refusal but a capability's: the server's authentication
+# sends none.
+NO_REASON = error_reason_pb2.ERROR_REASON_UNSPECIFIED
 
 
-def _refused(call: Callable[[], object], want: tuple[Code, str]) -> None:
-    """The call is refused with the server's code and message, and no
-    ErrorInfo reason — the server's authentication sends none."""
+def _refused(
+    call: Callable[[], object],
+    want: tuple[Code, str],
+    reason: error_reason_pb2.ErrorReason.ValueType = NO_REASON,
+) -> None:
+    """The call is refused with the server's code, message and ErrorInfo
+    reason."""
     with pytest.raises(ConnectError) as caught:
         call()
     assert (caught.value.code, caught.value.message) == want
-    assert paladin.reason(caught.value) == error_reason_pb2.ERROR_REASON_UNSPECIFIED
+    assert paladin.reason(caught.value) == reason
 
 
 def test_default_mode_serves_every_call(fake: FakePaladin) -> None:
@@ -247,12 +259,24 @@ def test_strict_auth_refuses_what_the_server_refuses(strict: FakePaladin) -> Non
         assert len(strict.calls(GET_OBJECT)) == before + 1, options
 
 
+def test_strict_auth_refuses_a_bearer_token_given_as_a_capability(strict: FakePaladin) -> None:
+    """A credential the fake issued, of another kind, is the verifier's
+    refusal, as one it never issued is: its title and its reason."""
+    obj = strict.put(strict.collection(), "k", "text/plain", b"x")
+    bearer = strict.issue_bearer_token(strict.tenant)
+    _refused(
+        lambda: _get(strict.connect(capability=bearer), obj),
+        CAPABILITY_NOT_ISSUED,
+        CAPABILITY_NOT_ISSUED_REASON,
+    )
+
+
 @pytest.mark.parametrize(
-    ("issue", "option", "want"),
+    ("issue", "option", "want", "reason"),
     [
-        (FakePaladin.issue_bearer_token, "bearer_token", JWT_EXPIRED),
-        (FakePaladin.issue_api_token, "api_token", API_TOKEN_REVOKED),
-        (FakePaladin.issue_capability, "capability", CAPABILITY_REVOKED),
+        (FakePaladin.issue_bearer_token, "bearer_token", JWT_EXPIRED, NO_REASON),
+        (FakePaladin.issue_api_token, "api_token", API_TOKEN_REVOKED, NO_REASON),
+        (FakePaladin.issue_capability, "capability", CAPABILITY_REVOKED, CAPABILITY_REVOKED_REASON),
     ],
     ids=["a bearer token", "an API token", "a capability"],
 )
@@ -261,13 +285,14 @@ def test_revoke_refuses_the_credential(
     issue: Callable[[FakePaladin, str], str],
     option: str,
     want: tuple[Code, str],
+    reason: error_reason_pb2.ErrorReason.ValueType,
 ) -> None:
     obj = strict.put(strict.collection(), "k", "text/plain", b"x")
     token = issue(strict, strict.tenant)
     p = strict.connect(**{option: token})
     _get(p, obj)
     strict.revoke(token)
-    _refused(lambda: _get(p, obj), want)
+    _refused(lambda: _get(p, obj), want, reason)
 
 
 def test_revoke_then_mint_again(strict: FakePaladin) -> None:
@@ -276,7 +301,11 @@ def test_revoke_then_mint_again(strict: FakePaladin) -> None:
     obj = strict.put(strict.collection(), "k", "text/plain", b"x")
     first = strict.issue_capability(strict.tenant)
     strict.revoke(first)
-    _refused(lambda: _get(strict.connect(capability=first), obj), CAPABILITY_REVOKED)
+    _refused(
+        lambda: _get(strict.connect(capability=first), obj),
+        CAPABILITY_REVOKED,
+        CAPABILITY_REVOKED_REASON,
+    )
     _get(strict.connect(capability=strict.issue_capability(strict.tenant)), obj)
 
 

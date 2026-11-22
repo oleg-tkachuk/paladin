@@ -193,9 +193,9 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 	s.mu.Unlock()
 	switch {
 	case !ok || parent == nil:
-		return nil, connect.NewError(connect.CodeUnauthenticated, errCapabilityInvalid.Error()).WithCause(errCapabilityInvalid)
+		return nil, capabilityRefusal(connect.CodeUnauthenticated, errCapabilityInvalid)
 	case cred.revoked:
-		return nil, connect.NewError(connect.CodeUnauthenticated, errCapabilityRevoked.Error()).WithCause(errCapabilityRevoked)
+		return nil, capabilityRefusal(connect.CodeUnauthenticated, errCapabilityRevoked)
 	}
 	parentCaveats := parent.msg.GetCaveats()
 	allowed := parentCaveats.GetOps()

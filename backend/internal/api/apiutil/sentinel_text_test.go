@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+
 	// Links every handler and store package, so each one's init has
 	// registered its sentinels before the test reads the registry.
 	_ "github.com/oleg-tkachuk/paladin/backend/internal/app"
@@ -30,6 +32,16 @@ func TestRegisteredSentinelsNameNoPackage(t *testing.T) {
 	for _, err := range sentinels {
 		if packagePrefix.MatchString(err.Error()) {
 			t.Errorf("%q starts with a package name", err)
+		}
+	}
+}
+
+// A refused bearer token is answered by the auth interceptors, not MapError,
+// so its messages are not in the registry: held to the same rule here.
+func TestBearerRefusalsNameNoPackage(t *testing.T) {
+	for _, msg := range auth.BearerRefusals() {
+		if packagePrefix.MatchString(msg) {
+			t.Errorf("%q starts with a package name", msg)
 		}
 	}
 }

@@ -226,7 +226,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		auth.SingleCredentials(),
 		// Skip the JWT gate for `paladin_pat_…` bearers so the role-bearing
 		// API-token interceptor below can authenticate them. Without this the
-		// JWT verifier rejects the bearer first with "jwt: malformed token" and
+		// JWT verifier rejects the bearer first as a "malformed bearer token" and
 		// a token carrying platform.capability-issuer never reaches the RPC it
 		// exists to call. Every other case is unchanged — a JWT is verified and
 		// a missing or invalid non-PAT bearer is still rejected, so auth stays
