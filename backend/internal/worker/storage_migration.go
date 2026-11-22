@@ -610,32 +610,39 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 	if w.Deleter == nil {
 		return nil // cleanup disabled
 	}
-	curOK, curKey := "", ""
-	for {
-		if ctx.Err() != nil {
-			return nil
-		}
-		objs, err := w.Repo.ListObjects(ctx, m.TenantID, curOK, curKey, w.CopyBatch)
-		if err != nil {
-			return fmt.Errorf("cleanup list objects: %w", err)
-		}
-		if len(objs) == 0 {
-			break
-		}
-		for _, o := range objs {
-			if err := w.Deleter.DeleteObject(ctx, m.sourceLoc(o)); err != nil {
-				return fmt.Errorf("cleanup delete %s/%s: %w", o.Collection, o.Key, err)
-			}
-			curOK, curKey = o.Collection, o.Key
-		}
-		if len(objs) < w.CopyBatch {
-			break
-		}
+	if done, err := w.cleanSource(ctx, m); err != nil || !done {
+		return err
 	}
 	w.log().Info("migration source cleaned",
 		zap.String("tenant_id", m.TenantID.String()),
 		zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName))
 	return w.Repo.MarkCleaned(ctx, m.Read())
+}
+
+// cleanSource deletes every listed object's copy from the source bucket, and
+// reports whether it got through them all: a cancelled context stops it short
+// with nothing to report, and the next tick starts over.
+func (w *StorageMigrationWorker) cleanSource(ctx context.Context, m StorageMigration) (bool, error) {
+	curOK, curKey, batch := "", "", w.batch()
+	for {
+		if ctx.Err() != nil {
+			return false, nil
+		}
+		objs, err := w.Repo.ListObjects(ctx, m.TenantID, curOK, curKey, batch)
+		if err != nil {
+			return false, fmt.Errorf("cleanup list objects: %w", err)
+		}
+		for _, o := range objs {
+			if err := w.Deleter.DeleteObject(ctx, m.sourceLoc(o)); err != nil {
+				return false, fmt.Errorf("cleanup delete %s/%s: %w", o.Collection, o.Key, err)
+			}
+			curOK, curKey = o.Collection, o.Key
+		}
+		// A short page is the last: an empty one included.
+		if len(objs) < batch {
+			return true, nil
+		}
+	}
 }
 
 // stepRollingBack puts a tenant whose physical verify failed back on its
@@ -683,13 +690,7 @@ func (w *StorageMigrationWorker) stepRollingBack(ctx context.Context, m StorageM
 		return fmt.Errorf("rollback list objects: %w", err)
 	}
 	if len(objs) == 0 {
-		if err := w.Repo.RebindBack(ctx, m.Read(), afterAt, afterID, m.SourceBackendID, m.SourceBucketName); err != nil {
-			return err
-		}
-		w.log().Warn("migration rolled back; tenant is on its source bucket again",
-			zap.String("tenant_id", m.TenantID.String()),
-			zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName))
-		return nil
+		return w.rebindBack(ctx, m, afterAt, afterID)
 	}
 	// Claim the batch: a guarded write of the cursor as it stands, so a
 	// worker resumed past its lease finds out before it copies, not after.
@@ -699,30 +700,51 @@ func (w *StorageMigrationWorker) stepRollingBack(ctx context.Context, m StorageM
 	if err := w.Repo.AdvanceRollback(ctx, m.Read(), afterAt, afterID); err != nil {
 		return err
 	}
-	curAt, curID, progressed := afterAt, afterID, false
+	return w.copyBackBatch(ctx, m, objs, afterAt, afterID)
+}
+
+// copyBackBatch copies a claimed batch back to the source in cursor order,
+// starting past (afterAt, afterID), the cursor the batch was claimed at, and
+// records the cursor past the last object copied — on a failure too, so the
+// next tick resumes there. Recording the claimed cursor again, when nothing
+// was copied, changes nothing: the cursor only moves forward.
+func (w *StorageMigrationWorker) copyBackBatch(ctx context.Context, m StorageMigration, objs []WrittenObject, afterAt time.Time, afterID uuid.UUID) error {
+	curAt, curID := afterAt, afterID
 	for _, o := range objs {
 		if ctx.Err() != nil {
 			break
 		}
-		src := CopyLocation{BackendID: m.TargetBackendID, TenantID: m.TenantID, Bucket: m.TargetBucketName, Collection: o.Collection, Key: o.Key}
-		dst := CopyLocation{BackendID: m.SourceBackendID, TenantID: m.TenantID, Bucket: m.SourceBucketName, Collection: o.Collection, Key: o.Key}
-		copyIt, err := w.targetHolds(ctx, src, o.SizeBytes)
-		if err == nil && copyIt {
-			err = w.Copier.CopyObject(ctx, src, dst)
-		}
-		if err != nil {
+		if err := w.copyBackOne(ctx, m, o.ObjectRef); err != nil {
 			// Persist progress so far, then bubble — the batch retries from here.
-			if progressed {
-				_ = w.Repo.AdvanceRollback(ctx, m.Read(), curAt, curID)
-			}
+			_ = w.Repo.AdvanceRollback(ctx, m.Read(), curAt, curID)
 			return fmt.Errorf("rollback copy %s/%s: %w", o.Collection, o.Key, err)
 		}
-		curAt, curID, progressed = o.WrittenAt, o.ID, true
-	}
-	if !progressed {
-		return nil // cancelled before the first object
+		curAt, curID = o.WrittenAt, o.ID
 	}
 	return w.Repo.AdvanceRollback(ctx, m.Read(), curAt, curID)
+}
+
+// rebindBack is the rollback's last step, once nothing is left past the
+// cursor: the tenant goes back to its source bucket (RebindBack says how).
+func (w *StorageMigrationWorker) rebindBack(ctx context.Context, m StorageMigration, afterAt time.Time, afterID uuid.UUID) error {
+	if err := w.Repo.RebindBack(ctx, m.Read(), afterAt, afterID, m.SourceBackendID, m.SourceBucketName); err != nil {
+		return err
+	}
+	w.log().Warn("migration rolled back; tenant is on its source bucket again",
+		zap.String("tenant_id", m.TenantID.String()),
+		zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName))
+	return nil
+}
+
+// copyBackOne copies o from the target back to the source, when the target
+// holds it as its row records it (targetHolds).
+func (w *StorageMigrationWorker) copyBackOne(ctx context.Context, m StorageMigration, o ObjectRef) error {
+	src := m.targetLoc(o)
+	copyIt, err := w.targetHolds(ctx, src, o.SizeBytes)
+	if err != nil || !copyIt {
+		return err
+	}
+	return w.Copier.CopyObject(ctx, src, m.sourceLoc(o))
 }
 
 // targetHolds reports whether the target bucket holds the object as its row

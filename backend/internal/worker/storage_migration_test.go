@@ -696,3 +696,24 @@ func TestStorageMigration_StaleStepFromAnEarlierAttemptChangesNothing(t *testing
 		})
 	}
 }
+
+// A reverse copy failing on the batch's first object leaves the cursor where
+// the batch was claimed — at the rebind — not moved past anything uncopied.
+func TestStorageMigration_RollbackFirstCopyFailureKeepsTheClaim(t *testing.T) {
+	repo, hdr := rollbackFixture(MigStateRollingBack)
+	cop := &fakeCopier{failOn: "new.txt"}
+	w := &StorageMigrationWorker{Repo: repo, Copier: cop, Header: hdr, CopyBatch: 2, Now: time.Now}
+	if err := w.tick(context.Background()); err == nil {
+		t.Fatal("tick = nil while the first reverse copy fails, want the failure")
+	}
+	if repo.mig.State != MigStateRollingBack || !repo.mig.RollbackCursorAt.Equal(repo.mig.ReboundAt) ||
+		repo.mig.RollbackCursorID != uuid.Nil() {
+		t.Errorf("state %q, cursor (%v, %v); want rolling back with the cursor at the rebind",
+			repo.mig.State, repo.mig.RollbackCursorAt, repo.mig.RollbackCursorID)
+	}
+	cop.failOn = ""
+	runToTerminal(t, w, repo)
+	if !contains(fmt.Sprint(cop.copies), "docs/new.txt") || !repo.reboundBack {
+		t.Errorf("copies %v, rebound back %v; want new.txt copied back on a later tick", cop.copies, repo.reboundBack)
+	}
+}
