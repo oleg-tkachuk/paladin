@@ -117,7 +117,7 @@ func (h *VersionHandler) parentBinding(ctx context.Context, rpc string, tenantID
 		backendID, bucket = scopeBucket(ctx, h.log, h.objects, rpc, tenantID, collection)
 		return backendID, bucket, nil
 	}
-	return writeBinding(ctx, h.objects, tenantID, collection)
+	return writeBinding(ctx, h.objects, tenantID, collection, bucketgate.BytesWrite)
 }
 
 // CapabilityObjectURI is the resource a capability names an object by.

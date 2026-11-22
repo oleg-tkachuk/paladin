@@ -1019,7 +1019,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 	// A completion is a write, the already-AVAILABLE no-op included: it goes
 	// through the write gate, so it answers a draining or provisioning bucket
 	// as every other write does, and Cedar decides on the resolved binding.
-	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection)
+	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection, bucketgate.BytesWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1824,7 +1824,7 @@ func (h *Handler) updateTarget(ctx context.Context, tenantID uuid.UUID, in Updat
 // PutObjectTags / DeleteObjectTags) and the update answers the bucket's state
 // as every other write does.
 func (h *Handler) updateResource(ctx context.Context, tenantID uuid.UUID, collection string, cur Object) (*cedar.Resource, error) {
-	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, collection)
+	backendID, bucket, err := writeBinding(ctx, h.repo, tenantID, collection, bucketgate.BytesWrite)
 	if err != nil {
 		return nil, err
 	}
@@ -1920,7 +1920,7 @@ func (h *Handler) DeleteObject(ctx context.Context, collection, objectIDStr, res
 	}
 	// A delete, to the trash or for good, is a write: it goes through the
 	// write gate, and Cedar decides on the binding it resolves.
-	authBackendID, authBucket, err := writeBinding(ctx, h.repo, tenantID, collection)
+	authBackendID, authBucket, err := writeBinding(ctx, h.repo, tenantID, collection, bucketgate.BytesWrite)
 	if err != nil {
 		return err
 	}
@@ -2249,7 +2249,7 @@ func (h *Handler) RestoreObject(ctx context.Context, collection, objectIDStr, re
 	}
 	// A restore puts an object back in the bucket: a write, through the write
 	// gate, and Cedar decides on the binding it resolves.
-	rsBackendID, rsBucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection)
+	rsBackendID, rsBucket, err := writeBinding(ctx, h.repo, tenantID, obj.Collection, bucketgate.BytesWrite)
 	if err != nil {
 		return nil, err
 	}

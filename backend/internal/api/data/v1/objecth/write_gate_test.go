@@ -2,6 +2,7 @@ package objecth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -64,9 +65,12 @@ func (a *denyRecorder) IsAuthorized(_ context.Context, _ *cedar.Principal, _ ced
 }
 
 // writeRPC calls one write RPC against repo with authz as its authorizer.
+// access is what the RPC touches, which decides how the bucket's state
+// answers it.
 type writeRPC struct {
-	name string
-	call func(ctx context.Context, repo Repository, authz cedar.Authorizer, tenantID uuid.UUID) error
+	name   string
+	access bucketgate.Access
+	call   func(ctx context.Context, repo Repository, authz cedar.Authorizer, tenantID uuid.UUID) error
 }
 
 const gateTestCollection = "docs"
@@ -82,57 +86,57 @@ func writeRPCs() []writeRPC {
 		return &Handler{repo: repo, storage: noopStorage{}, policy: authz, presign: testPresignConfig()}
 	}
 	return []writeRPC{
-		{"UploadObject", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"UploadObject", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := handler(repo, authz).UploadObject(ctx, UploadObjectInput{
 				Collection: gateTestCollection, Key: "a.txt", ContentType: "text/plain",
 				ChecksumAlgo: checksum.SHA256, ChecksumValue: testChecksumValue,
 			})
 			return err
 		}},
-		{"CompleteObject", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"CompleteObject", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := handler(repo, authz).CompleteObject(ctx, CompleteObjectInput{Collection: gateTestCollection, ObjectID: objectID})
 			return err
 		}},
-		{"CopyObject", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"CopyObject", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := handler(repo, authz).CopyObject(ctx, CopyObjectInput{
 				SourceCollection: gateTestCollection, SourceObjectID: objectID,
 				DestCollection: gateTestCollection, DestKey: "copy.txt",
 			})
 			return err
 		}},
-		{"UpdateObject", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"UpdateObject", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := handler(repo, authz).UpdateObject(ctx, UpdateObjectInput{
 				Collection: gateTestCollection, ObjectID: objectID, Tags: map[string]string{"k": "v"},
 			})
 			return err
 		}},
-		{"DeleteObject (trash)", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"DeleteObject (trash)", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			return handler(repo, authz).DeleteObject(ctx, gateTestCollection, objectID, "1", false, false)
 		}},
-		{"DeleteObject (permanent)", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"DeleteObject (permanent)", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			return handler(repo, authz).DeleteObject(ctx, gateTestCollection, objectID, "1", true, false)
 		}},
-		{"RestoreObject", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"RestoreObject", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := handler(repo, authz).RestoreObject(ctx, gateTestCollection, objectID, "1")
 			return err
 		}},
-		{"RestoreVersion", func(ctx context.Context, repo Repository, authz cedar.Authorizer, tenantID uuid.UUID) error {
+		{"RestoreVersion", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, tenantID uuid.UUID) error {
 			h := NewVersionHandler(repo, newFakeVersionRepo())
 			h.SetAuthorizer(authz)
 			_, err := h.RestoreVersion(ctx, versionName(tenantID, uuid.NewV7(), uuid.NewV7()), "1")
 			return err
 		}},
-		{"SetRetention", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"SetRetention", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := NewLockHandler(repo, nil, nil, authz).SetRetention(ctx, SetRetentionInput{
 				Collection: gateTestCollection, ObjectID: objectID, Mode: LockModeGovernance, RetainUntil: time.Now().Add(gateTestRetention),
 			})
 			return err
 		}},
-		{"SetLegalHold", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"SetLegalHold", bucketgate.BytesWrite, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := NewLockHandler(repo, nil, nil, authz).SetLegalHold(ctx, gateTestCollection, objectID, true)
 			return err
 		}},
-		{"SetTaint", func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
+		{"SetTaint", bucketgate.Protective, func(ctx context.Context, repo Repository, authz cedar.Authorizer, _ uuid.UUID) error {
 			_, err := NewTaintHandler(repo, nil, authz).SetTaint(ctx, gateTestCollection, objectID, nil)
 			return err
 		}},
@@ -140,47 +144,88 @@ func writeRPCs() []writeRPC {
 }
 
 // Every write RPC consults the same gate, so the same backend and bucket state
-// answers every one of them the same way — and a write the gate refuses, or
-// whose binding could not be read, never reaches Cedar: authorizing it with an
-// empty binding is the fail-open this guards against.
+// answers every RPC of the same access the same way, as bucketgate.Check
+// does. A write the gate refuses never reaches Cedar; one the gate lets
+// through reaches Cedar on the binding it resolved.
 func TestEveryWriteRPCAnswersTheBucketGateAlike(t *testing.T) {
 	states := []struct {
-		name string
-		repo func() *gatedRepo
-		want connect.Code
+		name  string
+		state bucketgate.State
 	}{
-		{"draining", func() *gatedRepo {
-			return &gatedRepo{state: bucketgate.State{Enabled: true, ReadOnly: true, ProvisionState: bucketgate.ProvisionReady}}
-		}, connect.CodeFailedPrecondition},
-		{"disabled", func() *gatedRepo {
-			return &gatedRepo{state: bucketgate.State{ProvisionState: bucketgate.ProvisionReady}}
-		}, connect.CodeFailedPrecondition},
-		{"provisioning", func() *gatedRepo {
-			return &gatedRepo{state: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionPending}}
-		}, connect.CodeUnavailable},
-		{"provision failed", func() *gatedRepo {
-			return &gatedRepo{state: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionFailed}}
-		}, connect.CodeFailedPrecondition},
-		{"store unreachable", func() *gatedRepo { return &gatedRepo{lookupErr: errBucketStore} }, connect.CodeInternal},
-		{"collection missing", func() *gatedRepo {
-			return &gatedRepo{lookupErr: fmt.Errorf("collection %q %w", gateTestCollection, apiutil.ErrNotFound)}
-		}, connect.CodeNotFound},
+		{"draining", bucketgate.State{Enabled: true, ReadOnly: true, ProvisionState: bucketgate.ProvisionReady}},
+		{"disabled", bucketgate.State{ProvisionState: bucketgate.ProvisionReady}},
+		{"provisioning", bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionPending}},
+		{"provision failed", bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionFailed}},
 	}
 	for _, rpc := range writeRPCs() {
 		for _, st := range states {
 			t.Run(rpc.name+"/"+st.name, func(t *testing.T) {
-				tenantID := uuid.New()
-				ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
-				authz := &denyRecorder{}
-				err := rpc.call(ctx, st.repo(), authz, tenantID)
-				if got := connect.CodeOf(err); got != st.want {
-					t.Fatalf("%s = %v (code %v), want %v", rpc.name, err, got, st.want)
+				authz, err := callGated(rpc, &gatedRepo{state: st.state})
+				refusal := bucketgate.Check(rpc.access, st.state)
+				if refusal == nil {
+					assertAuthorizedOnBinding(t, rpc.name, err, authz)
+					return
+				}
+				if !errors.Is(err, refusal) {
+					t.Fatalf("%s = %v, want the gate's %v", rpc.name, err, refusal)
 				}
 				if len(authz.checks) != 0 {
 					t.Fatalf("%s reached Cedar %d times with binding %+v; a refused write must not", rpc.name, len(authz.checks), authz.checks)
 				}
 			})
 		}
+	}
+}
+
+// A binding that cannot be read refuses every write, a protective one
+// included: authorizing a write on an empty binding is the fail-open this
+// guards against.
+func TestEveryWriteRPCFailsClosedOnAnUnreadableBinding(t *testing.T) {
+	failures := []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{"store unreachable", errBucketStore, connect.CodeInternal},
+		{"collection missing", fmt.Errorf("collection %q %w", gateTestCollection, apiutil.ErrNotFound), connect.CodeNotFound},
+	}
+	for _, rpc := range writeRPCs() {
+		for _, f := range failures {
+			t.Run(rpc.name+"/"+f.name, func(t *testing.T) {
+				authz, err := callGated(rpc, &gatedRepo{lookupErr: f.err})
+				if got := connect.CodeOf(err); got != f.want {
+					t.Fatalf("%s = %v (code %v), want %v", rpc.name, err, got, f.want)
+				}
+				if len(authz.checks) != 0 {
+					t.Fatalf("%s reached Cedar %d times with binding %+v; a write with no binding must not", rpc.name, len(authz.checks), authz.checks)
+				}
+			})
+		}
+	}
+}
+
+// callGated calls rpc against repo as a fresh principal of a fresh tenant,
+// with a recorder that denies every check.
+func callGated(rpc writeRPC, repo *gatedRepo) (*denyRecorder, error) {
+	tenantID := uuid.New()
+	ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
+	authz := &denyRecorder{}
+	err := rpc.call(ctx, repo, authz, tenantID)
+	return authz, err
+}
+
+// assertAuthorizedOnBinding checks that an RPC passed the gate and stopped at
+// Cedar's denial, decided on the binding the gate resolved.
+func assertAuthorizedOnBinding(t *testing.T, name string, err error, authz *denyRecorder) {
+	t.Helper()
+	if got := connect.CodeOf(err); got != connect.CodePermissionDenied {
+		t.Fatalf("%s = %v (code %v), want the recorder's denial", name, err, got)
+	}
+	if len(authz.checks) == 0 {
+		t.Fatalf("%s never reached Cedar", name)
+	}
+	if r := authz.checks[0]; r.BackendID != gateTestBackend || r.BucketName != gateTestBucket {
+		t.Fatalf("%s authorized on binding (%q, %q), want (%q, %q)", name, r.BackendID, r.BucketName, gateTestBackend, gateTestBucket)
 	}
 }
 
@@ -203,20 +248,8 @@ func TestGetLockIsServedWhileDraining(t *testing.T) {
 func TestEveryWriteRPCAuthorizesOnTheResolvedBinding(t *testing.T) {
 	for _, rpc := range writeRPCs() {
 		t.Run(rpc.name, func(t *testing.T) {
-			tenantID := uuid.New()
-			ctx := auth.WithPrincipal(context.Background(), &auth.Principal{Subject: "u1", TenantID: tenantID})
-			authz := &denyRecorder{}
-			repo := &gatedRepo{state: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}}
-			err := rpc.call(ctx, repo, authz, tenantID)
-			if got := connect.CodeOf(err); got != connect.CodePermissionDenied {
-				t.Fatalf("%s = %v (code %v), want the recorder's denial", rpc.name, err, got)
-			}
-			if len(authz.checks) == 0 {
-				t.Fatalf("%s never reached Cedar", rpc.name)
-			}
-			if r := authz.checks[0]; r.BackendID != gateTestBackend || r.BucketName != gateTestBucket {
-				t.Fatalf("%s authorized on binding (%q, %q), want (%q, %q)", rpc.name, r.BackendID, r.BucketName, gateTestBackend, gateTestBucket)
-			}
+			authz, err := callGated(rpc, &gatedRepo{state: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}})
+			assertAuthorizedOnBinding(t, rpc.name, err, authz)
 		})
 	}
 }

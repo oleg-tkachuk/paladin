@@ -10,9 +10,14 @@
   reason, `ERROR_REASON_BACKEND_READ_ONLY` or `ERROR_REASON_BACKEND_DISABLED`,
   in the error's `ErrorInfo`. It came with the code alone before.
 - `RestoreObject`, `RestoreVersion`, `UpdateObject` (and the tag RPCs on it),
-  `DeleteObject` to the trash, `SetObjectTaint` and `CompleteObject` — its
-  already-completed no-op included — used to proceed on a draining or
-  provisioning backend. They are now refused there like every other write.
+  `DeleteObject` to the trash and `CompleteObject` — its already-completed
+  no-op included — used to proceed on a draining or provisioning backend.
+  They are now refused there like every other write.
+- `SetObjectTaint`, setting or clearing, is answered by no backend or bucket
+  state: it goes through on a draining, disabled or provisioning backend,
+  decided by Cedar alone. A taint keeps content from capabilities, so it must
+  be settable while the backend still serves that content. It is still
+  refused with `INTERNAL` when the bucket cannot be looked up.
 - A write whose bucket could not be looked up is refused with `INTERNAL`
   rather than authorized without its bucket and carried out.
 - `GetObjectLock` is a read: a draining backend now serves it instead of
