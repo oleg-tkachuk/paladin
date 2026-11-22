@@ -81,6 +81,11 @@ func Known(algo string) bool {
 // The length check is what catches the common mistake — a hex digest, or a
 // SHA-256 sent under CRC32C — before it is signed into a URL that every
 // upload would then fail.
+//
+// The value must be the digest's one canonical spelling. Go's decoder also
+// takes line breaks and unused trailing bits, so "AAAAAB==" decodes to the
+// digest "AAAAAA==" names; the value is compared with the store's as a
+// string, and a second spelling would pass here and mismatch later.
 func Validate(algo, value string) error {
 	want, ok := digestBytes[strings.ToUpper(algo)]
 	if !ok {
@@ -89,6 +94,9 @@ func Validate(algo, value string) error {
 	raw, err := base64.StdEncoding.DecodeString(value)
 	if err != nil {
 		return fmt.Errorf("checksum %q is not base64: %w", value, err)
+	}
+	if canonical := base64.StdEncoding.EncodeToString(raw); canonical != value {
+		return fmt.Errorf("checksum %q is not canonical base64; send %q", value, canonical)
 	}
 	if len(raw) != want {
 		return fmt.Errorf("%s checksum is %d bytes, want %d", strings.ToUpper(algo), len(raw), want)
