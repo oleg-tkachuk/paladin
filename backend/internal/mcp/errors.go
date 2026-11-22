@@ -12,7 +12,7 @@ import (
 )
 
 // audienceMismatch is how the planes' JWT verifier words a token issued for
-// another plane (internal/auth/jwt.go).
+// another plane (auth.ErrBearerAudienceMismatch).
 const audienceMismatch = "audience mismatch"
 
 // audiencePrefix turns a catalog Audience ("admin") into the token audience

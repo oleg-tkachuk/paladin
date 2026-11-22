@@ -42,6 +42,7 @@ import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from http import HTTPStatus
 from socketserver import ThreadingMixIn
 from types import TracebackType
@@ -387,15 +388,14 @@ _UPLOAD_ID_FIELD = "upload_id"
 _MISSING_AUTHORIZATION = "missing Authorization header"
 _EXPECTED_BEARER = "expected Bearer token"
 _EMPTY_TOKEN = "empty token"
-_JWT_MALFORMED = "jwt: malformed token"
-_JWT_EXPIRED = "jwt: token expired"
+_JWT_MALFORMED = "malformed bearer token"
+_JWT_EXPIRED = "bearer token expired"
 _API_TOKEN_NOT_FOUND = "API token not found"
 _API_TOKEN_REVOKED = "API token revoked"
 _CAPABILITY_UNKNOWN = "The access token is invalid"
 """The server's words for a capability it did not issue: the title of its
 library's problem, as for every refusal of the library's
 (sdk/testdata/unknown_capabilities.json)."""
-_CAPABILITY_REVOKED = "capability: revoked"
 _TENANT_MISMATCH = "URL tenant does not match token tenant"
 _NAMES_SPAN_TENANTS = "resource names in one request must name the same tenant"
 _UPLOAD_TENANT_MISMATCH = "tenant mismatch"
@@ -664,6 +664,16 @@ def _unknown_capability() -> ConnectError:
         Code.UNAUTHENTICATED,
         error_reason_pb2.ERROR_REASON_CAPABILITY_INVALID_TOKEN,
         _CAPABILITY_UNKNOWN,
+    )
+
+
+def _revoked_capability() -> ConnectError:
+    """The server's refusal of a capability revoked since it was issued: its
+    verifier's title, reason and code."""
+    return _capability_refusal(
+        Code.UNAUTHENTICATED,
+        error_reason_pb2.ERROR_REASON_CAPABILITY_REVOKED,
+        _TITLE_TOKEN_INVALID,
     )
 
 
@@ -1030,7 +1040,7 @@ class _CapabilityService(CapabilityServiceSync):
         if credential is None or parent is None:
             raise _unknown_capability()
         if credential.revoked:
-            raise ConnectError(Code.UNAUTHENTICATED, _CAPABILITY_REVOKED)
+            raise _revoked_capability()
         parent_ops = list(copy.caveats.ops if copy is not None else parent.msg.caveats.ops)
         if Op.SHARE not in parent_ops:
             raise _with_reason(Code.PERMISSION_DENIED, _LACKS_SHARE)
@@ -1867,9 +1877,8 @@ class FakePaladin(
             return self._verify(
                 token,
                 _API_TOKEN_PREFIX,
-                Code.UNAUTHENTICATED,
-                _API_TOKEN_NOT_FOUND,
-                _API_TOKEN_REVOKED,
+                partial(ConnectError, Code.UNAUTHENTICATED, _API_TOKEN_NOT_FOUND),
+                partial(ConnectError, Code.UNAUTHENTICATED, _API_TOKEN_REVOKED),
             )
         token = _capability_token(headers.get(HEADER_CAPABILITY.lower(), ""), authz)
         if token:
@@ -1877,13 +1886,7 @@ class FakePaladin(
                 known = token in self._credentials or self._biscuit_of_copy_locked(token)
             if not known:
                 raise _unknown_capability()
-            return self._verify(
-                token,
-                _CAPABILITY_PREFIX,
-                Code.UNAUTHENTICATED,
-                _CAPABILITY_UNKNOWN,
-                _CAPABILITY_REVOKED,
-            )
+            return self._verify(token, _CAPABILITY_PREFIX, _unknown_capability, _revoked_capability)
         if not authz:
             raise ConnectError(Code.UNAUTHENTICATED, _MISSING_AUTHORIZATION)
         if not authz.startswith(_BEARER_SCHEME):
@@ -1892,7 +1895,10 @@ class FakePaladin(
         if not token:
             raise ConnectError(Code.UNAUTHENTICATED, _EMPTY_TOKEN)
         return self._verify(
-            token, _BEARER_TOKEN_PREFIX, Code.UNAUTHENTICATED, _JWT_MALFORMED, _JWT_EXPIRED
+            token,
+            _BEARER_TOKEN_PREFIX,
+            partial(ConnectError, Code.UNAUTHENTICATED, _JWT_MALFORMED),
+            partial(ConnectError, Code.UNAUTHENTICATED, _JWT_EXPIRED),
         )
 
     def _lease_target_locked(self, capability: str, ctx: Any) -> _CapabilityRecord:
@@ -1943,7 +1949,7 @@ class FakePaladin(
         if holder is None:
             raise _unknown_capability()
         if credential.revoked:
-            raise ConnectError(Code.UNAUTHENTICATED, _CAPABILITY_REVOKED)
+            raise _revoked_capability()
         if credential.biscuit:
             raise _with_reason(Code.FAILED_PRECONDITION, _LEASE_BY_COPY)
         if Op.SHARE not in holder.msg.caveats.ops:
@@ -1963,17 +1969,23 @@ class FakePaladin(
                 return self._credentials[t]
         return None
 
-    def _verify(self, token: str, prefix: str, code: Code, unknown: str, revoked: str) -> str:
+    def _verify(
+        self,
+        token: str,
+        prefix: str,
+        unknown: Callable[[], ConnectError],
+        revoked: Callable[[], ConnectError],
+    ) -> str:
         """The tenant of ``token``, a credential issued with ``prefix``; raise
-        ``code`` with ``unknown`` or ``revoked`` otherwise."""
+        the refusal ``unknown`` or ``revoked`` makes otherwise."""
         with self._lock:
             credential = self._credentials.get(token)
             if credential is None and prefix == _CAPABILITY_PREFIX:
                 credential = self._biscuit_of_copy_locked(token)
         if credential is None or credential.prefix != prefix:
-            raise ConnectError(code, unknown)
+            raise unknown()
         if credential.revoked:
-            raise ConnectError(code, revoked)
+            raise revoked()
         return credential.tenant
 
     def _authorize_tenant(self, tenant: str, message: Message) -> None:

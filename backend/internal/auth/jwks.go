@@ -207,7 +207,7 @@ func (v *KeySetVerifier) Verify(_ context.Context, token string) (*Principal, er
 		return nil, err
 	}
 	if !holds(v.Keys, kid) {
-		return nil, fmt.Errorf("jwt: unknown kid %q", kid)
+		return nil, fmt.Errorf("%w: kid %q", ErrBearerUnknownKey, kid)
 	}
 	return verifyBySet(token, v.Keys, v.ExpectedIssuer, v.ExpectedAudience, v.Leeway, v.Now)
 }
@@ -216,11 +216,11 @@ func (v *KeySetVerifier) Verify(_ context.Context, token string) (*Principal, er
 func tokenKeyID(token string) (string, error) {
 	msg, err := jws.ParseString(token)
 	if err != nil {
-		return "", fmt.Errorf("jwt: malformed token: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrBearerMalformed, err)
 	}
 	sigs := msg.Signatures()
 	if len(sigs) != 1 {
-		return "", errors.New("jwt: want exactly one signature")
+		return "", fmt.Errorf("%w: want exactly one signature, got %d", ErrBearerMalformed, len(sigs))
 	}
 	kid, _ := sigs[0].ProtectedHeaders().KeyID()
 	return kid, nil
@@ -232,7 +232,7 @@ func tokenKeyID(token string) (string, error) {
 func verifyBySet(token string, set jwk.Set, issuer, audience string, leeway time.Duration, now func() time.Time) (*Principal, error) {
 	payload, err := jws.Verify([]byte(token), jws.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)))
 	if err != nil {
-		return nil, fmt.Errorf("jwt: signature: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrBearerSignature, err)
 	}
 	c, err := acceptedClaims(payload, issuer, audience, leeway, now)
 	if err != nil {
@@ -260,7 +260,7 @@ func (v *JWKSVerifier) keySetWith(ctx context.Context, kid string) (jwk.Set, err
 	// Debounce: if we refreshed very recently, the kid is genuinely
 	// unknown — don't hammer the IdP on every spray request.
 	if !loadedAt.IsZero() && v.Now().Sub(loadedAt) < minRefresh {
-		return nil, fmt.Errorf("jwks: unknown kid %q", kid)
+		return nil, fmt.Errorf("%w: kid %q", ErrBearerUnknownKey, kid)
 	}
 
 	// Singleflight the refresh: concurrent misses share one fetch.
@@ -283,7 +283,7 @@ func (v *JWKSVerifier) keySetWith(ctx context.Context, kid string) (jwk.Set, err
 	if holds(v.keys, kid) {
 		return v.keys, nil
 	}
-	return nil, fmt.Errorf("jwks: unknown kid %q", kid)
+	return nil, fmt.Errorf("%w: kid %q", ErrBearerUnknownKey, kid)
 }
 
 // holds reports whether set has a key under kid; a token without a kid

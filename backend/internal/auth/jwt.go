@@ -80,9 +80,14 @@ func (v *JWTVerifier) Verify(_ context.Context, token string) (*Principal, error
 	if err != nil {
 		return nil, err
 	}
+	// Parsed first so a token that is no JWS is refused as malformed, as the
+	// key set verifiers refuse it, rather than as a bad signature.
+	if _, err := jws.ParseString(token); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrBearerMalformed, err)
+	}
 	payload, err := jws.Verify([]byte(token), jws.WithKey(alg, v.Key))
 	if err != nil {
-		return nil, fmt.Errorf("jwt: signature: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrBearerSignature, err)
 	}
 	c, err := acceptedClaims(payload, v.ExpectedIssuer, v.ExpectedAudience, v.Leeway, v.Now)
 	if err != nil {
@@ -129,7 +134,7 @@ func acceptedClaims(payload []byte, issuer, audience string, leeway time.Duratio
 	}
 	var c jwtClaims
 	if err := json.Unmarshal(payload, &c); err != nil {
-		return jwtClaims{}, fmt.Errorf("jwt: claims parse: %w", err)
+		return jwtClaims{}, fmt.Errorf("%w: parse: %w", ErrBearerClaims, err)
 	}
 	return c, nil
 }
@@ -138,15 +143,15 @@ func acceptedClaims(payload []byte, issuer, audience string, leeway time.Duratio
 func claimRefusal(err error) error {
 	switch {
 	case errors.Is(err, jwt.TokenExpiredError{}):
-		return fmt.Errorf("jwt: token expired: %w", err)
+		return fmt.Errorf("%w: %w", ErrBearerExpired, err)
 	case errors.Is(err, jwt.TokenNotYetValidError{}):
-		return fmt.Errorf("jwt: token not yet valid: %w", err)
+		return fmt.Errorf("%w: %w", ErrBearerNotYetValid, err)
 	case errors.Is(err, jwt.InvalidIssuerError{}):
-		return fmt.Errorf("jwt: issuer mismatch: %w", err)
+		return fmt.Errorf("%w: %w", ErrBearerIssuerMismatch, err)
 	case errors.Is(err, jwt.InvalidAudienceError{}):
-		return fmt.Errorf("jwt: audience mismatch: %w", err)
+		return fmt.Errorf("%w: %w", ErrBearerAudienceMismatch, err)
 	}
-	return fmt.Errorf("jwt: claims: %w", err)
+	return fmt.Errorf("%w: %w", ErrBearerClaims, err)
 }
 
 // principalFromClaims is the Principal a verified token's claims name, the
@@ -154,7 +159,7 @@ func claimRefusal(err error) error {
 func principalFromClaims(c jwtClaims, audience string) (*Principal, error) {
 	scopes, err := ParseScopes(c.Scopes)
 	if err != nil {
-		return nil, fmt.Errorf("jwt: scopes claim: %w", err)
+		return nil, fmt.Errorf("%w: scopes: %w", ErrBearerClaims, err)
 	}
 	p := &Principal{
 		Subject:    c.Sub,
@@ -181,7 +186,7 @@ func principalFromClaims(c jwtClaims, audience string) (*Principal, error) {
 	if t := c.tenantClaim(); t != "" {
 		id, err := uuid.Parse(t)
 		if err != nil {
-			return nil, fmt.Errorf("jwt: tenant claim: %w", err)
+			return nil, fmt.Errorf("%w: tenant: %w", ErrBearerClaims, err)
 		}
 		p.TenantID = id
 	}

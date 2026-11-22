@@ -7,6 +7,7 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"github.com/oleg-tkachuk/limes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
@@ -22,7 +23,7 @@ type Option func(*Server)
 // fake issued — IssueBearerToken, IssueAPIToken or IssueCapability — that
 // was not revoked, and every resource it names must be in that credential's
 // tenant. The answers are the server's, codes and messages, with no ErrorInfo
-// reason, as the server's authentication sends none:
+// reason but for a capability's, as the server's authentication sends none:
 //
 //   - no credential, or an Authorization that is not a bearer token:
 //     Unauthenticated;
@@ -30,8 +31,8 @@ type Option func(*Server)
 //     revoked: Unauthenticated — a revoked bearer token answers as the
 //     server does an expired one, since the server revokes none;
 //   - a capability the fake did not issue, or one that was revoked:
-//     PermissionDenied, as the server answers every capability it cannot
-//     verify;
+//     Unauthenticated in the verifier's words, its reason
+//     CAPABILITY_INVALID_TOKEN or CAPABILITY_REVOKED;
 //   - a name or parent in another tenant: PermissionDenied; an upload of
 //     another tenant: PermissionDenied.
 //
@@ -85,12 +86,14 @@ var (
 	errMissingAuthorization = errors.New("missing Authorization header")
 	errExpectedBearer       = errors.New("expected Bearer token")
 	errEmptyToken           = errors.New("empty token")
-	errJWTMalformed         = errors.New("jwt: malformed token")
-	errJWTExpired           = errors.New("jwt: token expired")
+	errJWTMalformed         = errors.New("malformed bearer token")
+	errJWTExpired           = errors.New("bearer token expired")
 	errAPITokenNotFound     = errors.New("API token not found")
 	errAPITokenRevoked      = errors.New("API token revoked")
-	errCapabilityInvalid    = errors.New("capability: invalid signature")
-	errCapabilityRevoked    = errors.New("capability: revoked")
+	// The verifier's own refusals, answered through capabilityRefusal: the
+	// library's title, its reason and its code.
+	errCapabilityInvalid    = limes.ErrInvalidToken
+	errCapabilityRevoked    = limes.ErrRevoked
 	errTenantMismatch       = errors.New("URL tenant does not match token tenant")
 	errNamesSpanTenants     = errors.New("resource names in one request must name the same tenant")
 	errUploadTenantMismatch = errors.New("tenant mismatch")
@@ -236,7 +239,8 @@ func capabilityToken(xHeader, authz string) string {
 }
 
 // verify is the tenant of token, a credential of kind, or code with unknown
-// or revoked.
+// or revoked, answered as capabilityRefusal answers it: a limes refusal with
+// its title, reason and code, any other error in its own words.
 func (s *Server) verify(token string, kind credentialKind, code connect.Code, unknown, revoked error) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -250,9 +254,9 @@ func (s *Server) verify(token string, kind credentialKind, code connect.Code, un
 	}
 	switch {
 	case !ok || c.kind != kind:
-		return "", connect.NewError(code, unknown.Error()).WithCause(unknown)
+		return "", capabilityRefusal(code, unknown)
 	case c.revoked:
-		return "", connect.NewError(code, revoked.Error()).WithCause(revoked)
+		return "", capabilityRefusal(code, revoked)
 	}
 	return c.tenant, nil
 }

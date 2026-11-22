@@ -111,7 +111,7 @@ func principalFromHeaders(ctx context.Context, v TokenVerifier, authz string) (*
 	}
 	p, err := v.Verify(ctx, token)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err.Error()).WithCause(err)
+		return nil, bearerRefusal(err)
 	}
 	return p, nil
 }

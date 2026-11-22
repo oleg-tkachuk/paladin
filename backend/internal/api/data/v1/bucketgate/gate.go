@@ -37,6 +37,8 @@
 package bucketgate
 
 import (
+	"errors"
+
 	"connectrpc.com/connect/v2"
 
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -173,6 +175,16 @@ var (
 // error mapper.
 func Refusals() []*Refusal {
 	return []*Refusal{ErrBackendDisabled, ErrBackendReadOnly, ErrBucketProvisioning, ErrBucketNotReady}
+}
+
+// Refused reports whether err, however wrapped, is one of the gate's
+// refusals: a verdict on the bucket's state, logged as a refusal even when
+// its code is Unavailable, as a provisioning bucket's is. A gate that could
+// not decide — its state unreadable — answers no Refusal, and stays the
+// server's fault.
+func Refused(err error) bool {
+	var r *Refusal
+	return errors.As(err, &r)
 }
 
 // Check answers whether s lets an operation of access through: nil, or the

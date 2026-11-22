@@ -118,3 +118,68 @@ func TestSubscriptionChangesAreLogged(t *testing.T) {
 		})
 	}
 }
+
+// A store answer the caller can act on — a subscription not there, a version
+// that moved, one already there — is logged as refused at warn; a store fault
+// as failed at error. A missing subscription read as "read failed", which
+// sends an operator looking for a fault that is not there.
+func TestStoreAnswersAreLoggedByWhatTheyAre(t *testing.T) {
+	tid := uuid.New()
+	sub := admindomain.EventSubscription{TenantID: tid, SubscriptionID: uuid.New(), SinkKind: "http"}
+	ctx := ctxAs(tid, apiutil.RolePlatformAdmin)
+	fault := errors.New("connection reset")
+	get := func(h *Handler) error {
+		_, err := h.Get(ctx, tid, sub.SubscriptionID)
+		return err
+	}
+	create := func(h *Handler) error {
+		_, err := h.Create(ctx, sub)
+		return err
+	}
+	update := func(h *Handler) error {
+		_, err := h.Update(ctx, tid, sub, 0, nil)
+		return err
+	}
+	del := func(h *Handler) error { return h.Delete(ctx, tid, sub.SubscriptionID, 0) }
+	list := func(h *Handler) error {
+		_, _, err := h.List(ctx, admindomain.ListEventSubscriptionsArgs{TenantID: tid})
+		return err
+	}
+	redrive := func(h *Handler) error {
+		_, err := h.RedriveFailedDeliveries(ctx, tid, sub.SubscriptionID)
+		return err
+	}
+	for _, tc := range []struct {
+		name  string
+		repo  *fakeRepo
+		call  func(*Handler) error
+		level zapcore.Level
+		msg   string
+	}{
+		{"read of a missing one", &fakeRepo{getErr: admindomain.ErrNotFound}, get, zapcore.WarnLevel, "event subscription read refused"},
+		{"read fault", &fakeRepo{getErr: fault}, get, zapcore.ErrorLevel, "event subscription read failed"},
+		{"create of one already there", &fakeRepo{createErr: admindomain.ErrAlreadyExists}, create, zapcore.WarnLevel, "event subscription create refused"},
+		{"create fault", &fakeRepo{createErr: fault}, create, zapcore.ErrorLevel, "event subscription create failed"},
+		{"update of a moved version", &fakeRepo{sub: sub, updateErr: admindomain.ErrVersionMismatch}, update, zapcore.WarnLevel, "event subscription update refused"},
+		{"update fault", &fakeRepo{sub: sub, updateErr: fault}, update, zapcore.ErrorLevel, "event subscription update failed"},
+		{"delete of one gone since", &fakeRepo{sub: sub, deleteErr: admindomain.ErrNotFound}, del, zapcore.WarnLevel, "event subscription delete refused"},
+		{"delete fault", &fakeRepo{sub: sub, deleteErr: fault}, del, zapcore.ErrorLevel, "event subscription delete failed"},
+		{"list fault", &fakeRepo{listErr: fault}, list, zapcore.ErrorLevel, "event subscription list failed"},
+		{"redrive of one gone since", &fakeRepo{sub: sub, requeueErr: admindomain.ErrNotFound}, redrive, zapcore.WarnLevel, "event subscription redrive refused"},
+		{"redrive fault", &fakeRepo{sub: sub, requeueErr: fault}, redrive, zapcore.ErrorLevel, "event subscription redrive failed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, logs := loggedHandler(tc.repo)
+			if err := tc.call(h); err == nil {
+				t.Fatal("the call succeeded")
+			}
+			lines := logs.FilterMessage(tc.msg).All()
+			if len(lines) != 1 || lines[0].Level != tc.level {
+				t.Fatalf("want one %v line %q, got %v", tc.level, tc.msg, logs.All())
+			}
+			if lines[0].ContextMap()["tenant_id"] != tid.String() {
+				t.Errorf("line %q names tenant %v, want %s", tc.msg, lines[0].ContextMap()["tenant_id"], tid)
+			}
+		})
+	}
+}

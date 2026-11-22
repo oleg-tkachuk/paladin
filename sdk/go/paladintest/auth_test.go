@@ -45,15 +45,18 @@ func wantRefused(t *testing.T, err error, want refusal) {
 var (
 	missingAuthorization = refusal{code: connect.CodeUnauthenticated, message: "missing Authorization header"}
 	expectedBearer       = refusal{code: connect.CodeUnauthenticated, message: "expected Bearer token"}
-	jwtMalformed         = refusal{code: connect.CodeUnauthenticated, message: "jwt: malformed token"}
-	jwtExpired           = refusal{code: connect.CodeUnauthenticated, message: "jwt: token expired"}
+	jwtMalformed         = refusal{code: connect.CodeUnauthenticated, message: "malformed bearer token"}
+	jwtExpired           = refusal{code: connect.CodeUnauthenticated, message: "bearer token expired"}
 	apiTokenNotFound     = refusal{code: connect.CodeUnauthenticated, message: "API token not found"}
 	apiTokenRevoked      = refusal{code: connect.CodeUnauthenticated, message: "API token revoked"}
 	// A capability the fake did not issue goes to the verifier, as on the
 	// server, which cannot read "not-issued" as a Biscuit.
 	capabilityNotIssued = refusal{connect.CodeUnauthenticated, "The access token is invalid",
 		commonv1.ErrorReason_ERROR_REASON_CAPABILITY_INVALID_TOKEN}
-	capabilityRevoked    = refusal{code: connect.CodeUnauthenticated, message: "capability: revoked"}
+	// A revoked capability is the verifier's refusal too: its title, and
+	// its reason.
+	capabilityRevoked = refusal{connect.CodeUnauthenticated, "The access token is invalid",
+		commonv1.ErrorReason_ERROR_REASON_CAPABILITY_REVOKED}
 	tenantMismatch       = refusal{code: connect.CodePermissionDenied, message: "URL tenant does not match token tenant"}
 	uploadTenantMismatch = refusal{code: connect.CodePermissionDenied, message: "tenant mismatch"}
 )
@@ -141,6 +144,9 @@ func TestStrictAuthRefusesWhatTheServerRefuses(t *testing.T) {
 		{"an API token not issued", paladin.WithAPIToken("paladin_pat_notissued"), apiTokenNotFound},
 		{"a capability not issued", paladin.WithCapability("not-issued"), capabilityNotIssued},
 		{"a capability given as a bearer token", paladin.WithBearerToken(srv.IssueCapability(srv.Tenant())), jwtMalformed},
+		// One the fake issued, of another kind: the verifier's refusal, as
+		// for one it never issued.
+		{"a bearer token given as a capability", paladin.WithCapability(srv.IssueBearerToken(srv.Tenant())), capabilityNotIssued},
 		{"another tenant's bearer token", paladin.WithBearerToken(srv.IssueBearerToken(other)), tenantMismatch},
 		{"another tenant's API token", paladin.WithAPIToken(srv.IssueAPIToken(other)), tenantMismatch},
 		{"another tenant's capability", paladin.WithCapability(srv.IssueCapability(other)), tenantMismatch},

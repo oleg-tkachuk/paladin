@@ -606,20 +606,60 @@ the same commit. Treat this file like a runtime invariant.
   test rebinds the collection mid-session.
 - **Blockers:** a store query by (backend, bucket) for the gate's state.
 
-## API error messages
-
-### Credential refusals still begin with `jwt:` and `capability:`
+### The RPC failure log counts a provisioning bucket as a server fault
 
 - **Status:** Deferred.
-- **Reason:** the registered sentinels and the API token refusals were cleaned
-  of package prefixes; the JWT verifier's and the capability gate's were not:
-  `jwt: malformed token`, `jwt: token expired`, `jwt: audience mismatch`,
-  `capability: invalid signature`, `capability: revoked`. Both SDK fakes copy
-  all but the third word for word, and the MCP bridge matches on `audience
-  mismatch`.
-- **Definition of Done:** each names the credential and the reason without a
-  package prefix; the Go and Python SDK fakes follow, and the bridge's match
-  still finds the phrase it looks for.
+- **Reason:** the handlers' own outcome lines (objecth, multiparth, batchh) log
+  the bucket gate's provisioning refusal as a refusal at Warn, but
+  `middleware.LogOutcome` decides by code alone and logs every Unavailable as
+  `rpc failed` at Error, so the same call still leaves an Error line on every
+  plane.
+- **Definition of Done:** the failure log reads the refusal's reason (or a
+  marker the gate sets) and logs a gate refusal as `rpc refused` at Warn,
+  while an Unavailable from a failing dependency stays at Error; a test
+  covers both.
+- **Blockers:** the middleware cannot import `bucketgate` without pulling a
+  handler concern into it; the marker needs a home both can import.
+
+## API error messages
+
+### A bearer token whose key set will not load is answered Unauthenticated
+
+- **Status:** Deferred.
+- **Reason:** when a token's kid is unknown and the forced JWKS refresh fails
+  (`JWKSVerifier.keySetWith`, the IdP unreachable), the planes answer
+  Unauthenticated, "bearer token could not be verified": a fault of the
+  server's dependency told to the caller as a credential problem, logged by
+  the failure log as `rpc rejected` at Info. The message was cleaned of the fetch error; the code was
+  left as it was.
+- **Definition of Done:** a refresh failure is Unavailable, logged at Error,
+  and an unknown kid after a good refresh stays Unauthenticated; a test
+  covers both.
+- **Blockers:** none.
+
+### Lease refusals of a presented capability still begin with `capability:`
+
+- **Status:** Deferred.
+- **Reason:** `capabilityh/lease.go` answers a lease call it refuses with
+  `capability: a Biscuit copy cannot lease; …`, `capability: leasing for a
+  capability requires OpShare`, `capability: a capability leases only for
+  itself or …` and `capability: the store names no ancestors, …`; both SDK
+  fakes copy the first three, and `paladintest`'s Delegate refusals
+  (`capability.go`, `msgNotPresented` and the rest) do likewise, as
+  `capabilityh.presentedParent` does.
+- **Definition of Done:** each names the capability and the reason without a
+  package prefix; the fakes follow, and a guard walks these messages.
+- **Blockers:** none.
+
+### The `TokenResponse.audience` comment quotes `jwt: audience mismatch`
+
+- **Status:** Deferred.
+- **Reason:** `proto/paladin/iam/v1/types.proto` explains the field by the
+  refusal it replaced, quoted in the old words; the refusal now reads
+  `bearer token audience mismatch`. A proto comment change needs its own
+  `docs(proto)` commit with regenerated stubs.
+- **Definition of Done:** the comment quotes the current text, stubs
+  regenerated, in a commit of its own.
 - **Blockers:** none.
 
 ### The bridge's upstream probe errors reach the admin verbatim

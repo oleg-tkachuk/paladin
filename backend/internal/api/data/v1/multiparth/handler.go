@@ -876,16 +876,22 @@ func (h *Handler) logOutcome(ctx context.Context, op string, success zapcore.Lev
 	switch code := connect.CodeOf(err); {
 	case err == nil:
 		h.log.Log(success, "multipart "+op, fields...)
-	case serverFault(code):
+	case serverFault(err):
 		h.log.Error("multipart failed", append(fields, zap.Error(err))...)
 	default:
 		h.log.Warn("multipart refused", append(fields, zap.String("code", code.String()), zap.Error(err))...)
 	}
 }
 
-// serverFault reports whether code is the server's failure rather than a
-// refusal of the request.
-func serverFault(code connect.Code) bool {
+// serverFault reports whether err is the server's failure rather than a
+// refusal of the request. The bucket gate's refusals are refusals whatever
+// their code: a bucket still provisioning answers Unavailable, so the caller
+// retries, but nothing on the server failed.
+func serverFault(err error) bool {
+	if bucketgate.Refused(err) {
+		return false
+	}
+	code := connect.CodeOf(err)
 	return code == connect.CodeInternal || code == connect.CodeUnknown || code == connect.CodeUnavailable
 }
 
