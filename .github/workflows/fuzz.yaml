@@ -1,0 +1,98 @@
+name: Fuzz
+
+# Every Go fuzz target of the backend and the Go SDK, each searched for new
+# inputs for a bounded time (FUZZ_TIME in Taskfile.dev.yaml's `fuzz`). The
+# seed corpora run in every `go test`, so CI's Verify jobs already replay each
+# input ever committed; this is the open-ended search, too slow for a pull
+# request. A crash fails the run and its input is uploaded, to be committed
+# under <package>/testdata/fuzz/<target>/ with the fix it calls for.
+#
+# The corpus each run grows is kept in the Actions cache, so a night starts
+# where the last one stopped rather than from the seeds.
+on:
+  schedule:
+    # Nightly, after CodeQL's weekly slot and away from the top of the hour.
+    - cron: "43 2 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # renovate: datasource=github-releases depName=go-task/task
+  TASK_VERSION: "3.54.0"
+
+jobs:
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-26.04
+    # Two minutes for each of the targets, plus compiling every package that
+    # holds one; the headroom is for a slow runner.
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache: false
+
+      # go test keeps the inputs a search found interesting under
+      # $(go env GOCACHE)/fuzz; that directory alone is carried between runs.
+      - name: Locate the fuzz corpus
+        id: corpus
+        run: printf 'dir=%s/fuzz\n' "$(go env GOCACHE)" >>"$GITHUB_OUTPUT"
+
+      - name: Restore the fuzz corpus
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.corpus.outputs.dir }}
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: fuzz-corpus-
+
+      - name: Set up the CI scripts
+        uses: ./.github/actions/setup-ci
+
+      - name: Set up Task
+        uses: ./.github/actions/setup-tools
+        with:
+          tools: task
+
+      # --yes accepts the first-fetch trust prompt for the shared task library
+      # include; unattended, that prompt is a hang rather than a question.
+      - name: task fuzz
+        run: task --yes -t Taskfile.dev.yaml fuzz
+
+      # A failing input is written beside its package's committed seeds, so
+      # only the files the run added are the finding.
+      - name: Collect the failing inputs
+        if: failure()
+        run: |
+          set -euo pipefail
+          git ls-files --others --exclude-standard -- '*/testdata/fuzz/*' >"$RUNNER_TEMP/crashers.txt"
+          cat "$RUNNER_TEMP/crashers.txt"
+          tar -czf "$RUNNER_TEMP/fuzz-crashers.tar.gz" -T "$RUNNER_TEMP/crashers.txt"
+
+      - name: Upload the failing inputs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-crashers
+          path: ${{ runner.temp }}/fuzz-crashers.tar.gz
+          if-no-files-found: ignore
+
+      - name: Save the fuzz corpus
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.corpus.outputs.dir }}
+          key: fuzz-corpus-${{ github.run_id }}

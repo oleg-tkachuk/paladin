@@ -15,6 +15,7 @@ package clientip
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -44,6 +45,9 @@ func New(header string, trusted []string) (*Resolver, error) {
 	return r, nil
 }
 
+// errZonedProxy refuses a trusted proxy written with an IPv6 zone.
+var errZonedProxy = errors.New("an IPv6 zone matches no peer; write the address without it")
+
 func parsePrefix(s string) (netip.Prefix, error) {
 	s = strings.TrimSpace(s)
 	if strings.Contains(s, "/") {
@@ -53,6 +57,11 @@ func parsePrefix(s string) (netip.Prefix, error) {
 	a, err := netip.ParseAddr(s)
 	if err != nil {
 		return netip.Prefix{}, err
+	}
+	// A prefix never contains a zoned address, nor is one built from it, so
+	// the entry would trust nothing: refused, as ParsePrefix refuses a zone.
+	if a.Zone() != "" {
+		return netip.Prefix{}, errZonedProxy
 	}
 	a = a.Unmap()
 	return netip.PrefixFrom(a, a.BitLen()), nil

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -70,7 +71,7 @@ func (r *ObjectVersionRepo) List(ctx context.Context, objectID uuid.UUID, pageSi
 	if pageToken != "" {
 		at, id, err := decodeVersionCursor(pageToken)
 		if err != nil {
-			return nil, "", fmt.Errorf("invalid page_token: %w", err)
+			return nil, "", fmt.Errorf("list versions: %w", err)
 		}
 		if !at.IsZero() {
 			afterAt = pgTS(at)
@@ -140,23 +141,30 @@ func versionFromSQLC(row sqlc.ObjectVersion, lockMode string, lockRetainUntil pg
 	}
 }
 
+// versionCursorSep joins a version cursor's time and id; neither holds one.
+const versionCursorSep = "/"
+
 // encodeVersionCursor / decodeVersionCursor format: "{rfc3339nano}/{uuid}".
 func encodeVersionCursor(at time.Time, id uuid.UUID) string {
-	return at.UTC().Format(time.RFC3339Nano) + "/" + id.String()
+	return at.UTC().Format(time.RFC3339Nano) + versionCursorSep + id.String()
 }
 
+// decodeVersionCursor refuses a token it did not mint with keyset.ErrMalformed,
+// the error the list handlers answer as InvalidArgument: the token is the
+// caller's input, so a bad one is never the store failing. As keyset.Decode,
+// the parsers' own errors stay out of the refusal the caller reads.
 func decodeVersionCursor(tok string) (time.Time, uuid.UUID, error) {
-	idx := strings.LastIndex(tok, "/")
+	idx := strings.LastIndex(tok, versionCursorSep)
 	if idx <= 0 {
-		return time.Time{}, uuid.Nil(), errors.New("malformed cursor")
+		return time.Time{}, uuid.Nil(), keyset.ErrMalformed
 	}
 	at, err := time.Parse(time.RFC3339Nano, tok[:idx])
 	if err != nil {
-		return time.Time{}, uuid.Nil(), err
+		return time.Time{}, uuid.Nil(), keyset.ErrMalformed
 	}
-	id, err := uuid.Parse(tok[idx+1:])
+	id, err := uuid.Parse(tok[idx+len(versionCursorSep):])
 	if err != nil {
-		return time.Time{}, uuid.Nil(), err
+		return time.Time{}, uuid.Nil(), keyset.ErrMalformed
 	}
 	return at, id, nil
 }

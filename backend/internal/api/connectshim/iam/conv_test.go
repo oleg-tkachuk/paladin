@@ -2,6 +2,7 @@ package iam
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -146,7 +147,7 @@ func TestUserToProtoOmitsUnsetLastLogin(t *testing.T) {
 }
 
 func contains(haystack, needle string) bool {
-	return len(needle) > 0 && len(haystack) >= len(needle) && indexOf(haystack, needle) >= 0
+	return needle != "" && strings.Contains(haystack, needle)
 }
 
 // ─── resource-name parsers ─────────────────────────────────────────────────
@@ -258,26 +259,6 @@ func TestParseTenantParent(t *testing.T) {
 				t.Errorf("want an error for %q", p)
 			}
 		})
-	}
-}
-
-func TestIndexOf(t *testing.T) {
-	cases := []struct {
-		s, sub string
-		want   int
-	}{
-		{"abcdef", "cd", 2},
-		{"abcdef", "abc", 0},
-		{"abcdef", "ef", 4},
-		{"abcdef", "zz", -1},
-		{"abc", "abcd", -1},
-		{"", "a", -1},
-		{"abc", "", 0},
-	}
-	for _, tc := range cases {
-		if got := indexOf(tc.s, tc.sub); got != tc.want {
-			t.Errorf("indexOf(%q, %q) = %d, want %d", tc.s, tc.sub, got, tc.want)
-		}
 	}
 }
 

@@ -101,6 +101,7 @@ type fakeVersionRepo struct {
 	current   map[uuid.UUID]uuid.UUID
 	fixedList []ObjectVersion
 	fixedGet  map[uuid.UUID]ObjectVersion
+	listErr   error
 }
 
 func newFakeVersionRepo() *fakeVersionRepo {
@@ -119,7 +120,7 @@ func (f *fakeVersionRepo) Get(_ context.Context, id uuid.UUID) (ObjectVersion, e
 	return ObjectVersion{}, ErrVersionNotFound
 }
 func (f *fakeVersionRepo) List(context.Context, uuid.UUID, int32, string) ([]ObjectVersion, string, error) {
-	return f.fixedList, "", nil
+	return f.fixedList, "", f.listErr
 }
 func (f *fakeVersionRepo) CurrentVersionID(_ context.Context, objectID uuid.UUID) (uuid.UUID, error) {
 	f.mu.Lock()

@@ -61,6 +61,9 @@ const (
 	prefixCanonical = "storageBackends/"
 	prefixTenant    = "tenants/"
 	collectionsSep  = "/collections/"
+	bucketsSep      = "/buckets/"
+	tenantsSep      = segmentSep + prefixTenant
+	segmentSep      = "/"
 )
 
 // ResolveCollectionName parses any of the three collection name shapes into a
@@ -137,17 +140,21 @@ func ResolveCollectionNameWithBinding(ctx context.Context, name string, bindings
 }
 
 // parseCanonical decodes storageBackends/{b}/buckets/{bk}/tenants/{t}/collections/{ok}.
+// The backend and the bucket are one segment each, as paladin.ParseBucketName
+// takes them: a '/' in either would let the name carry a second tenants/{id}
+// segment before the one it acts on, and the audit trail and the acting-tenant
+// interceptor read the first (apiutil.TenantInResourceName).
 func parseCanonical(name string) (CanonicalRef, error) {
 	bad := func() (CanonicalRef, error) {
 		return CanonicalRef{}, fmt.Errorf("invalid canonical collection name %q", name)
 	}
 	rest := strings.TrimPrefix(name, prefixCanonical)
-	backend, rest, ok := strings.Cut(rest, "/buckets/")
-	if !ok || backend == "" {
+	backend, rest, ok := strings.Cut(rest, bucketsSep)
+	if !ok || !isSegment(backend) {
 		return bad()
 	}
-	bucket, rest, ok := strings.Cut(rest, "/tenants/")
-	if !ok || bucket == "" {
+	bucket, rest, ok := strings.Cut(rest, tenantsSep)
+	if !ok || !isSegment(bucket) {
 		return bad()
 	}
 	tid, okBody, err := splitTenantCollection(rest)
@@ -161,6 +168,11 @@ func parseCanonical(name string) (CanonicalRef, error) {
 		BucketName: bucket,
 		Shape:      ShapeCanonical,
 	}, nil
+}
+
+// isSegment reports whether s is one non-empty segment of a resource name.
+func isSegment(s string) bool {
+	return s != "" && !strings.Contains(s, segmentSep)
 }
 
 // splitTenantCollection parses "{tid}/collections/{ok}" → (tid, ok). ok may
