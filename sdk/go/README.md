@@ -382,7 +382,11 @@ and version ids are UUIDs. `ErrInvalidName` for anything else.
 | `BucketName`, `ParseBucketName` | `storageBackends/{backend}/buckets/{bucket}` — a physical bucket on the admin plane, and a bucket quota's parent |
 
 `ObjectResource(tenant, collection, key)` is the resource a capability grants
-on an object, or on every object under a key prefix: `object://{tenant-id}/{collection}/{key}`.
+on an object, or on every object under a key prefix:
+`object://{tenant-id}/{collection segment}/{key}`. The collection is one
+segment with its `/` written `.` (`invoices/2026` is `invoices.2026`), so a
+grant on a collection never reaches a nested one; build the resource with
+`ObjectResource` rather than by hand.
 `APITokenPrefix` (`paladin_pat_`) starts every API token; the server reads
 both from here.
 

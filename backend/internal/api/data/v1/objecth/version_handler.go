@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
@@ -121,30 +122,40 @@ func (h *VersionHandler) parentBinding(ctx context.Context, rpc string, tenantID
 	return writeBinding(ctx, h.objects, tenantID, collection, bucketgate.BytesWrite)
 }
 
-// CapabilityObjectURI is the resource a capability names an object by.
+// CapabilityObjectURI is the resource a capability names an object by,
+// object://<tenant>/<collection segment>/<key>: the collection is one
+// segment, written as the bucket path writes it (storagepath.
+// CollectionSegment), so a URI names exactly one (collection, key) and a
+// grant on a collection does not reach a nested one.
 func CapabilityObjectURI(tenantID uuid.UUID, collection, key string) string {
-	return capabilityCollectionURI(tenantID, collection) + key
+	return paladin.ObjectResource(tenantID.String(), collection, key)
 }
 
 // capabilityObjectURIPrefix starts every object URI a capability names.
 const capabilityObjectURIPrefix = paladin.ObjectResourceScheme
 
-// parseCapabilityObjectURI splits "object://<tenant>/<collection>/<key>".
-// The key may itself contain "/"; the tenant and collection may not.
+// parseCapabilityObjectURI splits "object://<tenant>/<collection segment>/<key>",
+// the inverse of CapabilityObjectURI. The key may itself contain "/"; the
+// tenant and the collection segment may not, and a segment no collection
+// occupies names no object.
 func parseCapabilityObjectURI(uri string) (tenantID uuid.UUID, collection, key string, ok bool) {
 	rest, found := strings.CutPrefix(uri, capabilityObjectURIPrefix)
 	if !found {
 		return uuid.Nil(), "", "", false
 	}
-	tenant, rest, found := strings.Cut(rest, "/")
+	tenant, rest, found := strings.Cut(rest, storagepath.Separator)
 	if !found {
 		return uuid.Nil(), "", "", false
 	}
-	collection, key, found = strings.Cut(rest, "/")
-	if !found || collection == "" || key == "" {
+	segment, key, found := strings.Cut(rest, storagepath.Separator)
+	if !found || key == "" {
 		return uuid.Nil(), "", "", false
 	}
-	tenantID, err := uuid.Parse(tenant)
+	collection, err := storagepath.ParseCollectionSegment(segment)
+	if err != nil {
+		return uuid.Nil(), "", "", false
+	}
+	tenantID, err = uuid.Parse(tenant)
 	if err != nil {
 		return uuid.Nil(), "", "", false
 	}
@@ -154,7 +165,7 @@ func parseCapabilityObjectURI(uri string) (tenantID uuid.UUID, collection, key s
 // capabilityCollectionURI is the URI prefix every object in a collection
 // shares — the resource an operation over the whole collection asserts.
 func capabilityCollectionURI(tenantID uuid.UUID, collection string) string {
-	return capabilityObjectURIPrefix + tenantID.String() + "/" + collection + "/"
+	return CapabilityObjectURI(tenantID, collection, "")
 }
 
 // ─── List ───────────────────────────────────────────────────────────────────

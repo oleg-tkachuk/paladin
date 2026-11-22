@@ -214,14 +214,25 @@ func ParseBucketName(s string) (BucketName, error) {
 const APITokenPrefix = "paladin_pat_" // #nosec G101 -- a public prefix, not a credential
 
 // ObjectResourceScheme is the scheme of the resource a capability grants on
-// objects, object://{tenant-id}/{collection}/{key}.
+// objects, object://{tenant-id}/{collection segment}/{key}.
 const ObjectResourceScheme = "object://"
+
+// ObjectResourceCollectionSeparator joins a nested collection's segments
+// inside the one URI segment the collection occupies, as the server's bucket
+// path does (storagepath.CollectionSegmentSeparator): a collection name holds
+// only [a-z0-9-] between its "/", so the encoding is reversible.
+const ObjectResourceCollectionSeparator = "."
 
 // ObjectResource is the resource a capability names for an object, or for
 // every object under a key prefix when key is one: the server checks a
-// capability's resource against object://{tenant-id}/{collection}/{key}. The
-// tenant is the id, a UUID; a prefix ends where the caller wants it to, so
-// give "reports/" to cover the keys under reports/.
+// capability's resource against object://{tenant-id}/{collection segment}/{key}.
+// The tenant is the id, a UUID. The collection is one segment, its "/"
+// written ".", so collection "a/b" with key "c" (object://t/a.b/c) is not
+// collection "a" with key "b/c" (object://t/a/b/c), and a grant on
+// collection "a" does not reach collection "a/b". A prefix ends where the
+// caller wants it to, so give "reports/" to cover the keys under reports/,
+// and "" to cover the whole collection.
 func ObjectResource(tenant, collection, key string) string {
-	return ObjectResourceScheme + tenant + "/" + collection + "/" + key
+	return ObjectResourceScheme + tenant + "/" +
+		strings.ReplaceAll(collection, "/", ObjectResourceCollectionSeparator) + "/" + key
 }

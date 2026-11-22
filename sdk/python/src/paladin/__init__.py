@@ -100,6 +100,7 @@ from paladin.multipart import (
 )
 from paladin.names import (
     API_TOKEN_PREFIX,
+    OBJECT_RESOURCE_COLLECTION_SEPARATOR,
     OBJECT_RESOURCE_SCHEME,
     URI_SCHEME,
     BucketName,
@@ -215,6 +216,7 @@ __all__ = [
     "HEADER_WEBHOOK_SIGNATURE",
     "LIMES_CODE_KEY",
     "LOGGER_NAME",
+    "OBJECT_RESOURCE_COLLECTION_SEPARATOR",
     "OBJECT_RESOURCE_SCHEME",
     "OP_DELETE",
     "OP_GET",

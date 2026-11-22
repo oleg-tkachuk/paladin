@@ -245,10 +245,20 @@ it, and secret scanners find one by it."""
 OBJECT_RESOURCE_SCHEME = "object://"
 """The scheme of the resource a capability grants on objects."""
 
+OBJECT_RESOURCE_COLLECTION_SEPARATOR = "."
+"""Joins a nested collection's segments inside the one URI segment the
+collection occupies, as the server's bucket path does: a collection name holds
+only [a-z0-9-] between its "/", so the encoding is reversible."""
+
 
 def object_resource(tenant: str, collection: str, key: str) -> str:
     """The resource a capability names for an object, or for every object under
     a key prefix when ``key`` is one: the server checks a capability's resource
-    against ``object://{tenant-id}/{collection}/{key}``. The tenant is the id,
-    a UUID; give ``"reports/"`` to cover the keys under ``reports/``."""
-    return f"{OBJECT_RESOURCE_SCHEME}{tenant}/{collection}/{key}"
+    against ``object://{tenant-id}/{collection segment}/{key}``. The tenant is
+    the id, a UUID. The collection is one segment, its "/" written ".", so
+    collection ``a/b`` with key ``c`` is not collection ``a`` with key ``b/c``,
+    and a grant on collection ``a`` does not reach collection ``a/b``. Give
+    ``"reports/"`` to cover the keys under ``reports/``, and ``""`` to cover
+    the whole collection."""
+    segment = collection.replace("/", OBJECT_RESOURCE_COLLECTION_SEPARATOR)
+    return f"{OBJECT_RESOURCE_SCHEME}{tenant}/{segment}/{key}"

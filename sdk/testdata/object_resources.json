@@ -1,0 +1,23 @@
+{
+  "_comment": "The resource a capability names an object by, object://{tenant}/{collection segment}/{key}, which the server (objecth.CapabilityObjectURI), the Go SDK (paladin.ObjectResource) and the Python SDK (paladin.object_resource) build alike. The collection is one URI segment, its '/' written '.' as the bucket path writes it (storagepath.CollectionSegment), so every (collection, key) has a URI of its own and a grant on a collection does not reach a nested one. An empty key is the collection's own prefix, which a grant on the whole collection names. Under covers, a grant on (collection, key prefix) reaches an object when limes.MatchResource matches their URIs; the Python fake's matcher is held to the same rows.",
+  "tenant": "0190a3b2-7c4d-7e8f-9a0b-1c2d3e4f5a6b",
+  "resources": [
+    {"collection": "docs", "key": "a.pdf", "uri": "object://{tenant}/docs/a.pdf"},
+    {"collection": "docs", "key": "2026/q3/report.pdf", "uri": "object://{tenant}/docs/2026/q3/report.pdf"},
+    {"collection": "docs", "key": "", "uri": "object://{tenant}/docs/"},
+    {"collection": "docs", "key": "reports/", "uri": "object://{tenant}/docs/reports/"},
+    {"collection": "invoices/2026/q1", "key": "r.pdf", "uri": "object://{tenant}/invoices.2026.q1/r.pdf"},
+    {"collection": "a", "key": "b/c", "uri": "object://{tenant}/a/b/c"},
+    {"collection": "a/b", "key": "c", "uri": "object://{tenant}/a.b/c"},
+    {"collection": "a/b", "key": "", "uri": "object://{tenant}/a.b/"}
+  ],
+  "covers": [
+    {"name": "a collection covers its own object", "grant": {"collection": "a", "key": ""}, "object": {"collection": "a", "key": "b/c"}, "match": true},
+    {"name": "a collection does not cover a nested collection's object", "grant": {"collection": "a", "key": ""}, "object": {"collection": "a/b", "key": "c"}, "match": false},
+    {"name": "a nested collection covers its own object", "grant": {"collection": "a/b", "key": ""}, "object": {"collection": "a/b", "key": "c"}, "match": true},
+    {"name": "a nested collection does not cover its parent's object", "grant": {"collection": "a/b", "key": ""}, "object": {"collection": "a", "key": "b/c"}, "match": false},
+    {"name": "a key prefix covers the keys under it", "grant": {"collection": "a", "key": "b/"}, "object": {"collection": "a", "key": "b/c"}, "match": true},
+    {"name": "a key prefix does not cover a nested collection named alike", "grant": {"collection": "a", "key": "b/"}, "object": {"collection": "a/b", "key": "c"}, "match": false},
+    {"name": "a collection does not cover one that starts with its name", "grant": {"collection": "a", "key": ""}, "object": {"collection": "ab", "key": "c"}, "match": false}
+  ]
+}

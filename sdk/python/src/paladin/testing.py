@@ -101,7 +101,13 @@ from paladin.data.v1.storage_bootstrap_service_connect import (
     StorageBootstrapServiceWSGIApplication,
 )
 from paladin.errors import ERROR_DOMAIN, HEADER_SERVER_VERSION, LIMES_CODE_KEY, error_details
-from paladin.names import API_TOKEN_PREFIX, CollectionName, InvalidNameError, ObjectName
+from paladin.names import (
+    API_TOKEN_PREFIX,
+    CollectionName,
+    InvalidNameError,
+    ObjectName,
+    object_resource,
+)
 from paladin.transfer import CHECKSUM_SHA256
 
 if TYPE_CHECKING:  # annotations only: typing.Self is 3.11+
@@ -524,8 +530,6 @@ _NO_RESOURCE = ""
 """The resource of an operation bound to none, which a resource-restricted
 capability refuses."""
 
-_OBJECT_RESOURCE_SCHEME = "object://"
-
 # What the server tells a caller of a limes refusal: the fixed title of the
 # library's problem, never the library's own words, which name resources and
 # ids and are for the server's log (limes docs/errors.md).
@@ -577,9 +581,9 @@ _HEX_DIGITS = 2
 
 def _object_resource(tenant: str, collection: str, key: str) -> str:
     """The resource an object is to a capability: the server's
-    object://<tenant>/<collection>/<key>, its collection's prefix for an
-    empty key."""
-    return f"{_OBJECT_RESOURCE_SCHEME}{tenant}/{collection}/{key}"
+    object://<tenant>/<collection segment>/<key>, its collection's prefix for
+    an empty key."""
+    return object_resource(tenant, collection, key)
 
 
 def _plane_of(procedure: str) -> str | None:
