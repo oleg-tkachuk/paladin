@@ -39,6 +39,13 @@ export const MAX_COLLECTION_LENGTH = 255;
 const COLLECTION_GRAMMAR =
   /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\/[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
+/** One object resource, by its parts. An empty key is the whole collection. */
+export interface ObjectResourceParts {
+  tenant: string;
+  collection: string;
+  key: string;
+}
+
 /** Whether collection is a name the server gives a collection. */
 export function isCollectionName(collection: string): boolean {
   return (
@@ -53,6 +60,16 @@ export function collectionSegment(collection: string): string {
     COLLECTION_SEPARATOR,
     COLLECTION_SEGMENT_SEPARATOR,
   );
+}
+
+/** The collection whose segment is segment, or null when none occupies it. */
+export function parseCollectionSegment(segment: string): string | null {
+  if (segment.includes(RESOURCE_SEPARATOR)) return null;
+  const collection = segment.replaceAll(
+    COLLECTION_SEGMENT_SEPARATOR,
+    COLLECTION_SEPARATOR,
+  );
+  return isCollectionName(collection) ? collection : null;
 }
 
 /**
@@ -74,6 +91,157 @@ export function objectResource(
     RESOURCE_SEPARATOR +
     key
   );
+}
+
+/**
+ * The parts of an object resource, or null when uri is none: the inverse of
+ * objectResource. Unlike the server's parser, which reads the object a
+ * resource names, an empty key is accepted, since a grant on the whole
+ * collection carries one.
+ */
+export function parseObjectResource(uri: string): ObjectResourceParts | null {
+  if (!uri.startsWith(OBJECT_RESOURCE_SCHEME)) return null;
+  const rest = uri.slice(OBJECT_RESOURCE_SCHEME.length);
+  const tenantEnd = rest.indexOf(RESOURCE_SEPARATOR);
+  if (tenantEnd < 0) return null;
+  const tenant = rest.slice(0, tenantEnd);
+  const afterTenant = rest.slice(tenantEnd + RESOURCE_SEPARATOR.length);
+  const segmentEnd = afterTenant.indexOf(RESOURCE_SEPARATOR);
+  if (segmentEnd < 0) return null;
+  const collection = parseCollectionSegment(afterTenant.slice(0, segmentEnd));
+  if (collection === null || !isUuid(tenant)) return null;
+  const key = afterTenant.slice(segmentEnd + RESOURCE_SEPARATOR.length);
+  return { tenant, collection, key };
+}
+
+/** How far a stored resource prefix reaches, as the shared table names it. */
+export const GRANT_REACH = {
+  /** Every object of every tenant: the prefix restricts nothing. */
+  allTenants: "all_tenants",
+  /** Every object of the capability's tenant. */
+  tenant: "tenant",
+  /** Another tenant's objects, so nothing of the capability's tenant. */
+  otherTenant: "other_tenant",
+  /** One whole collection. */
+  collection: "collection",
+  /** The keys under a prefix ending in "/". */
+  keys: "keys",
+  /** One key and the keys under it. */
+  key: "key",
+  /** No object the server can store. */
+  nothing: "nothing",
+  /** No object resource: the console does not say what it reaches. */
+  unknown: "unknown",
+} as const;
+
+export type GrantReach = (typeof GRANT_REACH)[keyof typeof GRANT_REACH];
+
+/** What a stored resource prefix reaches, and the sentence that says so. */
+export interface ObjectGrantReach {
+  reach: GrantReach;
+  text: string;
+}
+
+const reachesNothing = (why: string): ObjectGrantReach => ({
+  reach: GRANT_REACH.nothing,
+  text: `${why}: it reaches nothing.`,
+});
+
+const wholeCollection = (collection: string): ObjectGrantReach => ({
+  reach: GRANT_REACH.collection,
+  text: `The whole collection ${collection} and every object in it.`,
+});
+
+const wholeTenant: ObjectGrantReach = {
+  reach: GRANT_REACH.tenant,
+  text: "Every object in every collection of this tenant.",
+};
+
+/**
+ * What a capability's stored resource prefix reaches in tenant (its id), as
+ * limes.MatchResource matches it against the object resources the server
+ * checks: a text prefix that ends at a "/" boundary. A prefix cut short still
+ * reaches what it is a prefix of ("object://{tenant}" is the whole tenant,
+ * "object://{tenant}/docs" the whole collection). A prefix only reaches
+ * nothing when no resource the server writes can match it: a tenant id not
+ * in lower case, a segment no collection is written as, or a key part the
+ * key rule refuses. A prefix outside the object:// scheme is no object
+ * resource, and the console does not guess at it. The tenant names the
+ * capability's tenant; the tenant itself is bound elsewhere, so "every
+ * tenant" says what the prefix matches, not what the capability can reach.
+ */
+export function describeObjectGrant(
+  prefix: string,
+  tenant: string,
+): ObjectGrantReach {
+  // A part of the scheme that ends at a "/" boundary of it reaches every
+  // object resource of every tenant. Any other part reaches no object, but
+  // what else it reaches is not the console's to say.
+  if (
+    prefix !== "" &&
+    OBJECT_RESOURCE_SCHEME.startsWith(prefix) &&
+    (prefix.endsWith(RESOURCE_SEPARATOR) ||
+      OBJECT_RESOURCE_SCHEME[prefix.length] === RESOURCE_SEPARATOR)
+  ) {
+    return {
+      reach: GRANT_REACH.allTenants,
+      text: "Every object of every tenant, as far as this prefix goes: it restricts nothing.",
+    };
+  }
+  if (!prefix.startsWith(OBJECT_RESOURCE_SCHEME)) {
+    return {
+      reach: GRANT_REACH.unknown,
+      text: "Not an object resource: the console cannot say what it reaches.",
+    };
+  }
+  const rest = prefix.slice(OBJECT_RESOURCE_SCHEME.length);
+  const tenantEnd = rest.indexOf(RESOURCE_SEPARATOR);
+  const named = tenantEnd < 0 ? rest : rest.slice(0, tenantEnd);
+  if (!isUuid(named)) return reachesNothing(`"${named}" is no tenant id`);
+  if (named !== named.toLowerCase()) {
+    return reachesNothing(
+      "The tenant id is not in lower case, as the server writes it",
+    );
+  }
+  // Without the capability's tenant the panel cannot tell another tenant's
+  // resource from its own, so it reads every one as its own.
+  if (isUuid(tenant) && named !== tenant.toLowerCase()) {
+    return {
+      reach: GRANT_REACH.otherTenant,
+      text: `Another tenant (${named}): nothing in this tenant.`,
+    };
+  }
+  const afterTenant =
+    tenantEnd < 0 ? "" : rest.slice(tenantEnd + RESOURCE_SEPARATOR.length);
+  if (afterTenant === "") return wholeTenant;
+  if (!afterTenant.includes(RESOURCE_SEPARATOR)) {
+    const collection = parseCollectionSegment(afterTenant);
+    return collection === null
+      ? reachesNothing(`No collection is written "${afterTenant}"`)
+      : wholeCollection(collection);
+  }
+  const parts = parseObjectResource(prefix);
+  if (!parts) {
+    const segment = afterTenant.slice(
+      0,
+      afterTenant.indexOf(RESOURCE_SEPARATOR),
+    );
+    return reachesNothing(`No collection is written "${segment}"`);
+  }
+  const { collection, key } = parts;
+  if (key === "") return wholeCollection(collection);
+  const refused = grantKeyProblem(key);
+  if (refused) return reachesNothing(`The key part is refused (${refused})`);
+  if (key.endsWith(KEY_SEPARATOR)) {
+    return {
+      reach: GRANT_REACH.keys,
+      text: `The objects under ${key} in ${collection}.`,
+    };
+  }
+  return {
+    reach: GRANT_REACH.key,
+    text: `The object ${key} in ${collection}, and the objects under ${key}${KEY_SEPARATOR}.`,
+  };
 }
 
 /**

@@ -6,15 +6,20 @@ import { MAX_SEGMENT_BYTES } from "@/lib/objects/objectKey";
 import {
   DOT_SEGMENT_REASON,
   DUPLICATE_GRANT,
+  GRANT_REACH,
   MAX_COLLECTION_LENGTH,
+  OBJECT_RESOURCE_SCHEME,
   TENANT_UNKNOWN,
   collectionSegment,
+  describeObjectGrant,
   firstObjectGrantProblem,
   grantKeyProblem,
   isCollectionName,
   objectGrantProblem,
   objectGrantProblems,
   objectResource,
+  parseCollectionSegment,
+  parseObjectResource,
 } from "./objectResource";
 
 // The table the server and both SDKs are held to as well.
@@ -23,11 +28,16 @@ const SHARED = resolve(
   "../../../../sdk/testdata/object_resources.json",
 );
 const TENANT_PLACEHOLDER = "{tenant}";
+const UPPER_TENANT_PLACEHOLDER = "{TENANT}";
+const OTHER_TENANT_PLACEHOLDER = "{other_tenant}";
 
 type Row = { collection: string; key: string; uri: string };
+type ReachRow = { name: string; prefix: string; reach: string };
 const table = JSON.parse(readFileSync(SHARED, "utf8")) as {
   tenant: string;
+  other_tenant: string;
   resources: Row[];
+  reach: ReachRow[];
 };
 const TENANT = table.tenant;
 const uriOf = (row: Row) => row.uri.replace(TENANT_PLACEHOLDER, TENANT);
@@ -54,12 +64,141 @@ describe("objectResource", () => {
   });
 });
 
+describe("parseObjectResource", () => {
+  it.each(table.resources)("reads back $uri", (row) => {
+    expect(parseObjectResource(uriOf(row))).toEqual({
+      tenant: TENANT,
+      collection: row.collection,
+      key: row.key,
+    });
+  });
+
+  it.each([
+    ["no scheme", `${TENANT}/docs/a.pdf`],
+    ["another scheme", `kv://${TENANT}/docs/a.pdf`],
+    ["no collection", `${OBJECT_RESOURCE_SCHEME}${TENANT}`],
+    ["no key part", `${OBJECT_RESOURCE_SCHEME}${TENANT}/docs`],
+    ["a tenant that is not an id", `${OBJECT_RESOURCE_SCHEME}acme/docs/a.pdf`],
+    ["an empty collection", `${OBJECT_RESOURCE_SCHEME}${TENANT}//a.pdf`],
+    ["an upper-case collection", `${OBJECT_RESOURCE_SCHEME}${TENANT}/Docs/a`],
+    ["an empty nested name", `${OBJECT_RESOURCE_SCHEME}${TENANT}/a..b/c`],
+    ["the old path-like form", "objects/contracts/2026/"],
+  ])("refuses %s", (_, uri) => {
+    expect(parseObjectResource(uri)).toBeNull();
+  });
+});
+
+describe("describeObjectGrant", () => {
+  // Each stored prefix is worded by what the server's match reaches with it;
+  // the server's test holds limes.MatchResource to the same rows.
+  it.each(table.reach)("words $name as $reach", (row) => {
+    const prefix = row.prefix
+      .replaceAll(TENANT_PLACEHOLDER, TENANT)
+      .replaceAll(UPPER_TENANT_PLACEHOLDER, TENANT.toUpperCase())
+      .replaceAll(OTHER_TENANT_PLACEHOLDER, table.other_tenant);
+    expect(describeObjectGrant(prefix, TENANT).reach).toBe(row.reach);
+  });
+
+  it("holds every reach the table names", () => {
+    expect(new Set(table.reach.map((r) => r.reach))).toEqual(
+      new Set(Object.values(GRANT_REACH)),
+    );
+  });
+
+  it.each([
+    ["", "docs", "The whole collection docs and every object in it."],
+    ["reports/", "docs", "The objects under reports/ in docs."],
+    [
+      "reports",
+      "docs",
+      "The object reports in docs, and the objects under reports/.",
+    ],
+    [
+      "r.pdf",
+      "invoices/2026/q1",
+      "The object r.pdf in invoices/2026/q1, and the objects under r.pdf/.",
+    ],
+  ])("reads key %j in %s", (key, collection, words) => {
+    expect(
+      describeObjectGrant(objectResource(TENANT, collection, key), TENANT).text,
+    ).toBe(words);
+  });
+
+  it.each([
+    [
+      `${OBJECT_RESOURCE_SCHEME}${TENANT}`,
+      "Every object in every collection of this tenant.",
+    ],
+    [
+      `${OBJECT_RESOURCE_SCHEME}${TENANT}/docs`,
+      "The whole collection docs and every object in it.",
+    ],
+    [
+      OBJECT_RESOURCE_SCHEME,
+      "Every object of every tenant, as far as this prefix goes: it restricts nothing.",
+    ],
+    [
+      `${OBJECT_RESOURCE_SCHEME}${table.other_tenant}/docs/`,
+      `Another tenant (${table.other_tenant}): nothing in this tenant.`,
+    ],
+    [
+      `${OBJECT_RESOURCE_SCHEME}${TENANT.toUpperCase()}/docs/`,
+      "The tenant id is not in lower case, as the server writes it: it reaches nothing.",
+    ],
+    [
+      `${OBJECT_RESOURCE_SCHEME}${TENANT}/Docs/`,
+      'No collection is written "Docs": it reaches nothing.',
+    ],
+    [
+      `${OBJECT_RESOURCE_SCHEME}${TENANT}/Docs`,
+      'No collection is written "Docs": it reaches nothing.',
+    ],
+    [
+      `${OBJECT_RESOURCE_SCHEME}${TENANT}/docs/a/../b`,
+      'The key part is refused (it holds a ".." segment): it reaches nothing.',
+    ],
+    ["obj", "Not an object resource: the console cannot say what it reaches."],
+    [
+      `${OBJECT_RESOURCE_SCHEME}${TENANT}/docs/%2e%2e/`,
+      `The key part is refused (${DOT_SEGMENT_REASON}): it reaches nothing.`,
+    ],
+    [
+      "objects/contracts/2026/",
+      "Not an object resource: the console cannot say what it reaches.",
+    ],
+  ])("words %j", (prefix, words) => {
+    expect(describeObjectGrant(prefix, TENANT).text).toBe(words);
+  });
+
+  // An unknown tenant cannot make the panel call the tenant's own resource
+  // another tenant's.
+  it("reads every resource as its own while the tenant is unknown", () => {
+    expect(
+      describeObjectGrant(objectResource(TENANT, "docs", ""), "").reach,
+    ).toBe(GRANT_REACH.collection);
+  });
+
+  it("compares the tenant as the server writes it", () => {
+    expect(
+      describeObjectGrant(
+        objectResource(TENANT, "docs", ""),
+        TENANT.toUpperCase(),
+      ).reach,
+    ).toBe(GRANT_REACH.collection);
+  });
+});
+
 describe("collection segments", () => {
   it.each([
     ["docs", "docs"],
     ["invoices/2026/q1", "invoices.2026.q1"],
-  ])("writes %s as %s", (collection, segment) => {
+  ])("writes %s as %s and reads it back", (collection, segment) => {
     expect(collectionSegment(collection)).toBe(segment);
+    expect(parseCollectionSegment(segment)).toBe(collection);
+  });
+
+  it("refuses a segment holding the separator", () => {
+    expect(parseCollectionSegment("a/b")).toBeNull();
   });
 
   it.each([
