@@ -1,4 +1,4 @@
-## Unreleased — a refused bearer token is answered without the JWT library's words
+## sdk/python/v0.151.1, sdk/go/v0.151.1 — a refused bearer token is answered without the JWT library's words
 
 Codes are unchanged; only the message text moved. A client that matches on
 the text should match on the code and, for a capability, the reason instead.
