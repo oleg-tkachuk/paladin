@@ -10,3 +10,5 @@
   entries of other tenants' callers that named a resource of that tenant.
 - A call admitted to a tenant that then fails, a version conflict say, is
   still in that tenant's trail.
+- Migration 112 applies the rule to existing entries: a refused entry filed
+  under a tenant other than its actor's is taken out of that tenant's trail.

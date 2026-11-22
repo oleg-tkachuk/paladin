@@ -158,3 +158,63 @@ func TestAuditResourceTenantBackfill(t *testing.T) {
 		}
 	}
 }
+
+// Rows filed in a named tenant before the insert asked whether the caller was
+// admitted there are re-filed by migration 112: a refused row naming a tenant
+// other than its actor's is taken out of that tenant's trail; a refused row
+// in its actor's own tenant, and an admitted one, stay where they are.
+func TestAuditRefusedResourceTenantRefiled(t *testing.T) {
+	h := pgharness.Setup(t)
+	ctx := context.Background()
+	repo := adapters.NewAuditRepoV2(sqlc.New(h.PoolMigrate), h.PoolMigrate)
+
+	actor := mustCreateTenant(t, h.PoolMigrate, "refile-actor")
+	named := mustCreateTenant(t, h.PoolMigrate, "refile-named")
+	at := time.Now().UTC().Truncate(time.Microsecond)
+	refused := func(e admindomain.AuditEntry) admindomain.AuditEntry {
+		e.ErrorMessage = "permission_denied: refused"
+		return e
+	}
+	cases := []struct {
+		name  string
+		entry admindomain.AuditEntry
+		want  uuid.UUID
+	}{
+		{"refused in another tenant", refused(trailEntry(actor, "tenants/"+named.String(), at)), uuid.Nil()},
+		{"refused with no actor", refused(trailEntry(uuid.Nil(), "tenants/"+named.String(), at)), uuid.Nil()},
+		{"refused in its own tenant", refused(trailEntry(actor, "tenants/"+actor.String(), at)), actor},
+		{"admitted in another tenant", trailEntry(actor, "tenants/"+named.String(), at), named},
+	}
+	for _, c := range cases {
+		if err := repo.Insert(ctx, c.entry); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+	// As the rows stood before: filed under whatever tenant the name carried.
+	if _, err := h.PoolMigrate.Exec(ctx,
+		`UPDATE audit_log SET resource_tenant_id = substring(resource_name from '^tenants/([^/]*)')::uuid`); err != nil {
+		t.Fatalf("file by name: %v", err)
+	}
+
+	raw, err := migrations.FS.ReadFile("112_audit_refused_resource_tenant.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	up, _, ok := strings.Cut(string(raw), "-- +goose Down")
+	if !ok {
+		t.Fatal("the migration has no Down marker")
+	}
+	if _, err := h.PoolMigrate.Exec(ctx, up); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	for _, c := range cases {
+		got, err := repo.Get(ctx, c.entry.EntryID)
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if got.ResourceTenantID != c.want {
+			t.Errorf("%s: filed under %s, want %s", c.name, got.ResourceTenantID, c.want)
+		}
+	}
+}
