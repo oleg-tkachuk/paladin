@@ -34,21 +34,14 @@ func (h *Hub) SSEHandler(verifier auth.TokenVerifier) http.Handler {
 			http.Error(w, "stream unavailable", http.StatusServiceUnavailable)
 			return
 		}
-		token, ok := bearerToken(r)
+		p, ok := h.verifyBearer(w, r, verifier)
 		if !ok {
-			w.Header().Set("WWW-Authenticate", "Bearer")
-			http.Error(w, "missing bearer token", http.StatusUnauthorized)
-			return
-		}
-		p, err := verifier.Verify(r.Context(), token)
-		if err != nil {
-			w.Header().Set("WWW-Authenticate", "Bearer")
-			http.Error(w, "invalid token", http.StatusUnauthorized)
 			return
 		}
 		if p.TenantID == uuid.Nil() {
 			// Tenant-less super-admin principals have no single tenant to
 			// scope the stream to; the console they use is tenant-scoped too.
+			h.log.Warn(msgNoTenant, zap.String(fieldSubject, p.Subject))
 			http.Error(w, "token carries no tenant", http.StatusForbidden)
 			return
 		}
@@ -104,6 +97,46 @@ func (h *Hub) SSEHandler(verifier auth.TokenVerifier) http.Handler {
 			}
 		}
 	})
+}
+
+// The lines verifyBearer leaves for a stream it refuses.
+const (
+	msgNoBearer      = "audit stream refused: no bearer token"      // #nosec G101 -- a log message, not a credential
+	msgBearerRefused = "audit stream refused: bearer token refused" // #nosec G101 -- a log message, not a credential
+	msgNoTenant      = "audit stream refused: the token carries no tenant"
+)
+
+// fieldSubject is the log key of the verified subject a stream was refused.
+const fieldSubject = "subject"
+
+// The texts a refused stream is answered with.
+const (
+	textNoBearer      = "missing bearer token" // #nosec G101 -- a refusal's message, not a credential
+	textBearerRefused = "invalid token"
+)
+
+// verifyBearer is the principal of the request's bearer token, answering
+// the request itself when there is none to give: 401 for no token or one
+// refused, and 503 for a key set that would not load, which says nothing of
+// the token.
+func (h *Hub) verifyBearer(w http.ResponseWriter, r *http.Request, verifier auth.TokenVerifier) (*auth.Principal, bool) {
+	token, ok := bearerToken(r)
+	if !ok {
+		h.log.Warn(msgNoBearer)
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, textNoBearer, http.StatusUnauthorized)
+		return nil, false
+	}
+	p, err := verifier.Verify(r.Context(), token)
+	if err == nil {
+		return p, true
+	}
+	if !auth.AnswerKeySetUnavailable(w, h.log, err) {
+		h.log.Warn(msgBearerRefused, zap.Error(err))
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, textBearerRefused, http.StatusUnauthorized)
+	}
+	return nil, false
 }
 
 func bearerToken(r *http.Request) (string, bool) {

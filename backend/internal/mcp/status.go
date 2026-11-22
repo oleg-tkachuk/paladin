@@ -64,8 +64,7 @@ func StatusHandler(
 		probe = probeHealth
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if code := authorizePlatformAdmin(r, verifier); code != 0 {
-			http.Error(w, http.StatusText(code), code)
+		if !authorizePlatformAdmin(w, r, verifier) {
 			return
 		}
 

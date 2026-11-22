@@ -128,13 +128,8 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 			return
 		}
 		if !isAPIToken {
-			p, err := verifier.Verify(r.Context(), tok)
-			if err != nil {
-				// The agent is told only that the token was refused; why —
-				// expired, another audience, a key set that would not load —
-				// is here. The token itself is never logged.
-				logger.FromContext(r.Context()).Info(tokenRefusedMessage, zap.Error(err))
-				writeChallenge(w, resourceMetadataURL, "invalid_token", "the access token is missing, expired, or invalid")
+			p, ok := verifyBearer(w, r, verifier, tok, resourceMetadataURL)
+			if !ok {
 				return
 			}
 			info = &mcpauth.TokenInfo{
@@ -145,6 +140,26 @@ func RequireBearer(next http.Handler, verifier auth.TokenVerifier, resourceMetad
 		}
 		bound.ServeHTTP(w, withTokenInfo(r, tok, info))
 	})
+}
+
+// verifyBearer verifies tok for RequireBearer, answering the request itself
+// when it cannot be let through: 503 for a key set that would not load —
+// the token may be good, and the agent retries — and 401 with an
+// invalid_token challenge for a token refused. The agent is told only that
+// the token was refused; why — expired, another audience — is logged. The
+// token itself is never logged.
+func verifyBearer(w http.ResponseWriter, r *http.Request, verifier auth.TokenVerifier, tok, resourceMetadataURL string) (*auth.Principal, bool) {
+	p, err := verifier.Verify(r.Context(), tok)
+	if err == nil {
+		return p, true
+	}
+	l := logger.FromContext(r.Context())
+	if auth.AnswerKeySetUnavailable(w, l, err) {
+		return nil, false
+	}
+	l.Warn(tokenRefusedMessage, zap.Error(err))
+	writeChallenge(w, resourceMetadataURL, "invalid_token", "the access token is missing, expired, or invalid")
+	return nil, false
 }
 
 // tokenRefusedMessage is the log line of a bearer token the edge refused.

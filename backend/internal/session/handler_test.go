@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
 	pbiam "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
@@ -401,11 +403,30 @@ func TestRotateLosingTheRaceKeepsTheSession(t *testing.T) {
 // A token whose age cannot be read — the JWKS not fetched while iam
 // restarts — is not a verdict on the session: it stays signed in, and IAM
 // judges the token on its next call.
+//
+// Keys that would not load are the role's dependency failing, logged at
+// Error; a token that does not verify is logged at Warn.
 func TestRotateKeepsTheSessionWhenItCannotReadTheAge(t *testing.T) {
-	r := newRig(t, fakeVerifier{err: errors.New("jwks: not fetched yet")})
-	rec := r.call(http.MethodPost, PathRefresh, testRefresh, "")
-	if rec.Code != http.StatusNoContent || sessionCookie(rec) != nil {
-		t.Fatalf("unreadable age = %d, cookie %v; want 204 and the cookie untouched", rec.Code, sessionCookie(rec))
+	for name, tc := range map[string]struct {
+		err   error
+		msg   string
+		level zapcore.Level
+	}{
+		"keys unavailable": {fmt.Errorf("%w: jwks: refresh on miss", ErrRefreshKeysUnavailable), msgAgeKeysUnavailable, zapcore.ErrorLevel},
+		"token refused":    {errors.New("bearer token expired"), msgAgeUnreadable, zapcore.WarnLevel},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newRig(t, fakeVerifier{err: tc.err})
+			core, logs := observer.New(zap.DebugLevel)
+			r.h.log = zap.New(core)
+			rec := r.call(http.MethodPost, PathRefresh, testRefresh, "")
+			if rec.Code != http.StatusNoContent || sessionCookie(rec) != nil {
+				t.Fatalf("unreadable age = %d, cookie %v; want 204 and the cookie untouched", rec.Code, sessionCookie(rec))
+			}
+			if got := logs.FilterMessage(tc.msg).All(); len(got) != 1 || got[0].Level != tc.level {
+				t.Fatalf("logged %v, want one %q at %s", logs.All(), tc.msg, tc.level)
+			}
+		})
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	apitoken "github.com/oleg-tkachuk/paladin/backend/internal/auth/api_token"
 )
 
 type fakeVerifier struct {
@@ -47,6 +49,34 @@ func upstream(t *testing.T, mintID string) http.Handler {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+}
+
+// Behind the edge, as the bridge wires it, a session is labelled with the
+// subject the edge verified, and a credential the edge cannot open — an API
+// token — leaves the label blank: nothing is verified a second time.
+func TestTrackSessions_LabelsWithTheEdgesSubject(t *testing.T) {
+	for name, tc := range map[string]struct {
+		token string
+		want  string
+	}{
+		"verified jwt": {"eyJhbGciOiJIUzI1NiJ9.e30.sig", "agent-a"},
+		"api token":    {apitoken.TokenPrefix + "secret", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			reg := newTestRegistry(&fakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)})
+			v := fakeVerifier{principal: &auth.Principal{Subject: "agent-a"}}
+			h := RequireBearer(TrackSessions(upstream(t, "sess-1"), reg, SessionSubject), v, "")
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp",
+				strings.NewReader(`{"jsonrpc":"2.0","method":"initialize","id":1}`))
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+			h.ServeHTTP(httptest.NewRecorder(), req)
+
+			snap := reg.Snapshot()
+			if len(snap) != 1 || snap[0].AgentSubject != tc.want {
+				t.Fatalf("snapshot = %+v, want one session labelled %q", snap, tc.want)
+			}
+		})
+	}
 }
 
 func TestTrackSessions_MintAndContinue(t *testing.T) {
@@ -164,6 +194,10 @@ func TestSessionsHandler(t *testing.T) {
 	}
 	if c := call(bad, "Bearer x").Code; c != http.StatusUnauthorized {
 		t.Errorf("bad token = %d, want 401", c)
+	}
+	keysDown := fakeVerifier{err: fmt.Errorf("%w: refresh on miss", auth.ErrKeySetUnavailable)}
+	if c := call(keysDown, "Bearer x").Code; c != http.StatusServiceUnavailable {
+		t.Errorf("key set down = %d, want 503", c)
 	}
 	if c := call(nonAdmin, "Bearer ok").Code; c != http.StatusForbidden {
 		t.Errorf("non-admin = %d, want 403", c)

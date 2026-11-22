@@ -4,12 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // probeStub answers per URL so a test can make one plane unreachable.
@@ -73,27 +79,42 @@ func TestStatusHandler_RequiresPlatformAdmin(t *testing.T) {
 	targets := []UpstreamTarget{{Name: "admin", URL: "https://admin.invalid"}}
 	probe := probeStub(nil)
 
+	keysDown := fmt.Errorf("%w: refresh on miss: dial tcp: connection refused", auth.ErrKeySetUnavailable)
 	for name, tc := range map[string]struct {
 		verifier auth.TokenVerifier
 		header   string
 		want     int
+		// level is the line the gate leaves; zero (Info) for one let through,
+		// which the gate leaves none for.
+		level zapcore.Level
 	}{
-		"no bearer":      {fakeVerifier{principal: &auth.Principal{Roles: []string{apiutil.RolePlatformAdmin}}}, "", http.StatusUnauthorized},
-		"nil verifier":   {nil, "Bearer x", http.StatusUnauthorized},
-		"bad token":      {fakeVerifier{err: errors.New("nope")}, "Bearer x", http.StatusUnauthorized},
-		"missing role":   {fakeVerifier{principal: &auth.Principal{Roles: []string{"tenant.admin"}}}, "Bearer x", http.StatusForbidden},
-		"platform.admin": {fakeVerifier{principal: &auth.Principal{Roles: []string{apiutil.RolePlatformAdmin}}}, "Bearer x", http.StatusOK},
+		"no bearer":      {fakeVerifier{principal: &auth.Principal{Roles: []string{apiutil.RolePlatformAdmin}}}, "", http.StatusUnauthorized, zapcore.WarnLevel},
+		"nil verifier":   {nil, "Bearer x", http.StatusUnauthorized, zapcore.WarnLevel},
+		"bad token":      {fakeVerifier{err: errors.New("nope")}, "Bearer x", http.StatusUnauthorized, zapcore.WarnLevel},
+		"key set down":   {fakeVerifier{err: keysDown}, "Bearer x", http.StatusServiceUnavailable, zapcore.ErrorLevel},
+		"missing role":   {fakeVerifier{principal: &auth.Principal{Roles: []string{"tenant.admin"}}}, "Bearer x", http.StatusForbidden, zapcore.WarnLevel},
+		"platform.admin": {fakeVerifier{principal: &auth.Principal{Roles: []string{apiutil.RolePlatformAdmin}}}, "Bearer x", http.StatusOK, zapcore.InfoLevel},
 	} {
 		t.Run(name, func(t *testing.T) {
+			core, logs := observer.New(zapcore.DebugLevel)
 			h := StatusHandler(NewSessionRegistry(), tc.verifier, targets, probe)
 			rec := httptest.NewRecorder()
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/status", nil)
+			req := httptest.NewRequestWithContext(logger.WithContext(t.Context(), zap.New(core)), http.MethodGet, "/status", nil)
 			if tc.header != "" {
 				req.Header.Set("Authorization", tc.header)
 			}
 			h.ServeHTTP(rec, req)
 			if rec.Code != tc.want {
 				t.Errorf("status = %d, want %d", rec.Code, tc.want)
+			}
+			if tc.want == http.StatusOK {
+				if logs.Len() != 0 {
+					t.Errorf("logged %v for a request let through", logs.All())
+				}
+				return
+			}
+			if got := logs.All(); len(got) != 1 || got[0].Level != tc.level {
+				t.Errorf("logged %v, want one line at %s", got, tc.level)
 			}
 		})
 	}

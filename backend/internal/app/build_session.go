@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -85,11 +86,16 @@ func sessionTransport(up config.MCPUpstreams) (http.RoundTripper, error) {
 	return tr, nil
 }
 
-// refreshAges reads a refresh token's verified iat for the session role.
+// refreshAges reads a refresh token's verified iat for the session role. A
+// key set that would not load is told apart as session.ErrRefreshKeysUnavailable,
+// which the role, holding no internal/auth, cannot classify itself.
 type refreshAges struct{ v auth.TokenVerifier }
 
 func (r refreshAges) IssuedAt(ctx context.Context, token string) (time.Time, error) {
 	p, err := r.v.Verify(ctx, token)
+	if errors.Is(err, auth.ErrKeySetUnavailable) {
+		return time.Time{}, fmt.Errorf("%w: %w", session.ErrRefreshKeysUnavailable, err)
+	}
 	if err != nil {
 		return time.Time{}, err
 	}
