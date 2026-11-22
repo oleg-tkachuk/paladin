@@ -623,17 +623,6 @@ the same commit. Treat this file like a runtime invariant.
   cause, a refused token stays 401; a test per edge covers both.
 - **Blockers:** none.
 
-### The `TokenResponse.audience` comment quotes `jwt: audience mismatch`
-
-- **Status:** Deferred.
-- **Reason:** `proto/paladin/iam/v1/types.proto` explains the field by the
-  refusal it replaced, quoted in the old words; the refusal now reads
-  `bearer token audience mismatch`. A proto comment change needs its own
-  `docs(proto)` commit with regenerated stubs.
-- **Definition of Done:** the comment quotes the current text, stubs
-  regenerated, in a commit of its own.
-- **Blockers:** none.
-
 ### The bridge's upstream probe errors reach the admin verbatim
 
 - **Status:** Deferred.
