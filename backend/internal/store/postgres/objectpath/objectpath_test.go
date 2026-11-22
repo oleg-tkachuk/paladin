@@ -25,3 +25,21 @@ func TestLockKey(t *testing.T) {
 		}
 	}
 }
+
+// A debt whose key the composer refuses names no bytes of its own: Check
+// settles it without a query, so a purge never retries what cannot succeed.
+func TestCheckSettlesAnUnaddressablePath(t *testing.T) {
+	tenant := uuid.MustParse("0192f6a4-0000-7000-8000-000000000001")
+	for _, tc := range [][2]string{
+		{"docs", "a//b"},
+		{"docs", "a/./b"},
+		{"docs", "/a"},
+		{"docs", ".."},
+		{"docs", ""},
+	} {
+		got, err := Check(t.Context(), nil, tenant, tc[0], tc[1])
+		if err != nil || got != Unaddressable {
+			t.Errorf("Check(%q, %q) = %v, %v, want Unaddressable", tc[0], tc[1], got, err)
+		}
+	}
+}

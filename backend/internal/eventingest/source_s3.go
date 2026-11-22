@@ -194,7 +194,7 @@ func s3EventType(name string) (EventType, bool) {
 }
 
 // parseStoragePath URL-decodes the notification object key, then splits it into the
-// Paladin 3-segment layout "<tenant_uuid>/<collection>/<key...>".
+// Paladin layout "<tenant_uuid>/<collection segment>/<key...>" (splitStoragePath).
 //
 // S3 event notifications form-encode the key: space → '+', '/' → '%2F', other
 // bytes → '%XX' (AWS docs: "red flower.jpg" → "red+flower.jpg"). MinIO uses
@@ -206,17 +206,14 @@ func parseStoragePath(key string) (SubjectFields, bool) {
 	if err != nil {
 		decoded = key
 	}
-	parts := strings.SplitN(decoded, "/", 3)
-	if len(parts) < 3 {
-		return SubjectFields{}, false
-	}
-	if parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	tenant, collection, objectKey, ok := splitStoragePath(decoded)
+	if !ok {
 		return SubjectFields{}, false
 	}
 	return SubjectFields{
-		TenantID:   parts[0],
-		Collection: parts[1],
-		Key:        parts[2],
+		TenantID:   tenant,
+		Collection: collection,
+		Key:        objectKey,
 	}, true
 }
 

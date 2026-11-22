@@ -1412,7 +1412,7 @@ func (h *Handler) attachListPlacement(ctx context.Context, principal *auth.Princ
 		return
 	}
 	for i := range objs {
-		objs[i].Placement = placementFor(tenantID, backendID, bucket, &objs[i])
+		objs[i].Placement = placementFor(ctx, tenantID, backendID, bucket, &objs[i])
 	}
 }
 

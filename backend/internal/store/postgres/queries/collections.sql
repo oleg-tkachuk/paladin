@@ -20,32 +20,6 @@ JOIN buckets b           ON b.id = collections.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE collections.tenant_id = $1 AND collections.name = $2;
 
--- name: ResolveCollectionPrefix :one
--- Longest registered collection name that is a prefix of the candidate (the
--- recombined "<collection>/<path>" tail of an ingest event) for the tenant. Multi-segment
--- collections (the schema baseline (001_initial_schema.sql)) make the naive "the OK is the first path
--- segment" split ambiguous — e.g. tail `invoices/2026/q1/report.pdf` could be
--- collection `invoices` + path `2026/q1/report.pdf`, OR collection
--- `invoices/2026/q1` + path `report.pdf`. Longest-prefix is deterministic (the
--- more specific one wins). name is constrained to `[a-z0-9-]` path segments
--- (the schema baseline (001_initial_schema.sql)) — no LIKE metacharacters — so `|| '/%'` is safe.
-SELECT name
-FROM collections
-WHERE tenant_id = $1
-  AND (sqlc.arg('candidate')::text = name
-       OR sqlc.arg('candidate')::text LIKE name || '/%')
-ORDER BY length(name) DESC
-LIMIT 1;
-
--- name: ListCollectionNamesForTenant :many
--- Every registered collection name for the tenant. Backs the in-process
--- longest-prefix cache (eventingest.CachingLookup) so ResolveCollectionPrefix is
--- not a per-event query on the ingest hot path. collections is small per tenant
--- (bounded by the tenant's namespace layout), so the unbounded read is cheap.
-SELECT name
-FROM collections
-WHERE tenant_id = $1;
-
 -- name: UpdateCollection :execrows
 -- expected_version=0 disables the OCC guard (force update).
 UPDATE collections

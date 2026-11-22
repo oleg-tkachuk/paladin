@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventingest/filerpb"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 )
 
 // fuzzBucket is the bucket every fuzzed source is configured for.
@@ -27,9 +28,11 @@ const subjectSep = "/"
 var fuzzNow = time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
 
 // segmented is how a source splits its storage path: whether the tenant and
-// the collection it reports are each one segment, and whether the tenant must
-// already be a UUID. The cloud-events subject anchors on its separators, so
-// its collection may hold '/'; the PromoteHandler resolves that one by prefix.
+// the collection it reports each come from one segment, and whether the
+// tenant must already be a UUID. A collection from one segment is a valid
+// collection name, decoded from its segment (storagepath.ParseCollectionSegment),
+// so it may hold '/' only as a nested collection does. The cloud-events
+// subject anchors on its separators, so its collection is taken as written.
 type segmented struct {
 	oneSegment, uuidTenant bool
 }
@@ -60,7 +63,9 @@ func checkParsed(t *testing.T, raw []byte, evs []CloudEvent, err error, shape se
 		if ev.ID == "" || s.TenantID == "" || s.Collection == "" || s.Key == "" {
 			t.Fatalf("Parse(%q) event %d is incomplete: id %q, subject %+v", raw, i, ev.ID, s)
 		}
-		if shape.oneSegment && (strings.Contains(s.TenantID, subjectSep) || strings.Contains(s.Collection, subjectSep)) {
+		if shape.oneSegment && (strings.Contains(s.TenantID, subjectSep) ||
+			storagepath.ValidateCollection(s.Collection) != nil ||
+			strings.Contains(storagepath.CollectionSegment(s.Collection), subjectSep)) {
 			t.Fatalf("Parse(%q) event %d splits its path at the wrong place: %+v", raw, i, s)
 		}
 		if _, perr := uuid.Parse(s.TenantID); shape.uuidTenant && perr != nil {

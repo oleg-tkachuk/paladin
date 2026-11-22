@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -59,6 +60,11 @@ const (
 	// Defer: an upload may be writing the path, or another transaction holds
 	// its lock. Leave the debt for a later attempt.
 	Defer
+	// Unaddressable: the key predates the key contract and composes to no
+	// path of its own (storagepath.Compose refuses it). The bytes it was
+	// written at may be a canonical object's, so the debt is settled without
+	// a delete; retrying could never succeed.
+	Unaddressable
 )
 
 // Check decides a purge of the bytes at a path. It must run on the
@@ -66,6 +72,9 @@ const (
 // until that transaction ends. It never waits, so a purge cannot stall behind
 // an upload or deadlock with another purge.
 func Check(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, collection, path string) (Verdict, error) {
+	if _, err := storagepath.Compose(tenantID, collection, path); err != nil {
+		return Unaddressable, nil
+	}
 	locked, err := q.TryLockObjectPath(ctx, lockKey(tenantID, collection, path))
 	if err != nil {
 		return Defer, err

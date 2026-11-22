@@ -796,7 +796,9 @@ func (r *ObjectRepo) PurgeBytesTx(ctx context.Context, tx pgx.Tx, tenantID uuid.
 			return false, err
 		}
 		return true, nil
-	case objectpath.Superseded:
+	case objectpath.Superseded, objectpath.Unaddressable:
+		// Unaddressable: a key from before the key contract; its debt
+		// settles without a delete.
 		return true, nil
 	default:
 		return false, nil

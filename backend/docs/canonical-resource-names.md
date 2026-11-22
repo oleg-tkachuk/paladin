@@ -15,8 +15,8 @@ in [ADR-0014](../../docs/adr/0014-canonical-resource-names.md).
 `{ok}` may contain `/`. `{tid}` is the tenant UUID.
 
 The physical object key does not depend on the shape a request used: inside the
-bucket it is `<tenant_id>/<collection>/<key>`
-(`internal/storage/s3adapter/s3.go`). Presigned URLs sign that physical
+bucket it is `<tenant_id>/<collection segment>/<key>`, the collection's `/`
+written `.` so it occupies one segment (`internal/storage/storagepath`). Presigned URLs sign that physical
 `(bucket, key)`, so they work for every shape.
 
 ## Resolution

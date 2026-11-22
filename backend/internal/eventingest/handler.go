@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 	"uuid"
 
@@ -14,6 +13,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
@@ -27,15 +27,6 @@ type ObjectLookup interface {
 		tenantID pgtype.UUID,
 		collection, key string,
 	) (sqlc.LookupObjectByKeyRow, error)
-	// ResolveCollectionPrefix returns the longest registered collection that
-	// prefixes `tail` (the recombined "<collection>/<key>" path) for the
-	// tenant — disambiguates multi-segment collections. pgx.ErrNoRows when no
-	// collection is a prefix.
-	ResolveCollectionPrefix(
-		ctx context.Context,
-		tenantID pgtype.UUID,
-		tail string,
-	) (string, error)
 	// GetCollection resolves a collection row (for its backend_id +
 	// bucket_name binding) so the emitted event carries the canonical
 	// resource name (ADR-0014 Phase 1).
@@ -142,25 +133,18 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 
 	tenantPg := pgtype.UUID{Bytes: tenantUUID, Valid: true}
 
-	// Disambiguate multi-segment collections. The source adapters split the
-	// "<collection>/<key>" tail at the first path segment, which is wrong when
-	// the collection itself is multi-segment (the schema baseline (001_initial_schema.sql)). Recombine the
-	// tail and re-derive the real collection by longest-prefix-match so a nested one
-	// (`invoices/2026/q1`) wins over a shorter sibling (`invoices`).
+	// The collection occupies one segment of the bucket path, so the source
+	// adapters' split is exact (storagepath.Compose). A key outside the key
+	// contract was written by something other than Paladin: no object can
+	// own it.
 	collection, key := ev.SubjectFields.Collection, ev.SubjectFields.Key
-	fullTail := collection + "/" + key
-	realOK, perr := h.Lookup.ResolveCollectionPrefix(ctx, tenantPg, fullTail)
-	switch {
-	case perr == nil && realOK != "" && realOK != fullTail:
-		collection = realOK
-		key = strings.TrimPrefix(fullTail, realOK+"/")
-	case perr == nil, errors.Is(perr, pgx.ErrNoRows):
-		// No registered OK prefixes the tail (or it equals the whole tail with
-		// an empty key) → keep the source's split; the lookup below skips it
-		// as an unknown object.
-	default:
-		// Genuine DB error → return so the worker retries the event.
-		return fmt.Errorf("resolve collection prefix: %w", perr)
+	if err := storagepath.ValidateKey(key); err != nil {
+		logger.Warn("event names a key outside the object key contract; skipping",
+			zap.String("tenant_id", ev.SubjectFields.TenantID),
+			zap.String("collection", collection),
+			zap.Error(err),
+		)
+		return nil
 	}
 
 	if skip, err := h.fromAnotherBucket(ctx, logger, tenantPg, collection, ev.SubjectFields.Bucket); skip || err != nil {
@@ -331,10 +315,10 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 	if h.Events == nil {
 		return nil
 	}
-	// collection/key are the RESOLVED values (post longest-prefix-match), not
-	// the source's naive split; resourceName is those same values canonicalized
-	// to A-shape by the caller — so the emitted event references the real OK in
-	// the same form the data-plane handler uses.
+	// collection/key are the decoded collection and the key of the bucket
+	// path; resourceName is those same values canonicalized to A-shape by the
+	// caller — so the emitted event references the real collection in the
+	// same form the data-plane handler uses.
 	err := h.Events.RecordTx(ctx, tx, ev.SubjectFields.TenantID, worker.Event{
 		Type:         string(EventTypeUploaded),
 		At:           time.Now().UTC(),

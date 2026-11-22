@@ -71,30 +71,8 @@ func TestHandle_InvalidTenantIsSkippedNotRetried(t *testing.T) {
 	}
 }
 
-// The other side of the line. A database error while resolving the prefix is
-// transient — the collection exists, we could not read it — so Handle must
-// return the error and let the broker redeliver. Swallowing it drops a real
-// upload: the object stays PENDING and only the reconciler will notice, hours
-// later.
-func TestHandle_PrefixResolveDBErrorIsRetried(t *testing.T) {
-	boom := errors.New("connection reset")
-	f := &fakeLookup{resolveErr: boom}
-	h := &PromoteHandler{Lookup: f, Logger: zap.NewNop()}
-
-	err := h.Handle(context.Background(), uploadedEvent(uuid.New(), "docs", "a.txt"))
-	if err == nil {
-		t.Fatal("Handle returned nil on a database error — the event is acked and lost")
-	}
-	if !errors.Is(err, boom) {
-		t.Errorf("err = %v, want it to wrap the database error", err)
-	}
-	if f.lookupCalled {
-		t.Error("continued to the object lookup after failing to resolve the prefix")
-	}
-}
-
-// lookupErrOnly returns a chosen error from LookupObjectByKey and resolves the
-// prefix cleanly, isolating the second skip-vs-retry decision.
+// lookupErrOnly returns a chosen error from LookupObjectByKey, isolating the
+// skip-vs-retry decision.
 type lookupErrOnly struct {
 	fakeLookup
 	err error
@@ -114,7 +92,6 @@ func TestHandle_ObjectLookupSkipsMissesButRetriesFailures(t *testing.T) {
 		// data-plane PUT's commit. Redelivery would find the same nothing,
 		// and the reconciler covers the orphan.
 		l := &lookupErrOnly{err: pgx.ErrNoRows}
-		l.resolveErr = pgx.ErrNoRows
 		h := &PromoteHandler{Lookup: l, Logger: zap.NewNop()}
 		if err := h.Handle(context.Background(), uploadedEvent(uuid.New(), "docs", "a.txt")); err != nil {
 			t.Fatalf("Handle = %v, want nil for a missing object", err)
@@ -123,7 +100,6 @@ func TestHandle_ObjectLookupSkipsMissesButRetriesFailures(t *testing.T) {
 
 	t.Run("a database failure is retried", func(t *testing.T) {
 		l := &lookupErrOnly{err: boom}
-		l.resolveErr = pgx.ErrNoRows
 		h := &PromoteHandler{Lookup: l, Logger: zap.NewNop()}
 		err := h.Handle(context.Background(), uploadedEvent(uuid.New(), "docs", "a.txt"))
 		if err == nil {
@@ -216,7 +192,6 @@ func (r *tenantRecorder) GetCollection(_ context.Context, t pgtype.UUID, _ strin
 func TestHandle_PassesAValidTenantDown(t *testing.T) {
 	tenant := uuid.New()
 	r := &tenantRecorder{}
-	r.resolveErr = pgx.ErrNoRows
 	h := &PromoteHandler{Lookup: r, Logger: zap.NewNop()}
 
 	if err := h.Handle(context.Background(), uploadedEvent(tenant, "docs", "a.txt")); err != nil {
@@ -245,28 +220,10 @@ func TestObjectResourceName_PassesAValidTenantDown(t *testing.T) {
 	}
 }
 
-// The first switch arm needs all three conditions. Relaxed to a disjunction,
-// a clean resolve that matched no prefix — ("", nil), which is what the query
-// returns for a tenant with no collection covering the tail — takes the
-// rewrite branch instead of the keep-the-split one, and the collection is
-// blanked to "" while the key keeps a leading segment. The lookup then misses
-// for a reason that looks identical to an unknown object.
-func TestHandle_EmptyPrefixWithNoErrorKeepsSourceSplit(t *testing.T) {
-	f := &fakeLookup{resolveReturn: "", resolveErr: nil}
-	h := &PromoteHandler{Lookup: f, Logger: zap.NewNop()}
-
-	if err := h.Handle(context.Background(), uploadedEvent(uuid.New(), "docs", "a.txt")); err != nil {
-		t.Fatalf("Handle: %v", err)
-	}
-	if f.gotCollection != "docs" || f.gotKey != "a.txt" {
-		t.Errorf("split = (%q, %q), want the source's (docs, a.txt)", f.gotCollection, f.gotKey)
-	}
-}
-
 // A handler wired without a logger is the shape every other component in this
 // package tolerates, and Handle reaches for one on its first line.
 func TestHandle_NilLoggerIsSafe(t *testing.T) {
-	f := &fakeLookup{resolveErr: pgx.ErrNoRows}
+	f := &fakeLookup{}
 	h := &PromoteHandler{Lookup: f} // no Logger
 	if err := h.Handle(context.Background(), uploadedEvent(uuid.New(), "docs", "a.txt")); err != nil {
 		t.Fatalf("Handle with a nil logger: %v", err)

@@ -132,10 +132,7 @@ func runIngest(
 	ingestEvents := worker.NewEventRecorder(l.Named("ingest-events"))
 
 	handler := &eventingest.PromoteHandler{
-		// Wrap the queries in the per-tenant longest-prefix cache so
-		// ResolveCollectionPrefix isn't a SQL round-trip on every storage
-		// event (bounded-staleness — see eventingest.CachingLookup).
-		Lookup:       eventingest.NewCachingLookup(ingestQueries, eventingest.DefaultPrefixCacheTTL, l.Named("ingest.prefix-cache")),
+		Lookup:       ingestQueries,
 		Transitioner: ingestSM,
 		Events:       ingestEvents,
 		Logger:       l.Named("ingest.handler"),
