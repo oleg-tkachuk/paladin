@@ -1,6 +1,11 @@
 version: "2"
 run:
   timeout: 5m
+  # Wait for the lock instead of failing: hooks and parallel worktrees start
+  # golangci-lint at the same time, and a run that finds another one going
+  # must queue rather than fail the hook with "parallel golangci-lint is
+  # running".
+  allow-serial-runners: true
   # The suites behind these tags need Docker or a live stack to RUN, but not to
   # lint. Left out, 31 findings sat in them unseen — two unused symbols among
   # them, and a dozen helpers whose failures pointed at the wrong line.
