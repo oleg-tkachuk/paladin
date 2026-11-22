@@ -18,8 +18,11 @@ import (
 type taintRepoStub struct {
 	stored   []string
 	setCalls int
-	at       map[string][]string // "collection/key" → signals
+	at       map[objectAt][]string
 }
+
+// objectAt is an object by its collection and key, kept apart.
+type objectAt struct{ collection, key string }
 
 func (s *taintRepoStub) SetTaint(_ context.Context, _, _ uuid.UUID, signals []string) ([]string, error) {
 	s.setCalls++
@@ -28,13 +31,13 @@ func (s *taintRepoStub) SetTaint(_ context.Context, _, _ uuid.UUID, signals []st
 }
 
 func (s *taintRepoStub) TaintAtPath(_ context.Context, _ uuid.UUID, collection, key string) ([]string, error) {
-	return s.at[collection+"/"+key], nil
+	return s.at[objectAt{collection, key}], nil
 }
 
 func newTaintHandler(policy cedar.Authorizer) (*TaintHandler, *taintRepoStub, uuid.UUID) {
 	tenantID := uuid.New()
 	objects := &lockObjectStub{obj: Object{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "a.pdf"}}
-	repo := &taintRepoStub{at: map[string][]string{"docs/a.pdf": {TaintPII}}}
+	repo := &taintRepoStub{at: map[objectAt][]string{{"docs", "a.pdf"}: {TaintPII}}}
 	return NewTaintHandler(objects, repo, policy), repo, tenantID
 }
 
@@ -98,6 +101,43 @@ func TestTaintedLooksUpTheObjectTheURINames(t *testing.T) {
 		got, err := h.Tainted(ctx, uri)
 		if err != nil || got != want {
 			t.Errorf("Tainted(%q) = %v, %v; want %v", uri, got, err, want)
+		}
+	}
+}
+
+// The read gate finds a nested collection's object through the URI it is
+// named by, and tells it from the parent's object at the same path text: a
+// lookup that missed it would read as "not tainted".
+func TestTaintedTellsANestedCollectionFromItsParent(t *testing.T) {
+	h, repo, tenantID := newTaintHandler(nil)
+	repo.at[objectAt{"a/b", "c"}] = []string{TaintPII}
+	ctx := context.Background()
+	for uri, want := range map[string]bool{
+		CapabilityObjectURI(tenantID, "a/b", "c"): true,
+		CapabilityObjectURI(tenantID, "a", "b/c"): false,
+	} {
+		if got, err := h.Tainted(ctx, uri); err != nil || got != want {
+			t.Errorf("Tainted(%q) = %v, %v; want %v", uri, got, err, want)
+		}
+	}
+}
+
+func TestParseCapabilityObjectURIRoundTrips(t *testing.T) {
+	tenantID := uuid.New()
+	for _, c := range [][2]string{{"docs", "a.pdf"}, {"invoices/2026/q1", "r.pdf"}, {"a", "b/c"}, {"a/b", "c"}} {
+		gotTenant, collection, key, ok := parseCapabilityObjectURI(CapabilityObjectURI(tenantID, c[0], c[1]))
+		if !ok || gotTenant != tenantID || collection != c[0] || key != c[1] {
+			t.Errorf("parse(build(%q, %q)) = %v %q %q %v", c[0], c[1], gotTenant, collection, key, ok)
+		}
+	}
+	// A segment no collection occupies names no object.
+	for _, uri := range []string{
+		"object://" + tenantID.String() + "/a..b/c",
+		"object://" + tenantID.String() + "/A/c",
+		"object://" + tenantID.String() + "/docs/",
+	} {
+		if _, _, _, ok := parseCapabilityObjectURI(uri); ok {
+			t.Errorf("parseCapabilityObjectURI(%q) parsed, want refused", uri)
 		}
 	}
 }

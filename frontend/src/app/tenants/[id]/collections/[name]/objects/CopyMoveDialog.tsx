@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { KEY_RULE, objectKeyProblem } from "@/lib/objects/objectKey";
 import { T } from "@/lib/ui/typography";
 
 export function CopyMoveDialog({
@@ -34,6 +35,13 @@ export function CopyMoveDialog({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  // The key is checked as the server checks it, so a refused one is named
+  // beside the field and never sent. No key yet is not a problem to name.
+  const problem = destKey ? objectKeyProblem(destKey) : null;
+  const canConfirm = destKey !== "" && problem === null;
+  const confirm = () => {
+    if (canConfirm) onConfirm();
+  };
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
@@ -61,19 +69,30 @@ export function CopyMoveDialog({
               autoFocus
               value={destKey}
               onChange={(e) => onDestKeyChange(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && onConfirm()}
+              onKeyDown={(e) => e.key === "Enter" && confirm()}
+              aria-invalid={problem !== null}
+              aria-describedby={problem ? "dest-key-problem" : undefined}
               className="font-mono text-xs"
             />
             <p className={T.hint}>
               Full path including filename, within the same Collection.
             </p>
+            {problem ? (
+              <p
+                id="dest-key-problem"
+                role="alert"
+                className="text-xs text-destructive"
+              >
+                The server refuses this key: {problem}. {KEY_RULE}
+              </p>
+            ) : null}
           </div>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={onConfirm}>
+          <Button onClick={confirm} disabled={!canConfirm}>
             Confirm {type === "copy" ? "copy" : "move"}
           </Button>
         </DialogFooter>

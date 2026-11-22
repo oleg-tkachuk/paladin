@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
@@ -17,8 +18,10 @@ const keyContractReport = `
   WHERE path = '' OR path LIKE '/%' OR path LIKE '%/'
      OR path LIKE '%//%' OR path ~ '(^|/)\.\.?(/|$)'`
 
-// The report finds exactly the keys storagepath.ValidateKey refuses: none it
-// accepts, and every one it does not.
+// The report finds exactly the stored keys that have no path of their own
+// (storagepath.ValidateStoredKey, what the composer refuses): none it
+// accepts, and every one it does not. A key over the boundary's length or
+// with a control character still has its path, so it is not reported.
 func TestKeyContractReportMatchesTheValidator(t *testing.T) {
 	f := setupDispatcher(t)
 	tenant := mustCreateTenant(t, f.h.PoolMigrate, "key-contract")
@@ -27,6 +30,7 @@ func TestKeyContractReportMatchesTheValidator(t *testing.T) {
 	keys := []string{
 		"a.txt", "a/b/c.txt", ".hidden", "a/..b", "...", "a/.b/c",
 		"", "/a", "a/", "a//b", ".", "..", "./a", "a/./b", "a/../b", "a/..",
+		strings.Repeat("k", storagepath.MaxSegmentBytes+1), "a\tb",
 	}
 	for _, k := range keys {
 		mustInsertObject(t, f.h.PoolMigrate, tenant, "docs", k)
@@ -49,7 +53,7 @@ func TestKeyContractReportMatchesTheValidator(t *testing.T) {
 		t.Fatalf("rows: %v", err)
 	}
 	for _, k := range keys {
-		refused := storagepath.ValidateKey(k) != nil
+		refused := storagepath.ValidateStoredKey(k) != nil
 		if found[k] != refused {
 			t.Errorf("key %q: reported %v, refused by the validator %v", k, found[k], refused)
 		}

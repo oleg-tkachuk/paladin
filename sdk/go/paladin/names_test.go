@@ -7,7 +7,10 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/oleg-tkachuk/limes"
 
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
@@ -165,5 +168,75 @@ func TestObjectResource(t *testing.T) {
 	const tenant = "7ba7b810-9dad-11d1-80b4-00c04fd430c8"
 	if got, want := paladin.ObjectResource(tenant, "docs", "reports/"), "object://"+tenant+"/docs/reports/"; got != want {
 		t.Errorf("ObjectResource = %q, want %q", got, want)
+	}
+}
+
+// objectResourcesTable is the object resource space, which the server and
+// the Python SDK are held to as well.
+const objectResourcesTable = "../../testdata/object_resources.json"
+
+// objectResources is sdk/testdata/object_resources.json.
+type objectResources struct {
+	Tenant    string `json:"tenant"`
+	Resources []struct {
+		Collection string `json:"collection"`
+		Key        string `json:"key"`
+		URI        string `json:"uri"`
+	} `json:"resources"`
+	Covers []struct {
+		Name   string    `json:"name"`
+		Grant  objectRef `json:"grant"`
+		Object objectRef `json:"object"`
+		Match  bool      `json:"match"`
+	} `json:"covers"`
+}
+
+type objectRef struct {
+	Collection string `json:"collection"`
+	Key        string `json:"key"`
+}
+
+func readObjectResources(t *testing.T) objectResources {
+	t.Helper()
+	raw, err := os.ReadFile(objectResourcesTable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var table objectResources
+	if err := json.Unmarshal(raw, &table); err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Resources) == 0 || len(table.Covers) == 0 {
+		t.Fatalf("the table has %d resources and %d covers", len(table.Resources), len(table.Covers))
+	}
+	return table
+}
+
+// Each (collection, key) has the URI the table names, so no two share one.
+func TestObjectResourceMatchesTheSharedTable(t *testing.T) {
+	table := readObjectResources(t)
+	seen := map[string]objectRef{}
+	for _, r := range table.Resources {
+		got := paladin.ObjectResource(table.Tenant, r.Collection, r.Key)
+		if want := strings.ReplaceAll(r.URI, "{tenant}", table.Tenant); got != want {
+			t.Errorf("ObjectResource(%q, %q) = %q, want %q", r.Collection, r.Key, got, want)
+		}
+		if prev, dup := seen[got]; dup {
+			t.Errorf("%q names both %v and (%q, %q)", got, prev, r.Collection, r.Key)
+		}
+		seen[got] = objectRef{r.Collection, r.Key}
+	}
+}
+
+// A grant on a collection, or on a key prefix in it, reaches that
+// collection's objects and no nested collection's, as limes matches it.
+func TestAGrantCoversOnlyItsOwnCollection(t *testing.T) {
+	table := readObjectResources(t)
+	for _, c := range table.Covers {
+		grant := paladin.ObjectResource(table.Tenant, c.Grant.Collection, c.Grant.Key)
+		object := paladin.ObjectResource(table.Tenant, c.Object.Collection, c.Object.Key)
+		if got := limes.MatchResource(grant, object); got != c.Match {
+			t.Errorf("%s: MatchResource(%q, %q) = %v, want %v", c.Name, grant, object, got, c.Match)
+		}
 	}
 }

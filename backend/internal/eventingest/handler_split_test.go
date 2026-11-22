@@ -2,6 +2,7 @@ package eventingest
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"uuid"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -53,6 +55,10 @@ func TestHandle_LooksUpTheSourceSplit(t *testing.T) {
 		{"invoices/2026/q1", "report.pdf"},
 		{"invoices", "2026/q1/report.pdf"},
 		{"assets", "logo.png"},
+		// Stored before the boundary bounded a key's length and text: the
+		// object it names still owns it.
+		{"assets", strings.Repeat("k", storagepath.MaxSegmentBytes+1)},
+		{"assets", "a\nb"},
 	} {
 		f := &fakeLookup{}
 		h := &PromoteHandler{Lookup: f, Logger: zap.NewNop()}

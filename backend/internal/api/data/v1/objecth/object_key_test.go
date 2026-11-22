@@ -2,6 +2,7 @@ package objecth
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"uuid"
@@ -32,6 +33,23 @@ func TestAdmitKeyAnswersTheRuleAndTheReason(t *testing.T) {
 	}
 	if err := AdmitKey(FieldKey, ""); err == nil {
 		t.Error("AdmitKey(\"\") = nil, want a refusal")
+	}
+}
+
+// An over-long key is refused where it enters, before a row is written, and
+// the refusal names the limit.
+func TestAdmitKeyNamesTheLengthLimit(t *testing.T) {
+	limit := strconv.Itoa(storagepath.MaxKeyBytes)
+	err := AdmitKey(FieldKey, strings.Repeat("a", storagepath.MaxKeyBytes+1))
+	var ce *connect.Error
+	if !errors.As(err, &ce) || ce.Code() != connect.CodeInvalidArgument || !strings.Contains(ce.Message(), "over the limit of "+limit) {
+		t.Fatalf("AdmitKey(over-long) = %v, want InvalidArgument naming the limit %s", err, limit)
+	}
+	if err := AdmitKeyPrefix(FieldDestinationKeyPrefix, strings.Repeat("a", storagepath.MaxKeyBytes)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("AdmitKeyPrefix(no room for a key) = %v, want InvalidArgument", err)
+	}
+	if err := AdmitKey(FieldKey, "a\nb"); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("AdmitKey(control character) = %v, want InvalidArgument", err)
 	}
 }
 

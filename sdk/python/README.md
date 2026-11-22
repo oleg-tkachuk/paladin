@@ -366,7 +366,11 @@ alike, so a name built from parts is checked too. `str(name)` prints it;
 | `BucketName` | `storageBackends/{backend}/buckets/{bucket}` — a physical bucket on the admin plane, and a bucket quota's parent |
 
 `object_resource(tenant, collection, key)` is the resource a capability grants
-on an object, or on every object under a key prefix: `object://{tenant-id}/{collection}/{key}`.
+on an object, or on every object under a key prefix:
+`object://{tenant-id}/{collection segment}/{key}`. The collection is one
+segment with its `/` written `.` (`invoices/2026` is `invoices.2026`), so a
+grant on a collection never reaches a nested one; build the resource with
+`object_resource` rather than by hand.
 `API_TOKEN_PREFIX` (`paladin_pat_`) starts every API token.
 
 `lookup_object(p.data, uri)` finds the object an `ObjectURI` (or its string)

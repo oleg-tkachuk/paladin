@@ -517,50 +517,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### An object key has no length bound
-
-- **Status:** Deferred.
-- **Reason:** the key contract (`storagepath.ValidateKey`) refuses keys that
-  would alias another object's path, but not keys too long to store: S3
-  takes at most 1024 bytes for the whole bucket path, tenant and collection
-  segment included, so an over-long key passes the upload and fails at the
-  store, after its row was written.
-- **Definition of Done:** the composed path's length is bounded where the
-  key enters, as `INVALID_ARGUMENT` with the limit in the message, on every
-  path `AdmitKey` guards; the batch copy prefix leaves room for the source
-  key or fails the item.
-- **Blockers:** none.
-
-### The console does not check an object key before sending it
-
-- **Status:** Deferred.
-- **Reason:** the server and both SDKs' fakes refuse a non-canonical key
-  (`sdk/testdata/object_keys.json`), and the console shows the server's
-  rule and reason, but the upload and copy dialogs accept any key, so a user
-  learns of the rule only from a refused request.
-- **Definition of Done:** the console's key helper reads
-  `sdk/testdata/object_keys.json` in its tests and the dialogs disable
-  submit with the rule beside the field.
-- **Blockers:** none.
-
-### A capability's object URI does not separate a nested collection from its keys
-
-- **Status:** Deferred.
-- **Reason:** a capability names an object as
-  `object://<tenant>/<collection>/<key>` (`objecth.CapabilityObjectURI`,
-  `paladin.ObjectResource`), and a collection may hold `/`, so collection
-  `a/b` with key `c` and collection `a` with key `b/c` have one URI, and a
-  resource caveat on collection `a`'s prefix also matches collection `a/b`'s
-  objects. `parseCapabilityObjectURI` assumes the collection is one segment.
-  The bucket path was made unambiguous (`storagepath`); the capability
-  resource space was not, since it is limes's and the SDKs' contract too.
-- **Definition of Done:** the URI writes the collection as one segment (the
-  storagepath encoding, or escaped as `paladin.ObjectURI` does), in the
-  backend, both SDKs and the attenuation helpers at once; a test shows a
-  caveat on collection `a` refuses an object of `a/b`.
-- **Blockers:** capabilities already issued carry the old URIs; a decision
-  on reissuing them.
-
 ### Batch executors do not re-check the bucket gate when they run
 
 - **Status:** Deferred.
@@ -885,6 +841,21 @@ the same commit. Treat this file like a runtime invariant.
   acceptable.
 
 ## UI / Admin Console
+
+### The capability dialog takes resource prefixes as free text
+
+- **Status:** Deferred.
+- **Reason:** the issue dialog's resource prefixes are typed by hand, and
+  its placeholder (`objects/contracts/2026/`) is not an object resource at
+  all. A nested collection is now one segment with its `/` written `.`
+  (`paladin.ObjectResource`), so a prefix typed with the collection's own
+  `/` names collection `a`'s keys under `b/`, not collection `a/b`. The
+  console has no helper that builds an object resource.
+- **Definition of Done:** a pure console helper builds
+  `object://{tenant}/{collection segment}/{key prefix}`, held to
+  `sdk/testdata/object_resources.json` in its tests; the dialog picks a
+  collection and a key prefix and shows the resource it will grant.
+- **Blockers:** none.
 
 ### Console UX programme (2026-10-19)
 

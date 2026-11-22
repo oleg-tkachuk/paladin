@@ -1,5 +1,7 @@
 {
-  "_comment": "Object keys and whether the server stores an object under them (backend/internal/storage/storagepath, ValidateKey). A key is segments separated by '/', none of them empty, '.' or '..': no leading or trailing '/', no '//'. The server, and both SDKs' fakes, refuse every key under refused as INVALID_ARGUMENT where an object is created; an empty key is not listed, as a caller that names none gets one from the server.",
+  "_comment": "Object keys and whether the server stores an object under them (backend/internal/storage/storagepath, ValidateKey). A key is at most max_key_bytes bytes of UTF-8 without control characters (Unicode category Cc), in segments of at most max_segment_bytes bytes separated by '/', none of them empty, '.' or '..': no leading or trailing '/', no '//'. max_key_bytes is S3's 1024-byte path less the tenant id, the longest collection segment and two separators, so the key fits in every collection; max_segment_bytes is the longest file name a filer-backed store (SeaweedFS) takes. The server, both SDKs' fakes and the console refuse every key under refused as INVALID_ARGUMENT where an object is created; an empty key is not listed, as a caller that names none gets one from the server. Each lengths case is a key of segments joined by '/', each segment unit repeated to the bytes given, counted in UTF-8. Invalid UTF-8 has no place in JSON, so each consumer tests it in its own language.",
+  "max_key_bytes": 731,
+  "max_segment_bytes": 255,
   "canonical": [
     "a.txt",
     "a/b/c.txt",
@@ -8,7 +10,8 @@
     "...",
     "a/.b/c",
     "report 2026.pdf",
-    "0190a3b2-7c4d-7e8f-9a0b-1c2d3e4f5a6b"
+    "0190a3b2-7c4d-7e8f-9a0b-1c2d3e4f5a6b",
+    "résumé/отчёт.pdf"
   ],
   "refused": [
     "/",
@@ -21,6 +24,25 @@
     "a/./b",
     "a/../b",
     "a/..",
-    "../a"
+    "../a",
+    "a\u0000b",
+    "a\nb",
+    "a\tb",
+    "a\u001fb",
+    "a\u007fb",
+    "a\u0085b",
+    "a\u009fb"
+  ],
+  "lengths": [
+    {"unit": "a", "segments": [243, 243, 243], "canonical": true},
+    {"unit": "a", "segments": [243, 243, 244], "canonical": false},
+    {"unit": "a", "segments": [255], "canonical": true},
+    {"unit": "a", "segments": [256], "canonical": false},
+    {"unit": "é", "segments": [254], "canonical": true},
+    {"unit": "é", "segments": [256], "canonical": false},
+    {"unit": "é", "segments": [242, 242, 242], "canonical": true},
+    {"unit": "é", "segments": [244, 244, 242], "canonical": false},
+    {"unit": "😀", "segments": [252, 252, 220], "canonical": true},
+    {"unit": "😀", "segments": [256], "canonical": false}
   ]
 }

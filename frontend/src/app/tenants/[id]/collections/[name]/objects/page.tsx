@@ -59,6 +59,7 @@ import { FolderTrail } from "./FolderTrail";
 import { LiveToggle } from "@/components/ui/LiveToggle";
 import { liveState } from "@/lib/live";
 import { FOLDER_DELIMITER } from "@/lib/objectFolders";
+import { objectKeyProblem } from "@/lib/objects/objectKey";
 import { ConfirmModal, type Affected } from "@/components/ui/ConfirmModal";
 import { ObjectsTable } from "./ObjectsTable";
 import { Button } from "@/components/ui/button";
@@ -573,7 +574,7 @@ function CollectionObjectsContent() {
   });
 
   const handleCopyMove = async () => {
-    if (!copyMove.obj || !copyMove.destKey) return;
+    if (!copyMove.obj || objectKeyProblem(copyMove.destKey)) return;
     const source = objects.find(
       (o) =>
         o.key === copyMove.obj?.key && o.collection === copyMove.obj.collection,

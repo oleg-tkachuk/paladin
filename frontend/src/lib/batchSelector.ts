@@ -4,6 +4,7 @@ import { getOption } from "@bufbuild/protobuf";
 
 import { field as validateField } from "@/gen/buf/validate/validate_pb";
 import { ObjectSelectorSchema } from "@/gen/paladin/data/v1/batch_service_pb";
+import { keyPrefixProblem } from "@/lib/objects/objectKey";
 
 /**
  * The most names one ObjectSelector takes, read from the contract: past it
@@ -64,6 +65,10 @@ export function copyTargetProblem(
   if (!destination) return "Choose the collection to copy into.";
   if (destination === source && !prefix) {
     return "Into the same collection, a prefix is needed: each copy would otherwise be its own source.";
+  }
+  const keyProblem = keyPrefixProblem(prefix);
+  if (keyProblem) {
+    return `The server refuses this key prefix: ${keyProblem}. Each copy's key is the prefix, then its own key.`;
   }
   return null;
 }

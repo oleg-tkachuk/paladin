@@ -209,7 +209,10 @@ func (*copyFakeRepo) TallyObjects(context.Context, objecth.TallyObjectsArgs) (ob
 // written: CreateObject would panic on the nil repository.
 func TestCopyOneRefusesANonCanonicalDestinationKey(t *testing.T) {
 	e := &BatchCopyExecutor{}
-	for _, key := range []string{"backup//k", "backup/../k", "k/"} {
+	// A prefix the submit admitted, joined to a source key, can still run past
+	// the key length limit; that item fails, not the store's write.
+	overLong := "backup/" + strings.Repeat("k", storagepath.MaxKeyBytes)
+	for _, key := range []string{"backup//k", "backup/../k", "k/", overLong} {
 		err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc(), dstKey: key})
 		if !errors.Is(err, storagepath.ErrNotCanonical) {
 			t.Errorf("dstKey %q: err = %v, want a key refusal", key, err)

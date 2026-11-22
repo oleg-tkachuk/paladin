@@ -789,6 +789,39 @@ describe("CollectionObjectsPage bulk restore and copy", () => {
       ),
     );
   });
+
+  it("names a key prefix the server refuses and does not send it", async () => {
+    h.bulkCopy.mockClear();
+    h.objects = [{ ...makeObj("a.txt"), state: ObjectState.AVAILABLE }];
+    render(<CollectionObjectsPage />);
+    await select();
+    await userEvent.click(screen.getByText("bulk copy"));
+    await userEvent.type(screen.getByLabelText("Key prefix"), "/v2/");
+    expect(screen.getByRole("alert")).toHaveTextContent('it starts with "/"');
+    const confirm = screen.getByRole("button", { name: "Copy 1 objects" });
+    expect(confirm).toBeDisabled();
+    await userEvent.click(confirm);
+    expect(h.bulkCopy).not.toHaveBeenCalled();
+  });
+
+  it("names a destination key the server refuses and does not copy", async () => {
+    h.copy.mockClear();
+    h.objects = [{ ...makeObj("a.txt"), state: ObjectState.AVAILABLE }];
+    render(<CollectionObjectsPage />);
+    await userEvent.click(await screen.findByText("copy a.txt"));
+    const field = screen.getByLabelText("Destination key");
+    await userEvent.clear(field);
+    await userEvent.type(field, "a//b{Enter}");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "it holds an empty segment",
+    );
+    expect(screen.getByRole("button", { name: "Confirm copy" })).toBeDisabled();
+    expect(h.copy).not.toHaveBeenCalled();
+
+    await userEvent.clear(field);
+    await userEvent.type(field, "b.txt{Enter}");
+    await waitFor(() => expect(h.copy).toHaveBeenCalled());
+  });
 });
 
 // One folder level at a time: the folders show above the objects, open on a
