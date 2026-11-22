@@ -1,0 +1,2 @@
+go test fuzz v1
+string("users/7d1e2f3a-0b4c-4d5e-8f60-718293a4b5c6/settings/../other")

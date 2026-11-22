@@ -9,6 +9,7 @@ package iam
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 	"uuid"
 
@@ -202,19 +203,23 @@ func paths(m *fieldmaskpb.FieldMask) []string {
 	return m.GetPaths()
 }
 
+// The two shapes of a user's settings name.
+const (
+	userNamePrefix     = "users/"
+	userSettingsSuffix = "/settings"
+)
+
 // parseUserResourceName accepts both "users/{uuid}" and
 // "users/{uuid}/settings" since the proto's Get and Delete use the
-// trailing /settings shape on different fields.
+// trailing /settings shape on different fields. Nothing may follow
+// /settings: the name was cut at its first occurrence, so
+// users/{uuid}/settings/… addressed {uuid} whatever came after.
 func parseUserResourceName(name string) (uuid.UUID, error) {
-	const prefix = "users/"
-	if len(name) <= len(prefix) || name[:len(prefix)] != prefix {
+	body, ok := strings.CutPrefix(name, userNamePrefix)
+	if !ok || body == "" {
 		return uuid.Nil(), errors.New("name must start with users/")
 	}
-	body := name[len(prefix):]
-	if i := indexOf(body, "/settings"); i >= 0 {
-		body = body[:i]
-	}
-	return uuid.Parse(body)
+	return uuid.Parse(strings.TrimSuffix(body, userSettingsSuffix))
 }
 
 // parseTenantParent — UUID-only for now; slug rollout is tracked in
@@ -229,15 +234,6 @@ func parseTenantParent(parent string) (uuid.UUID, error) {
 		return uuid.Nil(), errors.New("parent: tenant slug not yet supported on this RPC; use UUID")
 	}
 	return id, nil
-}
-
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
 }
 
 // itoa64 — small dependency-free formatter matching the proto-emitted
