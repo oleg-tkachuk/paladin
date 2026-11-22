@@ -62,10 +62,9 @@ const (
 	msgNoRequestCeiling = "caveats.request_ceiling: set max_requests, or unlimited_requests for no limit"
 	msgNoBudgetCeiling  = "caveats.budget_ceiling: set max_budget, or unlimited_budget for no limit"
 	msgIssueElsewhere   = "issuing a capability for another tenant requires platform.admin or platform.capability-issuer"
-	msgNotPresented     = "capability: delegation narrows a presented capability; send it in the " + paladin.HeaderCapability + " header"
-	msgLacksShare       = "capability: caller lacks OpShare"
-	msgNotOwnParent     = "capability: parent_id must equal caller's own capability id"
-	msgBiscuitDelegates = "capability: a Biscuit copy cannot delegate; attenuate it instead"
+	msgNotPresented     = "delegation narrows a presented capability; send it in the " + paladin.HeaderCapability + " header"
+	msgNotOwnParent     = "parent_id must be the id of the presented capability"
+	msgBiscuitDelegates = "the presented capability is a Biscuit copy, which cannot delegate; attenuate it instead"
 )
 
 // biscuitRefusals says, for require_biscuit, why each status leaves a
@@ -202,13 +201,16 @@ func (s capabilityService) Delegate(ctx context.Context, req *adminv1.Capability
 	if copyOps != nil {
 		allowed = paladin.OpNames(opsOf(copyOps)...)
 	}
+	// The server's order: the request names the capability presented, which
+	// is no Biscuit, and limes then refuses a parent without share.
 	switch {
-	case !slices.Contains(allowed, string(paladin.OpShare)):
-		return nil, withReason(connect.NewError(connect.CodePermissionDenied, msgLacksShare))
 	case parent.msg.GetId() != req.GetParentId():
 		return nil, withReason(connect.NewError(connect.CodePermissionDenied, msgNotOwnParent))
 	case cred.biscuit:
 		return nil, withReason(connect.NewError(connect.CodeFailedPrecondition, msgBiscuitDelegates))
+	case !slices.Contains(allowed, string(paladin.OpShare)):
+		return nil, capabilityRefusal(connect.CodePermissionDenied,
+			fmt.Errorf("%w: parent %s does not allow %q", limes.ErrOpNotAllowed, parent.msg.GetId(), limes.OpShare))
 	}
 	jkt := req.GetConfirmationJkt()
 	if jkt == "" {

@@ -623,20 +623,6 @@ the same commit. Treat this file like a runtime invariant.
   cause, a refused token stays 401; a test per edge covers both.
 - **Blockers:** none.
 
-### Lease refusals of a presented capability still begin with `capability:`
-
-- **Status:** Deferred.
-- **Reason:** `capabilityh/lease.go` answers a lease call it refuses with
-  `capability: a Biscuit copy cannot lease; …`, `capability: leasing for a
-  capability requires OpShare`, `capability: a capability leases only for
-  itself or …` and `capability: the store names no ancestors, …`; both SDK
-  fakes copy the first three, and `paladintest`'s Delegate refusals
-  (`capability.go`, `msgNotPresented` and the rest) do likewise, as
-  `capabilityh.presentedParent` does.
-- **Definition of Done:** each names the capability and the reason without a
-  package prefix; the fakes follow, and a guard walks these messages.
-- **Blockers:** none.
-
 ### The `TokenResponse.audience` comment quotes `jwt: audience mismatch`
 
 - **Status:** Deferred.

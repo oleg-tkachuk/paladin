@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/capabilityh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 
@@ -40,6 +41,17 @@ func TestRegisteredSentinelsNameNoPackage(t *testing.T) {
 // so its messages are not in the registry: held to the same rule here.
 func TestBearerRefusalsNameNoPackage(t *testing.T) {
 	for _, msg := range auth.BearerRefusals() {
+		if packagePrefix.MatchString(msg) {
+			t.Errorf("%q starts with a package name", msg)
+		}
+	}
+}
+
+// A lease or Delegate call refused for the capability it presents is answered
+// by the capability handler's own messages, not MapError: held to the same
+// rule here.
+func TestPresentedCapabilityRefusalsNameNoPackage(t *testing.T) {
+	for _, msg := range capabilityh.PresentedRefusals() {
 		if packagePrefix.MatchString(msg) {
 			t.Errorf("%q starts with a package name", msg)
 		}

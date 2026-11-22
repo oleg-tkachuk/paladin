@@ -1,5 +1,5 @@
 {
-  "_comment": "How CapabilityService answers Issue and Delegate where a consumer's tests meet it, which the server and both SDKs' fakes are held to. An issue case asks, for the fake's tenant, with audience [\"data\"], a TTL of 300 s, ops [\"get\", \"list\"] and unlimited ceilings unless it says otherwise: key_bound sets a confirmation_jkt, not_before is \"later\" (a minute on) or \"past_expiry\" (an hour on, past the TTL), no_request_ceiling and no_budget_ceiling leave a ceiling out. A delegate case delegates from a parent with parent_ops (and parent_prefixes, parent_idempotency_key when it names them), its own caveats narrowed to child_ops — with child_prefixes and child_tainted_read — when it names them and left out otherwise, for child_audience when it names one; what a child may not widen is limes.Narrows'. want is the code it is refused with, or the biscuit_status it is answered with and whether a Biscuit comes back.",
+  "_comment": "How CapabilityService answers Issue and Delegate where a consumer's tests meet it, which the server and both SDKs' fakes are held to. An issue case asks, for the fake's tenant, with audience [\"data\"], a TTL of 300 s, ops [\"get\", \"list\"] and unlimited ceilings unless it says otherwise: key_bound sets a confirmation_jkt, not_before is \"later\" (a minute on) or \"past_expiry\" (an hour on, past the TTL), no_request_ceiling and no_budget_ceiling leave a ceiling out. A delegate case delegates from a parent with parent_ops (and parent_prefixes, parent_idempotency_key when it names them), its own caveats narrowed to child_ops — with child_prefixes and child_tainted_read — when it names them and left out otherwise, for child_audience when it names one; what a child may not widen is limes.Narrows'. want is the code it is refused with, or the biscuit_status it is answered with and whether a Biscuit comes back; message, where a case names one, is the refusal's message word for word.",
   "issue": [
     {"name": "no share", "ops": ["get"], "want": {"biscuit_status": "BISCUIT_STATUS_ISSUED", "biscuit": true}},
     {"name": "share", "ops": ["get", "share"], "want": {"biscuit_status": "BISCUIT_STATUS_ISSUED", "biscuit": true}},
@@ -20,7 +20,7 @@
   ],
   "delegate": [
     {"name": "the parent's caveats", "parent_ops": ["get", "share"], "want": {"biscuit_status": "BISCUIT_STATUS_ISSUED", "biscuit": true}},
-    {"name": "a parent without share", "parent_ops": ["get"], "want": {"code": "permission_denied"}},
+    {"name": "a parent without share", "parent_ops": ["get"], "want": {"code": "permission_denied"}, "message": "The token does not allow this request"},
     {"name": "narrowed off share", "parent_ops": ["get", "share"], "child_ops": ["get"], "want": {"biscuit_status": "BISCUIT_STATUS_ISSUED", "biscuit": true}},
     {"name": "an op the parent lacks", "parent_ops": ["get", "share"], "child_ops": ["put"], "want": {"code": "permission_denied"}},
     {"name": "narrowed to a bare op", "parent_ops": ["get", "share"], "child_ops": ["presign"], "want": {"code": "invalid_argument"}},

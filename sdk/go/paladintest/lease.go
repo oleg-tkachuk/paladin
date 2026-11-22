@@ -27,9 +27,9 @@ import (
 
 // The server's refusals of a presented capability's lease call, word for word.
 const (
-	msgLeaseByCopy       = "capability: a Biscuit copy cannot lease; present the capability it was attenuated from"
-	msgLeaseWithoutShare = "capability: leasing for a capability requires OpShare"
-	msgLeaseNotBelow     = "capability: a capability leases only for itself or a capability delegated from it"
+	msgLeaseByCopy       = "the presented capability is a Biscuit copy, which cannot lease; present the capability it was attenuated from"
+	msgLeaseWithoutShare = "the presented capability does not allow share, which leasing for a capability requires"
+	msgLeaseNotBelow     = "the presented capability leases only for itself or a capability delegated from it"
 )
 
 // Lease opens a lease on the capability named; on one it holds already, it

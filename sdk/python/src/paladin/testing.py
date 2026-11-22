@@ -628,11 +628,14 @@ def _capability_refusal(
 
 # The server's refusals of a presented capability's lease call, word for word.
 _LEASE_BY_COPY = (
-    "capability: a Biscuit copy cannot lease; present the capability it was attenuated from"
+    "the presented capability is a Biscuit copy, which cannot lease;"
+    " present the capability it was attenuated from"
 )
-_LEASE_WITHOUT_SHARE = "capability: leasing for a capability requires OpShare"
+_LEASE_WITHOUT_SHARE = (
+    "the presented capability does not allow share, which leasing for a capability requires"
+)
 _LEASE_NOT_BELOW = (
-    "capability: a capability leases only for itself or a capability delegated from it"
+    "the presented capability leases only for itself or a capability delegated from it"
 )
 
 # The limes codes the lease calls answer with: limes's own, as the server
@@ -781,10 +784,13 @@ _NO_BUDGET_CEILING = NO_BUDGET_CEILING
 _ISSUE_ELSEWHERE = (
     "issuing a capability for another tenant requires platform.admin or platform.capability-issuer"
 )
-_NOT_PRESENTED = f"capability: delegation narrows a presented capability; send it in the {HEADER_CAPABILITY} header"
-_LACKS_SHARE = "capability: caller lacks OpShare"
-_NOT_OWN_PARENT = "capability: parent_id must equal caller's own capability id"
-_BISCUIT_DELEGATES = "capability: a Biscuit copy cannot delegate; attenuate it instead"
+_NOT_PRESENTED = (
+    f"delegation narrows a presented capability; send it in the {HEADER_CAPABILITY} header"
+)
+_NOT_OWN_PARENT = "parent_id must be the id of the presented capability"
+_BISCUIT_DELEGATES = (
+    "the presented capability is a Biscuit copy, which cannot delegate; attenuate it instead"
+)
 _BISCUIT_REFUSALS = {
     capability_service_pb2.BISCUIT_STATUS_KEY_BOUND: "it is bound to a key, and only its holder can prove it; present the token",
     capability_service_pb2.BISCUIT_STATUS_NOT_YET_VALID: "it is valid only from a later not_before",
@@ -1042,12 +1048,18 @@ class _CapabilityService(CapabilityServiceSync):
         if credential.revoked:
             raise _revoked_capability()
         parent_ops = list(copy.caveats.ops if copy is not None else parent.msg.caveats.ops)
-        if Op.SHARE not in parent_ops:
-            raise _with_reason(Code.PERMISSION_DENIED, _LACKS_SHARE)
+        # The server's order: the request names the capability presented,
+        # which is no Biscuit, and limes then refuses a parent without share.
         if parent.msg.id != request.parent_id:
             raise _with_reason(Code.PERMISSION_DENIED, _NOT_OWN_PARENT)
         if credential.biscuit:
             raise _with_reason(Code.FAILED_PRECONDITION, _BISCUIT_DELEGATES)
+        if Op.SHARE not in parent_ops:
+            raise _capability_refusal(
+                Code.PERMISSION_DENIED,
+                error_reason_pb2.ERROR_REASON_CAPABILITY_OP_NOT_ALLOWED,
+                _TITLE_NOT_ALLOWED,
+            )
         jkt = request.confirmation_jkt or parent.msg.confirmation_jkt
         # require_biscuit first, then what limes refuses as it mints: the
         # server's order.

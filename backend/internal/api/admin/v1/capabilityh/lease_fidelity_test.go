@@ -56,6 +56,8 @@ type leaseStep struct {
 	// Renewed, when set, says whether the step's lease has another id than
 	// the one the step before it answered with.
 	Renewed *bool `json:"renewed"`
+	// Message, when set, is the refusal's message word for word.
+	Message string `json:"message"`
 }
 
 type leaseCase struct {
@@ -85,13 +87,13 @@ func readLeaseTable(t *testing.T) []leaseCase {
 // leaseAnswer is what a step got: its refusal, or the requests its lease
 // holds.
 type leaseAnswer struct {
-	Code, LimesCode string
-	Held            int64
+	Code, LimesCode, Message string
+	Held                     int64
 }
 
 func (s leaseStep) want() leaseAnswer {
 	if s.Code != "" {
-		return leaseAnswer{Code: s.Code, LimesCode: s.LimesCode}
+		return leaseAnswer{Code: s.Code, LimesCode: s.LimesCode, Message: s.Message}
 	}
 	var held int64
 	if s.Held != nil {
@@ -119,9 +121,22 @@ func leaseLimesCode(err error) string {
 	return ""
 }
 
+// pinned is got with its message only when the step names one: the table
+// pins the words of the refusals Paladin writes, not of every answer.
+func (s leaseStep) pinned(got leaseAnswer) leaseAnswer {
+	if s.Message == "" {
+		got.Message = ""
+	}
+	return got
+}
+
 func answerOfLease(l *adminv1.CapabilityLease, err error) leaseAnswer {
 	if err != nil {
-		return leaseAnswer{Code: connect.CodeOf(err).String(), LimesCode: leaseLimesCode(err)}
+		var msg string
+		if ce, ok := errors.AsType[*connect.Error](err); ok {
+			msg = ce.Message()
+		}
+		return leaseAnswer{Code: connect.CodeOf(err).String(), LimesCode: leaseLimesCode(err), Message: msg}
 	}
 	return leaseAnswer{Held: l.GetRequests()}
 }
@@ -277,7 +292,7 @@ func TestTheSDKFakeLeasesAsTheServerDoes(t *testing.T) {
 					id = roles[s.Of].Capability().ID.String()
 				}
 				got, lease := runLeaseStep(ctx, h, h, adminCtx(), s, id)
-				if got != s.want() {
+				if got = s.pinned(got); got != s.want() {
 					t.Errorf("server step %d (%s of %s) answers %+v, the table %+v", i, s.Call, s.Of, got, s.want())
 				}
 				checkRenewed(t, "server", i, s, prev, lease)
@@ -297,7 +312,7 @@ func TestTheSDKFakeLeasesAsTheServerDoes(t *testing.T) {
 					id = ids[s.Of]
 				}
 				got, lease := runLeaseStep(context.Background(), client, srv.Connect().Admin.Capability, context.Background(), s, id)
-				if got != s.want() {
+				if got = s.pinned(got); got != s.want() {
 					t.Errorf("fake step %d (%s of %s) answers %+v, the table %+v", i, s.Call, s.Of, got, s.want())
 				}
 				checkRenewed(t, "fake", i, s, prev, lease)

@@ -97,16 +97,17 @@ def _chain(fake: FakePaladin) -> tuple[dict[str, str], dict[str, str]]:
     return ids, tokens
 
 
-def _answer(call: Any) -> tuple[tuple[str, str, int], str]:
+def _answer(call: Any) -> tuple[tuple[str, str, int], str, str]:
     """What a step got — its refusal's code and limes code, or the requests
-    its lease holds — and the id of the lease it answered with, "" for none."""
+    its lease holds — the id of the lease it answered with, "" for none, and
+    the refusal's message, "" for none."""
     try:
         res = call()
     except ConnectError as err:
-        return (err.code.value, limes_code(err), 0), ""
+        return (err.code.value, limes_code(err), 0), "", err.message
     if not hasattr(res, "lease"):
-        return ("", "", 0), ""
-    return ("", "", res.lease.requests), res.lease.id
+        return ("", "", 0), "", ""
+    return ("", "", res.lease.requests), res.lease.id, ""
 
 
 def _want(step: dict[str, Any]) -> tuple[str, str, int]:
@@ -143,8 +144,10 @@ def test_a_lease_call_answers_as_the_table_says(case: dict[str, Any]) -> None:
                     pb.CapabilityServiceSettleLeaseRequest(id=t)
                 ),
             }
-            got, lease = _answer(calls[step["call"]])
+            got, lease, message = _answer(calls[step["call"]])
             assert got == _want(step), f"step {i} ({step['call']} of {step['of']})"
+            if "message" in step:
+                assert message == step["message"], f"step {i} ({step['call']} of {step['of']})"
             if "renewed" in step:
                 assert (lease != prev) == step["renewed"], (
                     f"step {i} ({step['call']} of {step['of']}): lease {lease!r} after {prev!r}"
@@ -201,7 +204,7 @@ def test_a_lease_is_held_against_the_chains_ceilings_as_the_table_says(
                     pb.CapabilityServiceSettleLeaseRequest(id=t.capability.id)
                 ),
             }
-            got, _ = _answer(calls[step["call"]])
+            got, _, _ = _answer(calls[step["call"]])
             assert got == _want(step), f"step {i} ({step['call']} of {step['of']})"
 
 

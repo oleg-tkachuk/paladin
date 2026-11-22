@@ -142,10 +142,10 @@ func (h *Handler) leaseTarget(ctx context.Context, action cedar.Action, raw stri
 
 // Refusals of a presented capability's lease call.
 const (
-	errLeaseByCopy       = "capability: a Biscuit copy cannot lease; present the capability it was attenuated from"
-	errLeaseWithoutShare = "capability: leasing for a capability requires OpShare"
-	errLeaseNotBelow     = "capability: a capability leases only for itself or a capability delegated from it"
-	errLeaseNoLineage    = "capability: the store names no ancestors, so no lease can be checked against them"
+	errLeaseByCopy       = "the presented capability is a Biscuit copy, which cannot lease; present the capability it was attenuated from"
+	errLeaseWithoutShare = "the presented capability does not allow share, which leasing for a capability requires"
+	errLeaseNotBelow     = "the presented capability leases only for itself or a capability delegated from it"
+	errLeaseNoLineage    = "the capability store names no ancestors, so a lease for another capability cannot be checked"
 )
 
 // presentedLeaseTarget gates a lease call by the capability presented: one
