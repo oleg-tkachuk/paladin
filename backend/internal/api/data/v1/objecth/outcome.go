@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 )
 
@@ -62,15 +63,21 @@ func logOutcome(ctx context.Context, l *zap.Logger, op string, success zapcore.L
 	switch code := connect.CodeOf(err); {
 	case err == nil:
 		l.Log(success, "object "+op, fields...)
-	case serverFault(code):
+	case serverFault(err):
 		l.Error("object rpc failed", append(fields, zap.Error(err))...)
 	default:
 		l.Warn("object rpc refused", append(fields, zap.String("code", code.String()), zap.Error(err))...)
 	}
 }
 
-// serverFault reports whether code is the server's failure rather than a
-// refusal of the request.
-func serverFault(code connect.Code) bool {
+// serverFault reports whether err is the server's failure rather than a
+// refusal of the request. The bucket gate's refusals are refusals whatever
+// their code: a bucket still provisioning answers Unavailable, so the caller
+// retries, but nothing on the server failed.
+func serverFault(err error) bool {
+	if bucketgate.Refused(err) {
+		return false
+	}
+	code := connect.CodeOf(err)
 	return code == connect.CodeInternal || code == connect.CodeUnknown || code == connect.CodeUnavailable
 }

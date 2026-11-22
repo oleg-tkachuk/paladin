@@ -2,6 +2,7 @@ package bucketgate
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -90,6 +91,22 @@ func TestAccessesAreDistinct(t *testing.T) {
 			t.Fatalf("%s and %s are the same Access", a.name, other)
 		}
 		seen[a.access] = a.name
+	}
+}
+
+// Every refusal Check answers is Refused however it is wrapped, and so is
+// logged as a refusal; an error of the gate's store, which decided nothing,
+// is not.
+func TestRefused(t *testing.T) {
+	for _, r := range Refusals() {
+		if !Refused(r) || !Refused(fmt.Errorf("resolve bucket: %w", r)) {
+			t.Errorf("%v is not Refused", r)
+		}
+	}
+	for _, err := range []error{nil, errors.New(ErrBucketProvisioning.Error()), connect.NewError(connect.CodeUnavailable, "store down")} {
+		if Refused(err) {
+			t.Errorf("%v is Refused; only the gate's own refusals are", err)
+		}
 	}
 }
 
