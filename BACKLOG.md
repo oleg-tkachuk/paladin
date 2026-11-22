@@ -569,21 +569,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** anchoring a single-PUT upload to its bucket, as multipart
   sessions are.
 
-### A storage migration's rollback copies back objects only their rows changed
-
-- **Status:** Deferred.
-- **Reason:** the rollback copies back every object whose `updated_at` is at
-  or after `rebound_at` (`MigrationListObjectsWrittenSince`), and every row
-  UPDATE bumps it. A tag, taint, lock or restore after the rebind copies that
-  object's target copy over its source copy, though its bytes never changed,
-  and the target copy may be the one the verify failed on.
-- **Definition of Done:** the rollback selects objects whose bytes were
-  written since the rebind (a promote, an overwrite, a version restore), not
-  any row change, and a test tags an object after the rebind and checks its
-  source copy is left alone.
-- **Blockers:** a column or event that marks a write of bytes apart from a
-  row change.
-
 ### The lifecycle hard delete ignores a draining backend
 
 - **Status:** Deferred.

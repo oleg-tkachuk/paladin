@@ -591,6 +591,7 @@ type Object struct {
 	ChecksumPartSizeBytes *int64             `json:"checksum_part_size_bytes"`
 	PublicUrl             string             `json:"public_url"`
 	CreatedByOperation    pgtype.UUID        `json:"created_by_operation"`
+	BytesWrittenAt        pgtype.Timestamptz `json:"bytes_written_at"`
 }
 
 type ObjectLock struct {

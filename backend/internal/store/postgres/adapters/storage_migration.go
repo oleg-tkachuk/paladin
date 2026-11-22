@@ -247,7 +247,7 @@ func (r *StorageMigrationRepo) ListWrittenSince(ctx context.Context, tenantID uu
 			out = append(out, worker.WrittenObject{
 				ObjectRef: worker.ObjectRef{Collection: o.CollectionName, Key: o.Path, SizeBytes: o.SizeBytes},
 				ID:        uuidFrom(o.ID),
-				UpdatedAt: o.UpdatedAt.Time,
+				WrittenAt: o.WrittenAt.Time,
 			})
 		}
 		return nil

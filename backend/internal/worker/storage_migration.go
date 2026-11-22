@@ -121,7 +121,7 @@ type StorageMigration struct {
 	// written from then on.
 	ReboundAt time.Time
 	// RollbackCursorAt / RollbackCursorID are the rollback's resume cursor:
-	// the (updated_at, id) of the last object copied back; zero until the
+	// the (written at, id) of the last object copied back; zero until the
 	// first batch.
 	RollbackCursorAt time.Time
 	RollbackCursorID uuid.UUID
@@ -157,11 +157,13 @@ type ObjectRef struct {
 }
 
 // WrittenObject is an object written since a point in time, as the rollback
-// lists it: keyed by (UpdatedAt, ID) for its cursor.
+// lists it: keyed by (WrittenAt, ID) for its cursor.
 type WrittenObject struct {
 	ObjectRef
-	ID        uuid.UUID
-	UpdatedAt time.Time
+	ID uuid.UUID
+	// WrittenAt is when the object's bytes were last written — not its row,
+	// which a tag or a taint changes too.
+	WrittenAt time.Time
 }
 
 // MigrationRepo is the persistence seam for the migration state machine.
@@ -195,7 +197,7 @@ type MigrationRepo interface {
 	// migration's error and counting the failure.
 	StartRollback(ctx context.Context, at MigrationRead, reason string) error
 	// ListWrittenSince lists the tenant's live and trashed private objects whose
-	// (updated_at, id) is after (afterAt, afterID), in that order.
+	// (bytes written at, id) is after (afterAt, afterID), in that order.
 	ListWrittenSince(ctx context.Context, tenantID uuid.UUID, afterAt time.Time, afterID uuid.UUID, limit int) ([]WrittenObject, error)
 	// AdvanceRollback records the rollback cursor; it only moves forward.
 	AdvanceRollback(ctx context.Context, at MigrationRead, cursorAt time.Time, cursorID uuid.UUID) error
@@ -643,19 +645,19 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 // rolled-back migration never gets there: the source copies are the live
 // data again).
 //
-//  1. Copy back, one batch per tick, every live or trashed private object written
-//     at or after rebound_at, resumable by the (updated_at, id) cursor. Why
-//     updated_at: every write that puts bytes under an object's key changes
-//     its row (a new object is inserted; a promote, a storage-event
-//     overwrite, a version restore or an undelete updates it), and the
-//     bump_resource_version trigger sets updated_at on every UPDATE, as the
-//     insert defaults it. created_at alone would miss the writes to an
-//     existing row; object_versions only exist in versioned buckets.
-//     rebound_at is the rebind transaction's start, no later than any write
-//     that could see the rebind. Same-key copies, so redoing one is
-//     harmless. Objects older than the rebind are NOT copied: their source
-//     copy is the original, and their target copy may be the broken one the
-//     verify failed on.
+//  1. Copy back, one batch per tick, every live or trashed private object
+//     whose bytes were written at or after rebound_at, resumable by the
+//     (written at, id) cursor. Bytes, not the row: every write that puts
+//     bytes under an object's key is a promote — a new upload's first, a
+//     storage-event overwrite's later one — and the promote records it
+//     (objects.bytes_written_at). Anything else that changes a row after the
+//     rebind — a tag, a taint, a lock, a trash move, a restore from the trash
+//     or of a version, which repoint a row or a pointer only — leaves the
+//     bytes where they were. Such an object's source copy is the original
+//     and its target copy may be the broken one the verify failed on, so it
+//     is NOT copied, as no object older than the rebind is. rebound_at is
+//     the rebind transaction's start, no later than any write that could see
+//     the rebind. Same-key copies, so redoing one is harmless.
 //  2. With nothing left past the cursor, RebindBack: all or nothing, and
 //     refused if anything was written past the cursor meanwhile (that is
 //     copied first, next tick). The tenant is shared again and the
@@ -715,7 +717,7 @@ func (w *StorageMigrationWorker) stepRollingBack(ctx context.Context, m StorageM
 			}
 			return fmt.Errorf("rollback copy %s/%s: %w", o.Collection, o.Key, err)
 		}
-		curAt, curID, progressed = o.UpdatedAt, o.ID, true
+		curAt, curID, progressed = o.WrittenAt, o.ID, true
 	}
 	if !progressed {
 		return nil // cancelled before the first object
@@ -726,13 +728,12 @@ func (w *StorageMigrationWorker) stepRollingBack(ctx context.Context, m StorageM
 // targetHolds reports whether the target bucket holds the object as its row
 // records it, so the rollback copies only bytes that are the object's. Not
 // there: the write never reached the target (an upload that resolved its
-// bucket just before the rebind put its bytes in the source; an undelete of
-// an object deleted before the migration has none in the target) — the
-// source is all there is. A different size: the target copy is not the
-// recorded object (the broken copy the verify failed on, whose row a
-// metadata update after the rebind brought into the list); copying it would
-// overwrite the good source copy. Without a Header the rollback copies
-// everything listed.
+// bucket just before the rebind put its bytes in the source and was promoted
+// after it) — the source is all there is. A different size: the target copy
+// is not the recorded object (the broken copy the verify failed on, listed
+// when its row predates bytes_written_at and falls back to updated_at);
+// copying it would overwrite the good source copy. Without a Header the
+// rollback copies everything listed.
 func (w *StorageMigrationWorker) targetHolds(ctx context.Context, loc CopyLocation, size int64) (bool, error) {
 	if w.Header == nil {
 		return true, nil
