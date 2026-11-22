@@ -27,44 +27,69 @@ var (
 	drainingPending = State{Enabled: true, ReadOnly: true, ProvisionState: ProvisionPending}
 )
 
+// The accesses, by the name the table below prints them under.
+var accesses = []struct {
+	name   string
+	access Access
+}{
+	{"bytes-write", BytesWrite},
+	{"read", Read},
+	{"metadata-write", MetadataWrite},
+	{"protective", Protective},
+}
+
+// TestCheck runs every access against every state: the package table, cell
+// by cell. A nil want is a let-through.
 func TestCheck(t *testing.T) {
 	for _, tc := range []struct {
-		name   string
-		state  State
-		access Access
-		want   error
+		name  string
+		state State
+		// want is indexed as accesses: bytes-write, read, metadata-write,
+		// protective.
+		want [4]error
 	}{
-		{"healthy read", healthy, Read, nil},
-		{"healthy write", healthy, Write, nil},
-		{"disabled read", disabled, Read, ErrBackendDisabled},
-		{"disabled write", disabled, Write, ErrBackendDisabled},
-		{"draining read", draining, Read, nil},
-		{"draining write", draining, Write, ErrBackendReadOnly},
-		{"pending read", pending, Read, nil},
-		{"pending write", pending, Write, ErrBucketProvisioning},
-		{"failed read", failed, Read, nil},
-		{"failed write", failed, Write, ErrBucketNotReady},
-		{"deleting read", deleting, Read, nil},
-		{"deleting write", deleting, Write, ErrBucketNotReady},
-		{"unknown provision state write", unknownState, Write, ErrBucketNotReady},
-		{"disabled and draining write", disabledDraining, Write, ErrBackendDisabled},
-		{"draining and pending write", drainingPending, Write, ErrBackendReadOnly},
-		{"draining and pending read", drainingPending, Read, nil},
+		{"healthy", healthy, [4]error{nil, nil, nil, nil}},
+		{"disabled", disabled, [4]error{ErrBackendDisabled, ErrBackendDisabled, ErrBackendDisabled, nil}},
+		{"draining", draining, [4]error{ErrBackendReadOnly, nil, nil, nil}},
+		{"pending", pending, [4]error{ErrBucketProvisioning, nil, nil, nil}},
+		{"failed", failed, [4]error{ErrBucketNotReady, nil, nil, nil}},
+		{"deleting", deleting, [4]error{ErrBucketNotReady, nil, nil, nil}},
+		{"unknown provision state", unknownState, [4]error{ErrBucketNotReady, nil, nil, nil}},
+		{"disabled and draining", disabledDraining, [4]error{ErrBackendDisabled, ErrBackendDisabled, ErrBackendDisabled, nil}},
+		{"draining and pending", drainingPending, [4]error{ErrBackendReadOnly, nil, nil, nil}},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := Check(tc.access, tc.state); !errors.Is(got, tc.want) || (got == nil) != (tc.want == nil) {
-				t.Fatalf("Check(%v, %+v) = %v, want %v", tc.access, tc.state, got, tc.want)
-			}
-		})
+		for i, a := range accesses {
+			t.Run(tc.name+" "+a.name, func(t *testing.T) {
+				want := tc.want[i]
+				if got := Check(a.access, tc.state); !errors.Is(got, want) || (got == nil) != (want == nil) {
+					t.Fatalf("Check(%s, %+v) = %v, want %v", a.name, tc.state, got, want)
+				}
+			})
+		}
 	}
 }
 
-// An access the gate does not know is gated as a write: a caller that forgot
-// to say is refused rather than let through.
-func TestCheckTreatsAnUnknownAccessAsAWrite(t *testing.T) {
-	const unknown Access = 0
-	if got := Check(unknown, draining); !errors.Is(got, ErrBackendReadOnly) {
-		t.Fatalf("Check(unknown, draining) = %v, want %v", got, ErrBackendReadOnly)
+// An access left unset is the zero value, which is gated as a write of
+// bytes: a caller that forgot to say is refused rather than let through.
+func TestCheckTreatsAnUnsetAccessAsABytesWrite(t *testing.T) {
+	var unset Access
+	if unset != BytesWrite {
+		t.Fatalf("zero Access = %+v, want BytesWrite", unset)
+	}
+	if got := Check(unset, draining); !errors.Is(got, ErrBackendReadOnly) {
+		t.Fatalf("Check(unset, draining) = %v, want %v", got, ErrBackendReadOnly)
+	}
+}
+
+// Every access is a distinct value, so comparing one with another never
+// confuses two kinds.
+func TestAccessesAreDistinct(t *testing.T) {
+	seen := map[Access]string{}
+	for _, a := range accesses {
+		if other, dup := seen[a.access]; dup {
+			t.Fatalf("%s and %s are the same Access", a.name, other)
+		}
+		seen[a.access] = a.name
 	}
 }
 
@@ -110,8 +135,8 @@ func TestRefusalsListsEveryRefusalOnce(t *testing.T) {
 }
 
 func TestAccessOf(t *testing.T) {
-	if got := AccessOf(true); got != Write {
-		t.Errorf("AccessOf(true) = %v, want Write", got)
+	if got := AccessOf(true); got != BytesWrite {
+		t.Errorf("AccessOf(true) = %v, want BytesWrite", got)
 	}
 	if got := AccessOf(false); got != Read {
 		t.Errorf("AccessOf(false) = %v, want Read", got)
