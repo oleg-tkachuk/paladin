@@ -2,12 +2,15 @@ package objecth
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 )
 
 // ListVersions was at 0%. Its guard is the same one GetVersion carries and for
@@ -90,6 +93,32 @@ func TestListVersionsRejectsMalformedInput(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, _, err := h.ListVersions(ctx, tc.in); connect.CodeOf(err) != connect.CodeInvalidArgument {
 				t.Fatalf("code = %v, want InvalidArgument", connect.CodeOf(err))
+			}
+		})
+	}
+}
+
+// A page token the store cannot read is the caller's mistake, answered as
+// InvalidArgument; only the store itself failing is Internal.
+func TestListVersionsAnswersAMalformedPageTokenAsInvalidArgument(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{"malformed token", fmt.Errorf("list versions: %w", keyset.ErrMalformed), connect.CodeInvalidArgument},
+		{"store failure", errors.New("connection reset"), connect.CodeInternal},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			versions := newFakeVersionRepo()
+			versions.listErr = tc.err
+			objectID := uuid.NewV7()
+			h, ctx, _ := versionListHandler(&versionListRepo{parent: Object{ObjectID: objectID}}, versions)
+			_, _, err := h.ListVersions(ctx, ListVersionsInput{
+				Collection: "docs", ObjectID: objectID.String(), PageToken: "not-a-cursor",
+			})
+			if got := connect.CodeOf(err); got != tc.want {
+				t.Fatalf("code = %v, want %v", got, tc.want)
 			}
 		})
 	}

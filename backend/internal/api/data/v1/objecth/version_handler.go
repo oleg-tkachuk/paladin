@@ -190,7 +190,7 @@ func (h *VersionHandler) ListVersions(ctx context.Context, in ListVersionsInput)
 	}
 	out, next, err := h.versions.List(ctx, objectID, in.PageSize, in.PageToken)
 	if err != nil {
-		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		return nil, "", listError(err)
 	}
 	return out, next, nil
 }
