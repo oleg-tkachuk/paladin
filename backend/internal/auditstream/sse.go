@@ -47,56 +47,70 @@ func (h *Hub) SSEHandler(verifier auth.TokenVerifier) http.Handler {
 		}
 		flusher, ok := w.(http.Flusher)
 		if !ok {
+			h.log.Error(msgNoFlusher)
 			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 			return
 		}
-
-		events, cancel := h.Subscribe(p.TenantID.String())
-		defer cancel()
-
-		hdr := w.Header()
-		hdr.Set("Content-Type", "text/event-stream")
-		hdr.Set("Cache-Control", "no-cache")
-		hdr.Set("Connection", "keep-alive")
-		// Defensive: some reverse proxies buffer responses unless told not to.
-		hdr.Set("X-Accel-Buffering", "no")
-		w.WriteHeader(http.StatusOK)
-		// Initial comment both confirms liveness to the client and forces the
-		// header flush through any buffering intermediary.
-		_, _ = w.Write([]byte(": connected\n\n"))
-		flusher.Flush()
-
-		heartbeat := time.NewTicker(heartbeatEvery)
-		defer heartbeat.Stop()
-		enc := json.NewEncoder(w)
-		for {
-			select {
-			case <-r.Context().Done():
-				return
-			case <-heartbeat.C:
-				if _, err := w.Write([]byte(": ping\n\n")); err != nil {
-					return
-				}
-				flusher.Flush()
-			case e, ok := <-events:
-				if !ok {
-					return
-				}
-				if _, err := w.Write([]byte("event: audit\ndata: ")); err != nil {
-					return
-				}
-				// Encode writes the trailing \n; one more terminates the frame.
-				if err := enc.Encode(e); err != nil {
-					h.log.Warn("audit stream: encode failed", zap.Error(err))
-					return
-				}
-				if _, err := w.Write([]byte("\n")); err != nil {
-					return
-				}
-				flusher.Flush()
-			}
-		}
+		h.stream(w, flusher, r, p.TenantID.String())
 	})
+}
+
+// msgNoFlusher is the line of a response writer that cannot stream: the
+// server's wiring, never the caller's fault.
+const msgNoFlusher = "audit stream: the response writer cannot flush"
+
+// stream sends tenant's audit entries to w as Server-Sent Events, with a
+// heartbeat between them, until the request ends or a write fails.
+func (h *Hub) stream(w http.ResponseWriter, flusher http.Flusher, r *http.Request, tenant string) {
+	events, cancel := h.Subscribe(tenant)
+	defer cancel()
+
+	hdr := w.Header()
+	hdr.Set("Content-Type", "text/event-stream")
+	hdr.Set("Cache-Control", "no-cache")
+	hdr.Set("Connection", "keep-alive")
+	// Defensive: some reverse proxies buffer responses unless told not to.
+	hdr.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	// Initial comment both confirms liveness to the client and forces the
+	// header flush through any buffering intermediary.
+	_, _ = w.Write([]byte(": connected\n\n"))
+	flusher.Flush()
+
+	heartbeat := time.NewTicker(heartbeatEvery)
+	defer heartbeat.Stop()
+	enc := json.NewEncoder(w)
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-heartbeat.C:
+			if _, err := w.Write([]byte(": ping\n\n")); err != nil {
+				return
+			}
+			flusher.Flush()
+		case e, ok := <-events:
+			if !ok || !h.writeEvent(w, enc, e) {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+// writeEvent writes e as one audit event frame, reporting whether the
+// stream may go on.
+func (h *Hub) writeEvent(w http.ResponseWriter, enc *json.Encoder, e Entry) bool {
+	if _, err := w.Write([]byte("event: audit\ndata: ")); err != nil {
+		return false
+	}
+	// Encode writes the trailing \n; one more terminates the frame.
+	if err := enc.Encode(e); err != nil {
+		h.log.Warn("audit stream: encode failed", zap.Error(err))
+		return false
+	}
+	_, err := w.Write([]byte("\n"))
+	return err == nil
 }
 
 // The lines verifyBearer leaves for a stream it refuses.

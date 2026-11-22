@@ -212,6 +212,26 @@ func TestSSEHandler_RefusalsAnswerAndLog(t *testing.T) {
 	}
 }
 
+// noFlushWriter is a ResponseWriter that cannot stream.
+type noFlushWriter struct{ http.ResponseWriter }
+
+// A writer that cannot flush is the server's wiring: 500 and an Error line.
+func TestSSEHandler_AWriterThatCannotFlushIsLogged(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/audit/stream", nil)
+	req.Header.Set("Authorization", "Bearer x")
+
+	NewHub(zap.New(core)).SSEHandler(stubVerifier{p: &auth.Principal{TenantID: uuid.New()}}).ServeHTTP(noFlushWriter{rec}, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rec.Code)
+	}
+	if got := logs.FilterMessage(msgNoFlusher).All(); len(got) != 1 || got[0].Level != zapcore.ErrorLevel {
+		t.Errorf("logged %v, want one Error line", logs.All())
+	}
+}
+
 func TestSSEHandler_StreamsTenantEvents(t *testing.T) {
 	h := NewHub(nil)
 	tid := uuid.New()
