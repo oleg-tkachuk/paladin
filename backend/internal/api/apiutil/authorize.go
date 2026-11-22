@@ -44,7 +44,8 @@ func AuthorizeOwnTenant(ctx context.Context, policy cedar.Authorizer, action ced
 
 // Decide asks policy whether principal may take action on resource in the
 // request rc describes, for a gate that builds the principal itself. The
-// engine fills in rc's time when it has none.
+// engine fills in rc's time when it has none. An allowed decision admits the
+// call to the resource's tenant (AdmitTenant).
 func Decide(ctx context.Context, policy cedar.Authorizer, principal *cedar.Principal, action cedar.Action, resource *cedar.Resource, rc cedar.RequestContext) error {
 	decision, err := policy.IsAuthorized(ctx, principal, action, resource, rc)
 	if err != nil {
@@ -52,6 +53,9 @@ func Decide(ctx context.Context, policy cedar.Authorizer, principal *cedar.Princ
 	}
 	if decision != cedar.DecisionAllow {
 		return connect.NewError(connect.CodePermissionDenied, DeniedByPolicy)
+	}
+	if resource != nil {
+		AdmitTenant(ctx, resource.TenantID)
 	}
 	return nil
 }

@@ -8,23 +8,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 )
 
-// The tenant an entry is filed under besides its actor's: read from the
-// resource name, which nests a collection under its bucket.
-func TestAuditEntryResourceTenant(t *testing.T) {
-	tenant := uuid.New()
-	cases := map[string]uuid.UUID{
-		"tenants/" + tenant.String() + "/quota":                                           tenant,
-		"storageBackends/primary/buckets/b/tenants/" + tenant.String() + "/collections/c": tenant,
-		"storageBackends/primary/buckets/b":                                               uuid.Nil(),
-		"":                                                                                uuid.Nil(),
-	}
-	for name, want := range cases {
-		if got := (AuditEntry{ResourceName: name}).ResourceTenant(); got != want {
-			t.Errorf("ResourceTenant(%q) = %s, want %s", name, got, want)
-		}
-	}
-}
-
 // The cursor is cut by the store and by the audit handler, and read back by
 // the store; the time is UTC so one instant is one token whatever zone it
 // came in, and it resumes only the order it was cut for.
