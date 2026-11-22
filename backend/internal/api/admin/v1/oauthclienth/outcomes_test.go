@@ -82,6 +82,9 @@ func TestDeleteStoreFailureIsInternalAndLogged(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeInternal || !errors.Is(err, boom) {
 		t.Fatalf("err = %v (%v), want internal wrapping the store's", err, connect.CodeOf(err))
 	}
+	if ce, ok := errors.AsType[*connect.Error](err); !ok || ce.Message() != msgDeleteFailed {
+		t.Errorf("message = %q, want %q: the store's words are for the log", ce.Message(), msgDeleteFailed)
+	}
 	lines := logs.All()
 	if len(lines) != 1 || lines[0].Level != zapcore.ErrorLevel || lines[0].ContextMap()["client_id"] != registered {
 		t.Fatalf("want one error line naming the client, got %v", lines)

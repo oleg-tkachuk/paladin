@@ -614,7 +614,7 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### The OAuth endpoints quote Go errors in `error_description`
+### The OAuth endpoints and `unary.newMessage` quote Go errors to the caller
 
 - **Status:** Deferred.
 - **Reason:** the RPC refusals are held to the no-package-prefix rule
@@ -625,9 +625,13 @@ the same commit. Treat this file like a runtime invariant.
   grant consents to neither …`) is wrapped into the token exchange's
   `ErrInvalidScope` (`auth/delegation/policy.go`), whose answer has not been
   checked for it.
+  Alike, `unary.newMessage` (`api/unary/unary.go`) answers a procedure whose
+  message type is not registered with the registry's own error after the
+  procedure's name — a build fault, unreachable with generated stubs.
 - **Definition of Done:** each OAuth refusal's `error_description` is a fixed
   sentence the package exports for the guard test, the cause logged at Warn;
-  a test per endpoint pins the text.
+  a test per endpoint pins the text. `newMessage` answers a fixed sentence and
+  logs the registry's error at Error.
 - **Blockers:** none.
 
 ## Database
