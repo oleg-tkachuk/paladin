@@ -41,14 +41,20 @@ func (d *scriptedDeleter) DeleteObject(context.Context, string, string, uuid.UUI
 
 func seedPurgeDebt(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture) uuid.UUID {
 	t.Helper()
+	return seedPurgeDebtAt(t, ctx, pool, f, "k-orphan")
+}
+
+// seedPurgeDebtAt owes the bytes of key path in f's collection.
+func seedPurgeDebtAt(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, path string) uuid.UUID {
+	t.Helper()
 	id := uuid.New()
 	mustExec(t, ctx, pool, `
 		INSERT INTO pending_purges
 		  (id, tenant_id, object_id, bucket_id, collection_name, path)
-		SELECT $1, $2, $3, c.bucket_id, c.name, 'k-orphan'
+		SELECT $1, $2, $3, c.bucket_id, c.name, $5
 		  FROM collections c
 		 WHERE c.tenant_id = $2 AND c.name = $4`,
-		id, f.tenantID, uuid.New(), f.collection)
+		id, f.tenantID, uuid.New(), f.collection, path)
 	return id
 }
 
@@ -233,5 +239,32 @@ func TestPurgeDrainerKeepsDebtWhenTheAnnouncementFails(t *testing.T) {
 	if got := purgedEventCount(t, ctx, pool, f.tenantID); got != 0 {
 		t.Errorf("paladin.object.purged rows = %d, want 0 — the emit failed, so "+
 			"nothing may have been written", got)
+	}
+}
+
+// A debt for a key from before the key contract names no bytes of its own:
+// the composer refuses its path, so a delete could never succeed and the
+// bytes the old composer put it at may be another object's. It settles
+// without a storage call instead of being retried for ever.
+func TestPurgeDrainerSettlesAnUnaddressableDebtWithoutADelete(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	pool := startPostgres(t)
+	f := seedFixture(t, ctx, pool)
+	id := seedPurgeDebtAt(t, ctx, pool, f, "legacy//key")
+
+	deleter := &scriptedDeleter{failures: 99, err: errors.New("must not be called")}
+	d := &worker.PurgeDrainer{
+		Pool: pool, Q: sqlc.New(pool), Storage: deleter,
+		BatchSize: 10, MaxBackoff: time.Hour, Logger: zap.NewNop(),
+	}
+	if err := d.Sweep(ctx); err != nil {
+		t.Fatalf("Sweep = %v, want nil", err)
+	}
+	if deleter.calls != 0 {
+		t.Errorf("storage delete called %d times for a path the composer refuses", deleter.calls)
+	}
+	if got := purgeRowCount(t, ctx, pool, id); got != 0 {
+		t.Errorf("debt rows = %d, want 0 — an unaddressable debt must settle", got)
 	}
 }
