@@ -227,7 +227,8 @@ func (h *Handler) BatchRestoreObjects(ctx context.Context, args BatchRestoreObje
 // for the worker to report as not found.
 func (h *Handler) batchObjects(ctx context.Context, tenantID uuid.UUID, collection string, ids []uuid.UUID) ([]objecth.Object, error) {
 	if h.objects == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "batch: object lookup not wired")
+		h.log.Error(msgNoObjectFinder, bindingFields(tenantID, collection)...)
+		return nil, wiringFault()
 	}
 	found, err := h.objects.FindByIDs(ctx, tenantID, ids)
 	if err != nil {
@@ -332,9 +333,29 @@ func (h *Handler) authorize(ctx context.Context, p *auth.Principal, tenantID uui
 		cedar.RequestContext{})
 }
 
-// msgNoBucketResolver refuses a batch write when no bucket resolver is wired:
-// without one the write gate cannot be asked.
-const msgNoBucketResolver = "batch: bucket lookup not wired"
+// The lines of a handler built without a dependency the batch needs: no
+// bucket resolver, without which the write gate cannot be asked, or no
+// object finder. Both are the wiring's fault — NewHandler is given both in
+// every deployment (wire.ProvideBatchHandler) — and never the caller's.
+const (
+	msgNoBucketResolver = "batch not submitted: no bucket resolver wired"
+	msgNoObjectFinder   = "batch not submitted: no object finder wired"
+)
+
+// msgServerFault is what a caller is told of a batch a wiring fault kept
+// from being submitted: the cause is the server's, and is logged instead.
+const msgServerFault = "the batch could not be submitted: the server is at fault"
+
+// wiringFault is Internal with msgServerFault.
+func wiringFault() error {
+	return connect.NewError(connect.CodeInternal, msgServerFault)
+}
+
+// FaultMessages is every message a batch is answered with for the server's
+// own fault, outside MapError.
+func FaultMessages() []string {
+	return []string{msgServerFault}
+}
 
 // The lines binding leaves.
 const (
@@ -379,7 +400,7 @@ func (h *Handler) binding(ctx context.Context, tenantID uuid.UUID, collection st
 	}
 	if h.buckets == nil {
 		h.log.Error(msgNoBucketResolver, bindingFields(tenantID, collection)...)
-		return "", "", connect.NewError(connect.CodeUnavailable, msgNoBucketResolver)
+		return "", "", wiringFault()
 	}
 	backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, access)
 	if err != nil {

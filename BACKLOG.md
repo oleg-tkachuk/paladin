@@ -614,6 +614,22 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
+### The OAuth endpoints quote Go errors in `error_description`
+
+- **Status:** Deferred.
+- **Reason:** the RPC refusals are held to the no-package-prefix rule
+  (`apiutil/sentinel_text_test.go`), but the OAuth HTTP endpoints answer
+  `invalid_client` with the client authentication's own `err.Error()`
+  (`auth/oauth/handler.go` token and introspection paths, `revoke.go`), which
+  starts `oauth: bad credentials: …`; and `auth.ErrNoConsent` (`auth: the
+  grant consents to neither …`) is wrapped into the token exchange's
+  `ErrInvalidScope` (`auth/delegation/policy.go`), whose answer has not been
+  checked for it.
+- **Definition of Done:** each OAuth refusal's `error_description` is a fixed
+  sentence the package exports for the guard test, the cause logged at Warn;
+  a test per endpoint pins the text.
+- **Blockers:** none.
+
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

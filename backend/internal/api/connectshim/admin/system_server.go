@@ -36,7 +36,7 @@ func NewSystemServer(h *systemh.Handler) *SystemServer {
 
 func (s *SystemServer) GetConfig(ctx context.Context, _ *pb.GetConfigRequest) (*pb.GetConfigResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgSystemNotWired)
 	}
 	yamlBlob, defaults, sourcePath, err := s.H.MarshalRedacted(ctx)
 	if err != nil {
@@ -51,7 +51,7 @@ func (s *SystemServer) GetConfig(ctx context.Context, _ *pb.GetConfigRequest) (*
 
 func (s *SystemServer) GetDispatcherStats(ctx context.Context, _ *pb.GetDispatcherStatsRequest) (*pb.GetDispatcherStatsResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgSystemNotWired)
 	}
 	stats, available, err := s.H.DispatcherStats(ctx)
 	if err != nil {
@@ -80,7 +80,7 @@ func (s *SystemServer) GetDispatcherStats(ctx context.Context, _ *pb.GetDispatch
 
 func (s *SystemServer) GetPlatformStats(ctx context.Context, req *pb.GetPlatformStatsRequest) (*pb.GetPlatformStatsResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgSystemNotWired)
 	}
 	res, err := s.H.PlatformStats(ctx, platformstats.TenantPage{
 		Size:  int(req.GetTenantPage().GetPageSize()),
@@ -206,7 +206,7 @@ var signalFromPB = map[pb.PlatformStatsSignal]platformstats.Signal{
 
 func (s *SystemServer) ListPlatformStatsTenants(ctx context.Context, req *pb.ListPlatformStatsTenantsRequest) (*pb.ListPlatformStatsTenantsResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgSystemNotWired)
 	}
 	// The validation interceptor refuses UNSPECIFIED and unknown values
 	// first; this keeps a request that skipped it from reaching the worker
@@ -253,7 +253,7 @@ func statesToPB(in []platformstats.StateStat) []*pb.ObjectStateStat {
 // the snapshot token the console no longer holds (ADR-0048).
 func (s *SystemServer) GetPlatformHealth(ctx context.Context, _ *pb.GetPlatformHealthRequest) (*pb.GetPlatformHealthResponse, error) {
 	if s.H == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, "system handler not wired")
+		return nil, connect.NewError(connect.CodeUnavailable, msgSystemNotWired)
 	}
 	snaps := s.H.PlatformHealth(ctx)
 	out := &pb.GetPlatformHealthResponse{Roles: make([]*pb.RoleHealth, 0, len(snaps))}
