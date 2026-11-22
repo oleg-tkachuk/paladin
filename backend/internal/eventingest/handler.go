@@ -134,11 +134,12 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 	tenantPg := pgtype.UUID{Bytes: tenantUUID, Valid: true}
 
 	// The collection occupies one segment of the bucket path, so the source
-	// adapters' split is exact (storagepath.Compose). A key outside the key
-	// contract was written by something other than Paladin: no object can
-	// own it.
+	// adapters' split is exact (storagepath.Compose). A key no object can have
+	// a path of its own under was written by something other than Paladin: no
+	// object can own it. A key stored before the boundary's length and
+	// control-character rules still names its object.
 	collection, key := ev.SubjectFields.Collection, ev.SubjectFields.Key
-	if err := storagepath.ValidateKey(key); err != nil {
+	if err := storagepath.ValidateStoredKey(key); err != nil {
 		logger.Warn("event names a key outside the object key contract; skipping",
 			zap.String("tenant_id", ev.SubjectFields.TenantID),
 			zap.String("collection", collection),

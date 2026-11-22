@@ -38,6 +38,7 @@ import io
 import json
 import secrets
 import threading
+import unicodedata
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -213,17 +214,39 @@ class _Binding:
         return ""
 
 
-# The server's object key rule (sdk/testdata/object_keys.json): segments
-# separated by "/", none of them empty, "." or "..".
+# The server's object key rule (sdk/testdata/object_keys.json): at most
+# _MAX_KEY_BYTES bytes of UTF-8 without control characters, in segments of at
+# most _MAX_SEGMENT_BYTES separated by "/", none of them empty, "." or "..".
 _KEY_SEP = "/"
 _CURRENT_SEGMENT = "."
 _PARENT_SEGMENT = ".."
-_KEY_RULE = 'an object key is segments separated by "/", none of them empty, "." or ".."'
+_MAX_KEY_BYTES = 731
+"""The server's storagepath.MaxKeyBytes: S3's 1024-byte path less the tenant
+id, the longest collection segment and two separators."""
+_MAX_SEGMENT_BYTES = 255
+"""The server's storagepath.MaxSegmentBytes: the longest file name a
+filer-backed store takes."""
+_CONTROL_CATEGORY = "Cc"
+"""The Unicode category of a control character, which no key may hold."""
+_SURROGATE_CATEGORY = "Cs"
+"""The Unicode category of a lone surrogate, which no UTF-8 encodes."""
+_KEY_RULE = (
+    f"an object key is at most {_MAX_KEY_BYTES} bytes of UTF-8 without control characters, "
+    f'in segments of at most {_MAX_SEGMENT_BYTES} bytes separated by "/", '
+    'none of them empty, "." or ".."'
+)
 
 
 def _key_refusal(key: str) -> str:
     """Why the server refuses ``key`` where an object is created, or "" when
     it stores an object under it."""
+    if any(unicodedata.category(c) == _SURROGATE_CATEGORY for c in key):
+        return "it is not valid UTF-8"
+    size = len(key.encode())
+    if size > _MAX_KEY_BYTES:
+        return f"it is {size} bytes, over the limit of {_MAX_KEY_BYTES}"
+    if any(unicodedata.category(c) == _CONTROL_CATEGORY for c in key):
+        return "it holds a control character"
     if key.startswith(_KEY_SEP):
         return 'it starts with "/"'
     if key.endswith(_KEY_SEP):
@@ -235,6 +258,9 @@ def _key_refusal(key: str) -> str:
             return 'it holds a "." segment'
         if segment == _PARENT_SEGMENT:
             return 'it holds a ".." segment'
+        segment_size = len(segment.encode())
+        if segment_size > _MAX_SEGMENT_BYTES:
+            return f"it holds a segment of {segment_size} bytes, over the limit of {_MAX_SEGMENT_BYTES}"
     return ""
 
 
