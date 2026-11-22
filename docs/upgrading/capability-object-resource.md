@@ -1,4 +1,4 @@
-## Unreleased — a capability names a nested collection as one segment
+## sdk/python/v0.151.5, sdk/go/v0.151.5 — a capability names a nested collection as one segment
 
 - The resource a capability names an object by is
   `object://{tenant-id}/{collection segment}/{key}`: a nested collection's

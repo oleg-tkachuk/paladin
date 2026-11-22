@@ -1,4 +1,4 @@
-## Unreleased — an object key is bounded in length and text
+## sdk/python/v0.151.5, sdk/go/v0.151.5 — an object key is bounded in length and text
 
 - An object key is at most 731 bytes of UTF-8, in segments of at most 255
   bytes, without control characters (Unicode category Cc: U+0000–U+001F,
