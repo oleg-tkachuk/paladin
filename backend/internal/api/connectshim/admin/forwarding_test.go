@@ -538,7 +538,7 @@ func TestGetQuota_RejectsAFiveSegmentNameThatIsNotABucketQuota(t *testing.T) {
 // would refuse the plain "show me the unlimited tenants" query.
 func TestSummarize_UnlimitedOnlyWithNoThresholdIsAllowed(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
-	_, err := srv.Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
+	_, err := srv.Summarize(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSummarizeRequest{
 		UnlimitedOnly: true, // ThresholdPct left at zero: absent, not "0%"
 	})
 	if err != nil {
@@ -548,7 +548,7 @@ func TestSummarize_UnlimitedOnlyWithNoThresholdIsAllowed(t *testing.T) {
 
 func TestSummarize_RejectsUnlimitedOnlyWithAThreshold(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
-	_, err := srv.Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
+	_, err := srv.Summarize(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSummarizeRequest{
 		UnlimitedOnly: true, ThresholdPct: 80,
 	})
 	if err == nil {

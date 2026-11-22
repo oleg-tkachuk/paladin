@@ -328,7 +328,7 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 			usageStore = deps.Capability.Usage
 			budgets = deps.Capability.Budgets
 		}
-		state.budget = admin.NewTenantBudgetServer(budgets, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool))
+		state.budget = admin.NewTenantBudgetServer(budgets, adapters.NewTenantRepo(deps.DB.Queries, deps.Pool), polEngine)
 		paladinadminv1connect.RegisterTenantBudgetServiceHandler(adminServer, state.budget)
 
 		// BillingService — read-only aggregation over the charges

@@ -214,6 +214,14 @@ var (
 	// the schema baseline (001_initial_schema.sql).
 	ActionReadBilling = declare("ReadBilling")
 
+	// Tenant-budget actions (admin plane, TenantBudgetService). Resource is
+	// the Tenant entity whose budget is read or set. Reading it — its ceiling,
+	// spend and holds — is a tenant admin's for its own tenant (a built-in
+	// permit); setting it is the platform's, as the ceiling bounds what the
+	// tenant may spend.
+	ActionReadTenantBudget   = declare("ReadTenantBudget")
+	ActionManageTenantBudget = declare("ManageTenantBudget")
+
 	// Capability actions (admin plane, CapabilityService). Resource is the
 	// CALLER's own Tenant entity: which tenant a call may reach beyond its own
 	// is decided in the handler (capabilityh.spansTenants), not here. Read
@@ -893,6 +901,25 @@ when {
   principal.tenant_id == resource.tenant_id &&
   ((resource has user_id && principal.subject == resource.user_id) ||
    (principal has roles && principal.roles.contains("tenant.admin")))
+};
+
+// Built-in: a tenant admin may read its OWN tenant's budget — the ceiling,
+// what has been spent and reserved against it, and the holds that make up the
+// reservation. Built-in so it reaches tenants whose stored policy was frozen
+// before the action existed. Setting a budget (ManageTenantBudget) has no
+// permit here: the ceiling is the platform's to set, and the handler also
+// requires platform.admin for it. A tenant policy can still forbid the read.
+permit (
+  principal,
+  action == Action::"ReadTenantBudget",
+  resource
+)
+when {
+  principal has roles &&
+  principal.roles.contains("tenant.admin") &&
+  principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
 };
 
 // Built-in: a MACHINE principal may delete and restore objects in its OWN

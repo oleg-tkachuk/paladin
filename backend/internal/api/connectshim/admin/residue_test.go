@@ -397,7 +397,7 @@ func TestListPlatformStatsTenants_RefusesAnUnnamedSignal(t *testing.T) {
 func TestTenantBudgetSetForwardsThePeriodEnd(t *testing.T) {
 	store := &fakeUsageStore{}
 	end := time.Unix(1_767_225_600, 0).UTC()
-	if _, err := newServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+	if _, err := newServer(store).Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 		TenantId: uuid.New().String(), PeriodEnd: timestamppb.New(end), BudgetCeiling: unlimitedIn(""),
 	}); err != nil {
 		t.Fatal(err)

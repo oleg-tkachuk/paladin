@@ -20,6 +20,9 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
+	"github.com/oleg-tkachuk/paladin/backend/policies"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
@@ -144,15 +147,29 @@ func (f *fakeNames) TenantNames(_ context.Context, ids []uuid.UUID) (map[uuid.UU
 	return out, nil
 }
 
+// budgetPolicy is the real engine over the policy every tenant is created
+// with, so a test meets the built-in and default grants rather than a stub.
+func budgetPolicy() cedar.Authorizer {
+	return cedartest.Engine(policies.DefaultTenantPolicy)
+}
+
+// asPlatformAdmin is ctx carrying a platform admin of a tenant of its own,
+// the caller the budget RPCs admit to every tenant.
+func asPlatformAdmin(ctx context.Context) context.Context {
+	return auth.WithPrincipal(ctx, &auth.Principal{
+		TenantID: uuid.New(), Subject: "root@platform", Roles: []string{apiutil.RolePlatformAdmin},
+	})
+}
+
 // newServer is a TenantBudgetServer over store with no tenant named.
 func newServer(store TenantBudgetStore) *TenantBudgetServer {
-	return NewTenantBudgetServer(store, &fakeNames{})
+	return NewTenantBudgetServer(store, &fakeNames{}, budgetPolicy())
 }
 
 // Summarize pages through the store's cursor, both ways.
 func TestTenantBudgetServer_Summarize_Pages(t *testing.T) {
 	store := &fakeUsageStore{listNext: "next-page"}
-	resp, err := newServer(store).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
+	resp, err := newServer(store).Summarize(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSummarizeRequest{
 		Limit: 2, PageToken: "this-page",
 	})
 	if err != nil {
@@ -169,7 +186,7 @@ func TestTenantBudgetServer_Summarize_Pages(t *testing.T) {
 // A page token the store cannot read is the caller's to fix.
 func TestTenantBudgetServer_Summarize_BadPageToken(t *testing.T) {
 	store := &fakeUsageStore{listErr: fmt.Errorf("%w: cursor", limes.ErrInvalidRequest)}
-	_, err := newServer(store).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
+	_, err := newServer(store).Summarize(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSummarizeRequest{
 		PageToken: "garbage",
 	})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
@@ -180,7 +197,7 @@ func TestTenantBudgetServer_Summarize_BadPageToken(t *testing.T) {
 func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
 	tenantID := uuid.New()
-	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
+	_, err := srv.Get(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceGetRequest{
 		TenantId: tenantID.String(),
 	})
 	if err == nil {
@@ -197,7 +214,7 @@ func TestTenantBudgetServer_Get_NotFound(t *testing.T) {
 func TestTenantBudgetServer_Get_StoreFailureIsUnavailable(t *testing.T) {
 	const storeText = "pgstore: dial tcp 10.0.0.7:5432: connection refused"
 	srv := newServer(&fakeUsageStore{getErr: fmt.Errorf("%w: %s", limes.ErrStoreUnavailable, storeText)})
-	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{TenantId: uuid.New().String()})
+	_, err := srv.Get(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceGetRequest{TenantId: uuid.New().String()})
 	if connect.CodeOf(err) != connect.CodeUnavailable || strings.Contains(err.Error(), storeText) {
 		t.Errorf("err = %v, want Unavailable without the store's text", err)
 	}
@@ -215,7 +232,7 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 	srv := newServer(store)
 	tenantID := uuid.New()
 
-	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+	setRes, err := srv.Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 		TenantId:      tenantID.String(),
 		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "USD", Units: 100}),
 		ResetSpend:    true,
@@ -227,7 +244,7 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 		t.Errorf("max_budget: got %v, want %v", got, want)
 	}
 
-	getRes, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
+	getRes, err := srv.Get(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceGetRequest{
 		TenantId: tenantID.String(),
 	})
 	if err != nil {
@@ -243,7 +260,7 @@ func TestTenantBudgetServer_SetThenGet_RoundTrip(t *testing.T) {
 func TestTenantBudgetServer_Set_NamesTheBudgetForTheAuditLog(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
 	tenantID := uuid.New()
-	ctx := apiutil.WithResourceSlot(context.Background())
+	ctx := apiutil.WithResourceSlot(asPlatformAdmin(context.Background()))
 	if _, err := srv.Set(ctx, &pb.TenantBudgetServiceSetRequest{
 		TenantId:      tenantID.String(),
 		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "USD", Units: 100}),
@@ -275,14 +292,14 @@ func TestTenantBudgetServer_Set_RefusesTheRemovedDouble(t *testing.T) {
 	if err := proto.Unmarshal(raw, old); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := srv.Set(context.Background(), old); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := srv.Set(asPlatformAdmin(context.Background()), old); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("err = %v, want InvalidArgument", err)
 	}
 }
 
 func TestTenantBudgetServer_NilUsageStore_Unavailable(t *testing.T) {
-	srv := NewTenantBudgetServer(nil, nil)
-	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
+	srv := NewTenantBudgetServer(nil, nil, budgetPolicy())
+	_, err := srv.Get(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceGetRequest{
 		TenantId: uuid.New().String(),
 	})
 	var connErr *connect.Error
@@ -299,7 +316,7 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 	srv := newServer(store)
 	tenantID := uuid.New()
 
-	setRes, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+	setRes, err := srv.Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 		TenantId:      tenantID.String(),
 		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "EUR", Units: 250}),
 		ResetSpend:    true,
@@ -316,7 +333,7 @@ func TestTenantBudgetServer_Set_NonUSDUnit(t *testing.T) {
 // the boundary with CodeInvalidArgument.
 func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
-	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 		TenantId:      uuid.New().String(),
 		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "XYZ", Units: 1}),
 	})
@@ -328,7 +345,7 @@ func TestTenantBudgetServer_Set_BadUnit(t *testing.T) {
 
 func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
-	_, err := srv.Get(context.Background(), &pb.TenantBudgetServiceGetRequest{
+	_, err := srv.Get(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceGetRequest{
 		TenantId: "not-a-uuid",
 	})
 	var connErr *connect.Error
@@ -341,7 +358,7 @@ func TestTenantBudgetServer_BadTenantID(t *testing.T) {
 // send on the next edit and every second write is a conflict.
 func TestTenantBudgetServer_Set_ReturnsNewVersion(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
-	res, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+	res, err := srv.Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 		TenantId:      uuid.New().String(),
 		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "USD", Units: 10}),
 	})
@@ -361,14 +378,14 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 	srv := newServer(store)
 	tenantID := uuid.New().String()
 
-	if _, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+	if _, err := srv.Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 		TenantId:      tenantID,
 		BudgetCeiling: limitOf(&money.Money{CurrencyCode: "USD", Units: 10}),
 	}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        tenantID,
 		BudgetCeiling:   limitOf(&money.Money{CurrencyCode: "USD", Units: 999}),
 		ResourceVersion: "1234",
@@ -382,7 +399,7 @@ func TestTenantBudgetServer_Set_StaleVersionIsAborted(t *testing.T) {
 // An unparseable version is a malformed request, not a conflict.
 func TestTenantBudgetServer_Set_BadVersionIsInvalidArgument(t *testing.T) {
 	srv := newServer(&fakeUsageStore{})
-	_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+	_, err := srv.Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 		TenantId:        uuid.New().String(),
 		BudgetCeiling:   limitOf(&money.Money{CurrencyCode: "USD", Units: 1}),
 		ResourceVersion: "not-a-number",
@@ -404,7 +421,7 @@ func TestTenantBudgetServer_Set_MapsTheStoresRefusals(t *testing.T) {
 	}
 	for storeErr, want := range cases {
 		srv := newServer(&fakeUsageStore{setErr: storeErr})
-		_, err := srv.Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+		_, err := srv.Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 			TenantId:      uuid.New().String(),
 			BudgetCeiling: limitOf(&money.Money{CurrencyCode: "EUR", Units: 1}),
 		})
@@ -436,7 +453,7 @@ func TestTenantBudgetServer_Summarize_PicksTheFilter(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			store := &fakeUsageStore{}
-			if _, err := newServer(store).Summarize(context.Background(), tc.req); err != nil {
+			if _, err := newServer(store).Summarize(asPlatformAdmin(context.Background()), tc.req); err != nil {
 				t.Fatal(err)
 			}
 			if store.lastList.Filter != tc.wantFilter || store.lastList.ThresholdBasisPoints != tc.wantThreshold {
@@ -489,7 +506,7 @@ func newSummaryFixture() summaryFixture {
 // the id — and reports its utilisation, 0 for an unlimited tenant.
 func TestTenantBudgetServer_Summarize_JoinsTenantNames(t *testing.T) {
 	f := newSummaryFixture()
-	resp, err := NewTenantBudgetServer(f.store, f.names).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{})
+	resp, err := NewTenantBudgetServer(f.store, f.names, budgetPolicy()).Summarize(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSummarizeRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -527,7 +544,7 @@ func TestTenantBudgetServer_Summarize_JoinsTenantNames(t *testing.T) {
 func TestTenantBudgetServer_Summarize_ExcludesInactiveTenants(t *testing.T) {
 	f := newSummaryFixture()
 	f.store.listNext = "next-page"
-	resp, err := NewTenantBudgetServer(f.store, f.names).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{
+	resp, err := NewTenantBudgetServer(f.store, f.names, budgetPolicy()).Summarize(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSummarizeRequest{
 		ExcludeInactive: true,
 	})
 	if err != nil {
@@ -549,7 +566,7 @@ func TestTenantBudgetServer_Summarize_ExcludesInactiveTenants(t *testing.T) {
 func TestTenantBudgetServer_Summarize_NamesFailureIsInternal(t *testing.T) {
 	f := newSummaryFixture()
 	f.names.err = errors.New("db down")
-	_, err := NewTenantBudgetServer(f.store, f.names).Summarize(context.Background(), &pb.TenantBudgetServiceSummarizeRequest{})
+	_, err := NewTenantBudgetServer(f.store, f.names, budgetPolicy()).Summarize(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSummarizeRequest{})
 	if connect.CodeOf(err) != connect.CodeInternal {
 		t.Fatalf("code = %v, want Internal", connect.CodeOf(err))
 	}
@@ -576,7 +593,7 @@ func TestTenantBudgetServer_Set_Ceilings(t *testing.T) {
 			store := &fakeUsageStore{}
 			req := tc.ceiling
 			req.TenantId = uuid.New().String()
-			res, err := newServer(store).Set(context.Background(), req)
+			res, err := newServer(store).Set(asPlatformAdmin(context.Background()), req)
 			if err != nil {
 				t.Fatalf("Set: %v", err)
 			}
@@ -594,7 +611,7 @@ func TestTenantBudgetServer_Set_Ceilings(t *testing.T) {
 
 func TestTenantBudgetServer_Set_RefusesAnUnsetCeiling(t *testing.T) {
 	store := &fakeUsageStore{}
-	_, err := newServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{TenantId: uuid.New().String()})
+	_, err := newServer(store).Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{TenantId: uuid.New().String()})
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("err = %v, want InvalidArgument", err)
 	}
@@ -608,7 +625,7 @@ func TestTenantBudgetServer_Set_RefusesAnUnsetCeiling(t *testing.T) {
 func TestTenantBudgetServer_Set_UnlimitedUnit(t *testing.T) {
 	for unit, want := range map[string]string{"": "", "EUR": "EUR"} {
 		store := &fakeUsageStore{}
-		if _, err := newServer(store).Set(context.Background(), &pb.TenantBudgetServiceSetRequest{
+		if _, err := newServer(store).Set(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceSetRequest{
 			TenantId: uuid.New().String(), BudgetCeiling: unlimitedIn(unit),
 		}); err != nil {
 			t.Fatalf("%q: %v", unit, err)
@@ -650,7 +667,7 @@ func TestTenantBudgetServer_ListReservations(t *testing.T) {
 		}},
 		reservationsNext: "next-page",
 	}
-	resp, err := newServer(store).ListReservations(context.Background(), &pb.TenantBudgetServiceListReservationsRequest{
+	resp, err := newServer(store).ListReservations(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceListReservationsRequest{
 		TenantId: tenant.String(), PageSize: 7, PageToken: "this-page",
 	})
 	if err != nil {
@@ -683,7 +700,7 @@ func TestTenantBudgetServer_ListReservations_Refusals(t *testing.T) {
 		req  *pb.TenantBudgetServiceListReservationsRequest
 		want connect.Code
 	}{
-		"subsystem off": {NewTenantBudgetServer(nil, nil), &pb.TenantBudgetServiceListReservationsRequest{TenantId: uuid.New().String()}, connect.CodeUnavailable},
+		"subsystem off": {NewTenantBudgetServer(nil, nil, budgetPolicy()), &pb.TenantBudgetServiceListReservationsRequest{TenantId: uuid.New().String()}, connect.CodeUnavailable},
 		"no tenant id":  {newServer(&fakeUsageStore{}), &pb.TenantBudgetServiceListReservationsRequest{TenantId: "acme"}, connect.CodeInvalidArgument},
 		"bad page token": {
 			newServer(&fakeUsageStore{reservationsErr: fmt.Errorf("%w: cursor", limes.ErrInvalidRequest)}),
@@ -693,7 +710,7 @@ func TestTenantBudgetServer_ListReservations_Refusals(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := tc.srv.ListReservations(context.Background(), tc.req); connect.CodeOf(err) != tc.want {
+			if _, err := tc.srv.ListReservations(asPlatformAdmin(context.Background()), tc.req); connect.CodeOf(err) != tc.want {
 				t.Errorf("err = %v, want %v", err, tc.want)
 			}
 		})
@@ -706,7 +723,7 @@ func TestTenantBudgetServer_Get_Reserved(t *testing.T) {
 	store := &fakeUsageStore{budgets: map[uuid.UUID]meter.TenantBudget{tenant: {
 		TenantID: tenant, Ceiling: limes.BudgetCeiling{Unlimited: true, UnitCode: "EUR"}, ReservedAmount: 2 * limes.NanosPerUnit,
 	}}}
-	resp, err := newServer(store).Get(context.Background(), &pb.TenantBudgetServiceGetRequest{TenantId: tenant.String()})
+	resp, err := newServer(store).Get(asPlatformAdmin(context.Background()), &pb.TenantBudgetServiceGetRequest{TenantId: tenant.String()})
 	if err != nil {
 		t.Fatal(err)
 	}

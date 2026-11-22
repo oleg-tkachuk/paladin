@@ -178,13 +178,15 @@ action "BindCollectionToBucket" appliesTo {
 };
 
 // Tenant (admin plane). Also the resource for tenant-scoped records that have
-// no entity of their own: audit log, event subscriptions, operations, billing.
+// no entity of their own: audit log, event subscriptions, operations, billing,
+// the tenant's budget.
 action "ManageTenant", "ReadTenant",
        "ResetQuotaUsage",
        "ReadAuditLog", "ExportAuditLog",
        "ManageSubscription", "ReadSubscription", "TestSubscription",
        "ReadOperation", "CancelOperation",
-       "ReadBilling" appliesTo {
+       "ReadBilling",
+       "ReadTenantBudget", "ManageTenantBudget" appliesTo {
   principal: [User],
   resource: [Tenant],
   context: RequestContext
