@@ -606,60 +606,21 @@ the same commit. Treat this file like a runtime invariant.
   test rebinds the collection mid-session.
 - **Blockers:** a store query by (backend, bucket) for the gate's state.
 
-### The RPC failure log counts a provisioning bucket as a server fault
-
-- **Status:** Deferred.
-- **Reason:** the handlers' own outcome lines (objecth, multiparth, batchh) log
-  the bucket gate's provisioning refusal as a refusal at Warn, but
-  `middleware.LogOutcome` decides by code alone and logs every Unavailable as
-  `rpc failed` at Error, so the same call still leaves an Error line on every
-  plane.
-- **Definition of Done:** the failure log reads the refusal's reason (or a
-  marker the gate sets) and logs a gate refusal as `rpc refused` at Warn,
-  while an Unavailable from a failing dependency stays at Error; a test
-  covers both.
-- **Blockers:** the middleware cannot import `bucketgate` without pulling a
-  handler concern into it; the marker needs a home both can import.
-
 ## API error messages
 
-### A bearer token whose key set will not load is answered Unauthenticated
+### The HTTP edges answer a key set that will not load as a refused token
 
 - **Status:** Deferred.
-- **Reason:** when a token's kid is unknown and the forced JWKS refresh fails
-  (`JWKSVerifier.keySetWith`, the IdP unreachable), the planes answer
-  Unauthenticated, "bearer token could not be verified": a fault of the
-  server's dependency told to the caller as a credential problem, logged by
-  the failure log as `rpc rejected` at Info. The message was cleaned of the fetch error; the code was
-  left as it was.
-- **Definition of Done:** a refresh failure is Unavailable, logged at Error,
-  and an unknown kid after a good refresh stays Unauthenticated; a test
-  covers both.
-- **Blockers:** none.
-
-### Lease refusals of a presented capability still begin with `capability:`
-
-- **Status:** Deferred.
-- **Reason:** `capabilityh/lease.go` answers a lease call it refuses with
-  `capability: a Biscuit copy cannot lease; …`, `capability: leasing for a
-  capability requires OpShare`, `capability: a capability leases only for
-  itself or …` and `capability: the store names no ancestors, …`; both SDK
-  fakes copy the first three, and `paladintest`'s Delegate refusals
-  (`capability.go`, `msgNotPresented` and the rest) do likewise, as
-  `capabilityh.presentedParent` does.
-- **Definition of Done:** each names the capability and the reason without a
-  package prefix; the fakes follow, and a guard walks these messages.
-- **Blockers:** none.
-
-### The `TokenResponse.audience` comment quotes `jwt: audience mismatch`
-
-- **Status:** Deferred.
-- **Reason:** `proto/paladin/iam/v1/types.proto` explains the field by the
-  refusal it replaced, quoted in the old words; the refusal now reads
-  `bearer token audience mismatch`. A proto comment change needs its own
-  `docs(proto)` commit with regenerated stubs.
-- **Definition of Done:** the comment quotes the current text, stubs
-  regenerated, in a commit of its own.
+- **Reason:** the planes answer `auth.ErrKeySetUnavailable` Unavailable, but
+  the edges that verify a bearer token outside Connect — the MCP bridge's
+  `RequireBearer` (`mcp/oauth.go`, logged at Info), `authorizePlatformAdmin`
+  (`mcp/sessions.go`), the audit stream's `SSEHandler` (`auditstream/sse.go`),
+  the bridge's session-subject lookup (`cmd/server/serve_mcp.go`) and the
+  session role's `refreshAges` (`app/build_session.go`) — still answer it as
+  a token refused, 401, with no Error line.
+- **Definition of Done:** each edge answers 503 with a retry sentence for an
+  error wrapping `auth.ErrKeySetUnavailable` and logs it at Error with the
+  cause, a refused token stays 401; a test per edge covers both.
 - **Blockers:** none.
 
 ### The bridge's upstream probe errors reach the admin verbatim

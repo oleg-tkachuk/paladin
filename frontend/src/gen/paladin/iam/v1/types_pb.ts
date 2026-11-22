@@ -146,8 +146,8 @@ export type TokenPair = Message<"paladin.iam.v1.TokenPair"> & {
    * requested_audience is a request, not a guarantee: it defaults when unset
    * and the server may refuse to widen it. Echoing the result means a caller
    * can detect the difference here, rather than four hops later when the
-   * plane rejects the token as "jwt: audience mismatch" — which is where this
-   * field came from.
+   * plane rejects the token as "bearer token audience mismatch" — which is
+   * where this field came from.
    *
    * @generated from field: string audience = 6;
    */

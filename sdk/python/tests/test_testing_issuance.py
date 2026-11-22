@@ -126,3 +126,7 @@ def test_delegate_answers_as_the_table_says(fake: FakePaladin, case: dict[str, A
         req.confirmation_jkt = JKT
     delegate = fake.connect(capability=parent.token).admin.capability.delegate
     assert _answer(lambda: delegate(req)) == case["want"]
+    if "message" in case:
+        with pytest.raises(ConnectError) as refused:
+            delegate(req)
+        assert refused.value.message == case["message"]

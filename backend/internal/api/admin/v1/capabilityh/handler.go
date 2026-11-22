@@ -688,6 +688,22 @@ func issuanceTerms(req *adminv1.CapabilityServiceIssueRequest, caller *auth.Prin
 	return issuance{subject: subj, caveats: caveats, notBefore: nbf}, nil
 }
 
+// Refusals of a Delegate call by the capability it presents.
+const (
+	errDelegateNotPresented = "delegation narrows a presented capability; send it in the " + auth.HeaderCapability + " header"
+	errDelegateNotOwnParent = "parent_id must be the id of the presented capability"
+	errDelegateByCopy       = "the presented capability is a Biscuit copy, which cannot delegate; attenuate it instead"
+)
+
+// PresentedRefusals is every message a lease or Delegate call is refused
+// with for the capability it presents, outside limes's own answers.
+func PresentedRefusals() []string {
+	return []string{
+		errLeaseByCopy, errLeaseWithoutShare, errLeaseNotBelow, errLeaseNoLineage,
+		errDelegateNotPresented, errDelegateNotOwnParent, errDelegateByCopy,
+	}
+}
+
 // presentedParent is the capability a Delegate narrows: the one the caller
 // presents, which the request must name. A delegation is gated entirely by
 // that capability's own caveats — no Cedar admin check: the capability is
@@ -700,11 +716,10 @@ func presentedParent(ctx context.Context, parentIDStr string) (limes.VerifiedCap
 	}
 	verified, ok := auth.VerifiedCapabilityFromContext(ctx)
 	if !ok {
-		return limes.VerifiedCapability{}, connect.NewError(connect.CodeFailedPrecondition,
-			"capability: delegation narrows a presented capability; send it in the "+auth.HeaderCapability+" header")
+		return limes.VerifiedCapability{}, connect.NewError(connect.CodeFailedPrecondition, errDelegateNotPresented)
 	}
 	if verified.Capability().ID != parentID {
-		return limes.VerifiedCapability{}, connect.NewError(connect.CodePermissionDenied, "capability: parent_id must equal caller's own capability id")
+		return limes.VerifiedCapability{}, connect.NewError(connect.CodePermissionDenied, errDelegateNotOwnParent)
 	}
 	// A Biscuit copy's attenuation, and any limits of its own, are not in a
 	// token the issuer can extend: a child would shed them. Its holder
@@ -712,7 +727,7 @@ func presentedParent(ctx context.Context, parentIDStr string) (limes.VerifiedCap
 	// ErrDelegationTooWide; asking first answers with a precondition the
 	// caller can act on, not a permission denial.
 	if verified.FromBiscuit() {
-		return limes.VerifiedCapability{}, connect.NewError(connect.CodeFailedPrecondition, "capability: a Biscuit copy cannot delegate; attenuate it instead")
+		return limes.VerifiedCapability{}, connect.NewError(connect.CodeFailedPrecondition, errDelegateByCopy)
 	}
 	return verified, nil
 }

@@ -1,5 +1,5 @@
 {
-  "_comment": "Who may lease budget for a capability, which the server and both SDKs' fakes are held to. Each case seeds, in one tenant, holder (ops get and share), child and sibling delegated from it (get and share), grandchild from child (get), revoked delegated from holder (get) and revoked, and stranger issued on its own (get); biscuit is holder's own Biscuit, and copy a copy of it narrowed to get and share. The steps run in order as the caller named by as: an operator for none, else presenting that capability. Each step names its call \u2014 revoke revokes the capability as an operator, and answers nothing \u2014 the capability it is of (unknown: an id never issued), the requests it leases, and either the refusal \u2014 Connect's code and the ErrorInfo's limes_code (sdk/testdata/error_info.json) \u2014 or, when it succeeds, held: the requests the lease holds. A step that succeeds may also say renewed: true when its lease has another id than the one the step before it answered with \u2014 a top-up settles the open lease and opens a new one \u2014 or false when it is the same lease.",
+  "_comment": "Who may lease budget for a capability, which the server and both SDKs' fakes are held to. Each case seeds, in one tenant, holder (ops get and share), child and sibling delegated from it (get and share), grandchild from child (get), revoked delegated from holder (get) and revoked, and stranger issued on its own (get); biscuit is holder's own Biscuit, and copy a copy of it narrowed to get and share. The steps run in order as the caller named by as: an operator for none, else presenting that capability. Each step names its call \u2014 revoke revokes the capability as an operator, and answers nothing \u2014 the capability it is of (unknown: an id never issued), the requests it leases, and either the refusal \u2014 Connect's code and the ErrorInfo's limes_code (sdk/testdata/error_info.json) \u2014 with message, where the table names one, the refusal's message word for word \u2014 or, when it succeeds, held: the requests the lease holds. A step that succeeds may also say renewed: true when its lease has another id than the one the step before it answered with \u2014 a top-up settles the open lease and opens a new one \u2014 or false when it is the same lease.",
   "cases": [
     {
       "name": "an operator leases, reads and settles",
@@ -140,7 +140,8 @@
           "call": "lease",
           "of": "holder",
           "requests": 1,
-          "code": "permission_denied"
+          "code": "permission_denied",
+          "message": "the presented capability leases only for itself or a capability delegated from it"
         }
       ]
     },
@@ -152,7 +153,8 @@
           "call": "lease",
           "of": "grandchild",
           "requests": 1,
-          "code": "permission_denied"
+          "code": "permission_denied",
+          "message": "the presented capability leases only for itself or a capability delegated from it"
         }
       ]
     },
@@ -164,7 +166,8 @@
           "call": "lease",
           "of": "stranger",
           "requests": 1,
-          "code": "permission_denied"
+          "code": "permission_denied",
+          "message": "the presented capability leases only for itself or a capability delegated from it"
         }
       ]
     },
@@ -176,7 +179,8 @@
           "call": "lease",
           "of": "stranger",
           "requests": 1,
-          "code": "permission_denied"
+          "code": "permission_denied",
+          "message": "the presented capability does not allow share, which leasing for a capability requires"
         }
       ]
     },
@@ -214,7 +218,8 @@
           "call": "lease",
           "of": "holder",
           "requests": 1,
-          "code": "failed_precondition"
+          "code": "failed_precondition",
+          "message": "the presented capability is a Biscuit copy, which cannot lease; present the capability it was attenuated from"
         }
       ]
     },
@@ -226,7 +231,8 @@
           "call": "lease",
           "of": "holder",
           "requests": 1,
-          "code": "failed_precondition"
+          "code": "failed_precondition",
+          "message": "the presented capability is a Biscuit copy, which cannot lease; present the capability it was attenuated from"
         }
       ]
     }

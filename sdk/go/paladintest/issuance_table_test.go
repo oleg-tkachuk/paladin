@@ -3,6 +3,7 @@ package paladintest_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -51,6 +52,8 @@ type issuanceCase struct {
 	ChildTaintedRead     bool         `json:"child_tainted_read"`
 	ChildAudience        []string     `json:"child_audience"`
 	Want                 issuanceWant `json:"want"`
+	// Message, when set, is the refusal's message word for word.
+	Message string `json:"message"`
 }
 
 func answerOf(resp *adminv1.CapabilityServiceIssueResponse, err error) issuanceWant {
@@ -141,9 +144,12 @@ func TestIssueAndDelegateAnswerAsTheTableSays(t *testing.T) {
 			if tc.KeyBound {
 				req.ConfirmationJkt = testJKT
 			}
-			got := answerOf(srv.Connect(paladin.WithCapability(parent.GetToken())).Admin.Capability.Delegate(ctx, req))
-			if got != tc.Want {
+			resp, err := srv.Connect(paladin.WithCapability(parent.GetToken())).Admin.Capability.Delegate(ctx, req)
+			if got := answerOf(resp, err); got != tc.Want {
 				t.Errorf("the fake answers %+v, the table %+v", got, tc.Want)
+			}
+			if ce, ok := errors.AsType[*connect.Error](err); tc.Message != "" && (!ok || ce.Message() != tc.Message) {
+				t.Errorf("the fake refuses with %v, the table says %q", err, tc.Message)
 			}
 		})
 	}

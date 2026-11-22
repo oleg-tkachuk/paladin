@@ -89,7 +89,7 @@ func (s ceilingSide) run(t *testing.T, who string, steps []leaseStep) {
 		} else {
 			got, _ = runLeaseStep(s.operator, s.leases, s.leases, s.operator, step, s.ids[step.Of])
 		}
-		if got != step.want() {
+		if got = step.pinned(got); got != step.want() {
 			t.Errorf("%s step %d (%s of %s) answers %+v, the table %+v", who, i, step.Call, step.Of, got, step.want())
 		}
 	}

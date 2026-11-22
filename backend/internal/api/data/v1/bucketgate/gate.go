@@ -33,7 +33,8 @@
 // know refuses a bytes-write as not ready rather than letting it through.
 //
 // The package is a leaf on purpose: the store adapter, the handlers and their
-// test fakes all import it, so it carries no dependency beyond the codes.
+// test fakes all import it, so it carries no dependency beyond the codes and
+// rpcerr's refusal marker, which the failure log reads.
 package bucketgate
 
 import (
@@ -41,6 +42,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 )
 
@@ -140,6 +142,12 @@ type Refusal struct {
 }
 
 func (r *Refusal) Error() string { return r.msg }
+
+// Refuses marks every gate refusal as a verdict on the bucket's state, so the
+// failure log logs one as a refusal even when its code is Unavailable.
+func (*Refusal) Refuses() {}
+
+var _ rpcerr.Refusal = (*Refusal)(nil)
 
 // The refusals Check answers.
 var (

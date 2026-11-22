@@ -3,6 +3,7 @@ package capabilityh
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -64,6 +65,20 @@ type issuanceCase struct {
 	ChildTaintedRead     bool         `json:"child_tainted_read"`
 	ChildAudience        []string     `json:"child_audience"`
 	Want                 issuanceWant `json:"want"`
+	// Message, when set, is the refusal's message word for word.
+	Message string `json:"message"`
+}
+
+// checkMessage holds the message err refuses with to tc's, when tc names
+// one; who names the side that answered.
+func (tc issuanceCase) checkMessage(t *testing.T, who string, err error) {
+	t.Helper()
+	if tc.Message == "" {
+		return
+	}
+	if ce, ok := errors.AsType[*connect.Error](err); !ok || ce.Message() != tc.Message {
+		t.Errorf("%s refuses with %v, the table says %q", who, err, tc.Message)
+	}
 }
 
 func readIssuanceTable(t *testing.T) (issue, delegate []issuanceCase) {
@@ -180,9 +195,11 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 			})
 			serverReq := delegateReq(parent)
 			mutate(tc, serverReq)
-			if got := gotIssuance(h.Delegate(auth.WithCapability(context.Background(), parent), serverReq)); got != tc.Want {
+			served, serverErr := h.Delegate(auth.WithCapability(context.Background(), parent), serverReq)
+			if got := gotIssuance(served, serverErr); got != tc.Want {
 				t.Errorf("the server answers %+v, the table %+v", got, tc.Want)
 			}
+			tc.checkMessage(t, "the server", serverErr)
 
 			issueReq := &adminv1.CapabilityServiceIssueRequest{
 				Subject: &adminv1.CapabilityPrincipal{
@@ -203,6 +220,7 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 			if got := gotIssuance(faked, fakeErr); got != tc.Want {
 				t.Errorf("the fake answers %+v, the table %+v", got, tc.Want)
 			}
+			tc.checkMessage(t, "the fake", fakeErr)
 		})
 	}
 }

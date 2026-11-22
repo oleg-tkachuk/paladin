@@ -275,7 +275,7 @@ func (v *JWKSVerifier) keySetWith(ctx context.Context, kid string) (jwk.Set, err
 		}
 		return nil, v.refresh(ctx)
 	}); err != nil {
-		return nil, fmt.Errorf("jwks: refresh on miss: %w", err)
+		return nil, fmt.Errorf("%w: refresh on miss: %w", ErrKeySetUnavailable, err)
 	}
 
 	v.mu.RLock()
