@@ -531,17 +531,35 @@ the same commit. Treat this file like a runtime invariant.
   key or fails the item.
 - **Blockers:** none.
 
-### The console and the SDKs do not check an object key before sending it
+### The console does not check an object key before sending it
 
 - **Status:** Deferred.
-- **Reason:** the server refuses a non-canonical key with the rule and the
-  reason, which the console shows, but the upload dialog, the copy dialog
-  and the SDKs' `ObjectURI` parsers accept any non-empty key, so a user
+- **Reason:** the server and both SDKs' fakes refuse a non-canonical key
+  (`sdk/testdata/object_keys.json`), and the console shows the server's
+  rule and reason, but the upload and copy dialogs accept any key, so a user
   learns of the rule only from a refused request.
-- **Definition of Done:** one table of keys and verdicts in `sdk/testdata`
-  that `storagepath`'s tests, both SDKs and the console's key helper read;
-  the console disables submit with the rule beside the field.
+- **Definition of Done:** the console's key helper reads
+  `sdk/testdata/object_keys.json` in its tests and the dialogs disable
+  submit with the rule beside the field.
 - **Blockers:** none.
+
+### A capability's object URI does not separate a nested collection from its keys
+
+- **Status:** Deferred.
+- **Reason:** a capability names an object as
+  `object://<tenant>/<collection>/<key>` (`objecth.CapabilityObjectURI`,
+  `paladin.ObjectResource`), and a collection may hold `/`, so collection
+  `a/b` with key `c` and collection `a` with key `b/c` have one URI, and a
+  resource caveat on collection `a`'s prefix also matches collection `a/b`'s
+  objects. `parseCapabilityObjectURI` assumes the collection is one segment.
+  The bucket path was made unambiguous (`storagepath`); the capability
+  resource space was not, since it is limes's and the SDKs' contract too.
+- **Definition of Done:** the URI writes the collection as one segment (the
+  storagepath encoding, or escaped as `paladin.ObjectURI` does), in the
+  backend, both SDKs and the attenuation helpers at once; a test shows a
+  caveat on collection `a` refuses an object of `a/b`.
+- **Blockers:** capabilities already issued carry the old URIs; a decision
+  on reissuing them.
 
 ### Batch executors do not re-check the bucket gate when they run
 

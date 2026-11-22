@@ -10,7 +10,11 @@
   listed, but their bytes are where the old layout put them, so reading them
   fails. Delete such objects and upload them again; on a cluster whose data
   is disposable, delete the nested collections and create them again. Their
-  old bytes are not removed by Paladin.
+  old bytes are not removed by Paladin, and they sit where the parent
+  collection now keeps its own keys: an upload to the parent at such a key
+  is refused by the store (`If-None-Match: *`) until they are removed from
+  the bucket. The nested collections are
+  `SELECT tenant_id, name FROM collections WHERE name LIKE '%/%'`.
 - An object key is segments separated by `/`, none of them empty, `.` or
   `..`: no leading or trailing `/`, no `//`. `UploadObject`,
   `InitiateMultipartUpload` and `CopyObject` (`destination_key`) refuse any
@@ -29,6 +33,9 @@
   key of its own.
 - `InitiateMultipartUpload` without a `key` names one, as `UploadObject`
   does. It used to store the object at the collection's own prefix.
+- Both SDKs' fakes (`paladintest`, `paladin.testing`) refuse the same keys
+  on `UploadObject` and `InitiateMultipartUpload`, held to the server by
+  `sdk/testdata/object_keys.json`.
 - Objects stored under a key that breaks the rule before this release stay
   listed, but reading their bytes fails, and their placement is not
   reported. Deleting them settles without deleting bytes, which may belong
