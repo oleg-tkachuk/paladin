@@ -31,22 +31,22 @@ type gatedRepo struct {
 	lookupErr error
 }
 
-func (r *gatedRepo) resolve(write bool) error {
+func (r *gatedRepo) resolve(access bucketgate.Access) error {
 	if r.lookupErr != nil {
 		return r.lookupErr
 	}
-	return bucketgate.Check(bucketgate.AccessOf(write), r.state)
+	return bucketgate.Check(access, r.state)
 }
 
-func (r *gatedRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, write bool) (string, string, error) {
-	if err := r.resolve(write); err != nil {
+func (r *gatedRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, access bucketgate.Access) (string, string, error) {
+	if err := r.resolve(access); err != nil {
 		return "", "", err
 	}
 	return gateTestBackend, gateTestBucket, nil
 }
 
-func (r *gatedRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string, write bool) (BucketMeta, error) {
-	if err := r.resolve(write); err != nil {
+func (r *gatedRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string, access bucketgate.Access) (BucketMeta, error) {
+	if err := r.resolve(access); err != nil {
 		return BucketMeta{}, err
 	}
 	return BucketMeta{BackendID: gateTestBackend, BucketName: gateTestBucket, ObjectLockEnabled: true}, nil

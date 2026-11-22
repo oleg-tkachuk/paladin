@@ -75,6 +75,28 @@ var (
 	Protective = Access{kindProtective}
 )
 
+// The names String gives the accesses, as logs and test output print them.
+const (
+	nameBytesWrite    = "bytes-write"
+	nameRead          = "read"
+	nameMetadataWrite = "metadata-write"
+	nameProtective    = "protective"
+)
+
+// String names the access.
+func (a Access) String() string {
+	switch a {
+	case Read:
+		return nameRead
+	case MetadataWrite:
+		return nameMetadataWrite
+	case Protective:
+		return nameProtective
+	default:
+		return nameBytesWrite
+	}
+}
+
 // The provision states a bucket row carries (buckets.provision_state).
 const (
 	// ProvisionPending: registered, and the reconciler still owes the backend
@@ -167,12 +189,4 @@ func Check(access Access, s State) error {
 	default:
 		return ErrBucketNotReady
 	}
-}
-
-// AccessOf is the access a resolver's write flag stands for.
-func AccessOf(write bool) Access {
-	if write {
-		return BytesWrite
-	}
-	return Read
 }

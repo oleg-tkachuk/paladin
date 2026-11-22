@@ -134,12 +134,12 @@ func TestRefusalsListsEveryRefusalOnce(t *testing.T) {
 	}
 }
 
-func TestAccessOf(t *testing.T) {
-	if got := AccessOf(true); got != BytesWrite {
-		t.Errorf("AccessOf(true) = %v, want BytesWrite", got)
-	}
-	if got := AccessOf(false); got != Read {
-		t.Errorf("AccessOf(false) = %v, want Read", got)
+// String names every access the way the package table does.
+func TestAccessString(t *testing.T) {
+	for _, a := range accesses {
+		if got := a.access.String(); got != a.name {
+			t.Errorf("String() = %q, want %q", got, a.name)
+		}
 	}
 }
 

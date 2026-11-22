@@ -8,6 +8,7 @@ import (
 	"testing"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/multiparth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -30,7 +31,7 @@ func TestMultipartCompositeChecksumRoundTrip(t *testing.T) {
 		later     = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=-2"
 	)
 	objectID := uuid.NewV7()
-	backendID, bucket, err := repo.LookupBucket(ctx, f.tenantID, f.collection, true)
+	backendID, bucket, err := repo.LookupBucket(ctx, f.tenantID, f.collection, bucketgate.BytesWrite)
 	if err != nil {
 		t.Fatal(err)
 	}

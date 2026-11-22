@@ -79,7 +79,7 @@ type Submitter interface {
 // bucket:/collection:-scoped PAT is fail-closed on its own object-keys. The
 // object repository (object.Repository) satisfies this.
 type BucketResolver interface {
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (backendID, bucket string, err error)
+	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (backendID, bucket string, err error)
 }
 
 // ObjectFinder reads the objects a batch names by id, as the worker does.
@@ -370,7 +370,7 @@ func (h *Handler) binding(ctx context.Context, tenantID uuid.UUID, collection st
 		if h.buckets == nil {
 			return "", "", nil
 		}
-		backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, false)
+		backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, bucketgate.Read)
 		if err != nil {
 			h.log.Warn(msgSourceUnresolved, append(bindingFields(tenantID, collection), zap.Error(err))...)
 			return "", "", nil
@@ -381,7 +381,7 @@ func (h *Handler) binding(ctx context.Context, tenantID uuid.UUID, collection st
 		h.log.Error(msgNoBucketResolver, bindingFields(tenantID, collection)...)
 		return "", "", connect.NewError(connect.CodeUnavailable, msgNoBucketResolver)
 	}
-	backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, true)
+	backendID, bucket, err = h.buckets.LookupBucket(ctx, tenantID, collection, access)
 	if err != nil {
 		mapped := objecth.MapResolveErr(err)
 		code := connect.CodeOf(mapped)

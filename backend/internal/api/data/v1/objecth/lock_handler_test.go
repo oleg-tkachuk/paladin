@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
@@ -91,7 +92,7 @@ func (s *lockObjectStub) FindByName(context.Context, uuid.UUID, string, string) 
 	return s.obj, s.objErr
 }
 
-func (s *lockObjectStub) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (BucketMeta, error) {
+func (s *lockObjectStub) LookupBucketMeta(context.Context, uuid.UUID, string, bucketgate.Access) (BucketMeta, error) {
 	return s.meta, s.metaErr
 }
 

@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
@@ -137,11 +138,11 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 
 	// Bucket lookups are batch-invariant: same source / dest collection
 	// across the whole batch ⇒ resolve once.
-	srcBackendID, srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcCollection, false) // copy source (read)
+	srcBackendID, srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcCollection, bucketgate.Read) // copy source (read)
 	if err != nil {
 		return nil, fmt.Errorf("lookup src bucket: %w", err)
 	}
-	dstMeta, err := e.Objects.LookupBucketMeta(ctx, args.TenantID, args.DstCollection, true) // copy dest (mutation)
+	dstMeta, err := e.Objects.LookupBucketMeta(ctx, args.TenantID, args.DstCollection, bucketgate.BytesWrite) // copy dest (mutation)
 	if err != nil {
 		return nil, fmt.Errorf("lookup dst bucket: %w", err)
 	}

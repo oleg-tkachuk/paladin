@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
@@ -44,7 +45,7 @@ type fakeBuckets struct {
 	err   error
 }
 
-func (f fakeBuckets) LookupBucket(_ context.Context, _ uuid.UUID, collection string, _ bool) (string, string, error) {
+func (f fakeBuckets) LookupBucket(_ context.Context, _ uuid.UUID, collection string, _ bucketgate.Access) (string, string, error) {
 	if f.err != nil {
 		return "", "", f.err
 	}

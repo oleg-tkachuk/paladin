@@ -9,6 +9,7 @@ import (
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 )
 
 // fakeObjectRepo is a minimal Repository stand-in that only implements the
@@ -19,7 +20,7 @@ type fakeObjectRepo struct {
 	err  error
 }
 
-func (f *fakeObjectRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string, _ bool) (BucketMeta, error) {
+func (f *fakeObjectRepo) LookupBucketMeta(_ context.Context, _ uuid.UUID, _ string, _ bucketgate.Access) (BucketMeta, error) {
 	return f.meta, f.err
 }
 
@@ -64,7 +65,7 @@ func (*fakeObjectRepo) VersionLocks(context.Context, uuid.UUID, uuid.UUID) ([]Ob
 
 // LookupBucket reports no binding, as for an unbound collection: the version
 // RPCs' authorisation resolves it best-effort.
-func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
+func (*fakeObjectRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 	return "", "", nil
 }
 func (*fakeObjectRepo) UpdateMetadataTx(context.Context, pgx.Tx, UpdateMetadataArgs) (Object, error) {

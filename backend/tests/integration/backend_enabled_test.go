@@ -117,10 +117,10 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "gate-be", "gate-bucket", "docs")
 
 	// Enabled by default → resolution succeeds.
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 		t.Fatalf("enabled LookupBucket: %v", err)
 	}
-	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", false); err != nil {
+	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 		t.Fatalf("enabled LookupBucketMeta: %v", err)
 	}
 
@@ -133,10 +133,10 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 
 	// Both resolver paths now refuse with the sentinel — the gate every
 	// object op funnels through.
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, objecth.ErrBackendDisabled) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.Read); !errors.Is(err, objecth.ErrBackendDisabled) {
 		t.Errorf("disabled LookupBucket: err=%v, want ErrBackendDisabled", err)
 	}
-	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", false); !errors.Is(err, objecth.ErrBackendDisabled) {
+	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", bucketgate.Read); !errors.Is(err, objecth.ErrBackendDisabled) {
 		t.Errorf("disabled LookupBucketMeta: err=%v, want ErrBackendDisabled", err)
 	}
 
@@ -145,7 +145,7 @@ func TestBackendDisabled_ResolverGate(t *testing.T) {
 	if err := be.SetEnabled(ctx, "gate-be", true, cur.ResourceVersion); err != nil {
 		t.Fatalf("re-enable: %v", err)
 	}
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 		t.Errorf("re-enabled LookupBucket: %v", err)
 	}
 }
@@ -223,10 +223,10 @@ func TestBackendMaintenance_AdvisoryNotAGate(t *testing.T) {
 		t.Error("maintenance flag did not persist")
 	}
 	// Advisory: neither reads nor writes are gated by maintenance.
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 		t.Errorf("read under maintenance should resolve: %v", err)
 	}
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.BytesWrite); err != nil {
 		t.Errorf("write under maintenance should resolve (advisory, not a gate): %v", err)
 	}
 }
@@ -245,7 +245,7 @@ func TestBackendReadOnly_ResolverGate(t *testing.T) {
 	mustSeedBucketAndKey(t, h.PoolMigrate, tenantID, "drain-be", "drain-bucket", "docs")
 
 	// Writable by default: a mutation resolves.
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.BytesWrite); err != nil {
 		t.Fatalf("writable LookupBucket(write): %v", err)
 	}
 
@@ -257,17 +257,17 @@ func TestBackendReadOnly_ResolverGate(t *testing.T) {
 	}
 
 	// Mutations are refused with the read-only sentinel …
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); !errors.Is(err, objecth.ErrBackendReadOnly) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.BytesWrite); !errors.Is(err, objecth.ErrBackendReadOnly) {
 		t.Errorf("drained LookupBucket(write): err=%v, want ErrBackendReadOnly", err)
 	}
-	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", true); !errors.Is(err, objecth.ErrBackendReadOnly) {
+	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", bucketgate.BytesWrite); !errors.Is(err, objecth.ErrBackendReadOnly) {
 		t.Errorf("drained LookupBucketMeta(write): err=%v, want ErrBackendReadOnly", err)
 	}
 	// … but reads still resolve — the whole point of a drain.
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 		t.Errorf("drained LookupBucket(read): err=%v, want success", err)
 	}
-	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", false); err != nil {
+	if _, err := repo.LookupBucketMeta(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 		t.Errorf("drained LookupBucketMeta(read): err=%v, want success", err)
 	}
 
@@ -276,7 +276,7 @@ func TestBackendReadOnly_ResolverGate(t *testing.T) {
 	if err := be.SetReadOnly(ctx, "drain-be", false, cur.ResourceVersion); err != nil {
 		t.Fatalf("undrain: %v", err)
 	}
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", true); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.BytesWrite); err != nil {
 		t.Errorf("undrained LookupBucket(write): %v", err)
 	}
 }
@@ -362,7 +362,7 @@ func TestBackendDisable_ReversibleNoDataLoss(t *testing.T) {
 	if err := be.SetEnabled(ctx, "rev-be", false, cur.ResourceVersion); err != nil {
 		t.Fatalf("disable: %v", err)
 	}
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); !errors.Is(err, objecth.ErrBackendDisabled) {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.Read); !errors.Is(err, objecth.ErrBackendDisabled) {
 		t.Fatalf("expected disabled refusal, got %v", err)
 	}
 
@@ -371,7 +371,7 @@ func TestBackendDisable_ReversibleNoDataLoss(t *testing.T) {
 	if err := be.SetEnabled(ctx, "rev-be", true, cur.ResourceVersion); err != nil {
 		t.Fatalf("re-enable: %v", err)
 	}
-	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", false); err != nil {
+	if _, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 		t.Fatalf("re-enabled resolution: %v", err)
 	}
 
@@ -438,11 +438,11 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 
 	resolvers := []struct {
 		name   string
-		lookup func(context.Context, uuid.UUID, string, bool) (string, string, error)
+		lookup func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error)
 	}{
 		{"object", adapters.NewObjectRepo(q, h.PoolMigrate).LookupBucket},
-		{"presign", func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
-			meta, err := adapters.NewPresignRepo(q, h.PoolMigrate).LookupBucketMeta(ctx, tenantID, collection, write)
+		{"presign", func(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (string, string, error) {
+			meta, err := adapters.NewPresignRepo(q, h.PoolMigrate).LookupBucketMeta(ctx, tenantID, collection, access)
 			return meta.BackendID, meta.BucketName, err
 		}},
 		{"multipart", adapters.NewMultipartRepo(q, h.PoolMigrate).LookupBucket},
@@ -474,9 +474,9 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 	// Baseline: an enabled, writable, ready bucket resolves for every repo,
 	// so a later refusal is the gate firing and not a broken fixture.
 	for _, r := range resolvers {
-		for _, write := range []bool{false, true} {
-			if _, _, err := r.lookup(ctx, tenantID, "docs", write); err != nil {
-				t.Fatalf("%s baseline (write=%v): %v", r.name, write, err)
+		for _, access := range []bucketgate.Access{bucketgate.Read, bucketgate.BytesWrite} {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", access); err != nil {
+				t.Fatalf("%s baseline (%v): %v", r.name, access, err)
 			}
 		}
 	}
@@ -486,10 +486,10 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 		defer setFlag(t, func(rv int64) error { return be.SetEnabled(ctx, "three-be", true, rv) })
 
 		for _, r := range resolvers {
-			for _, write := range []bool{false, true} {
-				_, _, err := r.lookup(ctx, tenantID, "docs", write)
+			for _, access := range []bucketgate.Access{bucketgate.Read, bucketgate.BytesWrite} {
+				_, _, err := r.lookup(ctx, tenantID, "docs", access)
 				if !errors.Is(err, objecth.ErrBackendDisabled) {
-					t.Errorf("%s disabled (write=%v): err=%v, want ErrBackendDisabled", r.name, write, err)
+					t.Errorf("%s disabled (%v): err=%v, want ErrBackendDisabled", r.name, access, err)
 				}
 			}
 		}
@@ -500,12 +500,12 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 		defer setFlag(t, func(rv int64) error { return be.SetReadOnly(ctx, "three-be", false, rv) })
 
 		for _, r := range resolvers {
-			if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, objecth.ErrBackendReadOnly) {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", bucketgate.BytesWrite); !errors.Is(err, objecth.ErrBackendReadOnly) {
 				t.Errorf("%s drained (write): err=%v, want ErrBackendReadOnly", r.name, err)
 			}
 			// Reads keep resolving — a drain that stopped serving reads
 			// would be an outage, not a drain.
-			if _, _, err := r.lookup(ctx, tenantID, "docs", false); err != nil {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 				t.Errorf("%s drained (read): err=%v, want success", r.name, err)
 			}
 		}
@@ -516,10 +516,10 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 		defer setProvisionState(t, "ready")
 
 		for _, r := range resolvers {
-			if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, objecth.ErrBucketProvisioning) {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", bucketgate.BytesWrite); !errors.Is(err, objecth.ErrBucketProvisioning) {
 				t.Errorf("%s pending (write): err=%v, want ErrBucketProvisioning", r.name, err)
 			}
-			if _, _, err := r.lookup(ctx, tenantID, "docs", false); err != nil {
+			if _, _, err := r.lookup(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 				t.Errorf("%s pending (read): err=%v, want success", r.name, err)
 			}
 		}
@@ -533,10 +533,10 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 			defer setProvisionState(t, bucketgate.ProvisionReady)
 
 			for _, r := range resolvers {
-				if _, _, err := r.lookup(ctx, tenantID, "docs", true); !errors.Is(err, bucketgate.ErrBucketNotReady) {
+				if _, _, err := r.lookup(ctx, tenantID, "docs", bucketgate.BytesWrite); !errors.Is(err, bucketgate.ErrBucketNotReady) {
 					t.Errorf("%s %s (write): err=%v, want ErrBucketNotReady", r.name, state, err)
 				}
-				if _, _, err := r.lookup(ctx, tenantID, "docs", false); err != nil {
+				if _, _, err := r.lookup(ctx, tenantID, "docs", bucketgate.Read); err != nil {
 					t.Errorf("%s %s (read): err=%v, want success", r.name, state, err)
 				}
 			}
@@ -549,9 +549,9 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 		defer setFlag(t, func(rv int64) error { return be.SetMaintenance(ctx, "three-be", false, rv) })
 
 		for _, r := range resolvers {
-			for _, write := range []bool{false, true} {
-				if _, _, err := r.lookup(ctx, tenantID, "docs", write); err != nil {
-					t.Errorf("%s maintenance (write=%v): err=%v, want success", r.name, write, err)
+			for _, access := range []bucketgate.Access{bucketgate.Read, bucketgate.BytesWrite} {
+				if _, _, err := r.lookup(ctx, tenantID, "docs", access); err != nil {
+					t.Errorf("%s maintenance (%v): err=%v, want success", r.name, access, err)
 				}
 			}
 		}
@@ -604,7 +604,7 @@ func TestResolverGates_WireCodes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			setState(t, tc.readOnly, tc.provision)
 			defer setState(t, false, bucketgate.ProvisionReady)
-			_, _, err := repo.LookupBucket(ctx, tenantID, "docs", true)
+			_, _, err := repo.LookupBucket(ctx, tenantID, "docs", bucketgate.BytesWrite)
 			mapped := objecth.MapResolveErr(err)
 			if got := connect.CodeOf(mapped); got != tc.code {
 				t.Fatalf("code = %v (%v), want %v", got, mapped, tc.code)

@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
@@ -45,7 +46,7 @@ func warnBestEffort(ctx context.Context, l *zap.Logger, op, read string, tenantI
 // unaffected. A write never comes here: writeBinding resolves it through the
 // write gate and fails closed.
 func scopeBucket(ctx context.Context, l *zap.Logger, repo Repository, op string, tenantID uuid.UUID, collection string) (backendID, bucket string) {
-	backendID, bucket, err := repo.LookupBucket(ctx, tenantID, collection, false)
+	backendID, bucket, err := repo.LookupBucket(ctx, tenantID, collection, bucketgate.Read)
 	if err != nil {
 		warnBestEffort(ctx, l, op, readScopeBucket, tenantID, collection, err)
 		return "", ""

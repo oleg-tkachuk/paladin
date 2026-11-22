@@ -602,10 +602,10 @@ func (r *ObjectRepo) ListDistinctTags(
 // Collection. Hits idx_collections_bucket_routing. After the schema baseline (001_initial_schema.sql)
 // bucket_name is NOT NULL so a successful lookup always returns a
 // non-empty string.
-func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
+func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (string, string, error) {
 	// The query and the three gates live in bucket_resolver.go, shared with
 	// the presign and multipart repos.
-	return resolveBucket(ctx, r.pool, tenantID, collection, write)
+	return resolveBucket(ctx, r.pool, tenantID, collection, access)
 }
 
 // LookupBucketMeta returns the bucket binding plus versioning + lock flags
@@ -624,10 +624,10 @@ func (r *ObjectRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, colle
 //
 // This lets a tenant turn versioning on for one namespace within a
 // shared bucket without touching the bucket's global config.
-func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
+func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error) {
 	// JOIN storage_backends so a disabled backend is refused here too —
 	// the resolution chokepoint covers every promote/delete/version path.
-	// `write` splits the read_only (drain) gate by operation class (047).
+	// access decides how the read_only (drain) and provision gates answer.
 	const q = `
 		SELECT sb.name, bk.name,
 		       bk.versioning_enabled,
@@ -661,7 +661,7 @@ func (r *ObjectRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, c
 		}
 		return objecth.BucketMeta{}, fmt.Errorf("lookup bucket meta: %w", err)
 	}
-	if err := bucketgate.Check(bucketgate.AccessOf(write), state); err != nil {
+	if err := bucketgate.Check(access, state); err != nil {
 		return objecth.BucketMeta{}, err
 	}
 	// Fail closed on a document that does not decode: these are limits the

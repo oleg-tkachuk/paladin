@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
@@ -36,7 +37,7 @@ type fakeRepo struct {
 	initiateSessionFn func(ctx context.Context, args InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (Session, error)
 	getSessionFn      func(ctx context.Context, uploadID string) (Session, error)
 	deleteSessionFn   func(ctx context.Context, uploadID string) error
-	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error)
+	lookupBucketFn    func(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (string, string, error)
 	// object is what Object reads back; objectErr fails the read.
 	object    objecth.Object
 	objectErr error
@@ -61,7 +62,7 @@ type fakeRepo struct {
 	lastLookup struct {
 		tenantID   uuid.UUID
 		collection string
-		write      bool
+		access     bucketgate.Access
 	}
 	deleteCalled bool
 }
@@ -111,20 +112,20 @@ func (f *fakeRepo) RecordCompositeChecksum(_ context.Context, objectID uuid.UUID
 	return f.recordErr
 }
 
-func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (objecth.BucketMeta, error) {
-	backendID, bucket, err := f.LookupBucket(ctx, tenantID, collection, write)
+func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error) {
+	backendID, bucket, err := f.LookupBucket(ctx, tenantID, collection, access)
 	return objecth.BucketMeta{
 		BackendID: backendID, BucketName: bucket, Constraints: f.constraints,
 		PublicRead: f.public, CacheControl: f.cacheControl,
 	}, err
 }
 
-func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, write bool) (string, string, error) {
+func (f *fakeRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (string, string, error) {
 	f.lastLookup.tenantID = tenantID
 	f.lastLookup.collection = collection
-	f.lastLookup.write = write
+	f.lastLookup.access = access
 	if f.lookupBucketFn != nil {
-		return f.lookupBucketFn(ctx, tenantID, collection, write)
+		return f.lookupBucketFn(ctx, tenantID, collection, access)
 	}
 	return "backend-x", "bucket-x", nil
 }
@@ -401,7 +402,7 @@ func TestInitiateMultipartUpload(t *testing.T) {
 	})
 
 	t.Run("bucket resolve error → not found", func(t *testing.T) {
-		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
+		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 			return "", "", fmt.Errorf("no bucket: %w", apiutil.ErrNotFound)
 		}}
 		_, err := newHandler(repo, &fakeStorage{}, allow()).
@@ -410,7 +411,7 @@ func TestInitiateMultipartUpload(t *testing.T) {
 	})
 
 	t.Run("bucket disabled → failed precondition", func(t *testing.T) {
-		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
+		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 			return "", "", objecth.ErrBackendDisabled
 		}}
 		_, err := newHandler(repo, &fakeStorage{}, allow()).
@@ -456,7 +457,7 @@ func TestInitiateMultipartUpload(t *testing.T) {
 
 	t.Run("ok stamps tenant and routes storage + persist", func(t *testing.T) {
 		storage := &fakeStorage{initiateFn: func() (string, error) { return "SUP-77", nil }}
-		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
+		repo := &fakeRepo{lookupBucketFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 			return "backend-a", "bucket-a", nil
 		}}
 		args := base
@@ -473,7 +474,7 @@ func TestInitiateMultipartUpload(t *testing.T) {
 		if repo.lastInitiate.args.TenantID != tid {
 			t.Fatalf("tenant not stamped from ctx: got %v want %v", repo.lastInitiate.args.TenantID, tid)
 		}
-		if !repo.lastLookup.write {
+		if repo.lastLookup.access != bucketgate.BytesWrite {
 			t.Fatal("bucket lookup should request write routing for a mutation")
 		}
 		// The bucket must be resolved BEFORE authz and stamped on the Resource,
@@ -544,7 +545,7 @@ func TestCompleteMultipartUpload(t *testing.T) {
 				s.Bucket = "" // force LookupBucket path
 				return s, nil
 			},
-			lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
+			lookupBucketFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 				return "", "", fmt.Errorf("gone: %w", apiutil.ErrNotFound)
 			},
 		}
@@ -713,7 +714,7 @@ func TestPresignPart(t *testing.T) {
 				s.Bucket = ""
 				return s, nil
 			},
-			lookupBucketFn: func(context.Context, uuid.UUID, string, bool) (string, string, error) {
+			lookupBucketFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 				return "", "", fmt.Errorf("gone: %w", apiutil.ErrNotFound)
 			},
 		}

@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
@@ -31,10 +32,10 @@ type limitsCopyRepo struct {
 func (r *limitsCopyRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]objecth.Object, error) {
 	return r.sources, nil
 }
-func (*limitsCopyRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
+func (*limitsCopyRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 	return "be", "src-bucket", nil
 }
-func (r *limitsCopyRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bool) (objecth.BucketMeta, error) {
+func (r *limitsCopyRepo) LookupBucketMeta(context.Context, uuid.UUID, string, bucketgate.Access) (objecth.BucketMeta, error) {
 	return objecth.BucketMeta{BackendID: "be", BucketName: "dst-bucket", Constraints: r.constraints, PublicRead: r.public}, nil
 }
 func (r *limitsCopyRepo) CreateObject(_ context.Context, a objecth.CreateObjectArgs) (objecth.Object, error) {

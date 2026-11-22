@@ -6,6 +6,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -37,7 +38,7 @@ func TestLookupBucketReturnsBackendID(t *testing.T) {
 	}
 
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
-	backendID, bucket, err := repo.LookupBucket(ctx, f.tenantID, f.collection, false)
+	backendID, bucket, err := repo.LookupBucket(ctx, f.tenantID, f.collection, bucketgate.Read)
 	if err != nil {
 		t.Fatalf("LookupBucket: %v", err)
 	}

@@ -3,6 +3,8 @@ package objecth
 import (
 	"context"
 	"uuid"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 )
 
 // writeBinding resolves collection's (backend, bucket) for a write RPC,
@@ -15,7 +17,7 @@ import (
 // Every write RPC calls it before its Cedar check, so the binding it returns is
 // the one the check scopes.
 func writeBinding(ctx context.Context, repo Repository, tenantID uuid.UUID, collection string) (backendID, bucket string, err error) {
-	backendID, bucket, err = repo.LookupBucket(ctx, tenantID, collection, true)
+	backendID, bucket, err = repo.LookupBucket(ctx, tenantID, collection, bucketgate.BytesWrite)
 	if err != nil {
 		return "", "", MapResolveErr(err)
 	}

@@ -23,11 +23,11 @@ type gatedBuckets struct {
 	lookupErr error
 }
 
-func (g gatedBuckets) LookupBucket(_ context.Context, _ uuid.UUID, _ string, write bool) (string, string, error) {
+func (g gatedBuckets) LookupBucket(_ context.Context, _ uuid.UUID, _ string, access bucketgate.Access) (string, string, error) {
 	if g.lookupErr != nil {
 		return "", "", g.lookupErr
 	}
-	if err := bucketgate.Check(bucketgate.AccessOf(write), g.state); err != nil {
+	if err := bucketgate.Check(access, g.state); err != nil {
 		return "", "", err
 	}
 	return "backend-def", "bucket-def", nil
@@ -139,8 +139,8 @@ func TestBatchWriteWithoutAResolverIsRefused(t *testing.T) {
 // perCollection gates each collection on its own state.
 type perCollection map[string]bucketgate.State
 
-func (p perCollection) LookupBucket(_ context.Context, _ uuid.UUID, collection string, write bool) (string, string, error) {
-	if err := bucketgate.Check(bucketgate.AccessOf(write), p[collection]); err != nil {
+func (p perCollection) LookupBucket(_ context.Context, _ uuid.UUID, collection string, access bucketgate.Access) (string, string, error) {
+	if err := bucketgate.Check(access, p[collection]); err != nil {
 		return "", "", err
 	}
 	return "backend-" + collection, "bucket-" + collection, nil

@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
@@ -56,7 +57,7 @@ func (r *aggregateRepo) FindByPath(_ context.Context, _ uuid.UUID, _ string, _ s
 	return r.found, nil
 }
 
-func (r *aggregateRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bool) (string, string, error) {
+func (r *aggregateRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, _ bucketgate.Access) (string, string, error) {
 	r.lookupCall++
 	if r.bucketErr != nil {
 		return "", "", r.bucketErr

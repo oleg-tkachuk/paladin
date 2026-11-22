@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
@@ -52,7 +53,7 @@ func (r *scriptedUpdateRepo) FindByName(context.Context, uuid.UUID, string, stri
 	return r.obj, nil
 }
 
-func (r *scriptedUpdateRepo) LookupBucket(context.Context, uuid.UUID, string, bool) (string, string, error) {
+func (r *scriptedUpdateRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 	if r.bucketErr != nil {
 		return "", "", r.bucketErr
 	}
