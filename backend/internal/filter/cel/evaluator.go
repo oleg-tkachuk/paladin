@@ -405,6 +405,17 @@ func compileChecked(schema *Schema, expr string) (*cel.Env, *cel.Ast, error) {
 // safety ceiling, not a hot-path tuning knob.
 const maxCELCacheEntries = 4096
 
+// maxEvalCost bounds what evaluating one compiled filter against one row may
+// cost, in cel-go's cost units (roughly one per operation). A filter is the
+// caller's text and is evaluated on every row of a page, and a few hundred
+// bytes of nested comprehensions over literal lists cost billions — seconds
+// to minutes per row with no bound. A real filter is a handful of
+// comparisons and costs tens; the ceiling leaves orders of magnitude for
+// map and list macros over a row's tags and holds one row to milliseconds.
+// Evaluation past it fails, which every list RPC answers as InvalidArgument
+// and every background matcher as a skip.
+const maxEvalCost = 100_000
+
 // Evaluator compiles and caches CEL programs per schema+expression. The
 // cache is size-bounded: at capacity a new compile evicts an arbitrary
 // existing entry (Go map range order). Strict LRU isn't worth the
@@ -439,7 +450,7 @@ func (e *Evaluator) Compile(schema *Schema, expr string) (cel.Program, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cel: compile %q: %w", expr, err)
 	}
-	prog, err := env.Program(ast)
+	prog, err := env.Program(ast, cel.CostLimit(maxEvalCost))
 	if err != nil {
 		return nil, fmt.Errorf("cel: program: %w", err)
 	}
