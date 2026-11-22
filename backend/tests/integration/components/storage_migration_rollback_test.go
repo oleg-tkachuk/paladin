@@ -130,7 +130,7 @@ func TestStorageMigrationRollsBackAFailedVerify(t *testing.T) {
 	header := &hookedHeader{fakeObjectStore: f.store, hook: func() {
 		// On the worker's goroutine, so no t.Fatal. Rebound: these land in
 		// the dedicated bucket. post-1 is a new upload; gone-1 is uploaded
-		// and deleted again; more/obj-1, older than the rebind, is deleted.
+		// and trashed again; more/obj-1, older than the rebind, is trashed.
 		for key, size := range map[string]int64{"post-1": 7, "gone-1": 5} {
 			if _, err := f.pool.Exec(ctx, `INSERT INTO objects (tenant_id, collection_id, path, state, content_type, size_bytes)
 				SELECT $1, c.id, $2, 'AVAILABLE', 'text/plain', $3 FROM collections c
@@ -163,9 +163,10 @@ func TestStorageMigrationRollsBackAFailedVerify(t *testing.T) {
 	if size, _ := f.store.sizeOf(f.loc(f.private, "docs", "obj-1")); size != 42 {
 		t.Errorf("source docs/obj-1 is %d bytes, want its original 42", size)
 	}
-	// Deletes stay deletes: nothing copied back, nothing made visible.
-	if f.store.has(f.loc(f.private, "docs", "gone-1")) {
-		t.Error("an object deleted after the rebind was copied back to the source")
+	// Trashed after the rebind: its bytes come back with it, so it can still
+	// be restored from the source, and it stays in the trash.
+	if size, ok := f.store.sizeOf(f.loc(f.private, "docs", "gone-1")); !ok || size != 5 {
+		t.Errorf("the object trashed after the rebind has no bytes in the source (size %d, present %v)", size, ok)
 	}
 	for _, o := range [][2]string{{"docs", "gone-1"}, {"more", "obj-1"}} {
 		if got := f.objectState(t, ctx, o[0], o[1]); got != "DELETED" {

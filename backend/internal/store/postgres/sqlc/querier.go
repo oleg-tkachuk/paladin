@@ -642,19 +642,25 @@ type Querier interface {
 	// to it and leaves the migration 'failed', retryable like any other failure.
 	// Run in the rebind transaction: rebound_at is that transaction's now(), its
 	// START time, so it is no later than any moment a writer could have seen the
-	// tenant rebound. Every object written into the dedicated bucket has an
-	// updated_at at or after it.
+	// tenant rebound. Every object written into the dedicated bucket has a
+	// bytes_written_at at or after it.
 	MarkStorageMigrationRebound(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// The objects MigrationListTenantObjects walks: public collections' excluded.
+	// The objects MigrationListTenantObjects walks: live and trashed, public
+	// collections' excluded.
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	// The objects the rollback copies back: AVAILABLE, in a private collection
+	// The objects the rollback copies back: live or trashed (a trashed object's
+	// bytes are what a later RestoreObject reads), in a private collection
 	// (public ones never moved, ADR-0027), and written at or after the cursor —
-	// keyset on (updated_at, id), which the worker starts at (rebound_at, the
-	// nil uuid). updated_at, not created_at: the bump_resource_version trigger
-	// sets it on every UPDATE and the insert defaults it, so it covers a new
-	// object, a promote, a storage-event overwrite and a restore alike. An object
-	// written again after the cursor passed it moves back ahead of the cursor
-	// and is copied again.
+	// keyset on (written_at, id), which the worker starts at (rebound_at, the
+	// nil uuid). written_at is when the object's bytes were last written
+	// (bytes_written_at, which every promote sets: a new upload's and a
+	// storage-event overwrite's), not when its row last changed: a tag, a taint,
+	// a lock or a trash move after the rebind leaves its bytes where they were,
+	// and its only target copy may be the broken one the verify failed on. A row
+	// promoted before the column existed has none; its updated_at stands in, at
+	// or after its last write, so it is copied back if it might have to be. An
+	// object written again after the cursor passed it moves back ahead of the
+	// cursor and is copied again.
 	MigrationListObjectsWrittenSince(ctx context.Context, tenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, limitCount int32) ([]MigrationListObjectsWrittenSinceRow, error)
 	// The collections the transactional rebind moves: all but the public ones,
 	// which never rebind (collections_public_bucket_fixed, ADR-0027).
@@ -664,6 +670,13 @@ type Querier interface {
 	// size_bytes feeds the physical (HEAD size) verify after copy. A public
 	// collection's objects stay in their bucket (ADR-0027), so the copy, verify
 	// and cleanup never see them.
+	//
+	// Live and trashed objects: a trashed object keeps its bytes until the purge,
+	// and RestoreObject reads them from the bucket its collection is bound to, so
+	// they move with the collection. PENDING rows do not: no bytes are confirmed
+	// under them, and the upload URL they were handed names the source bucket.
+	// Versions and delete markers are rows only, all under the object's one key,
+	// so they need nothing copied.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// Whether any object MigrationListObjectsWrittenSince would still return past
 	// the cursor. The rebind back asks it under its lock: an object written since

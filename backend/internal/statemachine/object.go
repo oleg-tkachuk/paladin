@@ -209,6 +209,11 @@ func (t *Transitioner) promote(
 	//     race this closes).
 	//   - sequencer != '' (storage event): may also UPDATE an AVAILABLE row,
 	//     but only with a strictly newer sequencer (stale events are no-ops).
+	//
+	// Either way a promote that applies records bytes written under the key
+	// (bytes_written_at): the first one confirms an upload's, a later one a
+	// newer write a storage event reported. It is what a storage migration's
+	// rollback selects on, where updated_at moves for any change to the row.
 	const q = `
         UPDATE objects
            SET state = 'AVAILABLE',
@@ -216,7 +221,8 @@ func (t *Transitioner) promote(
                size_bytes = CASE WHEN $3 > 0 THEN $3 ELSE size_bytes END,
                checksum = COALESCE(NULLIF($4, ''), checksum),
                sequencer = COALESCE(NULLIF($5, ''), sequencer),
-               committed_at = CASE WHEN state = 'PENDING' THEN now() ELSE committed_at END
+               committed_at = CASE WHEN state = 'PENDING' THEN now() ELSE committed_at END,
+               bytes_written_at = now()
          WHERE id = $1
            AND (
                 ($5 = '' AND state = 'PENDING')

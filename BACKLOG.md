@@ -534,37 +534,40 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** deciding whether a backend disabled mid-batch fails the rest
   of the batch or only the items not yet written.
 
-### A storage migration leaves the trash behind
+### A storage migration orphans the bytes of objects purged while it runs
 
 - **Status:** Deferred.
-- **Reason:** the shared→dedicated migration copies, verifies and cleans up
-  only `AVAILABLE` objects (`MigrationListTenantObjects`). A trashed object's
-  bytes stay in the source bucket while its collection is rebound to the
-  target, so after the migration `RestoreObject` finds no bytes
-  (`assertBytesPresent`) and refuses it, and the lifecycle hard delete
-  removes the bytes from the target, where they never were, orphaning them
-  in the source. Found while classifying trash moves as metadata writes; the
-  gap does not depend on the gate.
-- **Definition of Done:** the migration copies and verifies trashed objects
-  too (or the trash is purged or restored before it starts), and a test
-  trashes an object, migrates the tenant and restores it.
-- **Blockers:** deciding whether the trash moves with the tenant or is
-  settled before the move.
+- **Reason:** the copy, verify and cleanup walk object rows, and the
+  lifecycle purge and a permanent delete remove bytes from the bucket the
+  collection is bound to, then the row. Purged during the copy after its
+  object was copied, an object's target copy stays with no row; purged
+  between the rebind and cleanup, its source copy does, since cleanup no
+  longer lists it. Purges during the copy also lower the row count under the
+  one recorded at the start, so a copy that ends short of it fails the
+  migration (`copy incomplete`) though nothing was missed; with the trash
+  now counted, a tenant whose trash is being purged meets this more often.
+- **Definition of Done:** a purge during a migration removes the object's
+  bytes from both buckets (or cleanup walks the source bucket's tenant
+  prefix rather than the rows), the short-copy check tells a purged row
+  from a hidden one, and a test purges an object mid-copy and after the
+  rebind and finds neither bucket holding it.
+- **Blockers:** the purge paths are being reworked against the bucket gate
+  ("The lifecycle hard delete ignores a draining backend").
 
-### A storage migration's rollback copies back objects only their rows changed
+### A presigned upload issued before a storage migration's rebind is lost
 
 - **Status:** Deferred.
-- **Reason:** the rollback copies back every object whose `updated_at` is at
-  or after `rebound_at` (`MigrationListObjectsWrittenSince`), and every row
-  UPDATE bumps it. A tag, taint, lock or restore after the rebind copies that
-  object's target copy over its source copy, though its bytes never changed,
-  and the target copy may be the one the verify failed on.
-- **Definition of Done:** the rollback selects objects whose bytes were
-  written since the rebind (a promote, an overwrite, a version restore), not
-  any row change, and a test tags an object after the rebind and checks its
-  source copy is left alone.
-- **Blockers:** a column or event that marks a write of bytes apart from a
-  row change.
+- **Reason:** the migration does not copy PENDING objects: no bytes are
+  confirmed under them. Their upload URL names the source bucket, so a PUT
+  made after the rebind lands there, and `CompleteObject` then HEADs the
+  collection's new binding (`writeBinding`), finds nothing and does not
+  promote the object; the reconciler discards it once its URL expires.
+- **Definition of Done:** an upload issued before the rebind either
+  completes against the bucket its URL names, with its bytes then moved, or
+  is refused at complete with a reason the client can act on; a test
+  presigns, rebinds, uploads and completes.
+- **Blockers:** anchoring a single-PUT upload to its bucket, as multipart
+  sessions are.
 
 ### The lifecycle hard delete ignores a draining backend
 

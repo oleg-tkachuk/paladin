@@ -427,8 +427,8 @@ WHERE tenant_id = $1 AND state = $2
 // to it and leaves the migration 'failed', retryable like any other failure.
 // Run in the rebind transaction: rebound_at is that transaction's now(), its
 // START time, so it is no later than any moment a writer could have seen the
-// tenant rebound. Every object written into the dedicated bucket has an
-// updated_at at or after it.
+// tenant rebound. Every object written into the dedicated bucket has a
+// bytes_written_at at or after it.
 func (q *Queries) MarkStorageMigrationRebound(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, markStorageMigrationRebound, tenantID, fromState, attempts)
 	if err != nil {
@@ -441,10 +441,11 @@ const migrationCountTenantObjects = `-- name: MigrationCountTenantObjects :one
 SELECT count(*)
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = $1 AND o.state = 'AVAILABLE' AND NOT c.public_read
+WHERE o.tenant_id = $1 AND o.state IN ('AVAILABLE', 'DELETED') AND NOT c.public_read
 `
 
-// The objects MigrationListTenantObjects walks: public collections' excluded.
+// The objects MigrationListTenantObjects walks: live and trashed, public
+// collections' excluded.
 func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, migrationCountTenantObjects, tenantID)
 	var count int64
@@ -453,35 +454,41 @@ func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgty
 }
 
 const migrationListObjectsWrittenSince = `-- name: MigrationListObjectsWrittenSince :many
-SELECT o.id, o.updated_at, c.name AS collection_name, o.path,
+SELECT o.id, COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at,
+       c.name AS collection_name, o.path,
        COALESCE(o.size_bytes, 0)::bigint AS size_bytes
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.state = 'AVAILABLE'
+  AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
-  AND ROW(o.updated_at, o.id) > ROW($2::timestamptz,
-                                    $3::uuid)
-ORDER BY o.updated_at, o.id
+  AND ROW(COALESCE(o.bytes_written_at, o.updated_at), o.id)
+      > ROW($2::timestamptz, $3::uuid)
+ORDER BY COALESCE(o.bytes_written_at, o.updated_at), o.id
 LIMIT $4::int
 `
 
 type MigrationListObjectsWrittenSinceRow struct {
 	ID             pgtype.UUID        `json:"id"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	WrittenAt      pgtype.Timestamptz `json:"written_at"`
 	CollectionName string             `json:"collection_name"`
 	Path           string             `json:"path"`
 	SizeBytes      int64              `json:"size_bytes"`
 }
 
-// The objects the rollback copies back: AVAILABLE, in a private collection
+// The objects the rollback copies back: live or trashed (a trashed object's
+// bytes are what a later RestoreObject reads), in a private collection
 // (public ones never moved, ADR-0027), and written at or after the cursor —
-// keyset on (updated_at, id), which the worker starts at (rebound_at, the
-// nil uuid). updated_at, not created_at: the bump_resource_version trigger
-// sets it on every UPDATE and the insert defaults it, so it covers a new
-// object, a promote, a storage-event overwrite and a restore alike. An object
-// written again after the cursor passed it moves back ahead of the cursor
-// and is copied again.
+// keyset on (written_at, id), which the worker starts at (rebound_at, the
+// nil uuid). written_at is when the object's bytes were last written
+// (bytes_written_at, which every promote sets: a new upload's and a
+// storage-event overwrite's), not when its row last changed: a tag, a taint,
+// a lock or a trash move after the rebind leaves its bytes where they were,
+// and its only target copy may be the broken one the verify failed on. A row
+// promoted before the column existed has none; its updated_at stands in, at
+// or after its last write, so it is copied back if it might have to be. An
+// object written again after the cursor passed it moves back ahead of the
+// cursor and is copied again.
 func (q *Queries) MigrationListObjectsWrittenSince(ctx context.Context, tenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, limitCount int32) ([]MigrationListObjectsWrittenSinceRow, error) {
 	rows, err := q.db.Query(ctx, migrationListObjectsWrittenSince,
 		tenantID,
@@ -498,7 +505,7 @@ func (q *Queries) MigrationListObjectsWrittenSince(ctx context.Context, tenantID
 		var i MigrationListObjectsWrittenSinceRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.UpdatedAt,
+			&i.WrittenAt,
 			&i.CollectionName,
 			&i.Path,
 			&i.SizeBytes,
@@ -540,11 +547,12 @@ func (q *Queries) MigrationListTenantCollections(ctx context.Context, tenantID p
 }
 
 const migrationListTenantObjects = `-- name: MigrationListTenantObjects :many
-SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes
+SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
+       (o.state = 'DELETED')::bool AS trashed
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
-  AND o.state = 'AVAILABLE'
+  AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
   AND ROW(c.name, o.path) > ROW($2::text,
                                 $3::text)
@@ -556,6 +564,7 @@ type MigrationListTenantObjectsRow struct {
 	CollectionName string `json:"collection_name"`
 	Path           string `json:"path"`
 	SizeBytes      int64  `json:"size_bytes"`
+	Trashed        bool   `json:"trashed"`
 }
 
 // Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
@@ -563,6 +572,13 @@ type MigrationListTenantObjectsRow struct {
 // size_bytes feeds the physical (HEAD size) verify after copy. A public
 // collection's objects stay in their bucket (ADR-0027), so the copy, verify
 // and cleanup never see them.
+//
+// Live and trashed objects: a trashed object keeps its bytes until the purge,
+// and RestoreObject reads them from the bucket its collection is bound to, so
+// they move with the collection. PENDING rows do not: no bytes are confirmed
+// under them, and the upload URL they were handed names the source bucket.
+// Versions and delete markers are rows only, all under the object's one key,
+// so they need nothing copied.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
 	rows, err := q.db.Query(ctx, migrationListTenantObjects,
 		tenantID,
@@ -577,7 +593,12 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 	var items []MigrationListTenantObjectsRow
 	for rows.Next() {
 		var i MigrationListTenantObjectsRow
-		if err := rows.Scan(&i.CollectionName, &i.Path, &i.SizeBytes); err != nil {
+		if err := rows.Scan(
+			&i.CollectionName,
+			&i.Path,
+			&i.SizeBytes,
+			&i.Trashed,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -594,10 +615,10 @@ SELECT EXISTS (
     FROM objects o
     JOIN collections c ON c.id = o.collection_id
     WHERE o.tenant_id = $1
-      AND o.state = 'AVAILABLE'
+      AND o.state IN ('AVAILABLE', 'DELETED')
       AND NOT c.public_read
-      AND ROW(o.updated_at, o.id) > ROW($2::timestamptz,
-                                        $3::uuid)
+      AND ROW(COALESCE(o.bytes_written_at, o.updated_at), o.id)
+          > ROW($2::timestamptz, $3::uuid)
 )::bool
 `
 
