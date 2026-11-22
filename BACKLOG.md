@@ -342,6 +342,23 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** KMS choice (AWS KMS vs Vault Transit vs cloud-agnostic
   envelope-encryption library).
 
+### A refused request is filed in the trail of any tenant its name mentions
+
+- **Status:** Deferred.
+- **Reason:** a mutation the server refuses is still audited, under the raw
+  request name when no handler stashed a canonical one
+  (`middleware.preferCanonical`), and the row's resource tenant is the first
+  `tenants/{id}` anywhere in that text (`AuditEntry.ResourceTenant`). Any
+  authenticated caller can therefore put rows, carrying its own subject, into
+  another tenant's audit trail by naming one of its resources. Seen while
+  fuzzing the collection-name resolver; refusing the name does not stop it.
+- **Definition of Done:** a refused request's row names a resource tenant only
+  when the name parsed and the caller was admitted to that tenant, else the
+  actor's own; a test refuses a request naming another tenant and reads that
+  tenant's trail.
+- **Blockers:** whether a tenant should see attempts against its resources at
+  all, which is a product call.
+
 ---
 
 ## Performance / Scale
@@ -843,6 +860,20 @@ the same commit. Treat this file like a runtime invariant.
   reconcile the naming with that entry's `cfg.Indexer` block — two different
   names for the same subsystem is how this drift starts.
 - **Blockers:** none — gated on semantic search becoming a committed feature.
+
+### A link-local proxy cannot be trusted
+
+- **Status:** Deferred.
+- **Reason:** `clientip` keeps the zone of a link-local peer
+  (`[fe80::1%eth0]:port`), and a prefix never contains a zoned address, so no
+  `trusted_proxies` entry can trust such a proxy and its forwarding header is
+  ignored. A zoned entry is refused at load since the fuzzing pass; the peer
+  side is unchanged. The failure is safe — the proxy is taken for the client —
+  and no deployment is known to sit behind one.
+- **Definition of Done:** the peer's zone is dropped before the trust check
+  (or a zone-aware entry is accepted), with a test for a zoned peer.
+- **Blockers:** whether trusting an address regardless of its link is
+  acceptable.
 
 ## UI / Admin Console
 
