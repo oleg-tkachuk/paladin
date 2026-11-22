@@ -8,6 +8,7 @@ import {
   type PresignedUrl,
 } from "@/gen/paladin/common/v1/resource_pb";
 import { PresignTransport } from "@/gen/paladin/data/v1/object_service_pb";
+import { KEY_RULE, objectKeyProblem } from "@/lib/objects/objectKey";
 import { TransferError, alreadyStored, withRetries } from "./retry";
 
 /**
@@ -27,6 +28,32 @@ export const PART_CONCURRENCY = 3;
 
 /** What an object is uploaded as when the browser gives no type. */
 export const DEFAULT_CONTENT_TYPE = "application/octet-stream";
+
+/** A key the server would refuse, caught before anything is sent. */
+export class ObjectKeyError extends Error {
+  constructor(
+    readonly key: string,
+    readonly reason: string,
+  ) {
+    super(`The key "${key}" is refused: ${reason}. ${KEY_RULE}`);
+    this.name = "ObjectKeyError";
+  }
+}
+
+/**
+ * The key a file is uploaded under: the folder's prefix, then the file's
+ * name. A key the server would refuse throws ObjectKeyError, so an upload
+ * names its problem before it allocates a row or hashes a byte.
+ */
+export function uploadKey(
+  keyPrefix: string | undefined,
+  fileName: string,
+): string {
+  const key = `${keyPrefix ?? ""}${fileName}`;
+  const problem = objectKeyProblem(key);
+  if (problem) throw new ObjectKeyError(key, problem);
+  return key;
+}
 
 /**
  * Headers a browser sets itself and refuses from script: the signature
@@ -126,10 +153,11 @@ export async function uploadSingle(args: {
   keyPrefix?: string;
 }): Promise<string> {
   const { parent, file } = args;
+  const key = uploadKey(args.keyPrefix, file.name);
   const checksum = await sha256Base64(file);
   const allocated = await objectClient.uploadObject({
     parent,
-    key: `${args.keyPrefix ?? ""}${file.name}`,
+    key,
     contentType: file.type || DEFAULT_CONTENT_TYPE,
     sizeHintBytes: BigInt(file.size),
     checksumAlgorithm: ChecksumAlgorithm.SHA256,
@@ -232,7 +260,7 @@ export async function uploadMultipart(args: {
   const { parent, file } = args;
   const init = await multipartClient.initiateMultipartUpload({
     parent,
-    key: `${args.keyPrefix ?? ""}${file.name}`,
+    key: uploadKey(args.keyPrefix, file.name),
     contentType: file.type || DEFAULT_CONTENT_TYPE,
     sizeBytes: BigInt(file.size),
     tags: args.tags,

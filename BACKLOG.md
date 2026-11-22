@@ -517,18 +517,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### The console does not check an object key before sending it
-
-- **Status:** Deferred.
-- **Reason:** the server and both SDKs' fakes refuse a non-canonical key
-  (`sdk/testdata/object_keys.json`), and the console shows the server's
-  rule and reason, but the upload and copy dialogs accept any key, so a user
-  learns of the rule only from a refused request.
-- **Definition of Done:** the console's key helper reads
-  `sdk/testdata/object_keys.json` in its tests and the dialogs disable
-  submit with the rule beside the field.
-- **Blockers:** none.
-
 ### A capability's object URI does not separate a nested collection from its keys
 
 - **Status:** Deferred.

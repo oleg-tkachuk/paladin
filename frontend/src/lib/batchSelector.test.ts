@@ -59,6 +59,9 @@ describe("copyTargetProblem", () => {
   it.each([
     ["no destination", "docs", "", ""],
     ["the same collection without a prefix", "docs", "docs", ""],
+    ["a prefix with a leading slash", "docs", "archive", "/v2/"],
+    ["a prefix with a dot segment", "docs", "archive", "a/../"],
+    ["a prefix with a control character", "docs", "archive", "v\t2/"],
   ])("refuses %s", (_, src, dst, prefix) => {
     expect(copyTargetProblem(src, dst, prefix)).toEqual(expect.any(String));
   });

@@ -24,6 +24,7 @@ vi.mock("@/lib/connect/client", () => ({
 }));
 
 import {
+  ObjectKeyError,
   PART_CONCURRENCY,
   sha256Base64,
   signedRequestHeaders,
@@ -203,6 +204,30 @@ describe("uploadSingle", () => {
     expect(h.uploadObject).toHaveBeenLastCalledWith(
       expect.objectContaining({ key }),
     );
+  });
+
+  // The key rule is checked before a row is allocated: a file whose name
+  // makes a key the server refuses never reaches it.
+  it.each([
+    ["a control character", undefined, "a\nb.txt"],
+    ["a segment over the limit", "reports/", `${"n".repeat(300)}.pdf`],
+    ["a name that is a dot segment", "reports/", ".."],
+  ])("refuses %s before sending", async (_, keyPrefix, name) => {
+    h.uploadObject.mockClear();
+    h.initiateMultipartUpload.mockClear();
+    const args = {
+      parent: "p",
+      file: new File(["x"], name),
+      tags: {},
+      onProgress: () => {},
+      keyPrefix,
+    };
+    await expect(
+      uploadSingle({ ...args, idempotencyKey: "i" }),
+    ).rejects.toBeInstanceOf(ObjectKeyError);
+    await expect(uploadMultipart(args)).rejects.toBeInstanceOf(ObjectKeyError);
+    expect(h.uploadObject).not.toHaveBeenCalled();
+    expect(h.initiateMultipartUpload).not.toHaveBeenCalled();
   });
 });
 
