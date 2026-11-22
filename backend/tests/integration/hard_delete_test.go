@@ -163,7 +163,7 @@ func TestHardDelete_RestoreWinsRace(t *testing.T) {
 	mustSoftDeleteWithBackdate(t, h.PoolMigrate, objectID, 24*time.Hour)
 
 	q := sqlc.New(h.PoolMigrate)
-	rows, err := q.ListHardDeletable(context.Background(), pgxTimestamp(time.Now().Add(-1*time.Hour)), 10)
+	rows, err := q.ListHardDeletable(context.Background(), pgxTimestamp(time.Now().Add(-1*time.Hour)), nil, 10)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("seed list: rows=%d err=%v", len(rows), err)
 	}

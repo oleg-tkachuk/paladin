@@ -247,7 +247,8 @@ What makes the `MetadataWrite` RPCs safe while a backend drains:
   HEAD a restore makes to check the bytes are still there.
 - Nothing that moves objects writes object rows, so a change made during a
   move cannot be overwritten. `read_only` is set by an operator and read by
-  the gate alone; no worker acts on it. The one mover is this ADR's storage
+  the gate alone; the background workers that delete bytes ask the gate too
+  (addendum below), and none of them moves objects. The one mover is this ADR's storage
   migration. It copies bytes under the same key and rebinds
   `collections.bucket_id`, and the object row, with its tags, locks and
   taint, stays where it was. A restore that lands after the copy has passed
@@ -256,6 +257,60 @@ What makes the `MetadataWrite` RPCs safe while a backend drains:
 - Two gaps in the migration itself do not depend on the gate and are
   recorded in BACKLOG: it leaves the trash behind, and its rollback copies
   back any object whose row changed after the rebind.
+
+## Addendum (2026-11-22): background workers ask the same gate
+
+Request paths reach the gate through the bucket resolver; the workers that
+delete bytes did not, so a draining backend refused `DeleteObject` with
+`permanent` while the lifecycle hard delete and the purge drainer deleted the
+same bytes from it once a trashed object's retention ran out. Those workers
+now ask `bucketgate.Check` about the bucket of every row they claim, from the
+bucket state their own capped claim returns with it, and work only the rows
+it admits (`internal/worker/bucket_gate.go`):
+
+| Worker | Access | A refused bucket's work |
+|---|---|---|
+| `LifecycleHardDeleter` | `BytesWrite` | the row stays in the trash with its bytes, restorable |
+| `PurgeDrainer` | `BytesWrite` | the debt stays due, no attempt counted, no backoff grown |
+
+The work is deferred, never failed or dropped, and each sweep logs every
+bucket it defers once, at Warn, with the gate's reason. The first sweep whose
+gate admits the bucket takes the work. A claim that met a newly refused
+bucket is followed by one that leaves that bucket's rows out, for the slots
+they took: a refused bucket's rows never head every claim and starve the
+buckets behind them, and every query stays capped by the batch, so a large
+refused backlog costs one claim, never a scan of itself.
+
+**A purge on a draining backend is deferred, not let through.** A drain's
+end is an empty backend, and deleting a purged tenant's bytes looks like
+progress towards it. It is deferred anyway:
+
+- The gate already answers this operation on the request path: a permanent
+  delete is a write of bytes, refused while the backend drains. A trash move
+  followed by the hard delete removes the same bytes and must get the same
+  answer, or the trash is a way around the drain.
+- `read_only` is an operator's promise that the backend's contents hold
+  still while something moves them: this ADR's migration, or a copy the
+  operator runs outside Paladin. A delete under that copy can remove bytes it
+  has already taken, and settling the debt then forgets the copy on the
+  target, with nothing left to name it.
+- Deferral loses nothing. The debt row is durable, and its bucket cannot be
+  deleted under it (`DeleteBucket` refuses a bucket `pending_purges`
+  references, and the foreign key is `RESTRICT`).
+
+The cost: a purged tenant's bytes outlive its purge for as long as the drain
+runs. A backend whose drain ends in `enabled = false`, not in writes again,
+keeps its debts on record; they are paid if it is ever enabled, and they are
+the list of what it still holds if it is decommissioned instead.
+
+**Provision states do not pin the teardown.** `BytesWrite` is refused on a
+bucket being deleted, but the bucket delete refuses while any debt names the
+bucket, so a bucket never reaches `deleting` with debts its own teardown
+would wait on.
+
+Not routed through the gate, deliberately: the bucket reconciler, which
+moves `provision_state` itself, so the gate would refuse its own work; and
+the storage migration, which is what drains a backend.
 
 ## Consequences
 

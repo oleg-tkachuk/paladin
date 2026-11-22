@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -83,9 +84,17 @@ func (w *PurgeDrainer) Run(ctx context.Context) error {
 // replica from issuing a duplicate delete while this one is mid-flight. The
 // batch is small and the lock is per-row, so the contention cost is bounded.
 //
+// Debt is claimed only from the buckets the bucket gate admits as a write of
+// bytes (bucket_gate.go): a draining or disabled backend keeps its debt, due
+// and untouched, until it takes deletes again. Deleting bytes is a write of
+// bytes, refused there as DeleteObject with permanent is: a drain moves what
+// the backend holds, and whatever copies it relies on a source that does not
+// change under the copy.
+//
 // It returns the first failure of the tick: one that rolled the tick back, or
 // a debt whose bytes could not be deleted and was rescheduled. A debt deferred
-// because an upload holds its path is not a failure.
+// because an upload holds its path, or because the gate refuses its bucket, is
+// not a failure.
 func (w *PurgeDrainer) Sweep(ctx context.Context) error {
 	tx, err := w.Pool.Begin(ctx)
 	if err != nil {
@@ -94,11 +103,8 @@ func (w *PurgeDrainer) Sweep(ctx context.Context) error {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	rows, err := w.Q.WithTx(tx).ListDuePurges(ctx, w.BatchSize)
-	if err != nil {
-		w.log().Warn("purge drainer: list due", zap.Error(err))
-		return err
-	}
+	q := w.Q.WithTx(tx)
+	gate := newBucketDeferrals(w.log(), bucketgate.BytesWrite)
 	// A row whose settlement must not stand aborts the whole tick.
 	//
 	// drainOne used to return nothing, and its `return` on a failed
@@ -108,19 +114,20 @@ func (w *PurgeDrainer) Sweep(ctx context.Context) error {
 	// the row was gone, so no later tick could retry it. The comment there
 	// said the tick rolls back; nothing did.
 	var failed error
-	for _, r := range rows {
-		if ctx.Err() != nil {
-			return failed
-		}
-		if err := w.drainOne(ctx, tx, r, &failed); err != nil {
-			// The deferred Rollback does the work. Every settlement in this
-			// tick is discarded, including ones that succeeded — which is the
-			// trade the emit branch already chose: an unannounced purge is
-			// worse than a repeated one, and the repeat is free because the
-			// storage DELETE is idempotent.
-			keepFirst(&failed, err)
-			return failed
-		}
+	_, err = claimAdmitted(ctx, gate, w.BatchSize,
+		func(limit int32, deferred []pgtype.UUID) ([]sqlc.ListDuePurgesRow, error) {
+			return q.ListDuePurges(ctx, limit, deferred)
+		},
+		purgeBucket,
+		func(r sqlc.ListDuePurgesRow) error { return w.drainOne(ctx, tx, r, &failed) })
+	if err != nil {
+		// The deferred Rollback does the work. Every settlement in this tick
+		// is discarded, including ones that succeeded — which is the trade
+		// the emit branch already chose: an unannounced purge is worse than a
+		// repeated one, and the repeat is free because the storage DELETE is
+		// idempotent.
+		keepFirst(&failed, tickCutShort(ctx, w.log(), "purge drainer: tick rolled back", err))
+		return failed
 	}
 	if err := tx.Commit(ctx); err != nil {
 		// Nothing is lost: uncommitted settlements mean the debt rows stay,
@@ -129,6 +136,14 @@ func (w *PurgeDrainer) Sweep(ctx context.Context) error {
 		keepFirst(&failed, err)
 	}
 	return failed
+}
+
+// purgeBucket is the bucket a claimed debt is owed on.
+func purgeBucket(r sqlc.ListDuePurgesRow) bucketGateRow {
+	return bucketGateRow{
+		ID: r.BucketID, BackendName: r.BackendName, BucketName: r.BucketName,
+		Enabled: r.Enabled, ReadOnly: r.ReadOnly, ProvisionState: r.ProvisionState,
+	}
 }
 
 // drainOne reclaims one object's bytes and settles its debt.

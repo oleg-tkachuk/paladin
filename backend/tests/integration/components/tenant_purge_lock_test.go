@@ -226,7 +226,7 @@ func TestTrashedTenantCannotBeEmptiedPastALock(t *testing.T) {
 						mustExec(t, ctx, f.pool, `UPDATE tenants SET deleted_at = NULL WHERE id = $1`, f.tenant)
 					}
 					rows, err := q.ListHardDeletable(ctx,
-						pgtype.Timestamptz{Time: time.Now(), Valid: true}, 100)
+						pgtype.Timestamptz{Time: time.Now(), Valid: true}, nil, 100)
 					if err != nil {
 						t.Fatalf("list: %v", err)
 					}

@@ -151,10 +151,18 @@ SELECT tenant_id, id, collection_id FROM erased;
 -- and any active retention window block the purge; the worker has no
 -- governance bypass, so GOVERNANCE is honoured here exactly like COMPLIANCE.
 -- Locked rows are skipped until the lock lapses.
+--
+-- Each row carries its bucket's id and the state the bucket gate decides on
+-- (bucketgate.State): the worker asks the gate in Go, never here, and passes
+-- back the buckets it refused so the next claim leaves their rows out. One
+-- capped query both bounds the work and keeps a refused bucket's trash from
+-- heading every batch.
 SELECT o.id, o.tenant_id, o.path, o.resource_version,
        sb.name AS backend_name,
        b.name  AS bucket_name,
-       k.name  AS collection_name
+       k.name  AS collection_name,
+       b.id    AS bucket_id,
+       sb.enabled, sb.read_only, b.provision_state
 FROM objects o
 JOIN collections k     ON k.id = o.collection_id
 JOIN buckets b         ON b.id = k.bucket_id
@@ -169,6 +177,8 @@ WHERE o.state = 'DELETED'
          AND (l.legal_hold OR l.retain_until > now()))
   -- A tenant in the trash is frozen: its trash is not emptied meanwhile.
   AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = o.tenant_id AND t.deleted_at IS NOT NULL)
+  -- Not the buckets the gate refused earlier in this sweep.
+  AND NOT (b.id = ANY(coalesce(sqlc.arg('deferred_bucket_ids')::uuid[], '{}')))
 ORDER BY o.terminated_at
 LIMIT sqlc.arg('batch_size');
 

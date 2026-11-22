@@ -90,7 +90,7 @@ func TestWorkersLeaveATrashedTenantAlone(t *testing.T) {
 	})
 
 	t.Run("trash emptying", func(t *testing.T) {
-		rows, err := q.ListHardDeletable(ctx, pgtype.Timestamptz{Time: time.Now(), Valid: true}, 10)
+		rows, err := q.ListHardDeletable(ctx, pgtype.Timestamptz{Time: time.Now(), Valid: true}, nil, 10)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -2,7 +2,10 @@
 // of the storage backend holding it lets an operation through. It is the one
 // place that decision is made: the bucket resolver applies it to every
 // collection→bucket lookup, so every data-plane RPC that resolves a bucket
-// gets the same answer for the same state.
+// gets the same answer for the same state, and the background workers that
+// delete bytes or abort uploads ask it for each bucket holding their work
+// (internal/worker/bucket_gate.go), so a trash emptied or a debt paid in the
+// background gets the answer the RPC would.
 //
 // The gate asks what an operation touches, not only whether it writes. Each
 // operation names its Access: BytesWrite puts or removes bytes on the backend,
@@ -32,8 +35,8 @@
 // draining, then the bucket's own state. A provision state the gate does not
 // know refuses a bytes-write as not ready rather than letting it through.
 //
-// The package is a leaf on purpose: the store adapter, the handlers and their
-// test fakes all import it, so it carries no dependency beyond the codes and
+// The package is a leaf on purpose: the store adapter, the handlers, the
+// background workers and their test fakes all import it, so it carries no dependency beyond the codes and
 // rpcerr's refusal marker, which the failure log reads.
 package bucketgate
 

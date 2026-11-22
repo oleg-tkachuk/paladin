@@ -84,7 +84,7 @@ func TestHardDeleteHonoursALockOnAnOlderVersion(t *testing.T) {
 					`UPDATE objects SET state = 'DELETED', terminated_at = now() - interval '365 days'
 					  WHERE id = $1`, f.objectID)
 				q := sqlc.New(f.pool)
-				rows, err := q.ListHardDeletable(ctx, pgtype.Timestamptz{Time: time.Now(), Valid: true}, 100)
+				rows, err := q.ListHardDeletable(ctx, pgtype.Timestamptz{Time: time.Now(), Valid: true}, nil, 100)
 				if err != nil {
 					t.Fatalf("list: %v", err)
 				}
@@ -132,7 +132,7 @@ func TestHardDeleterTakesTheObjectOnceAnOlderHoldIsReleased(t *testing.T) {
 	}
 
 	q := sqlc.New(f.pool)
-	rows, err := q.ListHardDeletable(ctx, pgtype.Timestamptz{Time: time.Now(), Valid: true}, 100)
+	rows, err := q.ListHardDeletable(ctx, pgtype.Timestamptz{Time: time.Now(), Valid: true}, nil, 100)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

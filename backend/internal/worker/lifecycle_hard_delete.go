@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -95,36 +96,47 @@ func (w *LifecycleHardDeleter) Run(ctx context.Context) error {
 // Exported so integration tests can drive a single tick without
 // running the full Run loop with its time.Ticker.
 //
+// Rows are claimed only from the buckets the bucket gate admits as a write of
+// bytes (bucket_gate.go), as DeleteObject with permanent is. A refused
+// bucket's rows stay in the trash, row and bytes together and still
+// restorable, until a sweep whose gate admits the bucket: deleting the row
+// alone would leave a debt pinned to a backend that may be disabled next
+// rather than writable again.
+//
 // A row that fails is logged and the rest still run; the first failure is
 // returned. A row skipped because it is no longer DELETED, or deferred because
-// an upload holds its path, is not a failure.
+// an upload holds its path or the gate refuses its bucket, is not a failure.
 func (w *LifecycleHardDeleter) Sweep(ctx context.Context) error {
 	cutoff := pgtype.Timestamptz{Time: time.Now().Add(-w.TTL), Valid: true}
+	gate := newBucketDeferrals(w.log(), bucketgate.BytesWrite)
 	var first error
 	for {
-		if ctx.Err() != nil {
-			return first
-		}
-		rows, err := w.Q.ListHardDeletable(ctx, cutoff, w.BatchSize)
+		handled, err := claimAdmitted(ctx, gate, w.BatchSize,
+			func(limit int32, deferred []pgtype.UUID) ([]sqlc.ListHardDeletableRow, error) {
+				return w.Q.ListHardDeletable(ctx, cutoff, deferred, limit)
+			},
+			hardDeletableBucket,
+			func(r sqlc.ListHardDeletableRow) error {
+				keepFirst(&first, w.deleteOne(ctx, r))
+				return nil
+			})
 		if err != nil {
-			w.log().Warn("list hard-deletable", zap.Error(err))
-			keepFirst(&first, err)
+			keepFirst(&first, tickCutShort(ctx, w.log(), "list hard-deletable", err))
 			return first
 		}
-		if len(rows) == 0 {
+		// Fewer than a batch handled means the claims came back short: the
+		// queue is drained, so don't issue another no-op SELECT.
+		if handled < w.BatchSize {
 			return first
 		}
-		for _, r := range rows {
-			if ctx.Err() != nil {
-				return first
-			}
-			keepFirst(&first, w.deleteOne(ctx, r))
-		}
-		// If we pulled fewer than the batch, the queue is drained;
-		// don't issue another no-op SELECT.
-		if len(rows) < int(w.BatchSize) {
-			return first
-		}
+	}
+}
+
+// hardDeletableBucket is the bucket a listed row's bytes are on.
+func hardDeletableBucket(r sqlc.ListHardDeletableRow) bucketGateRow {
+	return bucketGateRow{
+		ID: r.BucketID, BackendName: r.BackendName, BucketName: r.BucketName,
+		Enabled: r.Enabled, ReadOnly: r.ReadOnly, ProvisionState: r.ProvisionState,
 	}
 }
 

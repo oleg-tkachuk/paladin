@@ -436,7 +436,11 @@ type Querier interface {
 	// the same claim discipline the event-delivery outbox uses.
 	// Backend and bucket come back by NAME: the storage adapter addresses S3 by
 	// name, and the bucket still exists even though the object row does not.
-	ListDuePurges(ctx context.Context, limit int32) ([]ListDuePurgesRow, error)
+	// Each row carries its bucket's id and the state the bucket gate decides on
+	// (bucketgate.State): the drainer asks the gate in Go and claims again without
+	// the buckets it refused, whose debt stays due, untouched, for a tick whose
+	// gate admits it.
+	ListDuePurges(ctx context.Context, limit int32, deferredBucketIds []pgtype.UUID) ([]ListDuePurgesRow, error)
 	// Tombstones for permanently deleted objects (migration 074).
 	// HardDeleteObject writes them, in the statement that removes the row.
 	// Which of these ids were permanently deleted from this collection.
@@ -462,7 +466,13 @@ type Querier interface {
 	// and any active retention window block the purge; the worker has no
 	// governance bypass, so GOVERNANCE is honoured here exactly like COMPLIANCE.
 	// Locked rows are skipped until the lock lapses.
-	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, batchSize int32) ([]ListHardDeletableRow, error)
+	//
+	// Each row carries its bucket's id and the state the bucket gate decides on
+	// (bucketgate.State): the worker asks the gate in Go, never here, and passes
+	// back the buckets it refused so the next claim leaves their rows out. One
+	// capped query both bounds the work and keeps a refused bucket's trash from
+	// heading every batch.
+	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListHardDeletableRow, error)
 	// Every tenant this subject belongs to, for the tenant switcher. Ordered by
 	// creation so the list is stable across calls rather than whatever the
 	// planner returns.

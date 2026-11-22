@@ -566,20 +566,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** a column or event that marks a write of bytes apart from a
   row change.
 
-### The lifecycle hard delete ignores a draining backend
-
-- **Status:** Deferred.
-- **Reason:** a draining backend refuses `DeleteObject` with `permanent`,
-  a write of bytes, but `LifecycleHardDeleter` and `PurgeDrainer` delete
-  bytes from it without asking the gate; neither reads `read_only`.
-  A trash move is a metadata write a draining backend takes, so an object
-  trashed during a drain can have its bytes deleted from that backend once
-  its retention ends.
-- **Definition of Done:** both workers ask the gate as `BytesWrite` before
-  deleting bytes and leave the debt for later on a draining or disabled
-  backend, logged at Warn; a test drains the backend under a due purge.
-- **Blockers:** none.
-
 ### AbortMultipartUpload skips the bucket gate for an anchored session
 
 - **Status:** Deferred.
