@@ -32,6 +32,11 @@ vi.mock("@/lib/connect/client", () => ({
   billingClient: {
     getBillingSettings: () => Promise.resolve({ currencyCode: "EUR" }),
   },
+  // The issue dialog's resource picker reads the tenant's collections.
+  collectionClient: {
+    listCollections: () =>
+      Promise.resolve({ collections: [], page: { nextPageToken: "" } }),
+  },
   capabilityClient: {
     list: h.list,
     getUsage: h.getUsage,
