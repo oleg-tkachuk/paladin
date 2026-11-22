@@ -122,7 +122,8 @@ func leaseLimesCode(err error) string {
 }
 
 // pinned is got with its message only when the step names one: the table
-// pins the words of the refusals Paladin writes, not of every answer.
+// pins the words of every refusal it lists — Paladin's own, and limes's
+// problem titles the server answers with — not of every answer.
 func (s leaseStep) pinned(got leaseAnswer) leaseAnswer {
 	if s.Message == "" {
 		got.Message = ""
