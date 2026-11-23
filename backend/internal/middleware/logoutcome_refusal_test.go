@@ -12,6 +12,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/protonul"
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
@@ -56,6 +57,26 @@ func TestADependencyFailureStaysAServerFault(t *testing.T) {
 			got := loggedOutcome(t, err)
 			if got.Message != msgRPCFailed || got.Level != zapcore.ErrorLevel {
 				t.Errorf("logged %q at %v, want %q at %v", got.Message, got.Level, msgRPCFailed, zapcore.ErrorLevel)
+			}
+		})
+	}
+}
+
+// A client mistake is logged at Info, unless the server refused it by a rule
+// of the whole API: a request string holding NUL is a refusal, at Warn.
+func TestAnInvalidArgumentRefusalIsLoggedAsARefusal(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err   error
+		msg   string
+		level zapcore.Level
+	}{
+		"a refusal":      {rpcerr.New(connect.CodeInvalidArgument, &protonul.Error{Path: "key"}), msgRPCRefused, zapcore.WarnLevel},
+		"a plain reject": {connect.NewError(connect.CodeInvalidArgument, "key: not canonical"), msgRPCRejected, zapcore.InfoLevel},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := loggedOutcome(t, tc.err)
+			if got.Message != tc.msg || got.Level != tc.level {
+				t.Errorf("logged %q at %v, want %q at %v", got.Message, got.Level, tc.msg, tc.level)
 			}
 		})
 	}

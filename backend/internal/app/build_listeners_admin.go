@@ -250,6 +250,10 @@ func AssembleAdminMux(ctx context.Context, deps *SharedDeps, meta BuildMeta) (*h
 		auth.RequireAudience(auth.AudienceAdmin),
 		// After the principal, which carries the OAuth grant (ADR-0035).
 		auth.RequireOAuthWriteScope(),
+		// Refuses request text holding NUL, which Postgres cannot store; as
+		// soon as the principal is known, ahead of every layer that reads the
+		// request — the tenant freeze looks its names up.
+		middleware.RefuseNUL(),
 		// After auth so the tenant is known, and ahead of the audit and
 		// idempotency writers so a throttled call costs no database work.
 		tenantRL.Intercept,
