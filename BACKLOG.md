@@ -665,6 +665,35 @@ the same commit. Treat this file like a runtime invariant.
   logs the registry's error at Error.
 - **Blockers:** none.
 
+### Request text Postgres cannot store is suspected to answer Internal
+
+- **Status:** Deferred.
+- **Reason:** Postgres stores no U+0000 in a `text` column or a `jsonb`
+  string, and no handler refuses one before the insert: object tags and
+  metadata, display names, user subjects and the other free-text fields reach
+  the store as the client sent them. The handler fuzz targets run over fakes,
+  which store anything, so they cannot see it; the database's refusal would
+  fall through the adapters' error mapping to Internal. Not yet confirmed
+  against Postgres.
+- **Definition of Done:** an integration test sends such text through one
+  write RPC and records the answer; if it is Internal, one refusal at the edge
+  answers any request string Postgres cannot store as InvalidArgument naming
+  the field, with a test per plane, and the handler fuzz targets assert it.
+- **Blockers:** whether the refusal belongs to every RPC or only to the
+  fields that are stored, which is a contract decision.
+
+### The handler fuzz targets do not reach UserService
+
+- **Status:** Deferred.
+- **Reason:** `userh.CreateUser` and the password paths hash with the
+  production cost on every call, which leaves a fuzz search a handful of
+  inputs a second; the user subject and display name go unfuzzed at the
+  handler.
+- **Definition of Done:** a fuzz target drives `CreateUser` and `UpdateUser`
+  with a hasher of test cost injected through the handler, asserting the
+  `fuzzassert` invariants.
+- **Blockers:** the handler takes no hasher today.
+
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)
