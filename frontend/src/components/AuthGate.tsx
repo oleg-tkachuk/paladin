@@ -8,6 +8,10 @@
 // /login, preserving the originally-requested URL in a `?next=…`
 // query param so the login flow can bounce the user back to the page
 // they intended to visit. On "authenticated" we render the children.
+// On "unavailable" — the session role could not check the session — we
+// show that sign-in is temporarily unavailable while AuthContext retries:
+// neither the children (there is no user yet) nor a redirect (the session
+// may be good).
 //
 // This is the security contract for the UI:
 //   - operator typing https://paladin.local/tenants without a session
@@ -26,6 +30,9 @@ import { useRouter, usePathname } from "next/navigation";
 
 import { useAuth } from "@/context/AuthContext";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SESSION_UNAVAILABLE_MESSAGE } from "@/lib/session/check";
+import { STATUS_TONE } from "@/lib/ui/status";
+import { cn } from "@/lib/utils";
 
 interface AuthGateProps {
   /** Pathname patterns that bypass the gate (e.g. /login). */
@@ -76,6 +83,10 @@ export function AuthGate({ publicRoutes, children }: AuthGateProps) {
     );
   }
 
+  if (status === "unavailable") {
+    return <SessionUnavailable />;
+  }
+
   // The useEffect above kicked off the router.replace; while React
   // navigates we return nothing. This is the half-second between
   // status flipping to "unauthenticated" and the URL changing.
@@ -84,4 +95,22 @@ export function AuthGate({ publicRoutes, children }: AuthGateProps) {
   }
 
   return <>{children}</>;
+}
+
+/** The gate while the session role cannot check the session. */
+function SessionUnavailable() {
+  const tone = STATUS_TONE.warning;
+  const Icon = tone.icon;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        role="status"
+        data-slot="session-unavailable"
+        className="flex items-center gap-3 rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-foreground"
+      >
+        <Icon className={cn("size-4 shrink-0", tone.ink)} aria-hidden />
+        <p>{SESSION_UNAVAILABLE_MESSAGE}</p>
+      </div>
+    </div>
+  );
 }

@@ -1,5 +1,11 @@
 import { SESSION_PATHS } from "@/constants";
 
+import {
+  RETRY_AFTER_HEADER,
+  classifySessionAnswer,
+  type SessionCheck,
+} from "./check";
+
 /**
  * The session role's own endpoints (ADR-0048): sign-in, rotation, the tenant
  * switch and sign-out. Each sets or clears the session cookie in its answer;
@@ -18,8 +24,6 @@ export class SessionError extends Error {
     this.name = "SessionError";
   }
 }
-
-const HTTP_UNAUTHORIZED = 401;
 
 async function post(path: string, body?: unknown): Promise<Response> {
   const res = await fetch(path, {
@@ -48,17 +52,24 @@ export async function signIn(subject: string, password: string): Promise<void> {
 
 /**
  * Keeps the session alive: the role rotates its refresh token once it is old
- * enough, and answers 401 when there is no session. Returns whether there is.
+ * enough. Answers what the check found — a session, none (401), or a role that
+ * could not check it right now (503, or no answer) — as classifySessionAnswer
+ * reads it; it never throws.
  */
-export async function refreshSession(): Promise<boolean> {
+export async function refreshSession(): Promise<SessionCheck> {
+  let res: Response;
   try {
-    await post(SESSION_PATHS.refresh);
-    return true;
-  } catch (err) {
-    if (err instanceof SessionError && err.status === HTTP_UNAUTHORIZED)
-      return false;
-    throw err;
+    res = await fetch(SESSION_PATHS.refresh, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+  } catch {
+    return classifySessionAnswer({ networkError: true });
   }
+  return classifySessionAnswer({
+    status: res.status,
+    retryAfter: res.headers.get(RETRY_AFTER_HEADER),
+  });
 }
 
 /** Re-scopes the session to another tenant the user belongs to. */

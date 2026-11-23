@@ -52,19 +52,53 @@ describe("session client", () => {
     });
   });
 
-  it("reads no session from a 401 on refresh, and any other failure as an error", async () => {
-    vi.stubGlobal("fetch", answer(204));
-    await expect(refreshSession()).resolves.toBe(true);
+  it("reads a session from 204 and none from 401 on refresh", async () => {
+    const fetch = answer(204);
+    vi.stubGlobal("fetch", fetch);
+    await expect(refreshSession()).resolves.toEqual({ kind: "signed-in" });
+    const [path, init] = fetch.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(path).toBe(SESSION_PATHS.refresh);
+    expect(init).toMatchObject({ method: "POST", credentials: "same-origin" });
     vi.stubGlobal(
       "fetch",
       answer(401, { code: "unauthenticated", message: "no session" }),
     );
-    await expect(refreshSession()).resolves.toBe(false);
+    await expect(refreshSession()).resolves.toEqual({ kind: "signed-out" });
+  });
+
+  // A role that cannot check the session says nothing of it: the page must
+  // not read that as signed out.
+  it("reads a 503 and a failed fetch on refresh as unavailable, not signed out", async () => {
     vi.stubGlobal(
       "fetch",
-      answer(503, { code: "unavailable", message: "down" }),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ code: "unavailable", message: "down" }),
+            {
+              status: 503,
+              headers: { "Retry-After": "4" },
+            },
+          ),
+      ),
     );
-    await expect(refreshSession()).rejects.toBeInstanceOf(SessionError);
+    await expect(refreshSession()).resolves.toEqual({
+      kind: "unavailable",
+      retryAfterMs: 4_000,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    await expect(refreshSession()).resolves.toEqual({
+      kind: "unavailable",
+      retryAfterMs: null,
+    });
   });
 
   it("switches tenant and signs out at their own paths", async () => {

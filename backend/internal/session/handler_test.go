@@ -47,10 +47,12 @@ type fakeIAM struct {
 	revoked   []string
 	rotateErr error
 	refused   bool // every refresh token is refused
-	switchTo  string
-	userAgent string
-	forwarded string
-	auth      string
+	// exchangeErr, when set, answers every ExchangeAudience.
+	exchangeErr error
+	switchTo    string
+	userAgent   string
+	forwarded   string
+	auth        string
 }
 
 func (f *fakeIAM) seen(ctx context.Context) {
@@ -76,6 +78,9 @@ func (f *fakeIAM) Login(ctx context.Context, req *pbiam.LoginRequest) (*pbiam.Lo
 func (f *fakeIAM) ExchangeAudience(ctx context.Context, req *pbiam.ExchangeAudienceRequest) (*pbiam.ExchangeAudienceResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.exchangeErr != nil {
+		return nil, f.exchangeErr
+	}
 	if f.refused || slices.Contains(f.revoked, req.GetRefreshToken()) {
 		return nil, connect.NewError(connect.CodeUnauthenticated, "refresh token revoked")
 	}
@@ -400,31 +405,94 @@ func TestRotateLosingTheRaceKeepsTheSession(t *testing.T) {
 	}
 }
 
-// A token whose age cannot be read — the JWKS not fetched while iam
-// restarts — is not a verdict on the session: it stays signed in, and IAM
-// judges the token on its next call.
-//
-// Keys that would not load are the role's dependency failing, logged at
-// Error; a token that does not verify is logged at Warn.
-func TestRotateKeepsTheSessionWhenItCannotReadTheAge(t *testing.T) {
-	for name, tc := range map[string]struct {
-		err   error
-		msg   string
-		level zapcore.Level
-	}{
-		"keys unavailable": {fmt.Errorf("%w: jwks: refresh on miss", ErrRefreshKeysUnavailable), msgAgeKeysUnavailable, zapcore.ErrorLevel},
-		"token refused":    {errors.New("bearer token expired"), msgAgeUnreadable, zapcore.WarnLevel},
+// A token whose age does not verify is not a verdict on the session: it
+// stays signed in, and IAM judges the token on its next call.
+func TestRotateKeepsTheSessionWhenTheAgeDoesNotVerify(t *testing.T) {
+	r := newRig(t, fakeVerifier{err: errors.New("bearer token expired")})
+	logs := r.observe()
+	rec := r.call(http.MethodPost, PathRefresh, testRefresh, "")
+	if rec.Code != http.StatusNoContent || sessionCookie(rec) != nil {
+		t.Fatalf("unverified age = %d, cookie %v; want 204 and the cookie untouched", rec.Code, sessionCookie(rec))
+	}
+	assertOneLine(t, logs, zapcore.WarnLevel, msgAgeUnreadable, PathRefresh)
+}
+
+// observe sends the role's log lines to the returned observer.
+func (r *rig) observe() *observer.ObservedLogs {
+	core, logs := observer.New(zap.DebugLevel)
+	r.h.log = zap.New(core)
+	return logs
+}
+
+// assertOneLine checks that msg was logged once, at level, naming path, and
+// that no line holds the session's refresh token.
+func assertOneLine(t *testing.T, logs *observer.ObservedLogs, level zapcore.Level, msg, path string) {
+	t.Helper()
+	got := logs.FilterMessage(msg).All()
+	if len(got) != 1 || got[0].Level != level {
+		t.Fatalf("logged %v, want one %q at %s", logs.All(), msg, level)
+	}
+	if p := got[0].ContextMap()[logPath]; p != path {
+		t.Errorf("logged %s = %v, want %q", logPath, p, path)
+	}
+	for _, e := range logs.All() {
+		if strings.Contains(e.Message, testRefresh) || strings.Contains(fmt.Sprint(e.ContextMap()), testRefresh) {
+			t.Errorf("a log line holds the refresh token: %q %v", e.Message, e.ContextMap())
+		}
+	}
+}
+
+// assertUnavailable checks a 503 in the Connect error shape that leaves the
+// session cookie alone: the role could not check the session, which says
+// nothing of it.
+func assertUnavailable(t *testing.T, rec *httptest.ResponseRecorder, message string) {
+	t.Helper()
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("= %d %s, want 503", rec.Code, rec.Body)
+	}
+	if c := sessionCookie(rec); c != nil {
+		t.Errorf("cookie = %+v, want it untouched", c)
+	}
+	var body struct{ Code, Message string }
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("body %s: %v", rec.Body, err)
+	}
+	if body.Code != connect.CodeUnavailable.String() || body.Message != message {
+		t.Errorf("body = %+v, want unavailable: %q", body, message)
+	}
+}
+
+// Keys that would not load leave the role unable to check the session: it
+// answers 503 with the edges' sentence, keeps the cookie, and asks IAM
+// nothing.
+func TestRotateAnswersUnavailableWhenTheKeysWillNotLoad(t *testing.T) {
+	r := newRig(t, fakeVerifier{err: fmt.Errorf("%w: jwks: refresh on miss", ErrRefreshKeysUnavailable)})
+	logs := r.observe()
+	rec := r.call(http.MethodPost, PathRefresh, testRefresh, "")
+	assertUnavailable(t, rec, KeysUnavailableAnswer)
+	assertOneLine(t, logs, zapcore.ErrorLevel, msgAgeKeysUnavailable, PathRefresh)
+}
+
+// The routes that mint an access token leave the key check to IAM. When IAM
+// cannot make it — its key set will not load — the role answers 503 and keeps
+// the cookie; only IAM's Unauthenticated signs the session out.
+func TestRoutesAnswerUnavailableWhenIAMCannotCheckTheSession(t *testing.T) {
+	// What IAM answers a key set that will not load: the same sentence.
+	const iamDown = KeysUnavailableAnswer
+	for name, tc := range map[string]struct{ method, path, body string }{
+		"switch tenant": {http.MethodPost, PathSwitchTenant, `{"targetTenantId":"tenant-b"}`},
+		"rpc":           {http.MethodPost, PathRPC + "/paladin.data.v1.ObjectService/ListObjects", "{}"},
+		"audit stream":  {http.MethodGet, PathAuditStream, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
-			r := newRig(t, fakeVerifier{err: tc.err})
-			core, logs := observer.New(zap.DebugLevel)
-			r.h.log = zap.New(core)
-			rec := r.call(http.MethodPost, PathRefresh, testRefresh, "")
-			if rec.Code != http.StatusNoContent || sessionCookie(rec) != nil {
-				t.Fatalf("unreadable age = %d, cookie %v; want 204 and the cookie untouched", rec.Code, sessionCookie(rec))
-			}
-			if got := logs.FilterMessage(tc.msg).All(); len(got) != 1 || got[0].Level != tc.level {
-				t.Fatalf("logged %v, want one %q at %s", logs.All(), tc.msg, tc.level)
+			r := newRig(t, fakeVerifier{})
+			r.iam.exchangeErr = connect.NewError(connect.CodeUnavailable, iamDown)
+			logs := r.observe()
+			rec := r.call(tc.method, tc.path, testRefresh, tc.body)
+			assertUnavailable(t, rec, iamDown)
+			assertOneLine(t, logs, zapcore.ErrorLevel, msgAccessUnavailable, tc.path)
+			if len(r.calls) != 0 {
+				t.Errorf("planes were called: %v", r.calls)
 			}
 		})
 	}

@@ -13,6 +13,11 @@ import {
 
 import { loginFailure } from "@/lib/auth/loginFailure";
 import { authClient } from "@/lib/connect/client";
+import {
+  classifySessionError,
+  sessionRetryDelayMs,
+  type SessionMiss,
+} from "@/lib/session/check";
 import { onSessionEnded } from "@/lib/session/ended";
 import {
   refreshSession,
@@ -33,9 +38,15 @@ export type { AuthUser } from "@/lib/session/user";
  * one, reads the user with WhoAmI through the session transport. Sign-in, the
  * tenant switch and sign-out are the role's own endpoints; each is followed by
  * WhoAmI, which is what names the user and their tenant's slug.
+ *
+ * A role that cannot check the session — the keys that verify it would not
+ * load, IAM restarting — leaves the status "unavailable", not signed out: the
+ * context asks again with backoff (sessionRetryDelayMs) until the role
+ * answers either way.
  */
 
-export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
+export type AuthStatus =
+  "loading" | "authenticated" | "unauthenticated" | "unavailable";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -57,16 +68,21 @@ async function currentUser(): Promise<AuthUser> {
 // Module-level dedup for the on-mount rehydrate: StrictMode mounts effects
 // twice in dev, across two provider instances, and both would otherwise ask
 // the role to rotate at once.
-let rehydratePromise: Promise<AuthUser | null> | null = null;
+let rehydratePromise: Promise<Rehydrated> | null = null;
 
-function rehydrate(): Promise<AuthUser | null> {
+/** What the load-time check found: the user, or why there is none. */
+type Rehydrated = { kind: "signed-in"; user: AuthUser } | SessionMiss;
+
+function rehydrate(): Promise<Rehydrated> {
   if (rehydratePromise) return rehydratePromise;
-  rehydratePromise = (async () => {
+  rehydratePromise = (async (): Promise<Rehydrated> => {
     try {
-      if (!(await refreshSession())) return null;
-      return await currentUser();
-    } catch {
-      return null;
+      const check = await refreshSession();
+      if (check.kind !== "signed-in") return check;
+      return { kind: "signed-in", user: await currentUser() };
+    } catch (err) {
+      // WhoAmI failed: only a refusal is no session, an outage is not.
+      return classifySessionError(err);
     } finally {
       // Cleared after a tick so the double mount joins this promise but a
       // later re-mount (after logout) asks again.
@@ -91,18 +107,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const startedAt = generation.current;
-    void rehydrate().then((found) => {
-      if (cancelled || generation.current !== startedAt) return;
-      if (!found) {
-        setStatus("unauthenticated");
-        return;
-      }
-      setUser(found);
-      setStatus("authenticated");
-    });
+    // A sign-in, switch or sign-out since the first check supersedes it, and
+    // ends its retries.
+    const superseded = () => cancelled || generation.current !== startedAt;
+    const check = (attempt: number) => {
+      if (superseded()) return;
+      void rehydrate().then((found) => {
+        if (superseded()) return;
+        switch (found.kind) {
+          case "signed-in":
+            setUser(found.user);
+            setStatus("authenticated");
+            return;
+          case "signed-out":
+            setStatus("unauthenticated");
+            return;
+          case "unavailable":
+            setStatus("unavailable");
+            retry = setTimeout(
+              () => check(attempt + 1),
+              sessionRetryDelayMs(attempt, found.retryAfterMs),
+            );
+        }
+      });
+    };
+    check(0);
     return () => {
       cancelled = true;
+      clearTimeout(retry);
     };
   }, []);
 
