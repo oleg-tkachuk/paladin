@@ -18,7 +18,10 @@ import (
 
 // mismatchedHead answers every HEAD with bytes one longer than registered, and
 // counts the deletes it is asked for.
-type mismatchedHead struct{ deletes int }
+type mismatchedHead struct {
+	noCopy
+	deletes int
+}
 
 func (h *mismatchedHead) Head(context.Context, string, string, uuid.UUID, string, string, string) (string, int64, string, string, error) {
 	return "etag", registeredSize + 1, "", "", nil

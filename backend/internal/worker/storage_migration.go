@@ -213,6 +213,10 @@ type MigrationRepo interface {
 	Complete(ctx context.Context, at MigrationRead) error
 	// MarkCleaned is the terminal transition after the old copies are deleted.
 	MarkCleaned(ctx context.Context, at MigrationRead) error
+	// CountUploadsAnchoredTo counts the tenant's PENDING uploads whose URL was
+	// signed for (backendID, bucketName): their bytes may still land there
+	// (objects.upload_bucket_id).
+	CountUploadsAnchoredTo(ctx context.Context, tenantID uuid.UUID, backendID, bucketName string) (int64, error)
 	Fail(ctx context.Context, at MigrationRead, reason string) error
 }
 
@@ -610,6 +614,9 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 	if w.Deleter == nil {
 		return nil // cleanup disabled
 	}
+	if waiting, err := w.uploadsAnchoredToSource(ctx, m); err != nil || waiting {
+		return err
+	}
 	if done, err := w.cleanSource(ctx, m); err != nil || !done {
 		return err
 	}
@@ -617,6 +624,27 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 		zap.String("tenant_id", m.TenantID.String()),
 		zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName))
 	return w.Repo.MarkCleaned(ctx, m.Read())
+}
+
+// uploadsAnchoredToSource reports whether cleanup must wait: an upload whose
+// URL was signed for the source bucket before the rebind is still PENDING.
+// Its bytes land in the source, and CompleteObject or the reconciler copy
+// them into the target only when they settle it — from the source copy, which
+// cleanup would delete. Once promoted, the object is listed like any other
+// and its source copy goes with the rest; discarded, it left none. The wait
+// is bounded by the uploads' presign deadline and the reconciler's grace.
+func (w *StorageMigrationWorker) uploadsAnchoredToSource(ctx context.Context, m StorageMigration) (bool, error) {
+	n, err := w.Repo.CountUploadsAnchoredTo(ctx, m.TenantID, m.SourceBackendID, m.SourceBucketName)
+	if err != nil {
+		return false, fmt.Errorf("count uploads anchored to the source: %w", err)
+	}
+	if n > 0 {
+		w.log().Info("cleanup waits for uploads whose URL names the source bucket",
+			zap.String("tenant_id", m.TenantID.String()),
+			zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName), zap.Int64("uploads", n))
+		return true, nil
+	}
+	return false, nil
 }
 
 // cleanSource deletes every listed object's copy from the source bucket, and

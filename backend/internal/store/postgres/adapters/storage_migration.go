@@ -219,6 +219,18 @@ func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, at worker.Migrat
 	return migrationMoved(r.q.MarkStorageMigrationCleaned(ctx, worker.MigStateCleaned, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
+// CountUploadsAnchoredTo counts the tenant's PENDING uploads whose URL names
+// the bucket (objects.upload_bucket_id, migration 113).
+func (r *StorageMigrationRepo) CountUploadsAnchoredTo(ctx context.Context, tenantID uuid.UUID, backendID, bucketName string) (int64, error) {
+	var n int64
+	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
+		var e error
+		n, e = q.MigrationCountUploadsAnchoredTo(ctx, pgUUID(tenantID), backendID, bucketName)
+		return e
+	})
+	return n, err
+}
+
 func (r *StorageMigrationRepo) Fail(ctx context.Context, at worker.MigrationRead, reason string) error {
 	return migrationMoved(r.q.FailStorageMigration(ctx, worker.MigStateFailed, &reason, pgUUID(at.TenantID), at.State, at.Attempts))
 }

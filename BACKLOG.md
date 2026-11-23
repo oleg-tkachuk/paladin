@@ -537,20 +537,22 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** the purge paths are being reworked against the bucket gate
   ("The lifecycle hard delete ignores a draining backend").
 
-### A presigned upload issued before a storage migration's rebind is lost
+### A multipart upload completed after a storage migration's rebind is lost at cleanup
 
 - **Status:** Deferred.
-- **Reason:** the migration does not copy PENDING objects: no bytes are
-  confirmed under them. Their upload URL names the source bucket, so a PUT
-  made after the rebind lands there, and `CompleteObject` then HEADs the
-  collection's new binding (`writeBinding`), finds nothing and does not
-  promote the object; the reconciler discards it once its URL expires.
-- **Definition of Done:** an upload issued before the rebind either
-  completes against the bucket its URL names, with its bytes then moved, or
-  is refused at complete with a reason the client can act on; a test
-  presigns, rebinds, uploads and completes.
-- **Blockers:** anchoring a single-PUT upload to its bucket, as multipart
-  sessions are.
+- **Reason:** a session assembles its parts in the bucket it was anchored to
+  at initiate, and `CompleteMultipartUpload` promotes the object there. After
+  a rebind that is the source, while the object is read from the target; the
+  migration's cleanup, which waits only while the row is PENDING, then
+  deletes the source copy — the only one: the object is lost. Single-part
+  uploads move their bytes into the
+  collection's bucket on completion (`objecth.UploadOrigin`); the multipart
+  storage seam has no copy, and its HEAD-free complete path would need one.
+- **Definition of Done:** `CompleteMultipartUpload` copies an assembled
+  object whose session bucket is not the collection's binding into the
+  binding before promoting it, as `CompleteObject` does; a test initiates,
+  rebinds, completes and finds the object in the target after cleanup.
+- **Blockers:** none.
 
 ### The replication worker will skip the bucket gate once it copies
 

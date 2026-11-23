@@ -101,6 +101,10 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 	if err != nil {
 		return objecth.Object{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
 	}
+	uploadBucketID, err := resolveUploadBucket(ctx, qtx, args.UploadBackendID, args.UploadBucket)
+	if err != nil {
+		return objecth.Object{}, err
+	}
 	if err := qtx.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
@@ -117,6 +121,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		pgTS(args.PresignExpiresAt),
 		args.PublicURL,
 		pgUUID(args.CreatedByOperation),
+		uploadBucketID,
 	); err != nil {
 		return objecth.Object{}, fmt.Errorf("create object: %w", err)
 	}
@@ -124,6 +129,20 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		return objecth.Object{}, fmt.Errorf("commit create object: %w", err)
 	}
 	return r.getByID(ctx, args.TenantID, objectID)
+}
+
+// resolveUploadBucket is the id of the bucket an upload's URL is signed for,
+// by the names the URL carries: the PENDING row's anchor (migration 113).
+// No names, no anchor — NULL, which falls back to the collection's binding.
+func resolveUploadBucket(ctx context.Context, q *sqlc.Queries, backendID, bucket string) (pgtype.UUID, error) {
+	if backendID == "" || bucket == "" {
+		return pgtype.UUID{}, nil
+	}
+	id, err := q.ResolveUploadBucketID(ctx, backendID, bucket)
+	if err != nil {
+		return pgtype.UUID{}, fmt.Errorf("resolve upload bucket %s/%s: %w", backendID, bucket, err)
+	}
+	return id, nil
 }
 
 // FindByName reads one of the tenant's objects; objecth.ErrObjectNotFound
@@ -879,7 +898,26 @@ func (r *ObjectRepo) getByIDWith(ctx context.Context, q *sqlc.Queries, tenantID,
 	if err != nil {
 		return objecth.Object{}, err
 	}
-	return objectFromSQLC(row.Object, row.CollectionName), nil
+	obj := objectFromSQLC(row.Object, row.CollectionName)
+	obj.Upload = uploadAnchorFrom(row)
+	return obj, nil
+}
+
+// uploadAnchorFrom is the bucket the row's upload URL was signed for, as
+// GetObject joins it; nil when the row has none.
+func uploadAnchorFrom(row sqlc.GetObjectRow) *objecth.UploadAnchor {
+	if row.UploadBackendName == nil || row.UploadBucketName == nil {
+		return nil
+	}
+	return &objecth.UploadAnchor{
+		BackendID: *row.UploadBackendName,
+		Bucket:    *row.UploadBucketName,
+		State: bucketgate.State{
+			Enabled:        row.UploadEnabled != nil && *row.UploadEnabled,
+			ReadOnly:       row.UploadReadOnly != nil && *row.UploadReadOnly,
+			ProvisionState: derefStr(row.UploadProvisionState),
+		},
+	}
 }
 
 func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {

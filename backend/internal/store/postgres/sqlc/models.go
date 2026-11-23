@@ -592,6 +592,7 @@ type Object struct {
 	PublicUrl             string             `json:"public_url"`
 	CreatedByOperation    pgtype.UUID        `json:"created_by_operation"`
 	BytesWrittenAt        pgtype.Timestamptz `json:"bytes_written_at"`
+	UploadBucketID        pgtype.UUID        `json:"upload_bucket_id"`
 }
 
 type ObjectLock struct {

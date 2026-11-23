@@ -453,6 +453,25 @@ func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgty
 	return count, err
 }
 
+const migrationCountUploadsAnchoredTo = `-- name: MigrationCountUploadsAnchoredTo :one
+SELECT count(*)
+FROM objects o
+JOIN buckets b           ON b.id = o.upload_bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE o.tenant_id = $1 AND o.state = 'PENDING'
+  AND sb.name = $2 AND b.name = $3
+`
+
+// The tenant's uploads whose URL names the bucket (migration 113) and that
+// are still PENDING: their bytes may yet land there, and CompleteObject or
+// the reconciler move them from it. Cleanup of the source waits for none.
+func (q *Queries) MigrationCountUploadsAnchoredTo(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (int64, error) {
+	row := q.db.QueryRow(ctx, migrationCountUploadsAnchoredTo, tenantID, backendName, bucketName)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const migrationListObjectsWrittenSince = `-- name: MigrationListObjectsWrittenSince :many
 SELECT o.id, COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at,
        c.name AS collection_name, o.path,
@@ -576,7 +595,8 @@ type MigrationListTenantObjectsRow struct {
 // Live and trashed objects: a trashed object keeps its bytes until the purge,
 // and RestoreObject reads them from the bucket its collection is bound to, so
 // they move with the collection. PENDING rows do not: no bytes are confirmed
-// under them, and the upload URL they were handed names the source bucket.
+// under them, and the upload URL they were handed names the source bucket,
+// which the row records (upload_bucket_id): their completion moves the bytes.
 // Versions and delete markers are rows only, all under the object's one key,
 // so they need nothing copied.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {

@@ -17,6 +17,7 @@ import (
 // mismatchProber reports a stored object of a size the test chooses and
 // records deletes.
 type mismatchProber struct {
+	noCopy
 	size      int64
 	checksum  string
 	deleteErr error

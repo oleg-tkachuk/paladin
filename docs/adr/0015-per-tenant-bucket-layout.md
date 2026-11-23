@@ -349,6 +349,26 @@ Not routed through the gate, deliberately: the bucket reconciler, which
 moves `provision_state` itself, so the gate would refuse its own work; and
 the storage migration, which is what drains a backend.
 
+## Addendum (2026-11-24): an upload is anchored to the bucket its URL names
+
+The copy skips PENDING objects, and a single-part upload's URL names the
+bucket the collection was bound to when it was signed. A PUT made after the
+rebind lands in the source, which nothing read again: `CompleteObject` HEADed
+the new binding, and the reconciler discarded the row.
+
+The row now records that bucket (`objects.upload_bucket_id`, migration 113),
+as a multipart session records its own. `CompleteObject` and the reconciler
+look for the bytes there first and, when it is not the collection's binding,
+copy them into the binding under the same key before promoting; a URL
+regenerated after the rebind names the binding, which is looked in next. The
+promote clears the anchor. The anchored copy is not deleted there: the
+migration's cleanup removes it with the other source copies, and waits while
+any upload anchored to the source is still PENDING. So a crash between the
+copy and the promote leaves bytes in both buckets, and a retry copies again.
+An operator's direct `BindCollectionToBucket` moves no bytes at all: an
+upload completed after one is moved like this, and its anchored copy stays
+in the old bucket with every other object's.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

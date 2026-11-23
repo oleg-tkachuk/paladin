@@ -140,7 +140,7 @@ func runIngest(
 		// A delete event is believed only when a HEAD at the object's
 		// current placement finds nothing; the probe reads the placement
 		// through the same BYPASSRLS queries.
-		Probe:   adapters.NewReconcilerProbe(ingestQueries, s3adapter.NewObjectRouter(deps.Registry)),
+		Probe:   adapters.NewReconcilerProbe(ingestQueries, s3adapter.NewObjectRouter(deps.Registry)).WithLogger(l.Named("ingest.probe")),
 		Deleter: ingestSM,
 		// The transitions are recorded as the data-plane RPCs that make the
 		// same ones are; the repository writes in the object's tenant.

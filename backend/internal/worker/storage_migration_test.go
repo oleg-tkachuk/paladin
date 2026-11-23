@@ -23,6 +23,12 @@ type fakeMigRepo struct {
 	reboundBack bool   // RebindBack ran: the tenant is on its source again
 	reason      string // the error StartRollback or Fail recorded
 	reboundAt   time.Time
+	// anchored is how many PENDING uploads name the source bucket.
+	anchored int64
+}
+
+func (f *fakeMigRepo) CountUploadsAnchoredTo(context.Context, uuid.UUID, string, string) (int64, error) {
+	return f.anchored, nil
 }
 
 func (f *fakeMigRepo) ListActive(context.Context, int) ([]StorageMigration, error) {
@@ -610,6 +616,39 @@ func TestStorageMigration_CleanupWaitsForRetention(t *testing.T) {
 	}
 	if len(del.deleted) != 0 {
 		t.Fatal("deleted source objects before the retention window elapsed")
+	}
+}
+
+// An upload whose URL names the source is moved to the target from its
+// source copy when it completes: cleanup waits for it, past the retention
+// window, and runs once none is left.
+func TestStorageMigration_CleanupWaitsForUploadsAnchoredToTheSource(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateCompleted,
+			SourceBackendID: "primary", SourceBucketName: "paladin-shared",
+			CleanupAfter: time.Now().Add(-time.Minute),
+		},
+		objects:  []ObjectRef{{Collection: "docs", Key: "a.txt"}},
+		anchored: 1,
+	}
+	del := &fakeDeleter{}
+	w := &StorageMigrationWorker{Repo: repo, Deleter: del, CopyBatch: 2, Now: time.Now}
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
+	if repo.mig.State != MigStateCompleted || len(del.deleted) != 0 {
+		t.Fatalf("state %q after deleting %v, want completed with nothing deleted while an upload names the source",
+			repo.mig.State, del.deleted)
+	}
+
+	repo.anchored = 0
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v, want nil", err)
+	}
+	if repo.mig.State != MigStateCleaned || len(del.deleted) != 1 {
+		t.Fatalf("state %q after deleting %v, want cleaned once no upload names the source", repo.mig.State, del.deleted)
 	}
 }
 

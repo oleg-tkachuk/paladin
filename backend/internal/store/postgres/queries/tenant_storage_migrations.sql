@@ -123,7 +123,8 @@ FOR UPDATE;
 -- Live and trashed objects: a trashed object keeps its bytes until the purge,
 -- and RestoreObject reads them from the bucket its collection is bound to, so
 -- they move with the collection. PENDING rows do not: no bytes are confirmed
--- under them, and the upload URL they were handed names the source bucket.
+-- under them, and the upload URL they were handed names the source bucket,
+-- which the row records (upload_bucket_id): their completion moves the bytes.
 -- Versions and delete markers are rows only, all under the object's one key,
 -- so they need nothing copied.
 SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
@@ -137,6 +138,17 @@ WHERE o.tenant_id = $1
                                 sqlc.arg('after_path')::text)
 ORDER BY c.name, o.path
 LIMIT sqlc.arg('limit_count')::int;
+
+-- name: MigrationCountUploadsAnchoredTo :one
+-- The tenant's uploads whose URL names the bucket (migration 113) and that
+-- are still PENDING: their bytes may yet land there, and CompleteObject or
+-- the reconciler move them from it. Cleanup of the source waits for none.
+SELECT count(*)
+FROM objects o
+JOIN buckets b           ON b.id = o.upload_bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE o.tenant_id = $1 AND o.state = 'PENDING'
+  AND sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name');
 
 -- name: MigrationCountTenantObjects :one
 -- The objects MigrationListTenantObjects walks: live and trashed, public
