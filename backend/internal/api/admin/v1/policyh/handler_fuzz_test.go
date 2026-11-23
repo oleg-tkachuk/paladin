@@ -77,12 +77,16 @@ func FuzzSimulateAuthz(f *testing.F) {
 		f.Add(c[0], c[1], c[2], c[3], c[4])
 	}
 	h := NewHandler(cedar.NewEngine(permitLayers{}, engineTTL), &fakeStore{})
+	// One tenant for every input: the engine caches a policy set per tenant,
+	// and a fresh one per input would grow it for as long as the search runs.
+	principalTenant := uuid.New()
+	ctx := authedCtx(principalTenant)
 	f.Fuzz(func(t *testing.T, subject, role, kind, action, resource string) {
 		in := SimulateAuthzInput{
-			PrincipalSubject: subject, PrincipalTenantID: uuid.New(), PrincipalRoles: []string{role},
+			PrincipalSubject: subject, PrincipalTenantID: principalTenant, PrincipalRoles: []string{role},
 			PrincipalKind: kind, Action: action, ResourceName: resource,
 		}
-		out, err := h.SimulateAuthz(authedCtx(uuid.New()), in)
+		out, err := h.SimulateAuthz(ctx, in)
 		fuzzassert.Refusal(t, err, simulateCodes, subject, role, kind, action, resource)
 		if err == nil {
 			fuzzassert.Text(t, out.Explanation, action, resource)
