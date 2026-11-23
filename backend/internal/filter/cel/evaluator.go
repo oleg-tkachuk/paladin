@@ -9,7 +9,11 @@ package cel
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
@@ -329,20 +333,43 @@ func SchemaNames() []string {
 // cel-go's Issues.Errors() yields []*cel.Error with Location.Line() /
 // .Column() — Line is 1-indexed, Column is 0-indexed in cel-go itself
 // but display strings add 1. We normalise to 1-indexed for both.
+//
+// Message is text a client reads — the validation RPC answers it, the list
+// RPCs refuse a filter with it — so it is one printable line: cel-go names the
+// token it could not read as the expression holds it, and a control character
+// there reached the client raw. Error adds the position, not cel-go's report
+// rendered against the source, which echoes the expression line by line.
 type CompileError struct {
 	Message string
 	Line    int
 	Column  int
-	// detail is cel-go's full report of every issue, rendered against the
-	// source, for callers that log the error rather than read its fields.
-	detail string
 }
 
 func (e *CompileError) Error() string {
-	if e.detail != "" {
-		return e.detail
+	if e.Line > 0 {
+		return fmt.Sprintf("%d:%d: %s", e.Line, e.Column, e.Message)
 	}
 	return e.Message
+}
+
+// printable is s with each character that does not print, and each byte that
+// is not UTF-8, escaped as a Go string literal escapes it.
+func printable(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		switch {
+		case r == utf8.RuneError && size == 1:
+			fmt.Fprintf(&b, `\x%02x`, s[i])
+		case r == ' ' || unicode.IsPrint(r):
+			b.WriteRune(r)
+		default:
+			q := strconv.QuoteRune(r)
+			b.WriteString(q[1 : len(q)-1])
+		}
+		i += size
+	}
+	return b.String()
 }
 
 // CompileFirstError compiles `expr` against `schema` and, on failure,
@@ -373,14 +400,13 @@ func compileChecked(schema *Schema, expr string) (*cel.Env, *cel.Ast, error) {
 	if iss != nil && iss.Err() != nil {
 		errs := iss.Errors()
 		if len(errs) == 0 {
-			return nil, nil, &CompileError{Message: iss.Err().Error()}
+			return nil, nil, &CompileError{Message: printable(iss.Err().Error())}
 		}
 		first := errs[0]
 		return nil, nil, &CompileError{
-			Message: first.Message,
+			Message: printable(first.Message),
 			Line:    first.Location.Line(),
 			Column:  first.Location.Column() + 1, // 0→1-indexed
-			detail:  iss.Err().Error(),
 		}
 	}
 	if ast.OutputType() != cel.BoolType {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // A literal the field's SQL enum does not hold must fail compilation. For
@@ -100,10 +101,11 @@ func TestEnumValues(t *testing.T) {
 	}
 }
 
-// Syntax errors keep cel-go's full report for logs, and its first diagnostic
-// for the validation RPC.
-func TestCompileErrorKeepsDetail(t *testing.T) {
-	err := CompileFirstError(ObjectSchema, `nope == "x"`)
+// A compile error is the first diagnostic and its position, on one line:
+// the list RPCs refuse a filter with Error(), and cel-go's rendered report
+// echoes the expression line by line.
+func TestCompileErrorIsTheFirstDiagnosticOnOneLine(t *testing.T) {
+	err := CompileFirstError(ObjectSchema, "nope == \"x\" &&\n nope2")
 	var ce *CompileError
 	if !errors.As(err, &ce) {
 		t.Fatalf("%T, want *CompileError", err)
@@ -111,8 +113,40 @@ func TestCompileErrorKeepsDetail(t *testing.T) {
 	if strings.Contains(ce.Message, "ERROR:") {
 		t.Errorf("Message carries the rendered report: %q", ce.Message)
 	}
-	if !strings.Contains(ce.Error(), "ERROR:") || !strings.Contains(ce.Error(), ce.Message) {
-		t.Errorf("Error() = %q, want the rendered report", ce.Error())
+	if got, want := ce.Error(), "1:1: "+ce.Message; got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
+	}
+}
+
+// cel-go names a token it cannot read as the expression holds it; what the
+// client reads has it escaped.
+func TestCompileErrorEscapesWhatDoesNotPrint(t *testing.T) {
+	for _, expr := range []string{"\x7f", "a \x00", "\x1b[31m", "\xff", "a\u202eb"} {
+		err := CompileFirstError(ObjectSchema, expr)
+		var ce *CompileError
+		if !errors.As(err, &ce) {
+			t.Fatalf("%q: %T, want *CompileError", expr, err)
+		}
+		for _, r := range ce.Error() {
+			if r != ' ' && !unicode.IsPrint(r) {
+				t.Errorf("%q: Error() = %q holds unprintable %U", expr, ce.Error(), r)
+			}
+		}
+	}
+}
+
+func TestPrintable(t *testing.T) {
+	for in, want := range map[string]string{
+		"plain text":  "plain text",
+		"at: '\x7f'":  `at: '\x7f'`,
+		"a\nb\tc":     `a\nb\tc`,
+		"bad \xff":    `bad \xff`,
+		"arrow → ok":  "arrow → ok",
+		"bidi \u202e": `bidi \u202e`,
+	} {
+		if got := printable(in); got != want {
+			t.Errorf("printable(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
