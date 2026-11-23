@@ -23,7 +23,7 @@
 # together; the Go pair matches backend/deploy/Dockerfile.
 ARG NODE_VERSION=26
 # renovate: datasource=npm depName=pnpm
-ARG PNPM_VERSION=12.22.0
+ARG PNPM_VERSION=12.23.0
 ARG GO_VERSION=1.27
 
 # -----------------------------------------------------------------------------
