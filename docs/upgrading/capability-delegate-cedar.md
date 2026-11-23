@@ -1,4 +1,4 @@
-## Unreleased — tenant policies can forbid capability delegation
+## Unreleased — breaking: tenant policies can forbid capability delegation
 
 - **`CapabilityService.Delegate` now asks Cedar `DelegateCapability`**, with
   the presented capability as the principal (`principal.kind ==
