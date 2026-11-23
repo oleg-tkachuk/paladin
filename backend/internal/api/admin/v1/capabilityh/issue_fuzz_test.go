@@ -2,6 +2,7 @@ package capabilityh
 
 import (
 	"testing"
+	"time"
 	"uuid"
 
 	"buf.build/go/protovalidate"
@@ -64,8 +65,9 @@ func (c issueFuzz) request() *adminv1.CapabilityServiceIssueRequest {
 	return req
 }
 
-// Whatever terms an issuer asks for, Issue mints them or refuses them as the
-// caller's mistake, in words that name nothing of the server. A request the
+// Whatever terms an issuer asks for, Issue mints them — for the lifetime asked
+// for — or refuses them as the caller's mistake, in words that name nothing of
+// the server. A request the
 // contract's own rules refuse is answered by the validating interceptor before
 // Issue runs, so it is skipped here.
 func FuzzIssue(f *testing.F) {
@@ -76,6 +78,8 @@ func FuzzIssue(f *testing.F) {
 		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: string(limes.OpPut), prefix: "tenants/a/", uri: "paladin://x", cidr: "10.0.0.0/8", ttlSeconds: 60, maxRequests: 5},
 		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "share", currency: "not-a-currency", units: 1, jkt: testJKT, requireBiscuit: true},
 		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "get", cidr: "fe80::1%eth0/64", ttlSeconds: 1 << 40, notBeforeSeconds: -1},
+		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "get", ttlSeconds: maxTTLSeconds + 1},
+		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "get", ttlSeconds: 1 << 62},
 		{kind: 2, tenant: tenant, subject: "agent\x00", audience: "", op: "frobnicate", prefix: "paladin://tenants/", ttlSeconds: -5, requireBiscuit: true},
 	} {
 		f.Add(c.kind, c.tenant, c.subject, c.audience, c.op, c.prefix, c.uri, c.cidr, c.currency, c.jkt,
@@ -99,7 +103,14 @@ func FuzzIssue(f *testing.F) {
 			return
 		}
 		h := mkHandler(t, &fakeStore{}, nil, &allowAuthorizer{})
-		_, err := h.Issue(adminCtx(), req)
+		resp, err := h.Issue(adminCtx(), req)
 		fuzzassert.Refusal(t, err, issueCodes, tenant, subject, audience, op, prefix, uri, cidr, currency, jkt)
+		if err != nil || ttlSeconds == 0 {
+			return
+		}
+		minted := resp.GetCapability()
+		if got, want := minted.GetExpiresAt().AsTime().Sub(minted.GetIssuedAt().AsTime()), time.Duration(ttlSeconds)*time.Second; got != want {
+			t.Fatalf("ttl_seconds %d minted a lifetime of %v, want %v", ttlSeconds, got, want)
+		}
 	})
 }
