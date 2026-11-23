@@ -1,4 +1,4 @@
-## Unreleased — the SDK fakes refuse request text holding NUL
+## sdk/python/v0.152.1, sdk/go/v0.152.1 — the SDK fakes refuse request text holding NUL
 
 - `paladintest` (Go) and `paladin.testing` (Python) refuse a request any of
   whose strings holds a NUL character (U+0000) as `INVALID_ARGUMENT`, with the

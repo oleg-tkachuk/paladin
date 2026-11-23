@@ -89,6 +89,162 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — batches ask the bucket gate again when they run
+
+- The tag, restore and trash batches fail when their collection's backend was
+  disabled after the batch was submitted, and write nothing. A permanent
+  delete batch also fails on a draining backend or a bucket not ready for
+  writes, where it used to fail each object on its own.
+- A batch the gate refuses ends `FAILED` with the refusal's reason as its
+  error code (`ERROR_REASON_BACKEND_DISABLED`, `ERROR_REASON_BACKEND_READ_ONLY`,
+  `ERROR_REASON_BUCKET_PROVISIONING` or `ERROR_REASON_FAILED_PRECONDITION`),
+  and the operation's error answers the refusal's own code
+  (`FAILED_PRECONDITION` or `UNAVAILABLE`) rather than `UNKNOWN`. A batch copy
+  refused at run time is answered the same way.
+- The worker logs a refused batch at Warn and any other failed batch at Error
+  (it was Warn); a batch cut short by the worker's shutdown stays at Warn.
+
+## Unreleased — lifecycle expiry and the reconciler skip a disabled backend
+
+- The lifecycle expiry no longer moves objects to the trash on a disabled
+  backend, as `DeleteObject` to the trash is refused there. Its buckets are
+  skipped each tick, logged at Warn with the gate's reason, and expire on the
+  first tick after the backend is enabled. A draining backend still expires.
+- The reconciler no longer HEADs, promotes or discards pending uploads on a
+  disabled backend; they stay `PENDING`, and the overdue-pending gauge counts
+  them, until it is enabled. Each tick logs the deferral at Warn.
+
+## Unreleased — multipart sessions answer the bucket gate of their own bucket
+
+- `CompleteMultipartUpload` and `PresignPart` ask the bucket gate about the
+  bucket the upload was started in, where its parts are, rather than the
+  collection's current binding. After a storage migration rebinds the
+  collection, an upload started on the old backend is refused while that
+  backend drains (`FAILED_PRECONDITION`, `ERROR_REASON_BACKEND_READ_ONLY`),
+  and no longer refused because the new binding is provisioning or draining.
+- `AbortMultipartUpload` and `ListParts` now ask the gate too, as reads: a
+  disabled backend refuses them (`FAILED_PRECONDITION`,
+  `ERROR_REASON_BACKEND_DISABLED`). A draining, provisioning or failed bucket
+  still takes them; aborting an upload frees storage.
+- A part URL's lifetime is bounded by the `max_presign_put_ttl` of the bucket
+  the upload was started in.
+
+## sdk/python/v0.152.1, sdk/go/v0.152.1 — the SDK fakes refuse request text holding NUL
+
+- `paladintest` (Go) and `paladin.testing` (Python) refuse a request any of
+  whose strings holds a NUL character (U+0000) as `INVALID_ARGUMENT`, with the
+  server's text: `key: holds a NUL character`, `metadata.value: holds a NUL
+  character`. The refusal comes after authentication and before validation,
+  as on the server, and no handler runs.
+- A test that passed such text through either fake now fails as it would
+  against the server.
+
+## Unreleased — fixed texts for OAuth client refusals and unbuildable messages
+
+- An RPC whose request or response message the server cannot build is
+  `INTERNAL` with the message `the server cannot build this procedure's
+  messages`. It used to carry the procedure's name and the type registry's own
+  error. This is a build fault, unreachable with generated stubs; the cause is
+  logged at Error.
+- The `invalid_client` answers of `/oauth/token` and `/oauth/revoke` keep their
+  `error_description` texts (`unknown client`, `client_secret required`,
+  `invalid client_secret`), now fixed sentences rather than an error's text.
+  The refusal's log line carries the cause in a `cause` field.
+
+## Unreleased — the MCP presign tools bound `ttl_seconds`
+
+- `paladin_presign_download`, `paladin_regenerate_upload_url` and
+  `paladin_presign_part` refuse a `ttl_seconds` above 9223372036 as
+  `invalid_argument: ttl_seconds: <value> is over the limit of 9223372036`,
+  before the data plane is called. It used to wrap, and the plane refused a
+  TTL the agent did not send.
+
+## Unreleased — the session role answers a key set that will not load as 503
+
+- `POST /session/refresh` answers `503` with `{"code":"unavailable"}` and the
+  message `the keys that verify a bearer token could not be loaded; retry the
+  call` when the keys that verify the session's refresh token cannot be
+  loaded; it used to answer `204`. The session cookie is kept. A refresh
+  token IAM refuses is still `401`.
+- The console keeps the session on that answer, shows that sign-in is
+  temporarily unavailable and checks again with backoff. An older console
+  reads the `503` as signed out, so deploy the console with or before the
+  session role.
+
+## Unreleased — request text holding NUL is refused on every RPC
+
+- Every RPC on the data, admin and IAM planes refuses a request whose
+  strings hold a NUL character (U+0000) as `INVALID_ARGUMENT`, before any
+  handler runs. The message names the field and never its value:
+  `key: holds a NUL character`, `metadata.value: holds a NUL character`,
+  `names[2]: holds a NUL character`. A map entry is named by its half —
+  `tags.key` or `tags.value` — not by its key.
+- Every string counts: singular and repeated fields, map keys and values,
+  nested messages, oneofs and well-known types such as `StringValue` and
+  `Struct` (user settings' `preferences`). `bytes` fields are not checked.
+- Such text could not be stored: PostgreSQL holds no NUL in `text` and refuses
+  `\u0000` in `jsonb`. A call carrying it could fail at the store and come
+  back as `INTERNAL` — a `Login` whose subject held one did. Fields a handler
+  already checked, such as an object key, keep their code but now answer
+  with this message.
+- The refusal comes after authentication: a call without valid credentials is
+  still `UNAUTHENTICATED` first. `Login` takes no credentials, so a subject
+  holding NUL is refused, and not recorded in the audit log.
+- A client that sends such text deliberately should strip or replace it
+  before the call; there is no flag to accept it.
+
+## Unreleased — what a client is told about its own input
+
+- A list RPC refuses a filter that does not compile with one line ending in
+  `<line>:<column>: <message>`, in place of the CEL report that echoed the
+  expression over several lines. In that message and in `CELService.Validate`'s
+  `message`, a character that does not print is escaped (`\x7f`).
+- A Cedar parse error, from `PolicyService.Validate` and from every write that
+  carries a policy, names its line and column in the text that was sent; it
+  used to count from the start of the built-in layer. A character in it that
+  does not print is escaped.
+- A policy that does not type-check is still one `PolicyService.Validate`
+  warning, with its errors joined by semicolons on one line rather than by line
+  breaks.
+- `PolicyService.SimulateAuthz` answers a resource name it cannot read as
+  `INVALID_ARGUMENT`, and a caller it refuses as `PERMISSION_DENIED` or
+  `UNAUTHENTICATED`; every refusal used to be `INTERNAL`. The explanation
+  quotes the resource name and ends in `allow` or `deny` rather than `1` or
+  `0`.
+- An amount in a currency that is no ISO 4217 code is refused in words
+  (`unit_code "x": not an ISO 4217 currency code`), not as a dump of a Go
+  value.
+- An unknown timezone in user settings is refused as
+  `unknown timezone "<name>"`, quoted, without the loader's own text.
+- A capability `ttl_seconds` above 9223372036 is `INVALID_ARGUMENT`. It used to
+  wrap: refused as a negative TTL, or minted with the default lifetime.
+- `CreateCollection` (and the storage bootstrap's collections) refuse a name
+  outside the collection grammar as `INVALID_ARGUMENT` before the insert,
+  whose CHECK constraint refused it instead.
+- A tenant display name longer than 255 characters is `INVALID_ARGUMENT` on
+  create and update, refused before the insert rather than by its CHECK
+  constraint.
+
+## Unreleased — breaking: tenant policies can forbid capability delegation
+
+- **`CapabilityService.Delegate` now asks Cedar `DelegateCapability`**, with
+  the presented capability as the principal (`principal.kind ==
+  "capability"`) and its own tenant as the resource, under
+  `context.capability_op == "share"`. The built-in policy permits it in the
+  capability's own tenant, so delegation works as before without a tenant
+  policy. A tenant that wants to stop delegation can now `forbid` it, for
+  example `forbid (principal, action == Action::"DelegateCapability", resource);`;
+  `Delegate` then answers `PERMISSION_DENIED` ("denied by policy").
+- **A forbid that already matches every capability now stops delegation
+  too.** A tenant that followed the v40.2.0 note and forbids
+  `principal.kind == "capability"` on every action could delegate until now;
+  it cannot after this release. Narrow that `forbid` to the actions it means,
+  or add `action != Action::"DelegateCapability"` to its condition.
+- **`ListOperationGrants` reports `share` as `BUILTIN`** with the action
+  `DelegateCapability`, instead of `CAVEATS_ONLY` with the `Delegate`
+  procedure. No operation has the `CAVEATS_ONLY` basis any more; the enum
+  value stays.
+
 ## sdk/python/v0.151.5, sdk/go/v0.151.5 — a capability names a nested collection as one segment
 
 - The resource a capability names an object by is
