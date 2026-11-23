@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
@@ -113,6 +114,10 @@ func (e *BatchDeleteExecutor) Execute(ctx context.Context, op operationh.Operati
 
 	if args.Permanent && (e.Permanent == nil || e.Erasures == nil) {
 		return nil, errors.New("BatchDeleteExecutor: permanent delete requested but no PermanentDeleter / ErasureLookup wired")
+	}
+	// A move to the trash writes rows only; a permanent delete removes bytes.
+	if err := admitBatch(ctx, e.Objects, e.Logger, op, args.Collection, bucketgate.DeleteAccess(args.Permanent)); err != nil {
+		return nil, err
 	}
 
 	resp := BatchDeleteResponse{BatchCounts: BatchCounts{Total: len(args.ObjectIDs)}}

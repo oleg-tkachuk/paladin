@@ -267,6 +267,16 @@ refused a completion or a part URL there, whatever the new binding's state.
 `multipart_uploads.bucket_id` is `NOT NULL`, so there is no unanchored session
 to fall back from.
 
+A batch is admitted by the gate at submit and runs later, on a worker. Each
+executor asks the gate again, with the batch's access, before its first item
+(`internal/worker/operations/bucket_gate.go`), and a refusal fails the
+operation with the gate's refusal: its reason is the operation's error code,
+answered as the refusal's own code. The batch is not deferred. It continues
+one request, whose answer is the refusal, and the runner has no way back to
+`PENDING` that would not claim the operation again at once. The gate is asked
+once per batch: a backend disabled while a batch runs does not stop it, and
+the items written before stay written, as the rows one RPC wrote do.
+
 ## Addendum (2026-11-22): background workers ask the same gate
 
 Request paths reach the gate through the bucket resolver; the workers that

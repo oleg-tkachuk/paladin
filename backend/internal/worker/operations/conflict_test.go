@@ -6,6 +6,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
@@ -20,6 +21,11 @@ type rereadRepo struct {
 	// succeeds; updArgs records each.
 	updConflicts int
 	updArgs      []objecth.UpdateMetadataArgs
+}
+
+// LookupBucket admits every batch: the gate is not what these tests exercise.
+func (r *rereadRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
+	return testBackend, testBucket, nil
 }
 
 func (r *rereadRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]objecth.Object, error) {
