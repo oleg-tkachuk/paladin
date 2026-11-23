@@ -132,3 +132,16 @@ func TestSessionHealthReachesATLSIAMPlane(t *testing.T) {
 		t.Errorf("snapshot = %s, want it to name the session role", rec.Body)
 	}
 }
+
+// The session role answers a key set that will not load with the sentence
+// every other HTTP edge answers it with. It holds no internal/auth, so the
+// sentence is its own constant, pinned here to the edges' answer.
+func TestSessionAnswersAKeySetThatWillNotLoadAsTheOtherEdges(t *testing.T) {
+	rec := httptest.NewRecorder()
+	if !auth.AnswerKeySetUnavailable(rec, zap.NewNop(), auth.ErrKeySetUnavailable) {
+		t.Fatal("the edges' answer did not take the key set error")
+	}
+	if got := strings.TrimSpace(rec.Body.String()); got != session.KeysUnavailableAnswer {
+		t.Errorf("session answers %q, the other edges %q", session.KeysUnavailableAnswer, got)
+	}
+}

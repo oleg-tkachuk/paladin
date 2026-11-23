@@ -50,6 +50,12 @@ const (
 	contentTypeJSON     = "application/json"
 )
 
+// The log fields the role's lines name what they are about by.
+const (
+	logPath     = "path"
+	logAudience = "audience"
+)
+
 // ConsoleUserAgentProduct names the console to the planes, which record the
 // caller's User-Agent in the audit log.
 const ConsoleUserAgentProduct = "paladin-console"
@@ -66,10 +72,15 @@ type RefreshAges interface {
 }
 
 // ErrRefreshKeysUnavailable is a RefreshAges error that says nothing of the
-// token: the keys that verify it could not be loaded. The role logs it at
-// Error, as its dependency failing; any other error is the token's, and is
-// logged at Warn.
+// token: the keys that verify it could not be loaded. The role answers it 503
+// with KeysUnavailableAnswer, so the console keeps the session and asks again;
+// any other error is the token's, which IAM judges on the session's next call.
 var ErrRefreshKeysUnavailable = errors.New("the keys that verify a refresh token could not be loaded")
+
+// KeysUnavailableAnswer is what the browser is told of ErrRefreshKeysUnavailable:
+// the sentence every other edge answers a key set that will not load with
+// (auth.BearerRefusals holds it; a test in internal/app pins the two equal).
+const KeysUnavailableAnswer = "the keys that verify a bearer token could not be loaded; retry the call" // #nosec G101 -- a refusal's message, not a credential
 
 // Options builds a Handler.
 type Options struct {
@@ -164,7 +175,7 @@ func New(o Options) (*Handler, error) {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if changesState(r.Method) && !h.originAllowed(r) {
 		h.log.Warn("session: refused a call from a foreign origin",
-			zap.String("method", r.Method), zap.String("path", r.URL.Path),
+			zap.String("method", r.Method), zap.String(logPath, r.URL.Path),
 			zap.String("origin", r.Header.Get(headerOrigin)))
 		writeError(w, connect.CodePermissionDenied, "origin not allowed")
 		return
@@ -258,7 +269,7 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 
 // The lines rotate leaves when it cannot read the refresh token's age.
 const (
-	msgAgeKeysUnavailable = "session: the keys that verify the refresh token could not be loaded; not rotating"
+	msgAgeKeysUnavailable = "session: the keys that verify the refresh token could not be loaded; answering unavailable"
 	msgAgeUnreadable      = "session: cannot read the refresh token's age; not rotating"
 )
 
@@ -272,12 +283,18 @@ func (h *Handler) rotate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	issuedAt, err := h.refresh.IssuedAt(r.Context(), refresh)
+	if errors.Is(err, ErrRefreshKeysUnavailable) {
+		// Not a verdict on the session: the role cannot check it right now,
+		// as when iam restarts. 503 keeps the cookie, and the console keeps
+		// the session and asks again; a refused token stays IAM's 401.
+		h.log.Warn(msgAgeKeysUnavailable, zap.String(logPath, r.URL.Path), zap.Error(err))
+		writeError(w, connect.CodeUnavailable, KeysUnavailableAnswer)
+		return
+	}
 	if err != nil {
-		// Not a verdict on the session: the JWKS may not be fetched yet, as
-		// when iam restarts. IAM judges the token on the session's next call,
-		// and signs it out then if it must; rotation waits for a later try.
-		// Answering anything but 204 would sign the console out on load.
-		h.logAgeUnreadable(err)
+		// A token whose age does not verify: IAM judges it on the session's
+		// next call, and signs it out then if it must; rotation waits.
+		h.log.Warn(msgAgeUnreadable, zap.String(logPath, r.URL.Path), zap.Error(err))
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -289,17 +306,6 @@ func (h *Handler) rotate(w http.ResponseWriter, r *http.Request) {
 	h.upstreamHeaders(info.RequestHeader(), r)
 	res, err := h.iam.RefreshToken(ctx, &pbiam.RefreshTokenRequest{RefreshToken: refresh, RequestedAudience: paladin.AudienceIAM})
 	h.answerRotation(w, res, err, issuedAt)
-}
-
-// logAgeUnreadable logs why rotate could not read a refresh token's age:
-// at Error for keys that would not load, the role's dependency failing, and
-// at Warn for a token that does not verify.
-func (h *Handler) logAgeUnreadable(err error) {
-	if errors.Is(err, ErrRefreshKeysUnavailable) {
-		h.log.Error(msgAgeKeysUnavailable, zap.Error(err))
-		return
-	}
-	h.log.Warn(msgAgeUnreadable, zap.Error(err))
 }
 
 // answerRotation answers the browser with IAM's answer to a rotation of a
@@ -427,13 +433,13 @@ func (h *Handler) rewrite(pr *httputil.ProxyRequest) {
 // forwarded logs each call the role forwarded and how the plane answered.
 func (h *Handler) forwarded(res *http.Response) error {
 	f, _ := res.Request.Context().Value(forwardKey{}).(forward)
-	h.log.Debug("session: forwarded", zap.String("path", f.path), zap.Int("status", res.StatusCode))
+	h.log.Debug("session: forwarded", zap.String(logPath, f.path), zap.Int("status", res.StatusCode))
 	return nil
 }
 
 func (h *Handler) proxyError(w http.ResponseWriter, r *http.Request, err error) {
 	f, _ := r.Context().Value(forwardKey{}).(forward)
-	h.log.Error("session: forwarding failed", zap.String("path", f.path), zap.Error(err))
+	h.log.Error("session: forwarding failed", zap.String(logPath, f.path), zap.Error(err))
 	writeError(w, connect.CodeUnavailable, "the plane did not answer")
 }
 
@@ -470,6 +476,10 @@ func (h *Handler) access(ctx context.Context, in *http.Request, refresh, audienc
 	return res.GetAccessToken(), nil
 }
 
+// msgAccessUnavailable is the line accessOrRefuse leaves when IAM answered
+// Unavailable.
+const msgAccessUnavailable = "session: IAM could not check the session; answering unavailable"
+
 // accessOrRefuse is access, answering the browser itself when there is no
 // token to give: a session IAM no longer honours is signed out.
 func (h *Handler) accessOrRefuse(w http.ResponseWriter, r *http.Request, refresh, audience string) (string, bool) {
@@ -477,11 +487,16 @@ func (h *Handler) accessOrRefuse(w http.ResponseWriter, r *http.Request, refresh
 	if err == nil {
 		return token, true
 	}
-	if connect.CodeOf(err) == connect.CodeUnauthenticated {
-		h.log.Info("session: refresh token refused; signing out", zap.String("audience", audience), zap.Error(err))
+	switch connect.CodeOf(err) {
+	case connect.CodeUnauthenticated:
+		h.log.Info("session: refresh token refused; signing out", zap.String(logPath, r.URL.Path), zap.String(logAudience, audience), zap.Error(err))
 		clearCookie(w)
-	} else {
-		h.log.Error("session: minting an access token failed", zap.String("audience", audience), zap.Error(err))
+	case connect.CodeUnavailable:
+		// IAM could not check the session (its key set would not load, or it
+		// is restarting): the cookie stays, and the console asks again.
+		h.log.Warn(msgAccessUnavailable, zap.String(logPath, r.URL.Path), zap.String(logAudience, audience), zap.Error(err))
+	default:
+		h.log.Error("session: minting an access token failed", zap.String(logPath, r.URL.Path), zap.String(logAudience, audience), zap.Error(err))
 	}
 	writeConnectError(w, err)
 	return "", false
