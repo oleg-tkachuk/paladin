@@ -337,10 +337,11 @@ func buildCapabilityAuth(cfg config.Capability, deps *SharedDeps, own capability
 	// its own context, which StopWatchers cancels before the pool is closed
 	// — the same arrangement as the Cedar watcher. It reconnects on its own.
 	watchCtx, stopWatch := context.WithCancel(context.Background())
-	watchLog := deps.Logger.Named("capability-revocation-watch")
-	watcher := capabilitypg.NewRevocationWatcher(deps.Pool, func(err error) {
-		watchLog.Warn("revocation watch reconnecting; revocation answers cached for the short TTL until it listens again", zap.Error(err))
-	}, cache)
+	// pgstore logs the watch's life through this logger: each failure with
+	// its retry delay, and each time it listens again. While it does not
+	// listen, revocation answers stay cached for the short TTL alone.
+	watcher := capabilitypg.NewRevocationWatcher(deps.Pool,
+		logger.Slog(deps.Logger, revocationWatchLoggerName), nil, cache)
 	go func() { _ = watcher.Run(watchCtx) }()
 	deps.RegisterWatcherStop(stopWatch)
 	nonces, err := dpopNonces(cfg.DPoPNonce, deps.Cfg.App.Env, deps.Logger)
@@ -450,6 +451,10 @@ func previousCapabilityKeys(keys []config.CapabilityPublicKey) ([]limes.PublicKe
 // none when they are off. Every replica must sign with the same key, or a
 // nonce one issues is refused by the next; so a missing key refuses to start,
 // except where an ephemeral key is acceptable, as for the signing key.
+// revocationWatchLoggerName names the logger the revocation watch logs its
+// connection through.
+const revocationWatchLoggerName = "capability-revocation-watch"
+
 func dpopNonces(cfg config.DPoPNonce, env string, log *zap.Logger) (dpop.Nonces, error) {
 	if !cfg.Enabled {
 		return nil, nil

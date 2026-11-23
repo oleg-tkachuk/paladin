@@ -411,8 +411,8 @@ github.com/oleg-tkachuk/limes/exchange v0.27.0 h1:bw5YZOYRzak4aaGXY8WObB/jWFdkRr
 github.com/oleg-tkachuk/limes/exchange v0.27.0/go.mod h1:q4SUILgcEKtgWMURszw0OeugV7vLV/m79+aS6e7jZfw=
 github.com/oleg-tkachuk/limes/otelmetric v0.23.1 h1:dY1FDjKcrbFBBZn2l63oSBk7sU9YTxUIHhZJnWHe25A=
 github.com/oleg-tkachuk/limes/otelmetric v0.23.1/go.mod h1:C1KajlePIXaohH8wEfhnWgudDYkP2puLQNo6YOrmQbg=
-github.com/oleg-tkachuk/limes/pgstore v0.84.0 h1:CgK1UKMqyNaOhPLhhgrfZ1hw8sURUeC87G6XHIxaIJk=
-github.com/oleg-tkachuk/limes/pgstore v0.84.0/go.mod h1:8/CkPe24HWtB4tcuP7iyGQx4LWGEcHj/uSjYo4WdN2g=
+github.com/oleg-tkachuk/limes/pgstore v0.85.0 h1:JqoaZXt2Xgf0RU0T37Sscs08lV/ftKxaNfDz3aoMZGY=
+github.com/oleg-tkachuk/limes/pgstore v0.85.0/go.mod h1:8/CkPe24HWtB4tcuP7iyGQx4LWGEcHj/uSjYo4WdN2g=
 github.com/onsi/ginkgo/v2 v2.33.1 h1:62XfWJbEIjPSCSDYrsCPP/SHcmH7O0M8ne8zfqQ2iz4=
 github.com/onsi/ginkgo/v2 v2.33.1/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
 github.com/onsi/gomega v1.44.0 h1:eAiGl3Pw5jz5GQdDff0BcxYpAX1JxW8xD7mFUuwNfZQ=
