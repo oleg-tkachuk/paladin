@@ -614,20 +614,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### The SDK fakes accept request text holding NUL
-
-- **Status:** Deferred.
-- **Reason:** every plane refuses a request string holding U+0000 as
-  `INVALID_ARGUMENT` (`middleware.RefuseNUL`), but `paladintest` and
-  `paladin.testing` run protovalidate alone, so a test against either passes a
-  call the server refuses. The walker lives in `backend/internal/protonul`,
-  which the SDK modules cannot import.
-- **Definition of Done:** both fakes refuse such a request with the server's
-  text (`<field path>: holds a NUL character`) before their handlers, and
-  their fidelity tests pin it.
-- **Blockers:** where the walker lives so the SDK and the server share it —
-  a package of the Go SDK, and a port for Python.
-
 ### The handler fuzz targets do not reach UserService
 
 - **Status:** Deferred.

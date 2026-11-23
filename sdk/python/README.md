@@ -457,8 +457,10 @@ It serves `ObjectService` (upload, complete, get, lookup, list, download,
 delete), `MultipartUploadService`, `PresignService` (`regenerate_upload_url`,
 `presign_download`), `StorageBootstrapService` and `CapabilityService`
 (`issue`, `delegate`, `revoke`, `get`); every other RPC answers
-`UNIMPLEMENTED`. Like the server it runs protovalidate on every request,
-after authentication, so a request the contract's rules refuse is
+`UNIMPLEMENTED`. Like the server it refuses a request any of whose strings
+holds a NUL character (U+0000) with the server's text, `key: holds a NUL
+character`, then runs protovalidate on every request, both after
+authentication, so a request the contract's rules refuse is
 `InvalidArgumentError`; it checks `delete_object`'s `resource_version` —
 `VersionConflictError` for one that is not the object's — and advances it on
 every change to the object. `list_objects` refuses `filter`, `order_by` and

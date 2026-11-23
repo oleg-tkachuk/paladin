@@ -9,7 +9,9 @@ delete), MultipartUploadService, ListParts included, PresignService
 (RegenerateUploadUrl, PresignDownload) and StorageBootstrapService, with presigned URLs on its own storage, and
 CapabilityService (Issue, Delegate, Revoke, Get, List) to the server's rules; every other
 RPC answers Unimplemented, as a server that lacks it does. Like the server it
-runs protovalidate on every request, after authentication, and checks
+refuses a request any of whose strings holds NUL (U+0000) as INVALID_ARGUMENT
+naming the field, then runs protovalidate on every request, both after
+authentication, and checks
 DeleteObject's ``resource_version``; ListObjects refuses a filter or an
 ordering as Unimplemented rather than ignore it. It needs the ``testing``
 extra, for protovalidate. Like the server it
@@ -63,7 +65,7 @@ from google.protobuf.message import Message
 from google.rpc import error_details_pb2  # pyright: ignore[reportMissingTypeStubs]
 from google.type import money_pb2  # pyright: ignore[reportMissingTypeStubs]
 
-from paladin import _fake_biscuit
+from paladin import _fake_biscuit, _protonul
 from paladin._connect_types import Context
 from paladin.admin.v1 import capability_service_pb2
 from paladin.admin.v1.capability_service_connect import (
@@ -419,7 +421,9 @@ class _Calls:
         self._fake._record(Request(procedure, headers, _copy_message(message)))
         if self._fake.strict_auth:
             self._fake._authenticate(procedure, headers, message)
-        # After authentication, as the server's interceptor chain runs it.
+        # After authentication and before validation, as the server's
+        # interceptor chain runs them.
+        _refuse_nul(message)
         self._fake._validate(message)
         err = self._fake._take_rpc_fault(procedure, message)
         if err is not None:
@@ -2764,6 +2768,14 @@ def _unhonoured_list_field(request: object_service_pb2.ListObjectsRequest) -> st
     if request.count_facets:
         return "count_facets"
     return ""
+
+
+def _refuse_nul(request: Message) -> None:
+    """Refuse a request any of whose strings holds NUL (U+0000), as the
+    server does: INVALID_ARGUMENT naming the field, never the value."""
+    path = _protonul.find(request)
+    if path is not None:
+        raise ConnectError(Code.INVALID_ARGUMENT, _protonul.refusal(path))
 
 
 def _protovalidate() -> Any:
