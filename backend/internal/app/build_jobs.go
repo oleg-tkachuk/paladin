@@ -100,7 +100,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// Reuse the SharedDeps S3 client; same default backend as listeners.
 		out = append(out, worker.NewReconcilerV2(
 			smReaper,
-			adapters.NewReconcilerProbe(reaperQ, s3adapter.NewObjectRouter(deps.Registry)),
+			adapters.NewReconcilerProbe(reaperQ, s3adapter.NewObjectRouter(deps.Registry)).WithLogger(l.Named("reconciler")),
 			worker.ReconcilerV2Config{
 				PollInterval:    cfg.Worker.Jobs.Reconciler.Interval,
 				PendingGraceTTL: cfg.Worker.Jobs.Reconciler.MinObjectAge,

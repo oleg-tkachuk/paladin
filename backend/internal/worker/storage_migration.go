@@ -172,7 +172,6 @@ type MigrationRepo interface {
 	// BucketProvisionState returns the target bucket's provision_state
 	// ("pending" | "ready" | "failed").
 	BucketProvisionState(ctx context.Context, backendID, bucketName string) (string, error)
-	CountObjects(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	// The writes below name the migration as it was read (MigrationRead) and
 	// apply only while it still holds — the same state and the same attempt;
 	// otherwise they change nothing and return ErrMigrationMoved. A worker
@@ -180,11 +179,23 @@ type MigrationRepo interface {
 	// migration its successor moved on, nor, by the attempt, act on a retry
 	// of the attempt it read: the state alone repeats across attempts.
 
-	// SetCopying records the total and moves provisioning -> copying.
-	SetCopying(ctx context.Context, at MigrationRead, total int64) error
+	// SetCopying counts the objects to copy, records the total and moves
+	// provisioning -> copying, on one transaction that holds the migration
+	// row before it counts. A purge takes the row on its own transaction
+	// (package purgedebt), so the count sees every purge that got there
+	// first, and a later one finds 'copying' and takes its object off the
+	// total. It returns the total.
+	SetCopying(ctx context.Context, at MigrationRead) (int64, error)
 	ListObjects(ctx context.Context, tenantID uuid.UUID, afterCollection, afterKey string, limit int) ([]ObjectRef, error)
 	// AdvanceCopy only moves progress forward.
 	AdvanceCopy(ctx context.Context, at MigrationRead, copied int64, cursorCollection, cursorKey string) error
+	// HoldObject runs fn while o's rows are held against a delete, and
+	// reports whether there were any: none — the object was purged since it
+	// was listed — runs nothing. A purge of o waits for fn, and then owes
+	// what fn copied (package purgedebt); one that ran first left nothing to
+	// copy. With progress, it also records, on the same transaction, the copy
+	// having got past o with progress.Copied objects copied.
+	HoldObject(ctx context.Context, tenantID uuid.UUID, o ObjectRef, progress *CopyProgress, fn func(context.Context) error) (bool, error)
 	SetState(ctx context.Context, at MigrationRead, to string) error
 	// RebindTenant, in ONE transaction, rebinds every private collection of
 	// the tenant to (targetBackendID, targetBucketName), flips storage_layout
@@ -213,7 +224,18 @@ type MigrationRepo interface {
 	Complete(ctx context.Context, at MigrationRead) error
 	// MarkCleaned is the terminal transition after the old copies are deleted.
 	MarkCleaned(ctx context.Context, at MigrationRead) error
+	// CountUploadsAnchoredTo counts the tenant's PENDING uploads whose URL was
+	// signed for (backendID, bucketName): their bytes may still land there
+	// (objects.upload_bucket_id).
+	CountUploadsAnchoredTo(ctx context.Context, tenantID uuid.UUID, backendID, bucketName string) (int64, error)
 	Fail(ctx context.Context, at MigrationRead, reason string) error
+}
+
+// CopyProgress is the copy's progress to record with a held object: the
+// migration as read, and the count of objects copied once it is.
+type CopyProgress struct {
+	At     MigrationRead
+	Copied int64
 }
 
 // ErrMigrationMoved reports a transition that did not apply because the
@@ -400,17 +422,25 @@ func (w *StorageMigrationWorker) stepProvisioning(ctx context.Context, m Storage
 	default:
 		return nil // still pending; wait for the bucket reconciler
 	}
-	total, err := w.Repo.CountObjects(ctx, m.TenantID)
+	total, err := w.Repo.SetCopying(ctx, m.Read())
 	if err != nil {
-		return fmt.Errorf("count objects: %w", err)
+		return fmt.Errorf("enter the copy phase: %w", err)
 	}
 	w.log().Info("migration entering copy phase",
 		zap.String("tenant_id", m.TenantID.String()), zap.Int64("objects", total))
-	return w.Repo.SetCopying(ctx, m.Read(), total)
+	return nil
 }
 
 // stepCopying copies one batch of objects (server-side, identical key) and
 // advances the cursor. Empty batch => every object copied => rebinding.
+//
+// Each object is copied while its row is held, and the cursor moves past it
+// on the same transaction (HoldObject): a purge of it either waits for the
+// copy and then owes the target's copy too, or ran first and leaves nothing
+// to copy. So no copy outlives its row, and the count stays exact — a purge
+// takes an object the cursor has not reached off the total — whatever a
+// crash interrupts: an object whose transaction did not commit is copied
+// again, under the same key.
 func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigration) error {
 	objs, err := w.Repo.ListObjects(ctx, m.TenantID, m.CursorCollection, m.CursorKey, w.CopyBatch)
 	if err != nil {
@@ -431,20 +461,29 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 		return w.Repo.SetState(ctx, m.Read(), MigStateRebinding)
 	}
 	copied := m.ObjectsCopied
-	curOK, curKey := m.CursorCollection, m.CursorKey
 	for _, o := range objs {
 		if ctx.Err() != nil {
-			break
+			return nil
 		}
-		if err := w.copyOne(ctx, m, o); err != nil {
-			// Persist progress so far, then bubble — the batch retries from here.
-			_ = w.Repo.AdvanceCopy(ctx, m.Read(), copied, curOK, curKey)
+		held, err := w.Repo.HoldObject(ctx, m.TenantID, o, &CopyProgress{At: m.Read(), Copied: copied + 1},
+			func(ctx context.Context) error { return w.copyOne(ctx, m, o) })
+		if err != nil {
+			// Progress up to o is recorded — the batch retries from here.
 			return fmt.Errorf("copy %s/%s: %w", o.Collection, o.Key, err)
 		}
-		copied++
-		curOK, curKey = o.Collection, o.Key
+		if held {
+			copied++
+			continue
+		}
+		// Purged since it was listed: its purge took it off the total.
+		w.log().Info("object purged since it was listed; nothing to copy",
+			zap.String("tenant_id", m.TenantID.String()),
+			zap.String("collection", o.Collection), zap.String("key", o.Key))
+		if err := w.Repo.AdvanceCopy(ctx, m.Read(), copied, o.Collection, o.Key); err != nil {
+			return err
+		}
 	}
-	return w.Repo.AdvanceCopy(ctx, m.Read(), copied, curOK, curKey)
+	return nil
 }
 
 // copyOne copies o's bytes from the source to the target bucket, under the
@@ -565,6 +604,11 @@ func (w *StorageMigrationWorker) verifyPhysical(ctx context.Context, m StorageMi
 func (w *StorageMigrationWorker) verifyObject(ctx context.Context, m StorageMigration, o ObjectRef) error {
 	object := o.Collection + "/" + o.Key
 	got, err := w.Header.HeadObject(ctx, m.targetLoc(o))
+	if errors.Is(err, ErrObjectMissing) {
+		if purged, perr := w.purgedSinceListed(ctx, m, o); perr != nil || purged {
+			return perr
+		}
+	}
 	switch {
 	case errors.Is(err, ErrObjectMissing) && o.Trashed:
 		return w.verifyTrashedMissing(ctx, m, o, err)
@@ -576,6 +620,22 @@ func (w *StorageMigrationWorker) verifyObject(ctx context.Context, m StorageMigr
 		return &verifyFailure{object: object, problem: fmt.Sprintf(verifyProblemSize, got, o.SizeBytes)}
 	}
 	return nil
+}
+
+// purgedSinceListed reports whether o's row is gone: a purge since the
+// verify listed it, which took the target's copy with it (package
+// purgedebt). That is no fault of the copy.
+func (w *StorageMigrationWorker) purgedSinceListed(ctx context.Context, m StorageMigration, o ObjectRef) (bool, error) {
+	held, err := w.Repo.HoldObject(ctx, m.TenantID, o, nil, func(context.Context) error { return nil })
+	if err != nil {
+		return false, &verifyFailure{object: o.Collection + "/" + o.Key, problem: verifyProblemUnreadable, cause: err}
+	}
+	if !held {
+		w.log().Info("verify: object purged since it was listed; nothing to verify",
+			zap.String("tenant_id", m.TenantID.String()),
+			zap.String("collection", o.Collection), zap.String("key", o.Key))
+	}
+	return !held, nil
 }
 
 // verifyTrashedMissing decides a trashed object the target has no bytes for:
@@ -610,6 +670,9 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 	if w.Deleter == nil {
 		return nil // cleanup disabled
 	}
+	if waiting, err := w.uploadsAnchoredToSource(ctx, m); err != nil || waiting {
+		return err
+	}
 	if done, err := w.cleanSource(ctx, m); err != nil || !done {
 		return err
 	}
@@ -617,6 +680,27 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 		zap.String("tenant_id", m.TenantID.String()),
 		zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName))
 	return w.Repo.MarkCleaned(ctx, m.Read())
+}
+
+// uploadsAnchoredToSource reports whether cleanup must wait: an upload whose
+// URL was signed for the source bucket before the rebind is still PENDING.
+// Its bytes land in the source, and CompleteObject or the reconciler copy
+// them into the target only when they settle it — from the source copy, which
+// cleanup would delete. Once promoted, the object is listed like any other
+// and its source copy goes with the rest; discarded, it left none. The wait
+// is bounded by the uploads' presign deadline and the reconciler's grace.
+func (w *StorageMigrationWorker) uploadsAnchoredToSource(ctx context.Context, m StorageMigration) (bool, error) {
+	n, err := w.Repo.CountUploadsAnchoredTo(ctx, m.TenantID, m.SourceBackendID, m.SourceBucketName)
+	if err != nil {
+		return false, fmt.Errorf("count uploads anchored to the source: %w", err)
+	}
+	if n > 0 {
+		w.log().Info("cleanup waits for uploads whose URL names the source bucket",
+			zap.String("tenant_id", m.TenantID.String()),
+			zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName), zap.Int64("uploads", n))
+		return true, nil
+	}
+	return false, nil
 }
 
 // cleanSource deletes every listed object's copy from the source bucket, and
@@ -737,14 +821,24 @@ func (w *StorageMigrationWorker) rebindBack(ctx context.Context, m StorageMigrat
 }
 
 // copyBackOne copies o from the target back to the source, when the target
-// holds it as its row records it (targetHolds).
+// holds it as its row records it (targetHolds). The row is held for the
+// copy, as the copy phase holds it: a purge either waits and then owes the
+// source copy too, or ran first and leaves nothing to copy back.
 func (w *StorageMigrationWorker) copyBackOne(ctx context.Context, m StorageMigration, o ObjectRef) error {
 	src := m.targetLoc(o)
-	copyIt, err := w.targetHolds(ctx, src, o.SizeBytes)
-	if err != nil || !copyIt {
-		return err
+	held, err := w.Repo.HoldObject(ctx, m.TenantID, o, nil, func(ctx context.Context) error {
+		copyIt, err := w.targetHolds(ctx, src, o.SizeBytes)
+		if err != nil || !copyIt {
+			return err
+		}
+		return w.Copier.CopyObject(ctx, src, m.sourceLoc(o))
+	})
+	if err == nil && !held {
+		w.log().Info("rollback: object purged since it was listed; nothing to copy back",
+			zap.String("tenant_id", m.TenantID.String()),
+			zap.String("collection", o.Collection), zap.String("key", o.Key))
 	}
-	return w.Copier.CopyObject(ctx, src, m.sourceLoc(o))
+	return err
 }
 
 // targetHolds reports whether the target bucket holds the object as its row

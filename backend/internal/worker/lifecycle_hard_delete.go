@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/purgedebt"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -232,7 +233,23 @@ func (w *LifecycleHardDeleter) deleteRowRecordingDebt(ctx context.Context, r sql
 	); err != nil {
 		return false, fmt.Errorf("record purge debt: %w", err)
 	}
-	return true, tx.Commit(ctx)
+	copies, err := purgedebt.RecordMigrationCopies(ctx, q, purgedebt.Purge{
+		TenantID: tenantID, ObjectID: uuid.UUID(r.ID.Bytes),
+		BackendID: r.BackendName, Bucket: r.BucketName,
+		Collection: r.CollectionName, Key: r.Path, State: string(sqlc.ObjectStateDELETED),
+	})
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	if copies > 0 {
+		w.log().Info("the tenant is migrating storage; the copies in its other bucket are owed too",
+			zap.String("object_id", uuid.UUID(r.ID.Bytes).String()), zap.String("tenant_id", tenantID.String()),
+			zap.Int64("copies", copies))
+	}
+	return true, nil
 }
 
 // deleteBytes deletes the row's bytes unless an object uploaded at the same

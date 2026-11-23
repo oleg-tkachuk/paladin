@@ -517,40 +517,40 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### A storage migration orphans the bytes of objects purged while it runs
+### Writes behind a storage migration's copy cursor are not copied before the rebind
 
 - **Status:** Deferred.
-- **Reason:** the copy, verify and cleanup walk object rows, and the
-  lifecycle purge and a permanent delete remove bytes from the bucket the
-  collection is bound to, then the row. Purged during the copy after its
-  object was copied, an object's target copy stays with no row; purged
-  between the rebind and cleanup, its source copy does, since cleanup no
-  longer lists it. Purges during the copy also lower the row count under the
-  one recorded at the start, so a copy that ends short of it fails the
-  migration (`copy incomplete`) though nothing was missed; with the trash
-  now counted, a tenant whose trash is being purged meets this more often.
-- **Definition of Done:** a purge during a migration removes the object's
-  bytes from both buckets (or cleanup walks the source bucket's tenant
-  prefix rather than the rows), the short-copy check tells a purged row
-  from a hidden one, and a test purges an object mid-copy and after the
-  rebind and finds neither bucket holding it.
-- **Blockers:** the purge paths are being reworked against the bucket gate
-  ("The lifecycle hard delete ignores a draining backend").
+- **Reason:** the copy walks object rows once, in (collection, path) order,
+  and the tenant keeps writing to the source meanwhile. An object uploaded,
+  or overwritten through a storage event, at a path the cursor has passed is
+  in the source only, or stale in the target. The verify HEADs the target
+  after the rebind: a missing object rolls the migration back, which is safe
+  but fails a busy tenant's migration over and over; an overwrite that kept
+  its size passes the verify, and the tenant then reads the old bytes.
+- **Definition of Done:** before the rebind, the copy catches up on every
+  object whose bytes were written (`bytes_written_at`) since the copy
+  started — a second pass from a recorded start time, repeated until it is
+  empty under the rebind's lock, as the rollback does with `rebound_at` — and
+  a test uploads behind the cursor and overwrites a copied object, and finds
+  both in the target after the rebind.
+- **Blockers:** none.
 
-### A presigned upload issued before a storage migration's rebind is lost
+### A multipart upload completed after a storage migration's rebind is lost at cleanup
 
 - **Status:** Deferred.
-- **Reason:** the migration does not copy PENDING objects: no bytes are
-  confirmed under them. Their upload URL names the source bucket, so a PUT
-  made after the rebind lands there, and `CompleteObject` then HEADs the
-  collection's new binding (`writeBinding`), finds nothing and does not
-  promote the object; the reconciler discards it once its URL expires.
-- **Definition of Done:** an upload issued before the rebind either
-  completes against the bucket its URL names, with its bytes then moved, or
-  is refused at complete with a reason the client can act on; a test
-  presigns, rebinds, uploads and completes.
-- **Blockers:** anchoring a single-PUT upload to its bucket, as multipart
-  sessions are.
+- **Reason:** a session assembles its parts in the bucket it was anchored to
+  at initiate, and `CompleteMultipartUpload` promotes the object there. After
+  a rebind that is the source, while the object is read from the target; the
+  migration's cleanup, which waits only while the row is PENDING, then
+  deletes the source copy — the only one: the object is lost. Single-part
+  uploads move their bytes into the
+  collection's bucket on completion (`objecth.UploadOrigin`); the multipart
+  storage seam has no copy, and its HEAD-free complete path would need one.
+- **Definition of Done:** `CompleteMultipartUpload` copies an assembled
+  object whose session bucket is not the collection's binding into the
+  binding before promoting it, as `CompleteObject` does; a test initiates,
+  rebinds, completes and finds the object in the target after cleanup.
+- **Blockers:** none.
 
 ### The replication worker will skip the bucket gate once it copies
 

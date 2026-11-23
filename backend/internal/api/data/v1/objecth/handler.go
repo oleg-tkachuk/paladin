@@ -385,6 +385,9 @@ type PurgeDebt struct {
 	BucketName string
 	Collection string
 	Key        string
+	// ObjectState is the deleted row's state: a storage migration counted
+	// only live and trashed objects (package purgedebt).
+	ObjectState statemachine.State
 }
 
 type Object struct {
@@ -433,6 +436,11 @@ type Object struct {
 	// copy), or uuid.Nil.
 	CreatedByOperation uuid.UUID
 
+	// Upload is the bucket a PENDING object's upload URL was signed for, read
+	// by the single-object read the completion makes; nil when the row has
+	// none, and once the object is promoted.
+	Upload *UploadAnchor
+
 	// Placement is where the object's bytes physically live. Set only by the
 	// read paths (GetObject, LookupObject, ListObjects), and only when Cedar
 	// allows the caller ReadObjectPlacement on the object (placement.go);
@@ -466,6 +474,13 @@ type CreateObjectArgs struct {
 	// or uuid.Nil. It is what lets a reissue adopt a row its dead run left
 	// PENDING.
 	CreatedByOperation uuid.UUID
+	// UploadBackendID and UploadBucket name the bucket the upload's URL is
+	// signed for, which the row is anchored to (migration 113): a storage
+	// migration may rebind the collection before the bytes arrive, and they
+	// land where the URL says. Both "" anchor nothing; the bytes are then
+	// looked for in the collection's binding.
+	UploadBackendID string
+	UploadBucket    string
 }
 
 type UpdateMetadataArgs struct {
@@ -915,6 +930,8 @@ func (h *Handler) registerUpload(ctx context.Context, tenantID uuid.UUID, in Upl
 		ExternalRef:      in.ExternalRef,
 		PresignExpiresAt: presignExp,
 		PublicURL:        publicURL,
+		UploadBackendID:  meta.BackendID,
+		UploadBucket:     meta.BucketName,
 	})
 	if err != nil {
 		return nil, mapCreateErr(err)
@@ -1083,21 +1100,17 @@ type storedBytes struct {
 // once the caller's claims about those bytes check out. backendID and bucket
 // are the binding the write gate resolved for it.
 func (h *Handler) completeUpload(ctx context.Context, tenantID uuid.UUID, in CompleteObjectInput, obj Object, backendID, bucket string) (*Object, error) {
-	// Materialize authoritative values via HEAD against the object's bucket.
-	var (
-		b   storedBytes
-		err error
-	)
-	b.etag, b.size, b.checksum, b.sequencer, err = h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
+	// Materialize authoritative values via HEAD against the object's bucket,
+	// once the bytes are there (uploadedBytes).
+	bound := Location{BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key}
+	b, uploadedETag, err := h.uploadedBytes(ctx, obj, bound)
 	if err != nil {
 		return nil, headFailure(err)
 	}
-	if err := checkUploadClaims(in, obj, b.etag); err != nil {
+	if err := checkUploadClaims(in, obj, uploadedETag); err != nil {
 		return nil, err
 	}
-	changed, err := h.promoteUploaded(ctx, opComplete, obj.ObjectID, Location{
-		BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key,
-	}, b, map[string]any{
+	changed, err := h.promoteUploaded(ctx, opComplete, obj.ObjectID, bound, b, map[string]any{
 		payloadSizeBytes:   b.size,
 		payloadETag:        b.etag,
 		payloadContentType: obj.ContentType,
@@ -2122,13 +2135,14 @@ func (h *Handler) PermanentDelete(
 	// event above (ADR-0003), one floor down — over bytes instead of
 	// notifications.
 	debt := PurgeDebt{
-		PurgeID:    uuid.New(),
-		TenantID:   tenantID,
-		ObjectID:   obj.ObjectID,
-		BackendID:  backendID,
-		BucketName: bucket,
-		Collection: collection,
-		Key:        obj.Key,
+		PurgeID:     uuid.New(),
+		TenantID:    tenantID,
+		ObjectID:    obj.ObjectID,
+		BackendID:   backendID,
+		BucketName:  bucket,
+		Collection:  collection,
+		Key:         obj.Key,
+		ObjectState: obj.State,
 	}
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		if derr := deleteFn(ctx, tx, tenantID, objectID, rv); derr != nil {
@@ -2608,7 +2622,12 @@ var ErrNotUploaded = errors.New("object not uploaded yet")
 // at the key is the caller's to fix by uploading; a backend that could not be
 // asked is unavailable, not a refusal. The backend's own answer stays in the
 // cause: its request ids and status line are nothing the caller can act on.
+// An error that already carries its code — a bucket gate's refusal, a failed
+// move of the upload between buckets — keeps it.
 func headFailure(err error) error {
+	if _, ok := errors.AsType[*connect.Error](err); ok {
+		return err
+	}
 	if errors.Is(err, ErrStoredObjectNotFound) {
 		return connect.NewError(connect.CodeFailedPrecondition, ErrNotUploaded.Error()).WithCause(errors.Join(ErrNotUploaded, err))
 	}

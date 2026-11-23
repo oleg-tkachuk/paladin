@@ -1,26 +1,52 @@
 -- Object queries.
 
 -- name: CreateObject :exec
--- collection_id is resolved by the caller via ResolveCollectionID.
+-- collection_id is resolved by the caller via ResolveCollectionID, and
+-- upload_bucket_id, the bucket an upload's URL is signed for (migration 113),
+-- via ResolveUploadBucketID; NULL means the collection's binding.
 INSERT INTO objects (
     id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at, public_url,
-    created_by_operation
+    created_by_operation, upload_bucket_id
 ) VALUES (
     $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
     $10, $11, $12, $13, $14,
-    sqlc.narg('created_by_operation')
+    sqlc.narg('created_by_operation'), sqlc.narg('upload_bucket_id')
 );
+
+-- name: ResolveUploadBucketID :one
+-- The bucket an upload's URL is signed for, by the names the URL carries.
+SELECT b.id FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1 AND b.name = $2;
+
+-- name: LookupUploadBucket :one
+-- The bucket a PENDING object's upload URL was signed for (migration 113),
+-- with the state the bucket gate decides on there. No row when the object
+-- has no anchor: it uploads to its collection's binding.
+SELECT sb.name AS backend_name, b.name AS bucket_name,
+       sb.enabled, sb.read_only, b.provision_state
+FROM objects o
+JOIN buckets b           ON b.id = o.upload_bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE o.id = $1;
 
 -- name: ResolveCollectionID :one
 SELECT id FROM collections WHERE tenant_id = $1 AND name = $2;
 
 -- name: GetObject :one
-SELECT sqlc.embed(objects), c.name AS collection_name
+-- The upload_* columns are the bucket a PENDING object's URL was signed for
+-- (migration 113) and the bucket gate's state there; NULL when it has none.
+SELECT sqlc.embed(objects), c.name AS collection_name,
+       usb.name AS upload_backend_name, ub.name AS upload_bucket_name,
+       usb.enabled AS upload_enabled, usb.read_only AS upload_read_only,
+       ub.provision_state AS upload_provision_state
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
+LEFT JOIN buckets ub           ON ub.id = objects.upload_bucket_id
+LEFT JOIN storage_backends usb ON usb.id = ub.backend_id
 WHERE objects.tenant_id = $1 AND objects.id = $2;
 
 -- name: GetObjectsByIDs :many

@@ -11,7 +11,9 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
+	"go.uber.org/zap"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,6 +25,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/purgedebt"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -101,6 +104,10 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 	if err != nil {
 		return objecth.Object{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
 	}
+	uploadBucketID, err := resolveUploadBucket(ctx, qtx, args.UploadBackendID, args.UploadBucket)
+	if err != nil {
+		return objecth.Object{}, err
+	}
 	if err := qtx.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
@@ -117,6 +124,7 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		pgTS(args.PresignExpiresAt),
 		args.PublicURL,
 		pgUUID(args.CreatedByOperation),
+		uploadBucketID,
 	); err != nil {
 		return objecth.Object{}, fmt.Errorf("create object: %w", err)
 	}
@@ -124,6 +132,20 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 		return objecth.Object{}, fmt.Errorf("commit create object: %w", err)
 	}
 	return r.getByID(ctx, args.TenantID, objectID)
+}
+
+// resolveUploadBucket is the id of the bucket an upload's URL is signed for,
+// by the names the URL carries: the PENDING row's anchor (migration 113).
+// No names, no anchor — NULL, which falls back to the collection's binding.
+func resolveUploadBucket(ctx context.Context, q *sqlc.Queries, backendID, bucket string) (pgtype.UUID, error) {
+	if backendID == "" || bucket == "" {
+		return pgtype.UUID{}, nil
+	}
+	id, err := q.ResolveUploadBucketID(ctx, backendID, bucket)
+	if err != nil {
+		return pgtype.UUID{}, fmt.Errorf("resolve upload bucket %s/%s: %w", backendID, bucket, err)
+	}
+	return id, nil
 }
 
 // FindByName reads one of the tenant's objects; objecth.ErrObjectNotFound
@@ -770,12 +792,29 @@ func (r *ObjectRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID, obje
 
 // EnqueuePurgeTx records the byte-reclaim debt on the caller's tx — the same
 // tx that removes the objects row, so the handle outlives the row it describes.
+//
+// While the tenant migrates storage, the copies the migration made in its
+// other bucket are owed too, on the same tx (package purgedebt).
 func (r *ObjectRepo) EnqueuePurgeTx(ctx context.Context, tx pgx.Tx, p objecth.PurgeDebt) error {
-	if err := r.q.WithTx(tx).InsertPendingPurge(ctx,
+	qtx := r.q.WithTx(tx)
+	if err := qtx.InsertPendingPurge(ctx,
 		pgUUID(p.PurgeID), pgUUID(p.TenantID), pgUUID(p.ObjectID),
 		p.BackendID, p.BucketName, p.Collection, p.Key,
 	); err != nil {
 		return fmt.Errorf("enqueue purge: %w", err)
+	}
+	copies, err := purgedebt.RecordMigrationCopies(ctx, qtx, purgedebt.Purge{
+		TenantID: p.TenantID, ObjectID: p.ObjectID,
+		BackendID: p.BackendID, Bucket: p.BucketName,
+		Collection: p.Collection, Key: p.Key, State: string(p.ObjectState),
+	})
+	if err != nil {
+		return fmt.Errorf("enqueue purge: %w", err)
+	}
+	if copies > 0 {
+		logger.FromContext(ctx).Info("the tenant is migrating storage; the copies in its other bucket are owed too",
+			zap.String("object_id", p.ObjectID.String()), zap.String("tenant_id", p.TenantID.String()),
+			zap.Int64("copies", copies))
 	}
 	return nil
 }
@@ -879,7 +918,26 @@ func (r *ObjectRepo) getByIDWith(ctx context.Context, q *sqlc.Queries, tenantID,
 	if err != nil {
 		return objecth.Object{}, err
 	}
-	return objectFromSQLC(row.Object, row.CollectionName), nil
+	obj := objectFromSQLC(row.Object, row.CollectionName)
+	obj.Upload = uploadAnchorFrom(row)
+	return obj, nil
+}
+
+// uploadAnchorFrom is the bucket the row's upload URL was signed for, as
+// GetObject joins it; nil when the row has none.
+func uploadAnchorFrom(row sqlc.GetObjectRow) *objecth.UploadAnchor {
+	if row.UploadBackendName == nil || row.UploadBucketName == nil {
+		return nil
+	}
+	return &objecth.UploadAnchor{
+		BackendID: *row.UploadBackendName,
+		Bucket:    *row.UploadBucketName,
+		State: bucketgate.State{
+			Enabled:        row.UploadEnabled != nil && *row.UploadEnabled,
+			ReadOnly:       row.UploadReadOnly != nil && *row.UploadReadOnly,
+			ProvisionState: derefStr(row.UploadProvisionState),
+		},
+	}
 }
 
 func objectFromSQLC(o sqlc.Object, collectionName string) objecth.Object {

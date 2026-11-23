@@ -206,6 +206,40 @@ func (q *Queries) FinishStorageMigrationRollback(ctx context.Context, toState st
 	return result.RowsAffected(), nil
 }
 
+const forgetPurgedFromStorageMigrationCount = `-- name: ForgetPurgedFromStorageMigrationCount :exec
+UPDATE tenant_storage_migrations
+SET objects_total = objects_total - CASE
+        WHEN state = 'copying'
+         AND $1::text IN ('AVAILABLE', 'DELETED')
+         AND NOT EXISTS (SELECT 1 FROM collections c
+                          WHERE c.tenant_id = $2
+                            AND c.name = $3::text AND c.public_read)
+         AND ROW(cursor_collection, cursor_path)
+             < ROW($3::text, $4::text)
+        THEN 1 ELSE 0 END
+WHERE tenant_id = $2 AND state IN ('provisioning', 'copying')
+`
+
+// A purge's part in the copy's count, on its transaction, after the row is
+// deleted. The copy fails when it ends short of the total it counted, which
+// an object purged before the copy reached it would cause though nothing was
+// missed: such a purge takes it off the total. Counted means the copy's list
+// holds it — live or trashed, not in a public collection — and not reached
+// means past the cursor, which the copy advances on the transaction that
+// holds the object's row (CopyObjectHeld), so a purge either waited for that
+// copy and sees it counted, or ran first and the copy finds no row.
+// In 'provisioning' it only takes the row's lock: the count is taken under
+// it (LockStorageMigrationForCount), after this purge is visible.
+func (q *Queries) ForgetPurgedFromStorageMigrationCount(ctx context.Context, objectState string, tenantID pgtype.UUID, collectionName string, path string) error {
+	_, err := q.db.Exec(ctx, forgetPurgedFromStorageMigrationCount,
+		objectState,
+		tenantID,
+		collectionName,
+		path,
+	)
+	return err
+}
+
 const getStorageMigration = `-- name: GetStorageMigration :one
 SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
@@ -353,6 +387,25 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 	return items, nil
 }
 
+const lockStorageMigrationForCount = `-- name: LockStorageMigrationForCount :execrows
+SELECT 1 FROM tenant_storage_migrations
+WHERE tenant_id = $1 AND state = $2
+  AND attempts = $3
+FOR UPDATE
+`
+
+// Holds the migration row while the copy's total is counted, and only while
+// it is still as the worker read it. A purge's transaction updates the row
+// (ForgetPurgedFromStorageMigrationCount), so the count runs after any purge
+// that touched it has committed, and a purge after it waits for 'copying'.
+func (q *Queries) LockStorageMigrationForCount(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, lockStorageMigrationForCount, tenantID, fromState, attempts)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const lockStorageMigrationForRebind = `-- name: LockStorageMigrationForRebind :execrows
 SELECT 1 FROM tenant_storage_migrations
 WHERE tenant_id = $1 AND state = $2
@@ -451,6 +504,61 @@ func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgty
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const migrationCountUploadsAnchoredTo = `-- name: MigrationCountUploadsAnchoredTo :one
+SELECT count(*)
+FROM objects o
+JOIN buckets b           ON b.id = o.upload_bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE o.tenant_id = $1 AND o.state = 'PENDING'
+  AND sb.name = $2 AND b.name = $3
+`
+
+// The tenant's uploads whose URL names the bucket (migration 113) and that
+// are still PENDING: their bytes may yet land there, and CompleteObject or
+// the reconciler move them from it. Cleanup of the source waits for none.
+func (q *Queries) MigrationCountUploadsAnchoredTo(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (int64, error) {
+	row := q.db.QueryRow(ctx, migrationCountUploadsAnchoredTo, tenantID, backendName, bucketName)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const migrationHoldObject = `-- name: MigrationHoldObject :many
+SELECT o.id
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1
+  AND c.name = $2::text AND o.path = $3::text
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+FOR KEY SHARE OF o
+`
+
+// Holds the object's rows at (collection, path) against a delete for the
+// transaction (FOR KEY SHARE: a tag or a taint still goes through), so a
+// purge cannot remove the row while its bytes are copied: it waits, and then
+// records a debt for the copy. No row: the object was purged since it was
+// listed, and there is nothing to copy.
+func (q *Queries) MigrationHoldObject(ctx context.Context, tenantID pgtype.UUID, collectionName string, path string) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, migrationHoldObject, tenantID, collectionName, path)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const migrationListObjectsWrittenSince = `-- name: MigrationListObjectsWrittenSince :many
@@ -576,7 +684,8 @@ type MigrationListTenantObjectsRow struct {
 // Live and trashed objects: a trashed object keeps its bytes until the purge,
 // and RestoreObject reads them from the bucket its collection is bound to, so
 // they move with the collection. PENDING rows do not: no bytes are confirmed
-// under them, and the upload URL they were handed names the source bucket.
+// under them, and the upload URL they were handed names the source bucket,
+// which the row records (upload_bucket_id): their completion moves the bytes.
 // Versions and delete markers are rows only, all under the object's one key,
 // so they need nothing copied.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
@@ -764,6 +873,19 @@ func (q *Queries) RollBackStuckStorageMigration(ctx context.Context, id pgtype.U
 		&i.RollbackCursorID,
 	)
 	return i, err
+}
+
+const setIdleInTransactionTimeout = `-- name: SetIdleInTransactionTimeout :one
+SELECT set_config('idle_in_transaction_session_timeout', $1::text, true)
+`
+
+// Sets idle_in_transaction_session_timeout for the rest of the transaction
+// (set_config's is_local), for one held open across a copy (HoldObject).
+func (q *Queries) SetIdleInTransactionTimeout(ctx context.Context, timeout string) (string, error) {
+	row := q.db.QueryRow(ctx, setIdleInTransactionTimeout, timeout)
+	var set_config string
+	err := row.Scan(&set_config)
+	return set_config, err
 }
 
 const setStorageMigrationState = `-- name: SetStorageMigrationState :execrows

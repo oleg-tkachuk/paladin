@@ -23,6 +23,53 @@ func (q *Queries) DeletePendingPurge(ctx context.Context, id pgtype.UUID) (int64
 	return result.RowsAffected(), nil
 }
 
+const insertMigrationPurgeDebts = `-- name: InsertMigrationPurgeDebts :execrows
+INSERT INTO pending_purges (tenant_id, object_id, bucket_id, collection_name, path, migration_copy)
+SELECT m.tenant_id, $1, x.bucket_id,
+       $2, $3, true
+  FROM tenant_storage_migrations m
+ CROSS JOIN LATERAL (VALUES (m.source_bucket_id), (m.target_bucket_id)) AS x (bucket_id)
+  JOIN buckets b ON b.id = x.bucket_id
+  JOIN (SELECT bb.id FROM buckets bb
+          JOIN storage_backends sb ON sb.id = bb.backend_id
+         WHERE sb.name = $4 AND bb.name = $5) bound
+    ON bound.id IN (m.source_bucket_id, m.target_bucket_id)
+ WHERE m.tenant_id = $6
+   AND m.state IN ('provisioning', 'copying', 'rebinding', 'verifying', 'completed', 'rolling_back', 'failed')
+   AND b.provision_state = 'ready'
+   AND x.bucket_id <> bound.id
+`
+
+// The purge of an object while its tenant migrates (ADR-0015): one debt for
+// each bucket of the migration other than the one the collection is bound to,
+// which InsertPendingPurge recorded. Run on the transaction that deletes the
+// row, after the delete, so the debts exist exactly when the row is gone.
+//
+// Until 'cleaned', the object may have a copy in either bucket: the copy
+// puts one in the target, the rebind leaves one in the source until cleanup,
+// a rollback copies the target back, and a failed attempt leaves its copies
+// in the target — through the retry's 'provisioning' too, until its copy
+// overwrites them. 'cleaned' has removed the source copies. Only a ready
+// bucket: a first attempt's target is still being provisioned and holds
+// nothing, nor does one whose provisioning failed, and a debt there would
+// stay pinned behind the bucket gate. Only while the bound bucket is one of
+// the two: a public collection never moves, and its bucket is neither.
+// migration_copy marks the debts as the migration's: they announce nothing.
+func (q *Queries) InsertMigrationPurgeDebts(ctx context.Context, objectID pgtype.UUID, collectionName string, path string, boundBackendName string, boundBucketName string, tenantID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, insertMigrationPurgeDebts,
+		objectID,
+		collectionName,
+		path,
+		boundBackendName,
+		boundBucketName,
+		tenantID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertPendingPurge = `-- name: InsertPendingPurge :exec
 
 INSERT INTO pending_purges (
@@ -52,6 +99,7 @@ func (q *Queries) InsertPendingPurge(ctx context.Context, iD pgtype.UUID, tenant
 
 const listDuePurges = `-- name: ListDuePurges :many
 SELECT p.id, p.tenant_id, p.object_id, p.collection_name, p.path, p.attempts,
+       p.migration_copy,
        sb.name AS backend_name,
        b.name  AS bucket_name,
        b.id    AS bucket_id,
@@ -73,6 +121,7 @@ type ListDuePurgesRow struct {
 	CollectionName string      `json:"collection_name"`
 	Path           string      `json:"path"`
 	Attempts       int32       `json:"attempts"`
+	MigrationCopy  bool        `json:"migration_copy"`
 	BackendName    string      `json:"backend_name"`
 	BucketName     string      `json:"bucket_name"`
 	BucketID       pgtype.UUID `json:"bucket_id"`
@@ -106,6 +155,7 @@ func (q *Queries) ListDuePurges(ctx context.Context, limit int32, deferredBucket
 			&i.CollectionName,
 			&i.Path,
 			&i.Attempts,
+			&i.MigrationCopy,
 			&i.BackendName,
 			&i.BucketName,
 			&i.BucketID,

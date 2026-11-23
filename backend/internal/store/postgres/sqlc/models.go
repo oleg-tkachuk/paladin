@@ -592,6 +592,7 @@ type Object struct {
 	PublicUrl             string             `json:"public_url"`
 	CreatedByOperation    pgtype.UUID        `json:"created_by_operation"`
 	BytesWrittenAt        pgtype.Timestamptz `json:"bytes_written_at"`
+	UploadBucketID        pgtype.UUID        `json:"upload_bucket_id"`
 }
 
 type ObjectLock struct {
@@ -665,6 +666,7 @@ type PendingPurge struct {
 	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
 	LastError      *string            `json:"last_error"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	MigrationCopy  bool               `json:"migration_copy"`
 }
 
 type PolicyVersion struct {

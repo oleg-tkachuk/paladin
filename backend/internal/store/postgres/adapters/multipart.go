@@ -64,6 +64,11 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 	if err != nil {
 		return multiparth.Session{}, fmt.Errorf("resolve collection %q: %w", args.Collection, err)
 	}
+	// Anchored to the session's bucket, where its parts are assembled.
+	uploadBucketID, err := resolveUploadBucket(ctx, qtx, backendID, bucket)
+	if err != nil {
+		return multiparth.Session{}, err
+	}
 	if err := qtx.CreateObject(ctx,
 		pgUUID(objectID),
 		pgUUID(args.TenantID),
@@ -80,6 +85,7 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 		pgTS(time.Now().Add(multipartSessionTTL)),
 		args.PublicURL,
 		pgtype.UUID{}, // an upload session, not an operation, creates it
+		uploadBucketID,
 	); err != nil {
 		return multiparth.Session{}, fmt.Errorf("create multipart object row: %w", err)
 	}

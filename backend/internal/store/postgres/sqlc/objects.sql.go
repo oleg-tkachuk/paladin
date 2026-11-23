@@ -90,18 +90,20 @@ INSERT INTO objects (
     id, tenant_id, collection_id, path, state,
     content_type, size_bytes, checksum_algorithm, checksum,
     metadata, tags, external_ref, presign_expires_at, public_url,
-    created_by_operation
+    created_by_operation, upload_bucket_id
 ) VALUES (
     $1, $2, $3, $4, $5::object_state,
     $6, $7, $8, $9,
     $10, $11, $12, $13, $14,
-    $15
+    $15, $16
 )
 `
 
 // Object queries.
-// collection_id is resolved by the caller via ResolveCollectionID.
-func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string, createdByOperation pgtype.UUID) error {
+// collection_id is resolved by the caller via ResolveCollectionID, and
+// upload_bucket_id, the bucket an upload's URL is signed for (migration 113),
+// via ResolveUploadBucketID; NULL means the collection's binding.
+func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string, createdByOperation pgtype.UUID, uploadBucketID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, createObject,
 		iD,
 		tenantID,
@@ -118,6 +120,7 @@ func (q *Queries) CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgt
 		presignExpiresAt,
 		publicUrl,
 		createdByOperation,
+		uploadBucketID,
 	)
 	return err
 }
@@ -142,17 +145,29 @@ func (q *Queries) ExtendPendingPresign(ctx context.Context, tenantID pgtype.UUID
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, c.name AS collection_name,
+       usb.name AS upload_backend_name, ub.name AS upload_bucket_name,
+       usb.enabled AS upload_enabled, usb.read_only AS upload_read_only,
+       ub.provision_state AS upload_provision_state
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
+LEFT JOIN buckets ub           ON ub.id = objects.upload_bucket_id
+LEFT JOIN storage_backends usb ON usb.id = ub.backend_id
 WHERE objects.tenant_id = $1 AND objects.id = $2
 `
 
 type GetObjectRow struct {
-	Object         Object `json:"object"`
-	CollectionName string `json:"collection_name"`
+	Object               Object  `json:"object"`
+	CollectionName       string  `json:"collection_name"`
+	UploadBackendName    *string `json:"upload_backend_name"`
+	UploadBucketName     *string `json:"upload_bucket_name"`
+	UploadEnabled        *bool   `json:"upload_enabled"`
+	UploadReadOnly       *bool   `json:"upload_read_only"`
+	UploadProvisionState *string `json:"upload_provision_state"`
 }
 
+// The upload_* columns are the bucket a PENDING object's URL was signed for
+// (migration 113) and the bucket gate's state there; NULL when it has none.
 func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error) {
 	row := q.db.QueryRow(ctx, getObject, tenantID, iD)
 	var i GetObjectRow
@@ -183,7 +198,13 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype
 		&i.Object.PublicUrl,
 		&i.Object.CreatedByOperation,
 		&i.Object.BytesWrittenAt,
+		&i.Object.UploadBucketID,
 		&i.CollectionName,
+		&i.UploadBackendName,
+		&i.UploadBucketName,
+		&i.UploadEnabled,
+		&i.UploadReadOnly,
+		&i.UploadProvisionState,
 	)
 	return i, err
 }
@@ -217,7 +238,7 @@ func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[])
@@ -267,6 +288,7 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 			&i.Object.PublicUrl,
 			&i.Object.CreatedByOperation,
 			&i.Object.BytesWrittenAt,
+			&i.Object.UploadBucketID,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -540,7 +562,7 @@ func (q *Queries) ListObjectVersionLocks(ctx context.Context, tenantID pgtype.UU
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, $1::text AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, o.upload_bucket_id, $1::text AS collection_name
 FROM objects o
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
@@ -648,6 +670,7 @@ func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID p
 			&i.Object.PublicUrl,
 			&i.Object.CreatedByOperation,
 			&i.Object.BytesWrittenAt,
+			&i.Object.UploadBucketID,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
@@ -724,7 +747,7 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, c.name AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, o.upload_bucket_id, c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
@@ -769,7 +792,41 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 		&i.Object.PublicUrl,
 		&i.Object.CreatedByOperation,
 		&i.Object.BytesWrittenAt,
+		&i.Object.UploadBucketID,
 		&i.CollectionName,
+	)
+	return i, err
+}
+
+const lookupUploadBucket = `-- name: LookupUploadBucket :one
+SELECT sb.name AS backend_name, b.name AS bucket_name,
+       sb.enabled, sb.read_only, b.provision_state
+FROM objects o
+JOIN buckets b           ON b.id = o.upload_bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE o.id = $1
+`
+
+type LookupUploadBucketRow struct {
+	BackendName    string `json:"backend_name"`
+	BucketName     string `json:"bucket_name"`
+	Enabled        bool   `json:"enabled"`
+	ReadOnly       bool   `json:"read_only"`
+	ProvisionState string `json:"provision_state"`
+}
+
+// The bucket a PENDING object's upload URL was signed for (migration 113),
+// with the state the bucket gate decides on there. No row when the object
+// has no anchor: it uploads to its collection's binding.
+func (q *Queries) LookupUploadBucket(ctx context.Context, id pgtype.UUID) (LookupUploadBucketRow, error) {
+	row := q.db.QueryRow(ctx, lookupUploadBucket, id)
+	var i LookupUploadBucketRow
+	err := row.Scan(
+		&i.BackendName,
+		&i.BucketName,
+		&i.Enabled,
+		&i.ReadOnly,
+		&i.ProvisionState,
 	)
 	return i, err
 }
@@ -819,6 +876,20 @@ func (q *Queries) ResolveCollectionID(ctx context.Context, tenantID pgtype.UUID,
 	return id, err
 }
 
+const resolveUploadBucketID = `-- name: ResolveUploadBucketID :one
+SELECT b.id FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE sb.name = $1 AND b.name = $2
+`
+
+// The bucket an upload's URL is signed for, by the names the URL carries.
+func (q *Queries) ResolveUploadBucketID(ctx context.Context, name string, name_2 string) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, resolveUploadBucketID, name, name_2)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const restoreObject = `-- name: RestoreObject :execrows
 UPDATE objects
 SET state         = 'AVAILABLE',
@@ -839,7 +910,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, iD pg
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE state = 'PENDING'
@@ -890,6 +961,7 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.PublicUrl,
 			&i.Object.CreatedByOperation,
 			&i.Object.BytesWrittenAt,
+			&i.Object.UploadBucketID,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err

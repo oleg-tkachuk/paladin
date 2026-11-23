@@ -68,6 +68,59 @@ SET objects_total = sqlc.arg('objects_total'), state = sqlc.arg('to_state'), upd
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
+-- name: LockStorageMigrationForCount :execrows
+-- Holds the migration row while the copy's total is counted, and only while
+-- it is still as the worker read it. A purge's transaction updates the row
+-- (ForgetPurgedFromStorageMigrationCount), so the count runs after any purge
+-- that touched it has committed, and a purge after it waits for 'copying'.
+SELECT 1 FROM tenant_storage_migrations
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts')
+FOR UPDATE;
+
+-- name: ForgetPurgedFromStorageMigrationCount :exec
+-- A purge's part in the copy's count, on its transaction, after the row is
+-- deleted. The copy fails when it ends short of the total it counted, which
+-- an object purged before the copy reached it would cause though nothing was
+-- missed: such a purge takes it off the total. Counted means the copy's list
+-- holds it — live or trashed, not in a public collection — and not reached
+-- means past the cursor, which the copy advances on the transaction that
+-- holds the object's row (CopyObjectHeld), so a purge either waited for that
+-- copy and sees it counted, or ran first and the copy finds no row.
+-- In 'provisioning' it only takes the row's lock: the count is taken under
+-- it (LockStorageMigrationForCount), after this purge is visible.
+UPDATE tenant_storage_migrations
+SET objects_total = objects_total - CASE
+        WHEN state = 'copying'
+         AND sqlc.arg('object_state')::text IN ('AVAILABLE', 'DELETED')
+         AND NOT EXISTS (SELECT 1 FROM collections c
+                          WHERE c.tenant_id = sqlc.arg('tenant_id')
+                            AND c.name = sqlc.arg('collection_name')::text AND c.public_read)
+         AND ROW(cursor_collection, cursor_path)
+             < ROW(sqlc.arg('collection_name')::text, sqlc.arg('path')::text)
+        THEN 1 ELSE 0 END
+WHERE tenant_id = sqlc.arg('tenant_id') AND state IN ('provisioning', 'copying');
+
+-- name: SetIdleInTransactionTimeout :one
+-- Sets idle_in_transaction_session_timeout for the rest of the transaction
+-- (set_config's is_local), for one held open across a copy (HoldObject).
+SELECT set_config('idle_in_transaction_session_timeout', sqlc.arg('timeout')::text, true);
+
+-- name: MigrationHoldObject :many
+-- Holds the object's rows at (collection, path) against a delete for the
+-- transaction (FOR KEY SHARE: a tag or a taint still goes through), so a
+-- purge cannot remove the row while its bytes are copied: it waits, and then
+-- records a debt for the copy. No row: the object was purged since it was
+-- listed, and there is nothing to copy.
+SELECT o.id
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1
+  AND c.name = sqlc.arg('collection_name')::text AND o.path = sqlc.arg('path')::text
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+FOR KEY SHARE OF o;
+
 -- name: AdvanceStorageMigrationCopy :execrows
 -- Records copy progress + the resume cursor after a batch. Progress only moves
 -- forward: a stale batch reporting less than is recorded changes nothing.
@@ -123,7 +176,8 @@ FOR UPDATE;
 -- Live and trashed objects: a trashed object keeps its bytes until the purge,
 -- and RestoreObject reads them from the bucket its collection is bound to, so
 -- they move with the collection. PENDING rows do not: no bytes are confirmed
--- under them, and the upload URL they were handed names the source bucket.
+-- under them, and the upload URL they were handed names the source bucket,
+-- which the row records (upload_bucket_id): their completion moves the bytes.
 -- Versions and delete markers are rows only, all under the object's one key,
 -- so they need nothing copied.
 SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
@@ -137,6 +191,17 @@ WHERE o.tenant_id = $1
                                 sqlc.arg('after_path')::text)
 ORDER BY c.name, o.path
 LIMIT sqlc.arg('limit_count')::int;
+
+-- name: MigrationCountUploadsAnchoredTo :one
+-- The tenant's uploads whose URL names the bucket (migration 113) and that
+-- are still PENDING: their bytes may yet land there, and CompleteObject or
+-- the reconciler move them from it. Cleanup of the source waits for none.
+SELECT count(*)
+FROM objects o
+JOIN buckets b           ON b.id = o.upload_bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE o.tenant_id = $1 AND o.state = 'PENDING'
+  AND sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name');
 
 -- name: MigrationCountTenantObjects :one
 -- The objects MigrationListTenantObjects walks: live and trashed, public

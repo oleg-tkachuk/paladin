@@ -59,7 +59,7 @@ func TestStorageMigrationTransitionsApplyOnlyFromTheStateRead(t *testing.T) {
 		}
 	}
 
-	if err := repo.SetCopying(ctx, worker.MigrationRead{TenantID: tenant, State: worker.MigStateProvisioning}, 3); err != nil {
+	if _, err := repo.SetCopying(ctx, worker.MigrationRead{TenantID: tenant, State: worker.MigStateProvisioning}); err != nil {
 		t.Fatalf("provisioning -> copying: %v", err)
 	}
 	if err := repo.AdvanceCopy(ctx, worker.MigrationRead{TenantID: tenant, State: worker.MigStateCopying}, 3, "c", "d"); err != nil {
@@ -77,7 +77,8 @@ func TestStorageMigrationTransitionsApplyOnlyFromTheStateRead(t *testing.T) {
 	moved("AdvanceCopy from copying", repo.AdvanceCopy(ctx, worker.MigrationRead{TenantID: tenant, State: worker.MigStateCopying}, 3, "c", "d"))
 	moved("SetState from copying", repo.SetState(ctx, worker.MigrationRead{TenantID: tenant, State: worker.MigStateCopying}, worker.MigStateRebinding))
 	moved("Fail from copying", repo.Fail(ctx, worker.MigrationRead{TenantID: tenant, State: worker.MigStateCopying}, "stale"))
-	moved("SetCopying from provisioning", repo.SetCopying(ctx, worker.MigrationRead{TenantID: tenant, State: worker.MigStateProvisioning}, 0))
+	_, staleErr := repo.SetCopying(ctx, worker.MigrationRead{TenantID: tenant, State: worker.MigStateProvisioning})
+	moved("SetCopying from provisioning", staleErr)
 	if state, copied := read(); state != worker.MigStateVerifying || copied != 3 {
 		t.Fatalf("stale writes left the migration at %s with %d copied, want %s with 3",
 			state, copied, worker.MigStateVerifying)
@@ -119,7 +120,7 @@ func TestStorageMigrationTransitionsApplyOnlyToTheAttemptRead(t *testing.T) {
 	// The first attempt reaches rebinding with a worker holding that read,
 	// then fails; the retry starts over and is back in each state in turn.
 	first := worker.MigrationRead{TenantID: tenant, State: worker.MigStateProvisioning}
-	if err := repo.SetCopying(ctx, first, 2); err != nil {
+	if _, err := repo.SetCopying(ctx, first); err != nil {
 		t.Fatalf("provisioning -> copying: %v", err)
 	}
 	first.State = worker.MigStateCopying

@@ -215,6 +215,9 @@ func (t *Transitioner) promote(
 	// (bytes_written_at): the first one confirms an upload's, a later one a
 	// newer write a storage event reported. It is what a storage migration's
 	// rollback selects on, where updated_at moves for any change to the row.
+	// It also clears the upload's anchor (upload_bucket_id, migration 113):
+	// the bytes are now where the object is read from, and a storage
+	// migration's cleanup no longer waits on the row.
 	const q = `
         UPDATE objects
            SET state = 'AVAILABLE',
@@ -223,7 +226,8 @@ func (t *Transitioner) promote(
                checksum = COALESCE(NULLIF($4, ''), checksum),
                sequencer = COALESCE(NULLIF($5, ''), sequencer),
                committed_at = CASE WHEN state = 'PENDING' THEN now() ELSE committed_at END,
-               bytes_written_at = now()
+               bytes_written_at = now(),
+               upload_bucket_id = NULL
          WHERE id = $1
            AND (
                 ($5 = '' AND state = 'PENDING')
