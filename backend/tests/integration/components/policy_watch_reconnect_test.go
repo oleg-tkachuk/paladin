@@ -8,7 +8,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 )
 
@@ -27,6 +30,8 @@ func TestPolicyWatchReconnect(t *testing.T) {
 	defer cancel()
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
+	core, logs := observer.New(zap.InfoLevel)
+	ctx = logger.WithContext(ctx, zap.New(core))
 
 	store := cedar.NewPostgresStore(pool)
 	events, err := store.Watch(ctx)
@@ -68,6 +73,10 @@ func TestPolicyWatchReconnect(t *testing.T) {
 	if n := store.WatchReconnects(); n < 1 {
 		t.Fatalf("WatchReconnects = %d, want >= 1", n)
 	}
+	// The drop and the recovery are both in the log, so an operator reading
+	// it after an outage can tell the watch listens again.
+	assertLogged(t, logs, cedar.MsgPolicyWatchDropped)
+	assertLogged(t, logs, cedar.MsgPolicyWatchListening)
 
 	// The NEW LISTEN is live: a subsequent policy write still invalidates,
 	// with the correct targeted payload.
@@ -83,7 +92,22 @@ func TestPolicyWatchReconnect(t *testing.T) {
 // `LISTEN policy_changed`. It polls first: the watcher issues LISTEN then
 // blocks in WaitForNotification, so the backend's last query text settles to
 // "LISTEN policy_changed" a beat after Watch returns.
+// assertLogged fails unless the observed log holds a line with message msg.
+func assertLogged(t *testing.T, logs *observer.ObservedLogs, msg string) {
+	t.Helper()
+	if logs.FilterMessage(msg).Len() == 0 {
+		t.Fatalf("no %q line logged; got %d lines", msg, logs.Len())
+	}
+}
+
 func killListenBackend(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	killListenerOf(t, ctx, pool, "LISTEN policy_changed")
+}
+
+// killListenerOf terminates the backend of this test's database whose last
+// query is listen, retrying until one appears.
+func killListenerOf(t *testing.T, ctx context.Context, pool *pgxpool.Pool, listen string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -94,9 +118,9 @@ func killListenBackend(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
 			SELECT count(*) FROM (
 				SELECT pg_terminate_backend(pid)
 				FROM pg_stat_activity
-				WHERE query = 'LISTEN policy_changed' AND pid <> pg_backend_pid()
+				WHERE query = $1 AND pid <> pg_backend_pid()
 				  AND datname = current_database()
-			) t`).Scan(&killed)
+			) t`, listen).Scan(&killed)
 		if err != nil {
 			t.Fatalf("terminate LISTEN backend: %v", err)
 		}
