@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/tests/fuzzassert"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -78,7 +79,7 @@ func FuzzIssue(f *testing.F) {
 		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: string(limes.OpPut), prefix: "tenants/a/", uri: "paladin://x", cidr: "10.0.0.0/8", ttlSeconds: 60, maxRequests: 5},
 		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "share", currency: "not-a-currency", units: 1, jkt: testJKT, requireBiscuit: true},
 		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "get", cidr: "fe80::1%eth0/64", ttlSeconds: 1 << 40, notBeforeSeconds: -1},
-		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "get", ttlSeconds: maxTTLSeconds + 1},
+		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "get", ttlSeconds: apiutil.MaxTTLSeconds + 1},
 		{kind: service, tenant: tenant, subject: "svc", audience: "data", op: "get", ttlSeconds: 1 << 62},
 		{kind: 2, tenant: tenant, subject: "agent\x00", audience: "", op: "frobnicate", prefix: "paladin://tenants/", ttlSeconds: -5, requireBiscuit: true},
 	} {

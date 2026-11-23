@@ -19,6 +19,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"go.uber.org/zap"
 )
 
 // Func serves one whole unary call. Request and response metadata are on the
@@ -57,7 +60,7 @@ func Interceptor(
 			if spec.StreamType != connect.StreamTypeUnary {
 				return streaming(ctx, spec, s)
 			}
-			req, err := receive(spec, s)
+			req, err := receive(ctx, spec, s)
 			if err != nil {
 				return err
 			}
@@ -74,12 +77,12 @@ func Interceptor(
 // already holds it, and it is taken as it is: copying it into a fresh message
 // at every layer cost the data plane, five layers deep, about six times the
 // rest of a maximum-size call. Otherwise it is decoded from the stream.
-func receive(spec connect.Spec, s connect.ServerStream) (proto.Message, error) {
+func receive(ctx context.Context, spec connect.Spec, s connect.ServerStream) (proto.Message, error) {
 	if held, ok := s.(*heldStream); ok && !held.received {
 		held.received = true
 		return held.req, nil
 	}
-	req, err := NewRequest(spec)
+	req, err := NewRequest(ctx, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -90,26 +93,46 @@ func receive(spec connect.Spec, s connect.ServerStream) (proto.Message, error) {
 }
 
 // NewRequest is an empty request message of the method spec describes.
-func NewRequest(spec connect.Spec) (proto.Message, error) {
-	return newMessage(spec, protoreflect.MethodDescriptor.Input)
+func NewRequest(ctx context.Context, spec connect.Spec) (proto.Message, error) {
+	return newMessage(ctx, spec, protoreflect.MethodDescriptor.Input)
 }
 
 // NewResponse is an empty response message of the method spec describes, for
 // an interceptor that answers a call itself.
-func NewResponse(spec connect.Spec) (proto.Message, error) {
-	return newMessage(spec, protoreflect.MethodDescriptor.Output)
+func NewResponse(ctx context.Context, spec connect.Spec) (proto.Message, error) {
+	return newMessage(ctx, spec, protoreflect.MethodDescriptor.Output)
 }
 
-func newMessage(spec connect.Spec, which func(protoreflect.MethodDescriptor) protoreflect.MessageDescriptor) (proto.Message, error) {
+// MessageUnavailable is the answer to a call whose request or response
+// message the server cannot build: a procedure with no protobuf schema, or a
+// message type the binary did not register. Both are build faults,
+// unreachable with generated stubs; the cause is logged, not answered.
+const MessageUnavailable = "the server cannot build this procedure's messages"
+
+// messageUnavailableLog is the log line of such a call, at Error.
+const messageUnavailableLog = "rpc message type unavailable"
+
+// errNoSchema is a procedure registered without a protobuf schema.
+var errNoSchema = errors.New("the procedure has no protobuf schema")
+
+func newMessage(ctx context.Context, spec connect.Spec, which func(protoreflect.MethodDescriptor) protoreflect.MessageDescriptor) (proto.Message, error) {
 	method, ok := spec.Schema.(protoreflect.MethodDescriptor)
 	if !ok {
-		return nil, connect.Errorf(connect.CodeInternal, "%s has no protobuf schema", spec.Procedure)
+		return nil, messageUnavailable(ctx, spec, errNoSchema)
 	}
 	typ, err := protoregistry.GlobalTypes.FindMessageByName(which(method).FullName())
 	if err != nil {
-		return nil, connect.Errorf(connect.CodeInternal, "%s: %v", spec.Procedure, err).WithCause(err)
+		return nil, messageUnavailable(ctx, spec, err)
 	}
 	return typ.New().Interface(), nil
+}
+
+// messageUnavailable logs why spec's message could not be built, and is the
+// fixed answer to the call.
+func messageUnavailable(ctx context.Context, spec connect.Spec, cause error) error {
+	logger.FromContext(ctx).Error(messageUnavailableLog,
+		zap.String("rpc", spec.Procedure), zap.Error(cause))
+	return connect.NewError(connect.CodeInternal, MessageUnavailable)
 }
 
 // heldStream is the stream a unary handler runs on behind Interceptor.

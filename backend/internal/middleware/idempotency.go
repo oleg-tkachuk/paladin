@@ -252,7 +252,7 @@ func (i *idempotencyInterceptor) wrap(next unary.Func) unary.Func {
 			return nil, errKeyReused
 		}
 		if err == nil && found {
-			if replay, rerr := replayResponse(spec, rec.Response); rerr == nil {
+			if replay, rerr := replayResponse(ctx, spec, rec.Response); rerr == nil {
 				if err := refuseCredentialReplay(replay); err != nil {
 					metrics.RecordIdempotencyLookup(ctx, method, lookupRefused)
 					return nil, err
@@ -305,8 +305,8 @@ func marshalResponse(msg proto.Message) ([]byte, error) {
 }
 
 // replayResponse decodes a cached response into the method's response type.
-func replayResponse(spec connect.Spec, body []byte) (proto.Message, error) {
-	msg, err := unary.NewResponse(spec)
+func replayResponse(ctx context.Context, spec connect.Spec, body []byte) (proto.Message, error) {
+	msg, err := unary.NewResponse(ctx, spec)
 	if err != nil {
 		return nil, err
 	}

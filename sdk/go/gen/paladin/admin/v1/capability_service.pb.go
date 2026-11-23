@@ -216,7 +216,8 @@ const (
 	// Asserted only beside another operation, in paired_ops, whose own row
 	// grants the action: it adds a requirement, never an action.
 	CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_PAIRED CapabilityGrantBasis = 3
-	// The caveats alone decide; no policy is asked (share: Delegate).
+	// The caveats alone decide; no policy is asked. No operation has this
+	// basis today.
 	CapabilityGrantBasis_CAPABILITY_GRANT_BASIS_CAVEATS_ONLY CapabilityGrantBasis = 4
 )
 

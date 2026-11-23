@@ -1,0 +1,84 @@
+{
+  "_comment": "Request strings holding NUL (U+0000), which the server and both SDK fakes refuse as INVALID_ARGUMENT with the message '<path>: holds a NUL character', path naming the first offending field in declaration order. Each case is a request message by its full name, in its protobuf JSON form, and the path its refusal names; an empty path is a request that passes. A map holds at most one offending entry, since a map's order is not fixed.",
+  "refusal_suffix": ": holds a NUL character",
+  "cases": [
+    {
+      "name": "an empty message",
+      "message": "paladin.data.v1.UploadObjectRequest",
+      "request": {},
+      "path": ""
+    },
+    {
+      "name": "clean strings",
+      "message": "paladin.data.v1.UploadObjectRequest",
+      "request": {"parent": "tenants/t/collections/c", "key": "a/b", "metadata": {"k": "v"}},
+      "path": ""
+    },
+    {
+      "name": "a singular string",
+      "message": "paladin.data.v1.UploadObjectRequest",
+      "request": {"parent": "p", "key": "a\u0000b"},
+      "path": "key"
+    },
+    {
+      "name": "NUL alone",
+      "message": "paladin.data.v1.UploadObjectRequest",
+      "request": {"key": "\u0000"},
+      "path": "key"
+    },
+    {
+      "name": "NUL at the end",
+      "message": "paladin.data.v1.UploadObjectRequest",
+      "request": {"externalRef": "ref\u0000"},
+      "path": "external_ref"
+    },
+    {
+      "name": "the first field in declaration order",
+      "message": "paladin.data.v1.UploadObjectRequest",
+      "request": {"parent": "a\u0000b", "key": "a\u0000b"},
+      "path": "parent"
+    },
+    {
+      "name": "a map value",
+      "message": "paladin.data.v1.UploadObjectRequest",
+      "request": {"metadata": {"k": "a\u0000b"}},
+      "path": "metadata.value"
+    },
+    {
+      "name": "a map key",
+      "message": "paladin.data.v1.UploadObjectRequest",
+      "request": {"tags": {"a\u0000b": "v"}},
+      "path": "tags.key"
+    },
+    {
+      "name": "a repeated string",
+      "message": "paladin.data.v1.DismissOperationsRequest",
+      "request": {"names": ["a", "b", "a\u0000b"]},
+      "path": "names[2]"
+    },
+    {
+      "name": "a nested message",
+      "message": "paladin.iam.v1.UpdateMineRequest",
+      "request": {"preferences": {"ui": "a\u0000b"}},
+      "path": "preferences.fields.value.string_value"
+    },
+    {
+      "name": "a nested map key",
+      "message": "paladin.iam.v1.UpdateMineRequest",
+      "request": {"preferences": {"a\u0000b": 1}},
+      "path": "preferences.fields.key"
+    },
+    {
+      "name": "a oneof set to a message",
+      "message": "paladin.iam.v1.UpdateMineRequest",
+      "request": {"preferences": {"l": [1, "a\u0000b"]}},
+      "path": "preferences.fields.value.list_value.values[1].string_value"
+    },
+    {
+      "name": "a nested message, clean",
+      "message": "paladin.iam.v1.UpdateMineRequest",
+      "request": {"theme": "dark", "preferences": {"ui": {"density": "compact"}}},
+      "path": ""
+    }
+  ]
+}

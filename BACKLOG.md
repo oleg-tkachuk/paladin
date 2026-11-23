@@ -65,20 +65,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-### The proto still says `share` is `CAVEATS_ONLY`
-
-- **Status:** Deferred.
-- **Reason:** `CAPABILITY_GRANT_BASIS_CAVEATS_ONLY`'s comment in
-  `proto/paladin/admin/v1/capability_service.proto` reads "(share:
-  Delegate)", but `share` is now `BUILTIN` with `DelegateCapability`; a
-  proto comment change needs regenerated stubs in a `docs(proto)` commit of
-  its own.
-- **Definition of Done:** the comment names no operation (no row has the
-  basis now), the Go, Python and TypeScript stubs are regenerated, in one
-  `docs(proto)` commit.
-- **Blockers:** none.
-
-
 ## Deploy cutover: rename to `paladin`
 
 ### The `paladin` name has not been checked against trademark registers
@@ -584,40 +570,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### The OAuth endpoints and `unary.newMessage` quote Go errors to the caller
-
-- **Status:** Deferred.
-- **Reason:** the RPC refusals are held to the no-package-prefix rule
-  (`apiutil/sentinel_text_test.go`), but the OAuth HTTP endpoints answer
-  `invalid_client` with the client authentication's own `err.Error()`
-  (`auth/oauth/handler.go` token and introspection paths, `revoke.go`), which
-  starts `oauth: bad credentials: …`; and `auth.ErrNoConsent` (`auth: the
-  grant consents to neither …`) is wrapped into the token exchange's
-  `ErrInvalidScope` (`auth/delegation/policy.go`), whose answer has not been
-  checked for it.
-  Alike, `unary.newMessage` (`api/unary/unary.go`) answers a procedure whose
-  message type is not registered with the registry's own error after the
-  procedure's name — a build fault, unreachable with generated stubs.
-- **Definition of Done:** each OAuth refusal's `error_description` is a fixed
-  sentence the package exports for the guard test, the cause logged at Warn;
-  a test per endpoint pins the text. `newMessage` answers a fixed sentence and
-  logs the registry's error at Error.
-- **Blockers:** none.
-
-### The SDK fakes accept request text holding NUL
-
-- **Status:** Deferred.
-- **Reason:** every plane refuses a request string holding U+0000 as
-  `INVALID_ARGUMENT` (`middleware.RefuseNUL`), but `paladintest` and
-  `paladin.testing` run protovalidate alone, so a test against either passes a
-  call the server refuses. The walker lives in `backend/internal/protonul`,
-  which the SDK modules cannot import.
-- **Definition of Done:** both fakes refuse such a request with the server's
-  text (`<field path>: holds a NUL character`) before their handlers, and
-  their fidelity tests pin it.
-- **Blockers:** where the walker lives so the SDK and the server share it —
-  a package of the Go SDK, and a port for Python.
-
 ### The handler fuzz targets do not reach UserService
 
 - **Status:** Deferred.
@@ -644,17 +596,6 @@ the same commit. Treat this file like a runtime invariant.
 - **Definition of Done:** an integration test per write RPC sends a value
   each CHECK on its table refuses and asserts `InvalidArgument`; any that
   answers otherwise gets a handler refusal and a fuzz post-condition.
-- **Blockers:** none.
-
-### The MCP bridge converts a tool's `ttl_seconds` without a bound
-
-- **Status:** Deferred.
-- **Reason:** the presign tools (`mcp/bridge.go`) multiply `ttl_seconds` by
-  `time.Second` as the capability handler did before the fuzzing pass, so a
-  value past what a duration holds wraps and the server refuses a TTL the
-  agent did not send.
-- **Definition of Done:** the bridge refuses such a value as an invalid tool
-  argument naming the limit, with a test.
 - **Blockers:** none.
 
 ## Database

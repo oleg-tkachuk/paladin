@@ -26,6 +26,7 @@ const (
 	fieldGrantType = "grant_type"
 	fieldStatus    = "status"
 	fieldError     = "error"
+	fieldCause     = "cause"
 	fieldTookMS    = "took_ms"
 )
 
@@ -74,7 +75,11 @@ func logRequests(endpoint string, next http.HandlerFunc) http.HandlerFunc {
 		}
 		log := logger.FromContext(r.Context())
 		if rec.status >= firstClientErrorStatus || errCode != "" {
-			log.Warn(requestRefusedMessage, append(fields, zap.String(fieldError, errCode))...)
+			fields = append(fields, zap.String(fieldError, errCode))
+			if rec.cause != nil {
+				fields = append(fields, zap.NamedError(fieldCause, rec.cause))
+			}
+			log.Warn(requestRefusedMessage, fields...)
 			return
 		}
 		log.Info(requestServedMessage, fields...)
@@ -101,14 +106,23 @@ func loggedDownstream(w http.ResponseWriter) {
 	}
 }
 
-// outcomeRecorder remembers the status an endpoint answered with, and enough
-// of a refusal's body to read its error code. It unwraps to the writer it
-// wraps.
+// refusedFor records why the request w answers is refused, for logRequests to
+// log with the refusal: the client is told a fixed description, never this.
+func refusedFor(w http.ResponseWriter, cause error) {
+	if rec, ok := w.(*outcomeRecorder); ok {
+		rec.cause = cause
+	}
+}
+
+// outcomeRecorder remembers the status an endpoint answered with, enough of
+// a refusal's body to read its error code, and the cause refusedFor gave. It
+// unwraps to the writer it wraps.
 type outcomeRecorder struct {
 	http.ResponseWriter
 	status           int
 	wroteHeader      bool
 	loggedDownstream bool
+	cause            error
 	body             bytes.Buffer
 }
 

@@ -11,8 +11,10 @@
 // (RegenerateUploadUrl, PresignDownload), StorageBootstrapService and
 // CapabilityService (Issue, Delegate, Revoke, Get — see capability.go); every
 // other RPC of every plane answers Unimplemented, as a server that lacks it
-// does. Like the server it runs protovalidate on every request, after
-// authentication, and checks DeleteObject's resource_version; ListObjects
+// does. Like the server it refuses a request any of whose strings holds NUL
+// (U+0000) as InvalidArgument naming the field, then runs protovalidate on
+// every request, both after authentication, and checks DeleteObject's
+// resource_version; ListObjects
 // refuses a filter or an ordering as Unimplemented rather than ignore it.
 // Like the server it binds
 // every upload URL to the size and checksum the upload was registered with —
@@ -68,6 +70,7 @@ import (
 	commonv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 	datav1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/data/v1/paladindatav1connect"
+	"github.com/oleg-tkachuk/paladin/sdk/go/internal/protonul"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
@@ -524,7 +527,11 @@ func Start(opts ...Option) (*Server, func()) {
 					return nil, err
 				}
 			}
-			// After authentication, as the server's interceptor chain runs it.
+			// After authentication and before validation, as the server's
+			// interceptor chain runs it.
+			if err := refuseNUL(msg); err != nil {
+				return nil, err
+			}
 			if err := validator.Validate(msg); err != nil {
 				return nil, invalidRequest(err)
 			}
@@ -1301,6 +1308,15 @@ func (s *Server) objectByID(id string) (*object, bool) {
 		}
 	}
 	return nil, false
+}
+
+// refuseNUL is the server's refusal of a request any of whose strings holds
+// NUL (U+0000): InvalidArgument naming the field, never the value.
+func refuseNUL(msg proto.Message) error {
+	if path, found := protonul.Find(msg.ProtoReflect()); found {
+		return connect.NewError(connect.CodeInvalidArgument, protonul.Refusal(path))
+	}
+	return nil
 }
 
 // invalidRequest is the server's refusal of a request that breaks the
