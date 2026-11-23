@@ -63,7 +63,8 @@ var simulateCodes = []connect.Code{connect.CodeInvalidArgument}
 
 // Whatever principal, action and resource a simulation names, the real
 // engine decides it or the handler refuses it as the caller's mistake, in
-// words that name nothing of the server.
+// words that name nothing of the server; the explanation it answers with is
+// text the console can show as it is.
 func FuzzSimulateAuthz(f *testing.F) {
 	tid := uuid.New().String()
 	for _, c := range [][5]string{
@@ -81,7 +82,10 @@ func FuzzSimulateAuthz(f *testing.F) {
 			PrincipalSubject: subject, PrincipalTenantID: uuid.New(), PrincipalRoles: []string{role},
 			PrincipalKind: kind, Action: action, ResourceName: resource,
 		}
-		_, err := h.SimulateAuthz(authedCtx(uuid.New()), in)
+		out, err := h.SimulateAuthz(authedCtx(uuid.New()), in)
 		fuzzassert.Refusal(t, err, simulateCodes, subject, role, kind, action, resource)
+		if err == nil {
+			fuzzassert.Text(t, out.Explanation, action, resource)
+		}
 	})
 }
