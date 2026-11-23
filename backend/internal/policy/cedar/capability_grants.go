@@ -13,7 +13,8 @@ const (
 	// action; the operation adds a requirement, never an action.
 	GrantPaired
 	// GrantCaveatsOnly: the caveats alone decide and no policy is asked;
-	// Procedures are the RPCs they open.
+	// Procedures are the RPCs they open. No operation has this basis since
+	// share became DelegateCapability; the API keeps the value.
 	GrantCaveatsOnly
 )
 
@@ -48,9 +49,6 @@ const (
 	CapabilityOpTag     = "object:tag"
 )
 
-// procedureDelegate is the RPC an OpShare capability opens.
-const procedureDelegate = "paladin.admin.v1.CapabilityService.Delegate"
-
 // CapabilityOperationGrants is the table builtinPolicy implements for
 // capabilities, one row per operation, in the order the console lists them.
 // The policy text is the authority Cedar evaluates; this table is what the
@@ -67,7 +65,7 @@ var CapabilityOperationGrants = []CapabilityOperationGrant{
 	}},
 	{Op: CapabilityOpList, Basis: GrantBuiltin, Actions: []Action{ActionGetObject, ActionPresignGet}},
 	{Op: CapabilityOpDelete, Basis: GrantBuiltin, Actions: []Action{ActionDeleteObject}},
-	{Op: CapabilityOpShare, Basis: GrantCaveatsOnly, Procedures: []string{procedureDelegate}},
+	{Op: CapabilityOpShare, Basis: GrantBuiltin, Actions: []Action{ActionDelegateCapability}},
 	{Op: CapabilityOpManage, Basis: GrantTenantPolicy},
 	{Op: CapabilityOpPresign, Basis: GrantPaired, PairedOps: []string{CapabilityOpGet, CapabilityOpPut}},
 	{Op: CapabilityOpTag, Basis: GrantBuiltin, Actions: []Action{ActionUpdateObject}},

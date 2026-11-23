@@ -33,9 +33,13 @@
        `CopyObject`;
      - `object:tag` admitted → `UpdateObject` (the batch tag change);
      - `delete` → the machine delete permit already covers
-       `DeleteObject` and `RestoreObject`.
+       `DeleteObject` and `RestoreObject`;
+     - `share` admitted → `DelegateCapability`, which `Delegate` asks with
+       the presented capability as the principal. (Amended: at first
+       `share` opened `Delegate` with no policy asked, so a tenant could
+       not forbid delegation.)
      `object:presign` is asserted only beside `get` or `put`, which grant
-     the action; `share` opens `Delegate`, which asks no policy.
+     the action.
      A read admitted on one object cannot authorize an upload, and a
      request whose handler asserted nothing authorizes nothing.
   3. **`manage` gets no default.** Taint, Object Lock and operation

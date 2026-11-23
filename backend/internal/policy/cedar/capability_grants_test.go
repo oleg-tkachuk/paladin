@@ -2,11 +2,9 @@ package cedar
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/oleg-tkachuk/limes"
-	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
 	"github.com/oleg-tkachuk/paladin/sdk/go/paladin"
 )
 
@@ -26,14 +24,6 @@ func TestCapabilityOps_AreTheWireOps(t *testing.T) {
 		if got != want {
 			t.Errorf("%q != wire %q", got, want)
 		}
-	}
-}
-
-// The RPC the table says share opens is the one the SDK calls.
-func TestCapabilityOperationGrants_NameTheDelegateProcedure(t *testing.T) {
-	want := strings.ReplaceAll(strings.TrimPrefix(paladinadminv1connect.CapabilityServiceDelegateProcedure, "/"), "/", ".")
-	if procedureDelegate != want {
-		t.Fatalf("procedureDelegate = %q, want %q", procedureDelegate, want)
 	}
 }
 

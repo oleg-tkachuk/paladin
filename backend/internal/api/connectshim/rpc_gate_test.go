@@ -55,7 +55,6 @@ var rpcGateAllowlist = map[string]string{
 	"connectshim/admin.SystemServer.GetPlatformHealth": "every role's health; no tenant data, open to any session as iam HealthService.GetHealth is",
 	"admin/v1/celh.Handler.Validate":                   "stateless CEL syntax check of the caller's own text; reads no tenant data",
 	"admin/v1/apitokenh.Handler.GetSelf":               "self-introspection: the API token the caller authenticated with",
-	"admin/v1/capabilityh.Handler.Delegate":            "authorized by possession: presentedParent admits only the caller's own verified capability, and Issuer.Delegate refuses any widening",
 	"unary/unarytest.Probe.GetVersion":                 "test probe; no listener registers it",
 }
 

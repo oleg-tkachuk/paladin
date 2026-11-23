@@ -57,8 +57,8 @@ const GRANTS = [
   {
     ...NO_FIELDS,
     op: "share",
-    basis: CapabilityGrantBasis.CAVEATS_ONLY,
-    procedures: ["paladin.admin.v1.CapabilityService.Delegate"],
+    basis: CapabilityGrantBasis.BUILTIN,
+    actions: ["DelegateCapability"],
   },
 ];
 const UNLOCKS = "What these ops unlock";
@@ -66,7 +66,6 @@ const UNLOCKS = "What these ops unlock";
 const SERVER_DEFAULT_TTL = { seconds: BigInt(15 * 60), nanos: 0 };
 const MANAGE_WARNING = /unlocks nothing on its own:/;
 const PRESIGN_LINE = /adds a check beside/;
-const SHARE_LINE = /is decided by the caveats alone/;
 
 // A tenant id, as the route resolves it: a resource is built from the id.
 const TENANT = "0190a3b2-7c4d-7e8f-9a0b-1c2d3e4f5a6b";
@@ -221,13 +220,14 @@ describe("IssueCapabilityDialog", () => {
     expect(within(unlocks).queryByText(PRESIGN_LINE)).not.toBeInTheDocument();
   });
 
-  it("says share is decided by the caveats alone, and what it opens", async () => {
+  it("says share unlocks DelegateCapability", async () => {
     open();
     const unlocks = await screen.findByRole("group", { name: UNLOCKS });
+    expect(
+      within(unlocks).queryByText("DelegateCapability"),
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "share" }));
-    expect(within(unlocks).getByText(SHARE_LINE)).toHaveTextContent(
-      "share is decided by the caveats alone: it opens CapabilityService.Delegate.",
-    );
+    expect(within(unlocks).getByText("DelegateCapability")).toBeInTheDocument();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 

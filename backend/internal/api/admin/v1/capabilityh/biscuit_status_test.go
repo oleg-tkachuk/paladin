@@ -134,7 +134,7 @@ func TestIssueRequireBiscuit(t *testing.T) {
 func TestDelegateRequireBiscuit(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 	ctx := auth.WithCapability(context.Background(), parent)
 
 	inherits := delegateReq(parent)

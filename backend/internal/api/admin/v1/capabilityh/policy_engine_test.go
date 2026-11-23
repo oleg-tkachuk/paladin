@@ -1,13 +1,18 @@
 package capabilityh
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth/captest"
+	"github.com/oleg-tkachuk/paladin/backend/internal/capop"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar/cedartest"
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
@@ -44,6 +49,46 @@ func TestDelegate_CapabilityIssuerIsRefused(t *testing.T) {
 	_, err := h.Delegate(callerCtx(uuid.New(), roleCapabilityIssuer), delegateReq(parent))
 	if codeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v, want FailedPrecondition", codeOf(err))
+	}
+}
+
+// forbidDelegation is a tenant policy that refuses every delegation.
+const forbidDelegation = `forbid(principal, action == Action::"DelegateCapability", resource);`
+
+// presentedCtx is a request presenting parent on behalf of a tenant admin,
+// with the per-request operation holder the capability interceptor installs.
+func presentedCtx(parent limes.VerifiedCapability) context.Context {
+	return capop.WithHolder(auth.WithCapability(callerCtx(uuid.New(), "tenant.admin"), parent))
+}
+
+// A capability that allows share delegates under the built-in policy alone.
+func TestDelegate_BuiltinPolicyAllowsShare(t *testing.T) {
+	m := captest.NewMinter(t)
+	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, nil, cedartest.Engine(""))
+
+	resp, err := h.Delegate(presentedCtx(parent), delegateReq(parent))
+	if err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	if got := resp.GetCapability().GetParentId(); got != parent.Capability().ID.String() {
+		t.Errorf("parent_id = %q, want %s", got, parent.Capability().ID)
+	}
+}
+
+// A tenant policy that forbids DelegateCapability beats the built-in permit:
+// the caller is told it was denied by policy, and nothing is minted.
+func TestDelegate_TenantPolicyCanForbid(t *testing.T) {
+	m := captest.NewMinter(t)
+	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
+	h := NewHandler(m.Issuer, m.Verifier, m.Store, nil, cedartest.Engine(forbidDelegation))
+
+	_, err := h.Delegate(presentedCtx(parent), delegateReq(parent))
+	if codeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("code = %v, want PermissionDenied (%v)", codeOf(err), err)
+	}
+	if ce, ok := errors.AsType[*connect.Error](err); !ok || ce.Message() != apiutil.DeniedByPolicy {
+		t.Errorf("err = %v, want the message %q", err, apiutil.DeniedByPolicy)
 	}
 }
 

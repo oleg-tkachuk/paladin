@@ -172,7 +172,7 @@ func TestTheSDKFakeDelegatesAsTheServerDoes(t *testing.T) {
 	_, cases := readIssuanceTable(t)
 	srv := paladintest.New(t)
 	m := captest.NewMinter(t)
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 	mutate := func(tc issuanceCase, r *adminv1.CapabilityServiceDelegateRequest) {
 		if tc.ChildOps != nil {
 			r.Caveats = openCaveats(opsOf(*tc.ChildOps)...)

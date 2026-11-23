@@ -22,10 +22,8 @@ import (
 	adminv1 "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 )
 
-// allowAuthorizer / denyAuthorizer let us assert which Cedar branch the
-// handler took: when the capability path is exercised, Cedar must NOT be
-// consulted at all (we use denyAuthorizer to surface a regression that
-// fell back to the admin path).
+// allowAuthorizer / denyAuthorizer answer every Cedar question one way and
+// count how often they were asked.
 type allowAuthorizer struct{ called int }
 
 func (a *allowAuthorizer) IsAuthorized(_ context.Context, _ *cedar.Principal, _ cedar.Action, _ *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
@@ -162,13 +160,12 @@ func mkParent(tenantID uuid.UUID, ops ...limes.Op) limes.Capability {
 
 // TestDelegate_CapabilityPath_AllowedWithOpShare confirms a capability-
 // authenticated caller may delegate when its caveats include OpShare and
-// parent_id matches its own ID. Cedar must NOT be consulted — the deny
-// authorizer would surface a regression that fell back to the admin
-// path. The child comes back as a JWT and as a Biscuit.
+// parent_id matches its own ID, once Cedar allows DelegateCapability. The
+// child comes back as a JWT and as a Biscuit.
 func TestDelegate_CapabilityPath_AllowedWithOpShare(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
-	authz := &denyAuthorizer{}
+	authz := &allowAuthorizer{}
 	h := delegateHandler(m, authz)
 
 	resp, err := h.Delegate(auth.WithCapability(context.Background(), parent), delegateReq(parent))
@@ -189,8 +186,51 @@ func TestDelegate_CapabilityPath_AllowedWithOpShare(t *testing.T) {
 		t.Errorf("the Biscuit seals %s (from biscuit %t), want the child %s",
 			sealed.Capability().ID, sealed.FromBiscuit(), resp.GetCapability().GetId())
 	}
-	if authz.called != 0 {
-		t.Errorf("Cedar consulted %d times; capability path must skip Cedar", authz.called)
+	if authz.called != 1 {
+		t.Errorf("Cedar consulted %d times, want once", authz.called)
+	}
+}
+
+// recordingAuthorizer allows everything and keeps the last question.
+type recordingAuthorizer struct {
+	principal *cedar.Principal
+	action    cedar.Action
+	resource  *cedar.Resource
+}
+
+func (r *recordingAuthorizer) IsAuthorized(_ context.Context, p *cedar.Principal, a cedar.Action, res *cedar.Resource, _ cedar.RequestContext) (cedar.Decision, error) {
+	r.principal, r.action, r.resource = p, a, res
+	return cedar.DecisionAllow, nil
+}
+
+// Cedar is asked DelegateCapability with the presented capability as the
+// principal and its own tenant as the resource, whoever else the request
+// authenticates as.
+func TestDelegate_AsksCedarAsThePresentedCapability(t *testing.T) {
+	m := captest.NewMinter(t)
+	parent := mintParent(t, m, limes.OpShare)
+	authz := &recordingAuthorizer{}
+	h := delegateHandler(m, authz)
+
+	ctx := auth.WithCapability(callerCtx(uuid.New(), "tenant.admin"), parent)
+	if _, err := h.Delegate(ctx, delegateReq(parent)); err != nil {
+		t.Fatalf("delegate: %v", err)
+	}
+	c := parent.Capability()
+	want := cedar.Principal{
+		Subject:  auth.SubjectPrefixCapability + c.ID.String(),
+		TenantID: c.Subject.TenantID,
+		Kind:     auth.PrincipalKindNameCapability,
+	}
+	if p := authz.principal; p == nil || p.Subject != want.Subject || p.TenantID != want.TenantID ||
+		p.Kind != want.Kind || len(p.Roles) != 0 {
+		t.Errorf("principal = %+v, want %+v", authz.principal, want)
+	}
+	if authz.action != cedar.ActionDelegateCapability {
+		t.Errorf("action = %v, want %v", authz.action, cedar.ActionDelegateCapability)
+	}
+	if r := authz.resource; r == nil || r.TenantID != c.Subject.TenantID {
+		t.Errorf("resource = %+v, want the parent's tenant %v", authz.resource, c.Subject.TenantID)
 	}
 }
 
@@ -212,7 +252,7 @@ func TestDelegate_RecordsTheChildInTheParentsTenant(t *testing.T) {
 	store := &insertCtxStore{}
 	m := newMinter(t, store)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
-	h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+	h := NewHandler(m.Issuer, m.Verifier, store, nil, &allowAuthorizer{})
 
 	ctx := auth.WithCapability(callerCtx(uuid.New(), "platform.admin"), parent)
 	if _, err := h.Delegate(ctx, delegateReq(parent)); err != nil {
@@ -276,7 +316,7 @@ func TestDelegate_WithoutAPresentedCapabilityIsFailedPrecondition(t *testing.T) 
 		t.Fatalf("code: got %v, want FailedPrecondition (%v)", got, err)
 	}
 	if authz.called != 0 {
-		t.Errorf("Cedar consulted %d times; delegation is not Cedar's to grant", authz.called)
+		t.Errorf("Cedar consulted %d times; with nothing presented there is nothing to ask about", authz.called)
 	}
 }
 
@@ -297,7 +337,7 @@ func TestDelegate_UnsetCeilingKeepsTheParents(t *testing.T) {
 		Requests: limes.RequestCeiling{Max: parentMaxRequests},
 		Budget:   limes.BudgetCeiling{Max: parentBudgetUnits * limes.NanosPerUnit, UnitCode: platformUnit},
 	}})
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 	parentBudget := &money.Money{CurrencyCode: platformUnit, Units: parentBudgetUnits}
 
 	limit := func(n int64) *int64 { return &n }
@@ -338,7 +378,7 @@ func TestDelegate_RefusesAZeroRequestCeiling(t *testing.T) {
 		Ops:      []limes.Op{limes.OpGet, limes.OpShare},
 		Requests: limes.RequestCeiling{Max: parentMaxRequests},
 	}})
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 	req := delegateReq(parent)
 	req.Caveats = &adminv1.CapabilityCaveats{
 		Ops:            []string{string(limes.OpGet)},
@@ -357,7 +397,7 @@ func TestDelegate_UnlimitedUnderABoundedParentIsRefused(t *testing.T) {
 		Requests: limes.RequestCeiling{Max: parentMaxRequests},
 		Budget:   limes.BudgetCeiling{Unlimited: true, UnitCode: platformUnit},
 	}})
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 	req := delegateReq(parent)
 	req.Caveats = openCaveats(limes.OpGet)
 	if _, err := h.Delegate(auth.WithCapability(context.Background(), parent), req); err == nil {

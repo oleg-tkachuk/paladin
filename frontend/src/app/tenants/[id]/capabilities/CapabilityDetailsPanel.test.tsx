@@ -57,7 +57,7 @@ const CAP = {
 } as unknown as Capability;
 
 const NO_FIELDS = { actions: [], pairedOps: [], procedures: [] };
-// The server's table, as ListOperationGrants serves it, one row per basis.
+// The server's table, as ListOperationGrants serves it.
 const GRANTS = [
   {
     ...NO_FIELDS,
@@ -75,8 +75,8 @@ const GRANTS = [
   {
     ...NO_FIELDS,
     op: "share",
-    basis: CapabilityGrantBasis.CAVEATS_ONLY,
-    procedures: ["paladin.admin.v1.CapabilityService.Delegate"],
+    basis: CapabilityGrantBasis.BUILTIN,
+    actions: ["DelegateCapability"],
   },
 ];
 const UNLOCKS = "What these ops unlock";
@@ -188,7 +188,7 @@ describe("CapabilityDetailsPanel", () => {
       expect(screen.queryByRole("note")).not.toBeInTheDocument();
     });
 
-    it("says share is decided by the caveats alone", async () => {
+    it("says share unlocks DelegateCapability", async () => {
       const cap = {
         ...CAP,
         caveats: { ...CAP.caveats, ops: ["share"] },
@@ -197,10 +197,8 @@ describe("CapabilityDetailsPanel", () => {
       open(cap);
       const unlocks = await screen.findByRole("group", { name: UNLOCKS });
       expect(
-        within(unlocks).getByText(/is decided by the caveats alone/),
-      ).toHaveTextContent(
-        "share is decided by the caveats alone: it opens CapabilityService.Delegate.",
-      );
+        within(unlocks).getByText("DelegateCapability"),
+      ).toBeInTheDocument();
       expect(screen.queryByRole("note")).not.toBeInTheDocument();
     });
 

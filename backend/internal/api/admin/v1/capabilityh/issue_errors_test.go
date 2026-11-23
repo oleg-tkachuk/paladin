@@ -86,7 +86,7 @@ func TestDelegateAnswersAFailureByItsKind(t *testing.T) {
 			// The parent is recorded; only the child's insert fails.
 			parent := mintParent(t, m, limes.OpGet, limes.OpShare)
 			store.err = tc.err
-			h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+			h := NewHandler(m.Issuer, m.Verifier, store, nil, &allowAuthorizer{})
 			_, err := h.Delegate(auth.WithCapability(context.Background(), parent), delegateReq(parent))
 			assertKind(t, err, tc.code, tc.reason)
 		})
@@ -183,7 +183,7 @@ func TestDelegateAnswersALineageRefusal(t *testing.T) {
 			m := newMinter(t, store)
 			parent := mintParent(t, m, limes.OpGet, limes.OpShare)
 			store.err = tc.err
-			h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+			h := NewHandler(m.Issuer, m.Verifier, store, nil, &allowAuthorizer{})
 			_, err := h.Delegate(auth.WithCapability(context.Background(), parent), delegateReq(parent))
 			if got := connect.CodeOf(err); got != tc.code {
 				t.Fatalf("err = %v (%v), want %v", err, got, tc.code)
@@ -212,7 +212,7 @@ func TestDelegateTellsWhatWasTooWide(t *testing.T) {
 	store := &failingInsertStore{}
 	m := newMinter(t, store)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
-	h := NewHandler(m.Issuer, m.Verifier, store, nil, &denyAuthorizer{})
+	h := NewHandler(m.Issuer, m.Verifier, store, nil, &allowAuthorizer{})
 	req := delegateReq(parent)
 	req.Caveats = openCaveats(limes.OpPut)
 	_, err := h.Delegate(auth.WithCapability(context.Background(), parent), req)

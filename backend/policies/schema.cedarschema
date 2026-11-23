@@ -208,6 +208,8 @@ action "InspectPolicy" appliesTo {
 
 // Capabilities and API tokens (admin plane). Checked against the CALLER's own
 // tenant; which other tenants a call may reach is decided in the handler.
+// DelegateCapability's principal is the presented capability, and its tenant
+// the resource.
 // The two credential types have separate actions so a grant on one never
 // carries over to the other.
 action "IssueCapability", "DelegateCapability", "RevokeCapability",
