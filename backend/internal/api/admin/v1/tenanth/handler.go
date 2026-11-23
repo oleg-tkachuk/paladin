@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
@@ -516,11 +517,13 @@ func normalizeCreateArgs(args CreateTenantArgs) (CreateTenantArgs, error) {
 		return CreateTenantArgs{}, rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("slug: %w", err))
 	}
 	// display_name defaults to slug when omitted. Trim before checking
-	// so " " also triggers the default. Length + format are enforced
-	// at the DB layer (tenants_display_name_format CHECK from migr 033).
+	// so " " also triggers the default.
 	args.DisplayName = strings.TrimSpace(args.DisplayName)
 	if args.DisplayName == "" {
 		args.DisplayName = args.Slug
+	}
+	if err := admitDisplayName(args.DisplayName); err != nil {
+		return CreateTenantArgs{}, err
 	}
 	return normalizeCreateStorage(args)
 }
@@ -1035,7 +1038,25 @@ func trimmedDisplayName(name *string) (*string, error) {
 	if trimmed == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, "display_name must not be empty")
 	}
+	if err := admitDisplayName(trimmed); err != nil {
+		return nil, err
+	}
 	return &trimmed, nil
+}
+
+// MaxDisplayNameChars is the longest display name a tenant takes, in
+// characters: the tenants_display_name_format CHECK of the schema baseline
+// spelled in Go. Past it the insert failed the CHECK, which reached the
+// caller as Internal.
+const MaxDisplayNameChars = 255
+
+// admitDisplayName refuses a display name the column cannot hold.
+func admitDisplayName(name string) error {
+	if n := utf8.RuneCountInString(name); n > MaxDisplayNameChars {
+		return connect.NewError(connect.CodeInvalidArgument,
+			fmt.Sprintf("display_name: %d characters is over the limit of %d", n, MaxDisplayNameChars))
+	}
+	return nil
 }
 
 func (h *Handler) UpdateTenant(ctx context.Context, args UpdateTenantArgs) (*Tenant, error) {
