@@ -18,9 +18,11 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
+	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
@@ -85,21 +87,44 @@ func (r *ReconcilerV2) RunOnce(ctx context.Context) error { return r.tick(ctx) }
 
 // tick reconciles one batch, carrying on past an object that fails, and
 // returns the first failure — the scan's, an object's, or the overdue sample's.
+// Only the objects in buckets the gate admits as a read are reconciled
+// (pendingBucket); a refused bucket's objects stay PENDING, logged once per
+// tick, and the scan is taken again without them (bucket_gate.go).
 func (r *ReconcilerV2) tick(ctx context.Context) (first error) {
 	// After the batch, so the gauges show what the tick could not settle.
 	defer func() { keepFirst(&first, r.sampleOverdue(ctx)) }()
-	ids, err := r.sm.ScanPendingExpired(ctx, r.cfg.PendingGraceTTL, r.cfg.BatchSize)
+	gate := newBucketDeferrals(r.log, bucketgate.Read)
+	_, err := claimAdmitted(ctx, gate, safecast.Int32(r.cfg.BatchSize),
+		func(limit int32, deferred []pgtype.UUID) ([]statemachine.PendingExpired, error) {
+			return r.sm.ScanPendingExpired(ctx, r.cfg.PendingGraceTTL, int(limit), deferred)
+		},
+		pendingBucket,
+		func(p statemachine.PendingExpired) error {
+			keepFirst(&first, r.reconcile(ctx, p.ObjectID))
+			return nil
+		})
 	if err != nil {
-		r.log.Warn("failed to scan pending objects", zap.Error(err))
-		return err
-	}
-	for _, id := range ids {
-		if ctx.Err() != nil {
-			return first
-		}
-		keepFirst(&first, r.reconcile(ctx, id))
+		keepFirst(&first, tickCutShort(ctx, r.log, "failed to scan pending objects", err))
 	}
 	return first
+}
+
+// pendingBucket is the bucket a pending object's bytes are HEADed in.
+//
+// The reconciler asks the gate as a read. Its HEAD reads the bytes, and what
+// follows writes only the object's row: a promote of bytes the client already
+// put, or a discard of a row whose upload never came. So a disabled backend
+// defers its pending objects, which stay PENDING until it is enabled, and a
+// draining or provisioning one does not, though CompleteObject, which asks
+// for the same promote, is a write of bytes: that RPC is the client's next
+// step on an upload, the reconciler only settles one the client left.
+// Deleting bytes that broke their registration is a write of bytes, gated on
+// its own (ReconcilerProbe.DeleteByObjectID).
+func pendingBucket(p statemachine.PendingExpired) bucketGateRow {
+	return bucketGateRow{
+		ID: p.BucketID, BackendName: p.BackendName, BucketName: p.BucketName,
+		Enabled: p.Enabled, ReadOnly: p.ReadOnly, ProvisionState: p.ProvisionState,
+	}
 }
 
 // sampleOverdue publishes how many PENDING objects are still past their

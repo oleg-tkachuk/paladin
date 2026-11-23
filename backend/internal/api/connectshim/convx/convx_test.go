@@ -7,6 +7,7 @@ import (
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -190,6 +191,19 @@ func TestOperationErrorEdges(t *testing.T) {
 	}
 	if bare.GetCode() != int32(code.Code_UNKNOWN) {
 		t.Errorf("code = %d, want UNKNOWN for an executor failure", bare.GetCode())
+	}
+}
+
+// A batch the bucket gate refused when it ran answers the code the refusal
+// answers on the request path, found by the reason the runner records.
+func TestOperationErrorAnswersAGateRefusalWithItsCode(t *testing.T) {
+	for _, r := range bucketgate.Refusals() {
+		t.Run(r.Error(), func(t *testing.T) {
+			st := OperationError(r.Reason.String(), r.Error(), nil, false)
+			if st.GetCode() != int32(r.Code) {
+				t.Errorf("code = %d, want %d (%v)", st.GetCode(), r.Code, r.Code)
+			}
+		})
 	}
 }
 

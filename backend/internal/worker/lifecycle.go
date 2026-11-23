@@ -22,9 +22,11 @@ import (
 	"uuid"
 
 	celpkg "cel.dev/cel-go/cel"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
@@ -55,8 +57,16 @@ type LifecycleObjectRow struct {
 // Plus enumerates the (tenant, collection) pairs bound to each bucket so
 // the worker can scope its scans.
 type BucketLifecycleSource interface {
-	ListBucketsWithLifecycle(ctx context.Context) ([]admindomain.Bucket, error)
+	ListBucketsWithLifecycle(ctx context.Context) ([]LifecycleBucket, error)
 	ListCollectionBindings(ctx context.Context, backendID, bucketName string) ([]CollectionBinding, error)
+}
+
+// LifecycleBucket is a bucket with lifecycle rules, with its id and the state
+// the bucket gate decides its expiry on.
+type LifecycleBucket struct {
+	admindomain.Bucket
+	ID    pgtype.UUID
+	State bucketgate.State
 }
 
 type CollectionBinding struct {
@@ -102,20 +112,38 @@ func (w *LifecycleWorker) Run(ctx context.Context) error {
 
 // tick applies the rules of every bucket that has them, carrying on past one
 // that fails, and returns the first failure.
+//
+// An expiry moves objects to the trash, which writes their rows alone, so
+// each bucket is asked of the bucket gate as a metadata write, as
+// DeleteObject to the trash is: a disabled backend's buckets are skipped for
+// the tick, logged once each, and their objects expire on the first tick
+// whose gate admits them. A draining backend still takes the expiry.
 func (w *LifecycleWorker) tick(ctx context.Context) error {
 	buckets, err := w.Buckets.ListBucketsWithLifecycle(ctx)
 	if err != nil {
 		w.log().Warn("failed to list buckets", zap.Error(err))
 		return err
 	}
+	gate := newBucketDeferrals(w.log(), bucketgate.MetadataWrite)
 	var first error
 	for _, b := range buckets {
 		if ctx.Err() != nil {
 			return first
 		}
-		keepFirst(&first, w.processBucket(ctx, b))
+		if !gate.admit(lifecycleBucket(b)) {
+			continue
+		}
+		keepFirst(&first, w.processBucket(ctx, b.Bucket))
 	}
 	return first
+}
+
+// lifecycleBucket is a listed bucket as the gate decides on it.
+func lifecycleBucket(b LifecycleBucket) bucketGateRow {
+	return bucketGateRow{
+		ID: b.ID, BackendName: b.BackendID, BucketName: b.BucketName,
+		Enabled: b.State.Enabled, ReadOnly: b.State.ReadOnly, ProvisionState: b.State.ProvisionState,
+	}
 }
 
 // processBucket expires one bucket's objects and returns the first failure it

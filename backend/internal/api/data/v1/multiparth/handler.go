@@ -139,6 +139,15 @@ type Session struct {
 	SizeBytes    int64
 	ChecksumAlgo string
 	CreatedAt    time.Time
+	// BucketState is the anchored bucket's state as the bucket gate decides
+	// on it: its backend's flags and its own provision state. Every RPC on
+	// the session asks the gate about it (target), never about the
+	// collection's current binding, which a storage migration may have
+	// moved since initiate.
+	BucketState bucketgate.State
+	// BucketConstraints are the anchored bucket's upload constraints, which
+	// bound a part URL's lifetime.
+	BucketConstraints uploadpolicy.BucketConstraints
 }
 
 // PartLength is part n's exact length: the planned part size, except the
@@ -184,15 +193,13 @@ type CompleteArgs struct {
 
 type Repository interface {
 	InitiateSession(ctx context.Context, args InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (Session, error)
+	// GetSession reads a session with the bucket it was anchored to at
+	// initiate, that bucket's gate state and its constraints.
 	GetSession(ctx context.Context, uploadID string) (Session, error)
 	DeleteSession(ctx context.Context, uploadID string) error
-	// LookupBucket returns the storage backend id and the physical S3 bucket
-	// bound to the Collection. Used to route storage calls to the right
-	// (backend, bucket); callers that don't route on backend yet may discard
-	// backendID (docs/backend-registry.md).
-	LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (backendID, bucket string, err error)
-	// LookupBucketMeta is LookupBucket plus the bucket's upload constraints,
-	// for the paths that admit an upload or mint its URLs.
+	// LookupBucketMeta resolves the collection's current binding through the
+	// bucket gate, with the bucket's upload constraints, for initiate, which
+	// anchors the session to it.
 	LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error)
 	// Object reads the object a completed upload produced, to answer
 	// CompleteMultipartUpload with it as CompleteObject answers with its own.
@@ -401,7 +408,7 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	}
 	// Through the write gate before Cedar, then authorized on where the parts
 	// live, so a bucket:/collection:-scoped PAT enforces on complete.
-	_, backendID, bucket, err := h.writeTarget(ctx, tenantID, sess)
+	backendID, bucket, err := h.target(sess, bucketgate.BytesWrite)
 	if err != nil {
 		return objecth.Object{}, err
 	}
@@ -425,36 +432,30 @@ func (h *Handler) CompleteMultipartUpload(ctx context.Context, args CompleteArgs
 	return h.completedObject(ctx, tenantID, sess.ObjectID, args.UploadID), nil
 }
 
-// writeTarget passes sess's collection through the write gate and answers
-// where the session's parts live, for a write on them: the (backend, bucket)
-// anchored at initiate time, or the collection's current binding for a
-// session from before anchoring. The gate is asked even for an anchored
-// session, so a completion or a part URL answers a draining or provisioning
-// bucket as every other write does; meta is the collection's binding, for the
-// bucket's constraints.
-func (h *Handler) writeTarget(ctx context.Context, tenantID uuid.UUID, sess Session) (meta objecth.BucketMeta, backendID, bucket string, err error) {
-	meta, err = h.repo.LookupBucketMeta(ctx, tenantID, sess.Collection, bucketgate.BytesWrite) // multipart write (mutation)
-	if err != nil {
-		return objecth.BucketMeta{}, "", "", objecth.MapResolveErr(err)
-	}
-	if sess.Bucket != "" {
-		return meta, sess.BackendID, sess.Bucket, nil
-	}
-	return meta, meta.BackendID, meta.BucketName, nil
-}
+// errUnanchored is a session that names no bucket. multipart_uploads.bucket_id
+// is NOT NULL, so only a repository breaking its contract answers one, and no
+// operation is authorized on an empty binding.
+var errUnanchored = errors.New("upload session names no bucket")
 
-// route is where the session's parts live: the (backend, bucket) it was
-// anchored to at initiate time, or the collection's current binding for a
-// session from before anchoring.
-func (h *Handler) route(ctx context.Context, tenantID uuid.UUID, sess Session) (backendID, bucket string, err error) {
-	if sess.Bucket != "" {
-		return sess.BackendID, sess.Bucket, nil
+// target passes the bucket sess was anchored to at initiate — where its parts
+// live — through the bucket gate for access, and answers it, for Cedar and
+// for routing. The gate decides on that bucket's own state
+// (Session.BucketState), not on the collection's current binding: after a
+// storage migration rebinds the collection, a session anchored to the old,
+// draining backend still writes there, and is refused there.
+//
+// Completing an upload and signing a part URL write bytes (BytesWrite).
+// Aborting one frees storage and listing its parts reads it (Read): both are
+// refused only on a disabled backend, as the abort workers are
+// (internal/worker/bucket_gate.go).
+func (h *Handler) target(sess Session, access bucketgate.Access) (backendID, bucket string, err error) {
+	if sess.BackendID == "" || sess.Bucket == "" {
+		return "", "", rpcerr.New(connect.CodeInternal, fmt.Errorf("upload %s: %w", sess.UploadID, errUnanchored))
 	}
-	backendID, bucket, err = h.repo.LookupBucket(ctx, tenantID, sess.Collection, bucketgate.BytesWrite) // multipart complete / abort (mutation)
-	if err != nil {
+	if err := bucketgate.Check(access, sess.BucketState); err != nil {
 		return "", "", objecth.MapResolveErr(err)
 	}
-	return backendID, bucket, nil
+	return sess.BackendID, sess.Bucket, nil
 }
 
 // recordComposite checks the completion list and records the composite of
@@ -596,13 +597,14 @@ func (h *Handler) AbortMultipartUpload(ctx context.Context, uploadID string, wan
 	if err := auth.AssertCapabilityOp(ctx, limes.OpDelete, objectURI); err != nil {
 		return err
 	}
-	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
-	// scopes on abort.
-	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionDeleteObject, 0, ""); err != nil {
+	// Through the gate as a read — an abort frees storage, so only a disabled
+	// backend refuses it — then authorized on the anchored (backend, bucket),
+	// so a bucket:/collection:-scoped PAT enforces on abort.
+	backendID, bucket, err := h.target(sess, bucketgate.Read)
+	if err != nil {
 		return err
 	}
-	backendID, bucket, err := h.route(ctx, tenantID, sess)
-	if err != nil {
+	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, backendID, bucket, cedar.ActionDeleteObject, 0, ""); err != nil {
 		return err
 	}
 	if err := h.storage.AbortMultipart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key); err != nil {
@@ -658,14 +660,14 @@ func (h *Handler) PresignPart(ctx context.Context, uploadID string, partNumber i
 	}
 	// Through the write gate before Cedar, then authorized on where the part
 	// goes, so a bucket:/collection:-scoped PAT enforces on the part presign.
-	meta, backendID, bucket, err := h.writeTarget(ctx, tenantID, sess)
+	backendID, bucket, err := h.target(sess, bucketgate.BytesWrite)
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
 	if err := h.authorize(ctx, p, tenantID, sess.Collection, sess.Key, backendID, bucket, cedar.ActionPresignPut, 0, ""); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	return h.signPart(ctx, tenantID, sess, meta, backendID, bucket, PartBinding{
+	return h.signPart(ctx, tenantID, sess, backendID, bucket, PartBinding{
 		Number:        partNumber,
 		SizeBytes:     sess.PartLength(partNumber),
 		ChecksumAlgo:  sess.ChecksumAlgo,
@@ -696,10 +698,10 @@ func (s Session) checkPart(partNumber int32, checksumValue string) error {
 }
 
 // signPart signs the URL for part, living ttl within the bucket's ceiling,
-// against (backendID, bucket), where writeTarget found the session's parts.
-// The collection's bucket constraints (meta) bound the part URL's lifetime.
-func (h *Handler) signPart(ctx context.Context, tenantID uuid.UUID, sess Session, meta objecth.BucketMeta, backendID, bucket string, part PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
-	ttl, err := h.ttl.ResolveWithin(presignttl.OpPart, ttl, uploadpolicy.For(h.limits, meta.Constraints).PutTTLCeiling())
+// against (backendID, bucket), where target found the session's parts. The
+// anchored bucket's constraints bound the part URL's lifetime.
+func (h *Handler) signPart(ctx context.Context, tenantID uuid.UUID, sess Session, backendID, bucket string, part PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
+	ttl, err := h.ttl.ResolveWithin(presignttl.OpPart, ttl, uploadpolicy.For(h.limits, sess.BucketConstraints).PutTTLCeiling())
 	if err != nil {
 		return "", nil, time.Time{}, err
 	}
@@ -789,9 +791,14 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 		paladin.ObjectResource(tenantID.String(), sess.Collection, sess.Key)); err != nil {
 		return nil, "", err
 	}
-	// Session-anchored (backend, bucket) → authz enforces bucket:/collection:
-	// read scopes on listing parts.
-	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, sess.BackendID, sess.Bucket, cedar.ActionGetObject, 0, ""); err != nil {
+	// Through the gate as a read, then authorized on the anchored (backend,
+	// bucket), so a bucket:/collection:-scoped PAT's read scopes enforce on
+	// listing parts.
+	backendID, bucket, err := h.target(sess, bucketgate.Read)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := h.authorize(ctx, principal, tenantID, sess.Collection, sess.Key, backendID, bucket, cedar.ActionGetObject, 0, ""); err != nil {
 		return nil, "", err
 	}
 	after, err := partsPageAfter(pageToken)
@@ -799,7 +806,7 @@ func (h *Handler) ListParts(ctx context.Context, uploadID string, pageSize int32
 		return nil, "", err
 	}
 	parts, next, err := h.storage.ListMultipartParts(ctx,
-		sess.BackendID, sess.Bucket, tenantID, sess.StorageUploadID,
+		backendID, bucket, tenantID, sess.StorageUploadID,
 		sess.Collection, sess.Key, partsPageSize(pageSize), after)
 	if err != nil {
 		return nil, "", connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)

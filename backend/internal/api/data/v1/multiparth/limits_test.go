@@ -69,13 +69,17 @@ func TestInitiateHonoursUploadLimits(t *testing.T) {
 	})
 }
 
-// A bucket's max_presign_put_ttl bounds part URLs too: a part URL is a PUT.
+// A bucket's max_presign_put_ttl bounds part URLs too: a part URL is a PUT,
+// into the bucket the session was anchored to.
 func TestPresignPartHonoursBucketTTLCeiling(t *testing.T) {
 	tid := uuid.New()
 	const ceiling = 5 * time.Minute // below testPartTTL
+	sess := sessionForTenant(tid)
+	sess.BucketConstraints = uploadpolicy.BucketConstraints{MaxPresignPutTTL: ceiling}
 	repo := &fakeRepo{
-		getSessionFn: func(context.Context, string) (Session, error) { return sessionForTenant(tid), nil },
-		constraints:  uploadpolicy.BucketConstraints{MaxPresignPutTTL: ceiling},
+		getSessionFn: func(context.Context, string) (Session, error) { return sess, nil },
+		// The collection's current binding carries no ceiling: the part goes
+		// to the anchored bucket, whose ceiling binds it.
 	}
 
 	storage := &fakeStorage{}

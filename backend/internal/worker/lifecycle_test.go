@@ -19,12 +19,12 @@ import (
 )
 
 type fakeBucketSource struct {
-	buckets  []admindomain.Bucket
+	buckets  []LifecycleBucket
 	bindings map[string][]CollectionBinding
 	listErr  error
 }
 
-func (f *fakeBucketSource) ListBucketsWithLifecycle(_ context.Context) ([]admindomain.Bucket, error) {
+func (f *fakeBucketSource) ListBucketsWithLifecycle(_ context.Context) ([]LifecycleBucket, error) {
 	return f.buckets, f.listErr
 }
 func (f *fakeBucketSource) ListCollectionBindings(_ context.Context, backend, bucket string) ([]CollectionBinding, error) {
@@ -168,7 +168,7 @@ func TestLifecycleWorkerSoftDeletesOnlyAvailableMatches(t *testing.T) {
 		}},
 	}
 	src := &fakeBucketSource{
-		buckets: []admindomain.Bucket{bucket},
+		buckets: []LifecycleBucket{{Bucket: bucket, State: openBucketState}},
 		bindings: map[string][]CollectionBinding{
 			"primary/paladin-archive": {{TenantID: tenantID, Collection: "k"}},
 		},
@@ -244,7 +244,7 @@ func expiringFixture() (*fakeBucketSource, *fakeObjIter, CollectionBinding, admi
 		}},
 	}
 	src := &fakeBucketSource{
-		buckets:  []admindomain.Bucket{bucket},
+		buckets:  []LifecycleBucket{{Bucket: bucket, State: openBucketState}},
 		bindings: map[string][]CollectionBinding{bucket.BackendID + "/" + bucket.BucketName: {bind}},
 	}
 	old := time.Now().Add(-lifecycleTestAge)

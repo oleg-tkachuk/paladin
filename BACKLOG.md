@@ -531,23 +531,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### Batch executors do not re-check the bucket gate when they run
-
-- **Status:** Deferred.
-- **Reason:** a batch that writes is refused at submit time by the write gate
-  (`batchh.binding`), but the worker's soft-delete, restore and tag executors
-  (`internal/worker/operations/batch_{delete,restore,update_tags}.go`) write
-  rows without asking it again. They are metadata writes, which a draining
-  backend takes, but a backend disabled between submit and run still has the
-  batch applied. Copy (`batch_copy.go`) and permanent delete (through
-  `PermanentDelete`) already resolve as `BytesWrite`.
-- **Definition of Done:** each executor resolves its collection through the
-  write gate, as `MetadataWrite`, before its first item and fails the
-  operation with the gate's refusal; a test disables the backend between
-  submit and run.
-- **Blockers:** deciding whether a backend disabled mid-batch fails the rest
-  of the batch or only the items not yet written.
-
 ### A storage migration orphans the bytes of objects purged while it runs
 
 - **Status:** Deferred.
@@ -583,48 +566,21 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** anchoring a single-PUT upload to its bucket, as multipart
   sessions are.
 
-### Background workers that write rows or read bytes skip the bucket gate
+### The replication worker will skip the bucket gate once it copies
 
-- **Status:** Deferred.
-- **Reason:** the workers that delete bytes or abort uploads ask the gate
-  (`internal/worker/bucket_gate.go`), but three others still act on a
-  disabled backend's buckets: the lifecycle expiry trashes objects
-  (`lifecycle.go`, a metadata write the API refuses there), the reconciler
-  HEADs and promotes or discards PENDING objects (`reconciler.go`, a read),
-  and the replication worker will copy bytes to its destination bucket once
-  its `StorageReplicator` is wired (`build_jobs.go` runs it dry today).
-- **Definition of Done:** each asks `bucketgate.Check` with its access —
-  `MetadataWrite` for the expiry, `Read` for the reconciler's HEAD, `Read` on
-  the source and `BytesWrite` on the destination for replication — and defers
-  a refused bucket's work, logged once per tick; a test disables the backend
-  under each.
-- **Blockers:** the replicator implementation, for the third.
-
-### AbortMultipartUpload skips the bucket gate for an anchored session
-
-- **Status:** Deferred.
-- **Reason:** an abort only releases parts, so it is deliberately left out of
-  the write gate: on a draining or provisioning backend it frees storage
-  rather than adding data. A session from before anchoring still resolves
-  with `write=true` (`multiparth.route`), so the same abort is refused there,
-  and its Cedar check runs on an empty binding.
-- **Definition of Done:** abort resolves the same way for both sessions —
-  through the gate as a read, refused only on a disabled backend — and is
-  authorized on the resolved binding; a test covers both session shapes.
-- **Blockers:** none.
-
-### Multipart writes gate on the collection's binding, not the anchored bucket
-
-- **Status:** Deferred.
-- **Reason:** CompleteMultipartUpload and PresignPart ask the write gate about
-  the collection's current binding (`multiparth.writeTarget`), then write to
-  the bucket the session was anchored to. After a storage migration rebinds
-  the collection, a session anchored to the old, draining backend passes the
-  gate on the new binding.
-- **Definition of Done:** the gate is asked about the anchored bucket's own
-  backend and provision state (a lookup by backend and bucket name), and a
-  test rebinds the collection mid-session.
-- **Blockers:** a store query by (backend, bucket) for the gate's state.
+- **Status:** Blocked.
+- **Reason:** the lifecycle expiry and the reconciler ask the gate
+  (`internal/worker/bucket_gate.go`), but the replication worker
+  (`replication.go`) runs dry: `build_jobs.go` wires no `StorageReplicator`,
+  so it reads nothing and writes nothing yet. Once it copies, it reads the
+  source bucket and writes bytes to `replication.destination_bucket`, a
+  bucket its listing does not return the state of.
+- **Definition of Done:** the replication worker asks `bucketgate.Check` as
+  `Read` on the source and `BytesWrite` on the destination — the
+  destination's state read with it, by backend and bucket name — and defers a
+  refused bucket's copies without advancing its watermark, logged once per
+  tick; a test disables and drains each side.
+- **Blockers:** the `StorageReplicator` implementation.
 
 ## API error messages
 

@@ -29,6 +29,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 )
 
@@ -41,8 +42,9 @@ import (
 //   - response, nil    → operation marked SUCCEEDED with the response
 //     bytes attached.
 //   - nil, err         → operation marked FAILED with err.Error() in
-//     ErrorMessage and a coarse ErrorCode taken
-//     from the executor (see ErrCode).
+//     ErrorMessage and a coarse ErrorCode: the
+//     reason of a bucket gate refusal, or
+//     EXEC_FAILED.
 //
 // Executors should be safe to interrupt — the parent ctx is cancelled
 // when the worker pod shuts down. Long-running iteration loops MUST
@@ -183,8 +185,30 @@ func (r *Runner) runOne(ctx context.Context, op operationh.Operation) {
 		return
 	default:
 	}
+	if refusal, ok := errors.AsType[*bucketgate.Refusal](err); ok {
+		// A verdict on the bucket's state, not a failure of the worker: the
+		// operation fails with the refusal's reason as its code, which the
+		// API answers as the refusal's own code (convx.OperationError).
+		logger.Warn("operation refused by the bucket gate",
+			zap.Duration("duration", duration),
+			zap.String("reason", refusal.Reason.String()),
+			zap.Error(err),
+		)
+		r.markFailed(ctx, op, refusal.Reason.String(), err.Error())
+		return
+	}
+	if err != nil && ctx.Err() != nil {
+		// The worker is stopping and cancelled the executor: the operation
+		// is cut short, not broken.
+		logger.Warn("executor stopped by the worker's shutdown",
+			zap.Duration("duration", duration),
+			zap.Error(err),
+		)
+		r.markFailed(ctx, op, "EXEC_FAILED", err.Error())
+		return
+	}
 	if err != nil {
-		logger.Warn("executor failed",
+		logger.Error("executor failed",
 			zap.Duration("duration", duration),
 			zap.Error(err),
 		)

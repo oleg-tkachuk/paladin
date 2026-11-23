@@ -31,10 +31,11 @@ func TestMultipartCompositeChecksumRoundTrip(t *testing.T) {
 		later     = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=-2"
 	)
 	objectID := uuid.NewV7()
-	backendID, bucket, err := repo.LookupBucket(ctx, f.tenantID, f.collection, bucketgate.BytesWrite)
+	meta, err := repo.LookupBucketMeta(ctx, f.tenantID, f.collection, bucketgate.BytesWrite)
 	if err != nil {
 		t.Fatal(err)
 	}
+	backendID, bucket := meta.BackendID, meta.BucketName
 	if _, err := repo.InitiateSession(ctx, multiparth.InitiateArgs{
 		TenantID: f.tenantID, Collection: f.collection, Key: "mpu-" + uuid.New().String()[:8],
 		ContentType: "application/octet-stream", TotalParts: 2, PartSizeBytes: partSize, SizeHint: partSize + 1,

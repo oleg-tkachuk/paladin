@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -72,6 +73,9 @@ func (e *BatchUpdateTagsExecutor) Execute(ctx context.Context, op operationh.Ope
 	if args.TenantID != op.TenantID {
 		return nil, fmt.Errorf("metadata tenant_id %s != operation tenant_id %s",
 			args.TenantID, op.TenantID)
+	}
+	if err := admitBatch(ctx, e.Objects, e.Logger, op, args.Collection, bucketgate.MetadataWrite); err != nil {
+		return nil, err
 	}
 
 	resp := BatchUpdateTagsResponse{BatchCounts: BatchCounts{Total: len(args.ObjectIDs)}}

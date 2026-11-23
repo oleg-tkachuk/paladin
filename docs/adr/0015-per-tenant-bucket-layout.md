@@ -233,7 +233,7 @@ By RPC:
 | Access | RPCs |
 |---|---|
 | `BytesWrite` | `UploadObject`, `CompleteObject`, `CopyObject` (destination), `DeleteObject` with `permanent`, `RestoreObjectVersion`, presigned PUT, multipart initiate / complete / part URLs, batch copy (destination), permanent batch delete |
-| `Read` | `GetObject`, `DownloadObject`, list, presigned GET, `GetObjectLock`, `CopyObject` and batch copy (source), the HEAD `RestoreObject` makes |
+| `Read` | `GetObject`, `DownloadObject`, list, presigned GET, `GetObjectLock`, `CopyObject` and batch copy (source), the HEAD `RestoreObject` makes, `AbortMultipartUpload`, `ListParts` |
 | `MetadataWrite` | `UpdateObject` and the tag RPCs on it, `DeleteObject` to the trash, `RestoreObject`, `SetObjectRetention`, `SetObjectLegalHold`, the tag, restore and trash batches |
 | `Protective` | `SetObjectTaint`, setting or clearing |
 
@@ -258,6 +258,25 @@ What makes the `MetadataWrite` RPCs safe while a backend drains:
   recorded in BACKLOG: it leaves the trash behind, and its rollback copies
   back any object whose row changed after the rebind.
 
+A multipart session is decided on the bucket it was anchored to at
+initiate, where its parts are, never on the collection's current binding:
+`GetSession` reads that bucket's gate state with the session, and every RPC on
+the session asks the gate about it (`multiparth`, `target`). After this ADR's
+migration rebinds a collection, a session anchored to the draining source is
+refused a completion or a part URL there, whatever the new binding's state.
+`multipart_uploads.bucket_id` is `NOT NULL`, so there is no unanchored session
+to fall back from.
+
+A batch is admitted by the gate at submit and runs later, on a worker. Each
+executor asks the gate again, with the batch's access, before its first item
+(`internal/worker/operations/bucket_gate.go`), and a refusal fails the
+operation with the gate's refusal: its reason is the operation's error code,
+answered as the refusal's own code. The batch is not deferred. It continues
+one request, whose answer is the refusal, and the runner has no way back to
+`PENDING` that would not claim the operation again at once. The gate is asked
+once per batch: a backend disabled while a batch runs does not stop it, and
+the items written before stay written, as the rows one RPC wrote do.
+
 ## Addendum (2026-11-22): background workers ask the same gate
 
 Request paths reach the gate through the bucket resolver; the workers that
@@ -275,9 +294,19 @@ it admits (`internal/worker/bucket_gate.go`):
 | `MultipartReaper` | `Read` | the session stays open |
 | `MultipartAbortDrainer` | `Read` | the debt stays due, no attempt counted |
 | `ReconcilerV2` (bytes that broke their registration) | `BytesWrite` | the row stays `PENDING` |
+| `ReconcilerV2` (the HEAD, then a promote or a discard) | `Read` | the row stays `PENDING`, not HEADed |
+| `LifecycleWorker` (expiry to the trash) | `MetadataWrite` | the bucket is skipped for the tick; its objects stay as they are |
 
 The work is deferred, never failed or dropped, and each sweep logs every
-bucket it defers once, at Warn, with the gate's reason. The first sweep whose
+bucket it defers once, at Warn, with the gate's reason.
+
+The reconciler asks as `Read` though `CompleteObject`, which promotes the same
+row, is a `BytesWrite`: the bytes are on the backend already, and what the
+reconciler writes is the row alone; it settles an upload the client left
+rather than taking the client's next step. A disabled backend's pending
+objects stay `PENDING`, and the overdue-pending gauge grows with them, until
+it is enabled. The lifecycle expiry lists its buckets rather than claiming
+rows, so it asks once per bucket and skips a refused one for the tick. The first sweep whose
 gate admits the bucket takes the work. A claim that met a newly refused
 bucket is followed by one that leaves that bucket's rows out, for the slots
 they took: a refused bucket's rows never head every claim and starve the
@@ -308,9 +337,8 @@ the list of what it still holds if it is decommissioned instead.
 
 **An abort differs.** Multipart parts were never an object: no copy of the
 backend takes them, and aborting frees storage rather than adding data. The
-abort workers ask as `Read`, as BACKLOG's *AbortMultipartUpload skips the
-bucket gate for an anchored session* settles for the RPC: refused only on a
-disabled backend, which serves no Paladin-mediated operation.
+abort workers ask as `Read`, as `AbortMultipartUpload` does: refused only on
+a disabled backend, which serves no Paladin-mediated operation.
 
 **Provision states do not pin the teardown.** `BytesWrite` is refused on a
 bucket being deleted, but the bucket delete refuses while any debt names the

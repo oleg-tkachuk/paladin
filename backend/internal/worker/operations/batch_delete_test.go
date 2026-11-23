@@ -9,6 +9,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -29,6 +30,27 @@ type lookupRepo struct {
 
 	gotTenant uuid.UUID
 	gotIDs    []uuid.UUID
+
+	// bucketState is the state the collection's bucket is in when an
+	// executor asks the bucket gate; nil is a bucket open to every access.
+	// lookupErr fails that lookup as an unreachable store would.
+	bucketState *bucketgate.State
+	lookupErr   error
+	// gotAccess is every access the gate was asked about.
+	gotAccess []bucketgate.Access
+}
+
+func (r *lookupRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, access bucketgate.Access) (string, string, error) {
+	r.gotAccess = append(r.gotAccess, access)
+	if r.lookupErr != nil {
+		return "", "", r.lookupErr
+	}
+	if r.bucketState != nil {
+		if err := bucketgate.Check(access, *r.bucketState); err != nil {
+			return "", "", err
+		}
+	}
+	return testBackend, testBucket, nil
 }
 
 func (r *lookupRepo) FindByIDs(_ context.Context, tenantID uuid.UUID, ids []uuid.UUID) ([]objecth.Object, error) {

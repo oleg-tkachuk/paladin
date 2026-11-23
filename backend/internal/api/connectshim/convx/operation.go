@@ -2,6 +2,7 @@ package convx
 
 import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/operationh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 	commonpb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/common/v1"
@@ -81,9 +82,16 @@ func operationCode(errCode string, cancelled bool) code.Code {
 		return code.Code_ABORTED
 	case "UNKNOWN_TYPE":
 		return code.Code_UNIMPLEMENTED
-	default:
-		return code.Code_UNKNOWN
 	}
+	// A batch the bucket gate refused when it ran carries the refusal's
+	// reason as its code, and answers the code the refusal answers on the
+	// request path (the worker's operations runner).
+	for _, r := range bucketgate.Refusals() {
+		if errCode == r.Reason.String() {
+			return code.Code(r.Code)
+		}
+	}
+	return code.Code_UNKNOWN
 }
 
 // operationStates names each operation state on the wire. A state missing

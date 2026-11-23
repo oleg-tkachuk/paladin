@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 	"uuid"
@@ -130,6 +131,10 @@ func (r *MultipartRepo) InitiateSession(ctx context.Context, args multiparth.Ini
 // GetSession reads one upload session; multiparth.ErrUploadNotFound when the
 // store has none by that id — an id that does not parse names none either,
 // and Postgres would refuse it as a malformed uuid rather than match no row.
+//
+// The session comes with the bucket it was anchored to at initiate — not the
+// collection's current binding — and that bucket's gate state and upload
+// constraints, which every RPC on the session is decided on.
 func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multiparth.Session, error) {
 	if _, err := uuid.Parse(uploadID); err != nil {
 		return multiparth.Session{}, fmt.Errorf("upload %q: %w", uploadID, multiparth.ErrUploadNotFound)
@@ -139,7 +144,8 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		       mu.part_size_bytes, mu.total_parts, mu.created_at,
 		       sb.name, bk.name,
 		       o.tenant_id, c.name, o.path,
-		       o.size_bytes, o.checksum_algorithm
+		       o.size_bytes, o.checksum_algorithm,
+		       sb.enabled, sb.read_only, bk.provision_state, bk.constraints
 		FROM multipart_uploads mu
 		JOIN objects o           ON o.id = mu.object_id
 		JOIN collections c       ON c.id = o.collection_id
@@ -158,6 +164,7 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		totalParts int32
 		size       *int64
 		algo       int16
+		bucketDoc  []byte
 	)
 	err := r.pool.QueryRow(ctx, q, uploadID).Scan(
 		&s.UploadID,
@@ -173,12 +180,23 @@ func (r *MultipartRepo) GetSession(ctx context.Context, uploadID string) (multip
 		&key,
 		&size,
 		&algo,
+		&s.BucketState.Enabled,
+		&s.BucketState.ReadOnly,
+		&s.BucketState.ProvisionState,
+		&bucketDoc,
 	)
 	if err != nil {
 		if isNoRows(err) {
 			return multiparth.Session{}, fmt.Errorf("upload %q: %w", uploadID, multiparth.ErrUploadNotFound)
 		}
 		return multiparth.Session{}, fmt.Errorf("get multipart session: %w", err)
+	}
+	// Fail closed, as LookupBucketMeta does: a constraints document that does
+	// not decode is not "no limits".
+	if len(bucketDoc) > 0 {
+		if err := json.Unmarshal(bucketDoc, &s.BucketConstraints); err != nil {
+			return multiparth.Session{}, fmt.Errorf("bucket %q constraints: %w", s.Bucket, err)
+		}
 	}
 	s.ObjectID = objectID
 	s.TenantID = tenantID
@@ -234,20 +252,11 @@ func (r *MultipartRepo) DeleteSession(ctx context.Context, uploadID string) erro
 	return tx.Commit(ctx)
 }
 
-// LookupBucket reads the physical S3 bucket bound to a Collection via
-// idx_collections_bucket_routing. bucket_name is NOT NULL after
-// the schema baseline (001_initial_schema.sql) so a successful lookup always returns a non-empty value.
-// access decides how the drain and provision gates answer. Every multipart
-// path (init / complete / abort / presign-part) writes bytes, so callers pass
-// BytesWrite; the disabled (feature 002) gate applies to all.
 // LookupBucketMeta is the object repository's resolution, constraints
-// included.
+// included. Only initiate resolves the collection: every later RPC on the
+// session is decided on the bucket GetSession reads it was anchored to.
 func (r *MultipartRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error) {
 	return NewObjectRepo(r.q, r.pool).LookupBucketMeta(ctx, tenantID, collection, access)
-}
-
-func (r *MultipartRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (string, string, error) {
-	return resolveBucket(ctx, r.pool, tenantID, collection, access)
 }
 
 // upload_id is a uuid in the schema and a string on the API surface, so the

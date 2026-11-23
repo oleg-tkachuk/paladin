@@ -112,14 +112,14 @@ func TestWorkersLeaveATrashedTenantAlone(t *testing.T) {
 	})
 
 	t.Run("pending uploads", func(t *testing.T) {
-		ids, err := statemachine.New(f.pool).ScanPendingExpired(ctx, time.Minute, 10)
+		ids, err := statemachine.New(f.pool).ScanPendingExpired(ctx, time.Minute, 10, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var got []uuid.UUID
-		for _, id := range ids {
+		for _, p := range ids {
 			var tenant uuid.UUID
-			if err := f.pool.QueryRow(ctx, `SELECT tenant_id FROM objects WHERE id = $1`, id).Scan(&tenant); err != nil {
+			if err := f.pool.QueryRow(ctx, `SELECT tenant_id FROM objects WHERE id = $1`, p.ObjectID).Scan(&tenant); err != nil {
 				t.Fatal(err)
 			}
 			got = append(got, tenant)
