@@ -1,7 +1,9 @@
 package tenanth
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 	"uuid"
 
 	"connectrpc.com/connect/v2"
@@ -16,8 +18,8 @@ var createCodes = []connect.Code{connect.CodeInvalidArgument}
 
 // Whatever slug, display name and storage a create names, CreateTenant either
 // creates the tenant — with a default policy that compiles, since the slug is
-// written into it — or refuses it as the caller's mistake, in words that name
-// nothing of the server.
+// written into it, and a display name the column holds — or refuses it as the
+// caller's mistake, in words that name nothing of the server.
 func FuzzCreateTenant(f *testing.F) {
 	for _, c := range [][5]string{
 		{"acme", "", "", "", ""},
@@ -29,6 +31,7 @@ func FuzzCreateTenant(f *testing.F) {
 		{"acme", "", "", "", "weird"},
 		{"a\"b", "x\x00", " ", "\t", ""},
 		{"acme-2026", "Acme \u202e", "primary", "acme-data", "shared"},
+		{"acme", strings.Repeat("d", MaxDisplayNameChars+1), "", "", ""},
 	} {
 		f.Add(c[0], c[1], c[2], c[3], c[4])
 	}
@@ -44,6 +47,10 @@ func FuzzCreateTenant(f *testing.F) {
 		}
 		if verr := cedar.Validate(repo.lastCreateTx.InheritedCedarPolicy); verr != nil {
 			t.Fatalf("slug %q seeds a default policy that does not compile: %v", slug, verr)
+		}
+		// What the tenants_display_name_format CHECK holds the row to.
+		if n := utf8.RuneCountInString(repo.lastCreateTx.DisplayName); n < 1 || n > MaxDisplayNameChars {
+			t.Fatalf("display name %q of %d characters reached the store", repo.lastCreateTx.DisplayName, n)
 		}
 	})
 }
