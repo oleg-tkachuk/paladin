@@ -226,6 +226,8 @@ var (
 	// CALLER's own Tenant entity: which tenant a call may reach beyond its own
 	// is decided in the handler (capabilityh.spansTenants), not here. Read
 	// covers Get, List, GetUsage and GetBiscuitUsage; Revoke covers RevokeBiscuit.
+	// Delegate asks DelegateCapability as the presented capability, in that
+	// capability's own tenant.
 	ActionIssueCapability    = declare("IssueCapability")
 	ActionDelegateCapability = declare("DelegateCapability")
 	ActionRevokeCapability   = declare("RevokeCapability")
@@ -970,8 +972,9 @@ when {
 // this a tenant with no stored policy denied every read and upload a
 // capability was issued for, and the refusal said only "denied by policy".
 //
-// context.capability_op is the operation auth.AssertCapabilityOp checked
-// against the caveats in this request — its prefix, resource URIs, request
+// context.capability_op is the operation auth.AssertCapabilityOp (or, for
+// share, auth.AssertCapabilityShare) checked against the caveats in this
+// request — its prefix, resource URIs, request
 // and budget ceilings, taint — before the handler asked Cedar; it is "" for
 // any request that presented no capability or whose handler asserted nothing.
 // Each permit binds an operation to the data-plane actions that operation
@@ -980,7 +983,9 @@ when {
 // object and then asks for UpdateObject. "delete" needs no line here: the
 // machine delete permit above grants it. "object:presign" is only asserted
 // beside "get" or "put", and the request authorizes under the one asserted
-// last. "share" opens Delegate, which asks no policy. "manage" gets none on
+// last. "share" is asserted by auth.AssertCapabilityShare and grants
+// DelegateCapability, which Delegate asks with the presented capability as
+// the principal and its own tenant as the resource. "manage" gets none on
 // purpose — taint, Object Lock and operation cancellation stay with a tenant
 // policy that names them. CapabilityOperationGrants is this, as the API serves
 // it.
@@ -1029,6 +1034,20 @@ when {
   principal has kind &&
   principal.kind == "capability" &&
   context.capability_op == "put" &&
+  principal has tenant_id &&
+  resource has tenant_id &&
+  principal.tenant_id == resource.tenant_id
+};
+
+permit (
+  principal,
+  action == Action::"DelegateCapability",
+  resource
+)
+when {
+  principal has kind &&
+  principal.kind == "capability" &&
+  context.capability_op == "share" &&
   principal has tenant_id &&
   resource has tenant_id &&
   principal.tenant_id == resource.tenant_id
@@ -1096,9 +1115,8 @@ when {
 // action at all.
 //
 // The action list is exhaustive by intent, and the omissions are the point:
-// no DelegateCapability (the admin delegate path reads the parent under the
-// caller's own tenant, so it cannot reach the capabilities this role issues
-// for others; a consumer narrows by issuing a narrower capability), no
+// no DelegateCapability (Delegate asks it as the presented capability, never
+// as the role; a consumer narrows by issuing a narrower capability), no
 // API-token action (it cannot mint, revoke or read a long-lived credential),
 // no tenant, bucket, collection or IAM action, and no data-plane reach.
 // A tenant policy can still forbid it (first-forbid wins).

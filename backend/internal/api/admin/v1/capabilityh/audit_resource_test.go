@@ -50,7 +50,7 @@ func TestDelegateNamesTheChildUnderItsTenant(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
 	tenant := parent.Capability().Subject.TenantID
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 
 	ctx := withSlot(auth.WithCapability(context.Background(), parent))
 	resp, err := h.Delegate(ctx, delegateReq(parent))

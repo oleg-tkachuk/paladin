@@ -12,7 +12,9 @@
 //     caveats include OpShare and whose ID matches the requested
 //     parent_id — the MCP `share`-tool path, agents minting
 //     sub-capabilities for downstream callers without going through an
-//     admin. Only a presented, verified capability can be delegated from.
+//     admin. Only a presented, verified capability can be delegated from,
+//     and Cedar is asked DelegateCapability with that capability as the
+//     principal, so a tenant policy can forbid delegation.
 package capabilityh
 
 import (
@@ -265,7 +267,8 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 // the attenuation of a Biscuit copy. The caller presents it via the
 // X-Paladin-Capability header, alone or beside a JWT. Its caveats MUST
 // include `OpShare`, AND `parent_id` MUST equal its own ID, so an agent
-// cannot delegate off some other principal's capability.
+// cannot delegate off some other principal's capability. Cedar then decides
+// DelegateCapability (authorizeDelegation).
 //
 // Caveat narrowing is enforced downstream by Issuer.Delegate
 // (ErrDelegationTooWide); this handler only gates *who* may delegate.
@@ -275,6 +278,9 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		return nil, err
 	}
 	parent := verified.Capability()
+	if err := h.authorizeDelegation(ctx, &parent); err != nil {
+		return nil, err
+	}
 	terms, err := delegationTerms(req, parent, h.currency)
 	if err != nil {
 		return nil, err
@@ -710,10 +716,8 @@ func PresentedRefusals() []string {
 }
 
 // presentedParent is the capability a Delegate narrows: the one the caller
-// presents, which the request must name. A delegation is gated entirely by
-// that capability's own caveats — no Cedar admin check: the capability is
-// the grant. A parent without OpShare is limes's to refuse (Issuer.Delegate),
-// which tells the caller its code.
+// presents, which the request must name. Whether it may share is
+// authorizeDelegation's to decide.
 func presentedParent(ctx context.Context, parentIDStr string) (limes.VerifiedCapability, error) {
 	parentID, err := uuid.Parse(parentIDStr)
 	if err != nil {
@@ -735,6 +739,44 @@ func presentedParent(ctx context.Context, parentIDStr string) (limes.VerifiedCap
 		return limes.VerifiedCapability{}, connect.NewError(connect.CodeFailedPrecondition, errDelegateByCopy)
 	}
 	return verified, nil
+}
+
+// The lines authorizeDelegation logs a refused or unchecked delegation with.
+const (
+	msgDelegationWithoutShare = "delegation refused: the capability does not allow share"
+	msgDelegationDenied       = "delegation refused by policy"
+	msgDelegationUnchecked    = "delegation could not be authorized"
+)
+
+// authorizeDelegation decides whether the presented capability parent may
+// delegate. Its caveats must allow share (auth.AssertCapabilityShare, which
+// sets context.capability_op), and Cedar must allow DelegateCapability with
+// the capability as the principal and its own tenant as the resource: the
+// built-in policy permits that in its own tenant, and a tenant policy may
+// forbid it. The principal is the capability, not whoever else the request
+// authenticates as, because the capability is the authority a delegation
+// exercises.
+func (h *Handler) authorizeDelegation(ctx context.Context, parent *limes.Capability) error {
+	fields := []zap.Field{
+		zap.String("capability_id", parent.ID.String()),
+		zap.String("tenant_id", parent.Subject.TenantID.String()),
+	}
+	if err := auth.AssertCapabilityShare(ctx); err != nil {
+		h.log.Warn(msgDelegationWithoutShare, append(fields, zap.Error(err))...)
+		return err
+	}
+	principal := apiutil.CedarPrincipal(auth.CapabilityPrincipal(parent, auth.AudienceAdmin))
+	resource := &cedar.Resource{TenantID: parent.Subject.TenantID}
+	err := apiutil.Decide(ctx, h.policy, principal, cedar.ActionDelegateCapability, resource, cedar.RequestContext{})
+	switch code := connect.CodeOf(err); {
+	case err == nil:
+		return nil
+	case code == connect.CodePermissionDenied:
+		h.log.Warn(msgDelegationDenied, append(fields, zap.Error(err))...)
+	default:
+		h.log.Error(msgDelegationUnchecked, append(fields, zap.String("code", code.String()), zap.Error(err))...)
+	}
+	return err
 }
 
 // delegation is what a Delegate request asks of the child, settled against

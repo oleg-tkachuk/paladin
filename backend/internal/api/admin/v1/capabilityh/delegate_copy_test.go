@@ -17,7 +17,7 @@ import (
 func TestDelegate_CapabilityPath_NarrowsFromThePresentedParent(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 	ctx := auth.WithCapability(context.Background(), parent)
 
 	wider := delegateReq(parent)
@@ -52,7 +52,7 @@ func TestDelegate_CapabilityPath_RefusesABiscuitCopy(t *testing.T) {
 			m := captest.NewMinter(t)
 			parent := mintParent(t, m, limes.OpGet, limes.OpPut, limes.OpShare)
 			copied, _ := m.Attenuated(t, parent, a)
-			h := delegateHandler(m, &denyAuthorizer{})
+			h := delegateHandler(m, &allowAuthorizer{})
 
 			_, err := h.Delegate(auth.WithCapability(context.Background(), copied), delegateReq(parent))
 			if codeOf(err) != connect.CodeFailedPrecondition {

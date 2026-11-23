@@ -51,8 +51,9 @@ Four layers are concatenated, in this order, and compiled together:
    - a capability may, in its own tenant, read and download objects
      (`GetObject`, `PresignGet`) when its caveats admitted `get` or `list`
      for the request, and upload and change them (`PutObject`, `PresignPut`,
-     `UpdateObject`, `CopyObject`) when they admitted `put`, and change
-     tags in bulk (`UpdateObject`) when they admitted `object:tag`
+     `UpdateObject`, `CopyObject`) when they admitted `put`, change
+     tags in bulk (`UpdateObject`) when they admitted `object:tag`, and
+     delegate (`DelegateCapability`) when they admitted `share`
      ([ADR-0038](../../docs/adr/0038-a-capability-does-what-its-caveats-allow.md));
    - `platform.tenant-provisioner` may create tenants and their storage,
      bind collections to buckets and publish them (`ConfigurePublicRead`);
@@ -141,6 +142,14 @@ from `ManageBucket` and `ManageCollection`, so holding those is not enough to
 publish ([ADR-0027](../../docs/adr/0027-public-collections.md)).
 `ManageOAuthClient` (deleting an OAuth client) is also held to
 `platform.admin` by the handler.
+`DelegateCapability` is the exception to "the caller's own": `Delegate` asks
+it with the presented capability as the principal (`kind` `capability`, no
+roles) and that capability's tenant as the resource, whatever else the request
+authenticates as. A tenant `forbid` on it stops delegation in that tenant:
+
+```cedar
+forbid (principal, action == Action::"DelegateCapability", resource);
+```
 `ReadObjectPlacement` reveals an object's physical placement — its storage
 backend, bucket and key inside the bucket — in the `placement` field of
 `GetObject`, `LookupObject` and `ListObjects`. It is checked after the read is
@@ -211,7 +220,7 @@ whether the bucket was resolved.
 | `ip` | String | every request with a resolvable client address; see `trusted_proxies` in [configuration](../../docs/configuration.md#client-address-behind-proxies) |
 | `oauth_client_id` | String | `AuthorizeOAuth` |
 | `oauth_scopes` | Set&lt;String&gt; | `AuthorizeOAuth` |
-| `capability_op` | String | a request presenting a capability: the operation its caveats admitted (`get`, `list`, `put`, `delete`, `manage`) |
+| `capability_op` | String | a request presenting a capability: the operation its caveats admitted (`get`, `list`, `put`, `delete`, `manage`, `share`) |
 
 Keys that do not apply are zero-valued, never absent.
 

@@ -36,7 +36,8 @@ import (
 // capabilities: a capability-only request is refused before any handler, and
 // one presented alongside a principal cannot widen what that principal's
 // roles and Cedar already allow. The one admin RPC that grants authority from
-// a capability, CapabilityService.Delegate, checks OpShare itself.
+// a capability, CapabilityService.Delegate, checks OpShare itself
+// (auth.AssertCapabilityShare) and asks Cedar DelegateCapability.
 // TestAdminAndIAMCapabilityReaders pins that surface so a new reader there
 // is a decision, not an accident.
 func TestDataPlaneRPCAssertsCapabilityOp(t *testing.T) {

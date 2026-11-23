@@ -20,7 +20,7 @@ import (
 func TestDelegate_RefusesUnreadableTerms(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 	ctx := auth.WithCapability(context.Background(), parent)
 	for _, tc := range []struct {
 		name  string
@@ -51,7 +51,7 @@ func TestDelegate_RefusesUnreadableTerms(t *testing.T) {
 func TestDelegate_ChildCarriesTheTermsAskedFor(t *testing.T) {
 	m := captest.NewMinter(t)
 	parent := mintParent(t, m, limes.OpGet, limes.OpShare)
-	h := delegateHandler(m, &denyAuthorizer{})
+	h := delegateHandler(m, &allowAuthorizer{})
 	ctx := auth.WithCapability(context.Background(), parent)
 	nbf := time.Now().Add(10 * time.Second).Truncate(time.Second) // inside the delegateTTLSeconds lifetime
 	req := delegateReq(parent)

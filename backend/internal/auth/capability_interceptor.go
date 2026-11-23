@@ -436,18 +436,13 @@ func (i *capabilityInterceptor) withCapabilityPrincipal(
 		return ctx, errCapabilityNoTenant
 	}
 
-	return WithPrincipal(ctx, &Principal{
-		TenantID: cap.Subject.TenantID,
-		Subject:  SubjectPrefixCapability + cap.ID.String(),
-		// The interceptor's audience is the capability PLANE label ("data"),
-		// while RequireAudience compares against the canonical plane audience
-		// ("paladin-data"). Mapping here is what the API-token path already does;
-		// carrying the label through unmapped produced `token audience "data"
-		// is not allowed on "paladin-data" plane` — a request that had just
-		// authenticated, refused for a naming mismatch.
-		Audience: PlaneAudience(i.audience),
-		Kind:     PrincipalKindCapability,
-	}), nil
+	// The interceptor's audience is the capability PLANE label ("data"),
+	// while RequireAudience compares against the canonical plane audience
+	// ("paladin-data"). Mapping here is what the API-token path already does;
+	// carrying the label through unmapped produced `token audience "data"
+	// is not allowed on "paladin-data" plane` — a request that had just
+	// authenticated, refused for a naming mismatch.
+	return WithPrincipal(ctx, CapabilityPrincipal(cap, PlaneAudience(i.audience))), nil
 }
 
 // enforceCaveats runs the per-connection caveat checks: source-IP CIDR
