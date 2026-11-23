@@ -68,7 +68,7 @@ env:
   # renovate: datasource=github-releases depName=astral-sh/uv
   UV_VERSION: "0.13.9"
   # renovate: datasource=pypi depName=zizmor
-  ZIZMOR_VERSION: "1.32.0"
+  ZIZMOR_VERSION: "1.33.1"
   # The stack gate mints its dev token with `step` (task backend:auth:mint-token).
   # renovate: datasource=github-releases depName=smallstep/cli
   STEP_VERSION: "0.31.0"
