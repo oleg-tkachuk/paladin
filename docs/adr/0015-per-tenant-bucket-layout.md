@@ -284,9 +284,19 @@ it admits (`internal/worker/bucket_gate.go`):
 | `MultipartReaper` | `Read` | the session stays open |
 | `MultipartAbortDrainer` | `Read` | the debt stays due, no attempt counted |
 | `ReconcilerV2` (bytes that broke their registration) | `BytesWrite` | the row stays `PENDING` |
+| `ReconcilerV2` (the HEAD, then a promote or a discard) | `Read` | the row stays `PENDING`, not HEADed |
+| `LifecycleWorker` (expiry to the trash) | `MetadataWrite` | the bucket is skipped for the tick; its objects stay as they are |
 
 The work is deferred, never failed or dropped, and each sweep logs every
-bucket it defers once, at Warn, with the gate's reason. The first sweep whose
+bucket it defers once, at Warn, with the gate's reason.
+
+The reconciler asks as `Read` though `CompleteObject`, which promotes the same
+row, is a `BytesWrite`: the bytes are on the backend already, and what the
+reconciler writes is the row alone; it settles an upload the client left
+rather than taking the client's next step. A disabled backend's pending
+objects stay `PENDING`, and the overdue-pending gauge grows with them, until
+it is enabled. The lifecycle expiry lists its buckets rather than claiming
+rows, so it asks once per bucket and skips a refused one for the tick. The first sweep whose
 gate admits the bucket takes the work. A claim that met a newly refused
 bucket is followed by one that leaves that bucket's rows out, for the slots
 they took: a refused bucket's rows never head every claim and starve the

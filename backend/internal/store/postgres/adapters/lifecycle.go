@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
@@ -21,22 +22,28 @@ func NewLifecycleSource(q *sqlc.Queries) *LifecycleSource { return &LifecycleSou
 
 var _ worker.BucketLifecycleSource = (*LifecycleSource)(nil)
 
-func (s *LifecycleSource) ListBucketsWithLifecycle(ctx context.Context) ([]admindomain.Bucket, error) {
+func (s *LifecycleSource) ListBucketsWithLifecycle(ctx context.Context) ([]worker.LifecycleBucket, error) {
 	rows, err := s.q.ListBucketsWithLifecycle(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list buckets-with-lifecycle: %w", err)
 	}
-	out := make([]admindomain.Bucket, 0, len(rows))
+	out := make([]worker.LifecycleBucket, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, decodeBucketRow(
-			row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
-			row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
-			row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
-			row.VersioningEnabled, row.VersioningKeepDeletesForever,
-			row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
-			row.ProvisionState, row.PublicRead, row.PublicBaseUrl, row.CreatedOnBackend,
-			row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
-		))
+		out = append(out, worker.LifecycleBucket{
+			ID: row.BucketID,
+			State: bucketgate.State{
+				Enabled: row.Enabled, ReadOnly: row.ReadOnly, ProvisionState: row.ProvisionState,
+			},
+			Bucket: decodeBucketRow(
+				row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
+				row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
+				row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
+				row.VersioningEnabled, row.VersioningKeepDeletesForever,
+				row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
+				row.ProvisionState, row.PublicRead, row.PublicBaseUrl, row.CreatedOnBackend,
+				row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
+			),
+		})
 	}
 	return out, nil
 }

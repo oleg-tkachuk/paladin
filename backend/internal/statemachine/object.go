@@ -23,6 +23,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -418,39 +419,65 @@ func (t *Transitioner) transitionInTx(ctx context.Context, do func(exec dbExec) 
 	return nil
 }
 
-// ScanPendingExpired returns up to `limit` PENDING object IDs whose presign
-// TTL has elapsed by `graceBeyond`. Consumed by the Reaper worker.
+// PendingExpired is a PENDING object ScanPendingExpired found past its
+// presign TTL, with the bucket its collection is bound to — the one the
+// reconciler HEADs — and the state the bucket gate decides on there.
+type PendingExpired struct {
+	ObjectID       uuid.UUID
+	BucketID       pgtype.UUID
+	BackendName    string
+	BucketName     string
+	Enabled        bool
+	ReadOnly       bool
+	ProvisionState string
+}
+
+// ScanPendingExpired returns up to `limit` PENDING objects whose presign TTL
+// has elapsed by `graceBeyond`, oldest deadline first, leaving out the
+// objects in the buckets of deferred. Consumed by the reconciler, which asks
+// the bucket gate about each row's bucket and scans again without the
+// buckets it refused, so their rows never head every scan.
 func (t *Transitioner) ScanPendingExpired(
 	ctx context.Context,
 	graceBeyond time.Duration,
 	limit int,
-) ([]uuid.UUID, error) {
+	deferred []pgtype.UUID,
+) ([]PendingExpired, error) {
 	const q = `
-        SELECT id
-          FROM objects
-         WHERE state = 'PENDING'
-           AND presign_expires_at IS NOT NULL
-           AND presign_expires_at < now() - $1::interval
+        SELECT o.id, b.id, sb.name, b.name, sb.enabled, sb.read_only, b.provision_state
+          FROM objects o
+          JOIN collections c       ON c.id = o.collection_id
+          JOIN buckets b           ON b.id = c.bucket_id
+          JOIN storage_backends sb ON sb.id = b.backend_id
+         WHERE o.state = 'PENDING'
+           AND o.presign_expires_at IS NOT NULL
+           AND o.presign_expires_at < now() - $1::interval
            -- A tenant in the trash is frozen: its uploads are settled on restore.
            AND NOT EXISTS (SELECT 1 FROM tenants t
-                            WHERE t.id = objects.tenant_id AND t.deleted_at IS NOT NULL)
-         ORDER BY presign_expires_at
+                            WHERE t.id = o.tenant_id AND t.deleted_at IS NOT NULL)
+           -- Not the buckets the gate refused earlier in this tick.
+           AND NOT (b.id = ANY($3::uuid[]))
+         ORDER BY o.presign_expires_at
          LIMIT $2
     `
-	rows, err := t.pool.Query(ctx, q, graceBeyond.String(), limit)
+	if deferred == nil {
+		deferred = []pgtype.UUID{}
+	}
+	rows, err := t.pool.Query(ctx, q, graceBeyond.String(), limit, deferred)
 	if err != nil {
 		return nil, fmt.Errorf("sm: scan: %w", err)
 	}
 	defer rows.Close()
-	var ids []uuid.UUID
+	var out []PendingExpired
 	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
+		var p PendingExpired
+		if err := rows.Scan(&p.ObjectID, &p.BucketID, &p.BackendName, &p.BucketName,
+			&p.Enabled, &p.ReadOnly, &p.ProvisionState); err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
+		out = append(out, p)
 	}
-	return ids, rows.Err()
+	return out, rows.Err()
 }
 
 // PendingOverdue reports the PENDING objects the reconciler should already

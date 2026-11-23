@@ -583,22 +583,21 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** anchoring a single-PUT upload to its bucket, as multipart
   sessions are.
 
-### Background workers that write rows or read bytes skip the bucket gate
+### The replication worker will skip the bucket gate once it copies
 
-- **Status:** Deferred.
-- **Reason:** the workers that delete bytes or abort uploads ask the gate
-  (`internal/worker/bucket_gate.go`), but three others still act on a
-  disabled backend's buckets: the lifecycle expiry trashes objects
-  (`lifecycle.go`, a metadata write the API refuses there), the reconciler
-  HEADs and promotes or discards PENDING objects (`reconciler.go`, a read),
-  and the replication worker will copy bytes to its destination bucket once
-  its `StorageReplicator` is wired (`build_jobs.go` runs it dry today).
-- **Definition of Done:** each asks `bucketgate.Check` with its access —
-  `MetadataWrite` for the expiry, `Read` for the reconciler's HEAD, `Read` on
-  the source and `BytesWrite` on the destination for replication — and defers
-  a refused bucket's work, logged once per tick; a test disables the backend
-  under each.
-- **Blockers:** the replicator implementation, for the third.
+- **Status:** Blocked.
+- **Reason:** the lifecycle expiry and the reconciler ask the gate
+  (`internal/worker/bucket_gate.go`), but the replication worker
+  (`replication.go`) runs dry: `build_jobs.go` wires no `StorageReplicator`,
+  so it reads nothing and writes nothing yet. Once it copies, it reads the
+  source bucket and writes bytes to `replication.destination_bucket`, a
+  bucket its listing does not return the state of.
+- **Definition of Done:** the replication worker asks `bucketgate.Check` as
+  `Read` on the source and `BytesWrite` on the destination — the
+  destination's state read with it, by backend and bucket name — and defers a
+  refused bucket's copies without advancing its watermark, logged once per
+  tick; a test disables and drains each side.
+- **Blockers:** the `StorageReplicator` implementation.
 
 ## API error messages
 

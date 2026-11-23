@@ -405,6 +405,10 @@ type Querier interface {
 	// wasteful when most carry no rules.
 	//
 	// See ListBucketsWithReplication for why we restrict to provision_state='ready'.
+	//
+	// bucket_id, enabled and read_only, with provision_state, are what the bucket
+	// gate decides the expiry on (bucketgate.State): the worker asks it in Go and
+	// skips a bucket it refuses for the tick.
 	ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWithLifecycleRow, error)
 	// Lifecycle worker queries.
 	// Returns buckets that have replication.enabled = true. Used by the

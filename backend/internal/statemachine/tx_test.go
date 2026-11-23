@@ -485,7 +485,8 @@ func TestScanPendingExpiredCollectsIDs(t *testing.T) {
 	pool := &fakePool{rows: rows}
 	sm := &Transitioner{pool: pool}
 
-	got, err := sm.ScanPendingExpired(smCtx, 90*time.Second, 50)
+	deferred := []pgtype.UUID{{Bytes: uuid.New(), Valid: true}}
+	got, err := sm.ScanPendingExpired(smCtx, 90*time.Second, 50, deferred)
 	if err != nil {
 		t.Fatalf("ScanPendingExpired: %v", err)
 	}
@@ -493,19 +494,23 @@ func TestScanPendingExpiredCollectsIDs(t *testing.T) {
 		t.Fatalf("got %d ids, want %d", len(got), len(want))
 	}
 	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("id[%d] = %v, want %v", i, got[i], want[i])
+		if got[i].ObjectID != want[i] {
+			t.Errorf("id[%d] = %v, want %v", i, got[i].ObjectID, want[i])
 		}
 	}
-	// The grace period travels as a Postgres interval string.
-	if len(pool.queryArgsP) != 2 {
-		t.Fatalf("want 2 query args, got %v", pool.queryArgsP)
+	// The grace period travels as a Postgres interval string, and the
+	// deferred buckets as they were given.
+	if len(pool.queryArgsP) != 3 {
+		t.Fatalf("want 3 query args, got %v", pool.queryArgsP)
 	}
 	if pool.queryArgsP[0] != "1m30s" {
 		t.Errorf("interval arg = %v, want 1m30s", pool.queryArgsP[0])
 	}
 	if pool.queryArgsP[1] != 50 {
 		t.Errorf("limit arg = %v, want 50", pool.queryArgsP[1])
+	}
+	if got, ok := pool.queryArgsP[2].([]pgtype.UUID); !ok || len(got) != 1 || got[0] != deferred[0] {
+		t.Errorf("deferred arg = %v, want %v", pool.queryArgsP[2], deferred)
 	}
 	if !rows.closed {
 		t.Error("rows must be closed")
@@ -515,7 +520,7 @@ func TestScanPendingExpiredCollectsIDs(t *testing.T) {
 func TestScanPendingExpiredEmpty(t *testing.T) {
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{}}}
 
-	got, err := sm.ScanPendingExpired(smCtx, time.Minute, 10)
+	got, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil)
 	if err != nil {
 		t.Fatalf("ScanPendingExpired: %v", err)
 	}
@@ -524,11 +529,24 @@ func TestScanPendingExpiredEmpty(t *testing.T) {
 	}
 }
 
+// No bucket deferred still binds an empty array, never a NULL the query would
+// have to tell apart.
+func TestScanPendingExpiredBindsNoDeferredBucketsAsAnEmptyArray(t *testing.T) {
+	pool := &fakePool{rows: &fakeRows{}}
+	sm := &Transitioner{pool: pool}
+	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil); err != nil {
+		t.Fatalf("ScanPendingExpired: %v", err)
+	}
+	if got, ok := pool.queryArgsP[2].([]pgtype.UUID); !ok || got == nil || len(got) != 0 {
+		t.Errorf("deferred arg = %#v, want an empty []pgtype.UUID", pool.queryArgsP[2])
+	}
+}
+
 func TestScanPendingExpiredQueryError(t *testing.T) {
 	boom := errors.New("query failed")
 	sm := &Transitioner{pool: &fakePool{queryErr: boom}}
 
-	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10); !errors.Is(err, boom) {
+	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("cause must be wrapped, got %v", err)
 	}
 }
@@ -537,7 +555,7 @@ func TestScanPendingExpiredScanError(t *testing.T) {
 	boom := errors.New("bad scan")
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{ids: []uuid.UUID{uuid.New()}, scanErr: boom}}}
 
-	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10); !errors.Is(err, boom) {
+	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("want the scan error, got %v", err)
 	}
 }
@@ -548,7 +566,7 @@ func TestScanPendingExpiredSurfacesRowsErr(t *testing.T) {
 	boom := errors.New("connection lost mid-iteration")
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{ids: []uuid.UUID{uuid.New()}, finalErr: boom}}}
 
-	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10); !errors.Is(err, boom) {
+	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("want the rows error, got %v", err)
 	}
 }

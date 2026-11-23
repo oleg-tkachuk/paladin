@@ -29,6 +29,22 @@ func (h *mismatchedHead) DeleteObject(context.Context, string, string, uuid.UUID
 	return nil
 }
 
+// The lines the reconciler defers work with. A draining backend admits the
+// HEAD, a read, and refuses the delete that follows it; a disabled one
+// refuses the HEAD itself, so the object is never scanned for this tick.
+const (
+	lineDeleteDeferred = "the bucket gate refuses deleting the mismatched bytes; the object stays pending until it admits it"
+	lineBucketDeferred = "the bucket gate refuses this bucket; its work is deferred until the gate admits it"
+)
+
+// reconcilerDeferral is the line the reconciler defers r's work with.
+func (r backendRefusal) reconcilerDeferral() string {
+	if r.column == "enabled" {
+		return lineBucketDeferred
+	}
+	return lineDeleteDeferred
+}
+
 func TestReconcilerDefersAMismatchedDeleteOnABackendTheGateRefuses(t *testing.T) {
 	t.Parallel()
 	for _, refusal := range backendRefusals {
@@ -55,7 +71,7 @@ func TestReconcilerDefersAMismatchedDeleteOnABackendTheGateRefuses(t *testing.T)
 				`UPDATE objects SET size_bytes = $2, presign_expires_at = now() - interval '48 hours' WHERE id = $1`,
 				objectID, registeredSize)
 			logs := reconcileLogged(t, pool, probe)
-			requireLogged(t, logs, "the bucket gate refuses deleting the mismatched bytes; the object stays pending until it admits it")
+			requireLogged(t, logs, refusal.reconcilerDeferral())
 			if head.deletes != 0 {
 				t.Errorf("the reconciler deleted bytes on a %s backend", refusal.name)
 			}

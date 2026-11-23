@@ -81,19 +81,21 @@ func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtyp
 }
 
 const listBucketsWithLifecycle = `-- name: ListBucketsWithLifecycle :many
-SELECT (SELECT sb.name FROM storage_backends sb WHERE sb.id = buckets.backend_id) AS backend_name,
-       name AS bucket_name, display_name, region, labels,
-       owner_tenant_id, cedar_policy, cedar_policy_hash, constraints,
-       lifecycle_rules,
-       object_lock_enabled, object_lock_default_mode, object_lock_default_retention_seconds,
-       versioning_enabled, versioning_keep_deletes_forever,
-       replication_enabled, replication_destination, replication_filter,
-       provision_state, public_read, public_base_url, created_on_backend,
-       resource_version, created_at, updated_at
-FROM buckets
-WHERE jsonb_array_length(lifecycle_rules) > 0
-  AND provision_state = 'ready'
-ORDER BY name
+SELECT sb.name AS backend_name,
+       b.name AS bucket_name, b.display_name, b.region, b.labels,
+       b.owner_tenant_id, b.cedar_policy, b.cedar_policy_hash, b.constraints,
+       b.lifecycle_rules,
+       b.object_lock_enabled, b.object_lock_default_mode, b.object_lock_default_retention_seconds,
+       b.versioning_enabled, b.versioning_keep_deletes_forever,
+       b.replication_enabled, b.replication_destination, b.replication_filter,
+       b.provision_state, b.public_read, b.public_base_url, b.created_on_backend,
+       b.resource_version, b.created_at, b.updated_at,
+       b.id AS bucket_id, sb.enabled, sb.read_only
+FROM buckets b
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE jsonb_array_length(b.lifecycle_rules) > 0
+  AND b.provision_state = 'ready'
+ORDER BY b.name
 `
 
 type ListBucketsWithLifecycleRow struct {
@@ -122,6 +124,9 @@ type ListBucketsWithLifecycleRow struct {
 	ResourceVersion                   int64              `json:"resource_version"`
 	CreatedAt                         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                         pgtype.Timestamptz `json:"updated_at"`
+	BucketID                          pgtype.UUID        `json:"bucket_id"`
+	Enabled                           bool               `json:"enabled"`
+	ReadOnly                          bool               `json:"read_only"`
 }
 
 // Returns only buckets with a non-empty lifecycle_rules array. The worker
@@ -129,6 +134,10 @@ type ListBucketsWithLifecycleRow struct {
 // wasteful when most carry no rules.
 //
 // See ListBucketsWithReplication for why we restrict to provision_state='ready'.
+//
+// bucket_id, enabled and read_only, with provision_state, are what the bucket
+// gate decides the expiry on (bucketgate.State): the worker asks it in Go and
+// skips a bucket it refuses for the tick.
 func (q *Queries) ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWithLifecycleRow, error) {
 	rows, err := q.db.Query(ctx, listBucketsWithLifecycle)
 	if err != nil {
@@ -164,6 +173,9 @@ func (q *Queries) ListBucketsWithLifecycle(ctx context.Context) ([]ListBucketsWi
 			&i.ResourceVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.BucketID,
+			&i.Enabled,
+			&i.ReadOnly,
 		); err != nil {
 			return nil, err
 		}
