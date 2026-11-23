@@ -676,17 +676,6 @@ the same commit. Treat this file like a runtime invariant.
   answers otherwise gets a handler refusal and a fuzz post-condition.
 - **Blockers:** none.
 
-### The MCP bridge converts a tool's `ttl_seconds` without a bound
-
-- **Status:** Deferred.
-- **Reason:** the presign tools (`mcp/bridge.go`) multiply `ttl_seconds` by
-  `time.Second` as the capability handler did before the fuzzing pass, so a
-  value past what a duration holds wraps and the server refuses a TTL the
-  agent did not send.
-- **Definition of Done:** the bridge refuses such a value as an invalid tool
-  argument naming the limit, with a test.
-- **Blockers:** none.
-
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

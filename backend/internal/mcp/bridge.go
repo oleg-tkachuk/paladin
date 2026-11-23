@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"go.uber.org/zap"
 
@@ -293,6 +294,34 @@ const toolFailedMessage = "mcp tool call failed"
 var serverFailure = map[connect.Code]bool{
 	connect.CodeUnavailable: true, connect.CodeInternal: true, connect.CodeUnknown: true,
 	connect.CodeDeadlineExceeded: true, connect.CodeDataLoss: true,
+}
+
+const (
+	// ttlSecondsArg names the presign tools' lifetime argument in a refusal.
+	ttlSecondsArg = "ttl_seconds"
+	// ttlRefusedMessage is the log line of a ttl_seconds the bridge refuses
+	// before any plane is called.
+	ttlRefusedMessage = "mcp tool ttl_seconds refused"
+)
+
+// presignTTL is the URL lifetime tool's ttl_seconds asks for: nil when it
+// names none, so the plane applies its default. A value a duration cannot
+// hold is refused as an invalid argument naming the limit, rather than
+// wrapping into a lifetime the agent did not send; no plane sees the call, so
+// the refusal is logged here, at Warn.
+func presignTTL(ctx context.Context, tool string, seconds int64) (*durationpb.Duration, error) {
+	if seconds <= 0 {
+		return nil, nil
+	}
+	ttl, err := apiutil.TTLOf(ttlSecondsArg, seconds)
+	if err != nil {
+		logger.FromContext(ctx).Warn(ttlRefusedMessage,
+			zap.String("tool", tool),
+			zap.Int64(ttlSecondsArg, seconds),
+			zap.Int64("limit", apiutil.MaxTTLSeconds))
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error())
+	}
+	return durationpb.New(ttl), nil
 }
 
 // jsonResult is the universal "Connect response → MCP tool result" adapter.
@@ -1111,15 +1140,17 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_presign_download",
 		Description: "Issue a presigned GET URL for an existing AVAILABLE object. Agent fetches bytes directly from S3.",
-	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in presignDownloadArgs) (*mcpsdk.CallToolResult, any, error) {
+	}, func(ctx context.Context, call *mcpsdk.CallToolRequest, in presignDownloadArgs) (*mcpsdk.CallToolResult, any, error) {
 		req := &datav1.PresignDownloadRequest{
 			Name:               in.Name,
 			ContentDisposition: in.ContentDisposition,
 			RequireEtagMatch:   in.RequireETagMatch,
 		}
-		if in.TtlSeconds > 0 {
-			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
+		ttl, err := presignTTL(ctx, call.Params.Name, in.TtlSeconds)
+		if err != nil {
+			return nil, nil, err
 		}
+		req.Ttl = ttl
 		return jsonResult(c.Presign.PresignDownload(ctx, req))
 	})
 
@@ -1249,11 +1280,12 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_regenerate_upload_url",
 		Description: "Re-mint a presigned PUT URL for an object whose upload was initiated but not completed (e.g. the first URL expired). Does not create a new object.",
-	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in regenerateUploadURLArgs) (*mcpsdk.CallToolResult, any, error) {
-		req := &datav1.RegenerateUploadUrlRequest{Name: in.Name}
-		if in.TtlSeconds > 0 {
-			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
+	}, func(ctx context.Context, call *mcpsdk.CallToolRequest, in regenerateUploadURLArgs) (*mcpsdk.CallToolResult, any, error) {
+		ttl, err := presignTTL(ctx, call.Params.Name, in.TtlSeconds)
+		if err != nil {
+			return nil, nil, err
 		}
+		req := &datav1.RegenerateUploadUrlRequest{Name: in.Name, Ttl: ttl}
 		return jsonResult(c.Presign.RegenerateUploadUrl(ctx, req))
 	})
 
@@ -1275,16 +1307,18 @@ func registerWriteTools(s *mcpsdk.Server, c *Clients, filter *ToolFilter) {
 	addTool(s, filter, &mcpsdk.Tool{
 		Name:        "paladin_presign_part",
 		Description: "Mint a presigned PUT URL for one part (1-based `part_number`) of an in-progress multipart upload. The agent PUTs the bytes to S3 and keeps the returned ETag for completion.",
-	}, func(ctx context.Context, _ *mcpsdk.CallToolRequest, in presignPartArgs) (*mcpsdk.CallToolResult, any, error) {
+	}, func(ctx context.Context, call *mcpsdk.CallToolRequest, in presignPartArgs) (*mcpsdk.CallToolResult, any, error) {
 		req := &datav1.PresignPartRequest{
 			ObjectName:    in.ObjectName,
 			UploadId:      in.UploadID,
 			PartNumber:    in.PartNumber,
 			ChecksumValue: in.ChecksumValue,
 		}
-		if in.TtlSeconds > 0 {
-			req.Ttl = durationpb.New(time.Duration(in.TtlSeconds) * time.Second)
+		ttl, err := presignTTL(ctx, call.Params.Name, in.TtlSeconds)
+		if err != nil {
+			return nil, nil, err
 		}
+		req.Ttl = ttl
 		return jsonResult(c.Multipart.PresignPart(ctx, req))
 	})
 

@@ -21,7 +21,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 	"uuid"
 
@@ -831,18 +830,16 @@ func delegationTerms(req *adminv1.CapabilityServiceDelegateRequest, parent limes
 	return d, nil
 }
 
-// maxTTLSeconds is the longest ttl_seconds a time.Duration holds. Converted
-// past it, the lifetime wrapped: a request for longer was refused as a
-// negative TTL, or minted with the default lifetime when it wrapped to zero.
-const maxTTLSeconds = int64(math.MaxInt64 / time.Second)
+// ttlSecondsField names the request's lifetime in a refusal.
+const ttlSecondsField = "ttl_seconds"
 
 // ttlOf is the lifetime ttl_seconds asks for; 0 is the issuer's default.
 func ttlOf(seconds int64) (time.Duration, error) {
-	if seconds > maxTTLSeconds {
-		return 0, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Sprintf("ttl_seconds: %d is over the limit of %d", seconds, maxTTLSeconds))
+	ttl, err := apiutil.TTLOf(ttlSecondsField, seconds)
+	if err != nil {
+		return 0, connect.NewError(connect.CodeInvalidArgument, err.Error())
 	}
-	return time.Duration(seconds) * time.Second, nil
+	return ttl, nil
 }
 
 // budgetFor is the budget a capability gets: the one the request sets, else
