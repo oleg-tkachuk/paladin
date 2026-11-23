@@ -4,14 +4,20 @@ package components
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/limes/pgstore"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
 	capstore "github.com/oleg-tkachuk/paladin/backend/internal/capability/postgres"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // watchRevocations runs the server's revocation watcher over pool, clearing
@@ -20,7 +26,7 @@ import (
 func watchRevocations(t *testing.T, ctx context.Context, pool *pgxpool.Pool, caches ...pgstore.Clearer) {
 	t.Helper()
 	ctx, stop := context.WithCancel(ctx)
-	w := capstore.NewRevocationWatcher(pool, func(err error) {
+	w := capstore.NewRevocationWatcher(pool, slog.New(slog.DiscardHandler), func(err error) {
 		if ctx.Err() == nil {
 			t.Errorf("revocation watch: %v", err)
 		}
@@ -146,5 +152,47 @@ func TestRevocationNotificationClearsOnlyWhatItOutdates(t *testing.T) {
 	}
 	if cache.Stats().Capabilities.Hits != hits+1 {
 		t.Errorf("an unrelated capability's answer was looked up again; the revocation cleared the whole cache")
+	}
+}
+
+// pgstoreListeningLine is the message pgstore's RevocationWatcher logs each
+// time it listens (pgstore v0.85.0, unexported there as logWatchListening).
+const pgstoreListeningLine = "pgstore: revocation watcher listening"
+
+// After its connection is killed, the revocation watcher listens again and
+// says so through the logger the service gives it, with the failed attempts
+// counted: an operator reading the log after an outage sees it recover.
+func TestRevocationWatchLogsListeningAgain(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pool := startPostgres(t)
+	core, logs := observer.New(zap.InfoLevel)
+
+	w := capstore.NewRevocationWatcher(pool, logger.Slog(zap.New(core), "capability-revocation-watch"), nil)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = w.Run(ctx)
+	}()
+	t.Cleanup(func() { cancel(); <-done })
+
+	waitLines := func(n int) {
+		t.Helper()
+		deadline := time.Now().Add(notifyDeadline)
+		for logs.FilterMessage(pgstoreListeningLine).Len() < n {
+			if time.Now().After(deadline) {
+				t.Fatalf("%d %q lines after %s, want %d", logs.FilterMessage(pgstoreListeningLine).Len(), pgstoreListeningLine, notifyDeadline, n)
+			}
+			time.Sleep(notifyPoll)
+		}
+	}
+	waitLines(1)
+	killListenerOf(t, ctx, pool, "LISTEN "+pgx.Identifier{pgstore.RevocationChannel}.Sanitize())
+	waitLines(2)
+
+	again := logs.FilterMessage(pgstoreListeningLine).All()[1]
+	if got := again.ContextMap()["failed_attempts"]; got != int64(1) {
+		t.Fatalf("failed_attempts on listening again = %v (%T), want 1", got, got)
 	}
 }
