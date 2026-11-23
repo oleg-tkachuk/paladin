@@ -4,7 +4,7 @@ import { usePageAction } from "@/context/ActionsContext";
 import { CREATE_ACTION } from "@/lib/paletteActions";
 import { HelpTip } from "@/components/ui/HelpTip";
 import { useTenantChangesBlocked } from "../tenant-context";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
   ArrowPathIcon,
@@ -38,7 +38,10 @@ import { CapabilityDetailsPanel } from "./CapabilityDetailsPanel";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { openableRow } from "@/components/ui/RecordDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
-import { objectGrantLabel } from "@/lib/capability/objectResource";
+import {
+  labelBreakPieces,
+  objectGrantLabel,
+} from "@/lib/capability/objectResource";
 import { RevokeRunDialog } from "./RevokeRunDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
@@ -595,19 +598,27 @@ export default function CapabilitiesPage() {
                           </Badge>
                         ))}
                       </div>
-                      {/* One short line per prefix: the full URI broke a
-                          character per line in this narrow column. It stays
-                          in the tooltip and in the details panel. */}
+                      {/* One label per prefix, the full URI on hover and in
+                          the details panel. The column is narrow, so a label
+                          wraps only between path segments and id groups,
+                          never a character per line. */}
                       {(c.caveats?.resourcePrefixes ?? []).map((p) => (
                         <div
                           key={p}
                           className={cn(
                             T.codeSmall,
-                            "mt-1 max-w-48 truncate text-muted-foreground @xl:max-w-64",
+                            "mt-1 text-muted-foreground",
                           )}
                           title={p}
                         >
-                          {objectGrantLabel(p, c.subject?.tenantId ?? "")}
+                          {labelBreakPieces(
+                            objectGrantLabel(p, c.subject?.tenantId ?? ""),
+                          ).map((piece, i) => (
+                            <Fragment key={i}>
+                              {piece}
+                              <wbr />
+                            </Fragment>
+                          ))}
                         </div>
                       ))}
                     </TableCell>
@@ -624,19 +635,23 @@ export default function CapabilitiesPage() {
                       className={cn(
                         COL_ISSUED,
                         T.code,
-                        "text-muted-foreground",
+                        // Date, time and offset may stack: on one line the
+                        // timestamp alone pushed the table past its card.
+                        "whitespace-normal text-muted-foreground",
                       )}
                     >
-                      <Timestamp ts={c.issuedAt} />
+                      <Timestamp ts={c.issuedAt} wrap />
                     </TableCell>
                     <TableCell
                       className={cn(
                         COL_EXPIRES,
                         T.code,
-                        "text-muted-foreground",
+                        // Date, time and offset may stack: on one line the
+                        // timestamp alone pushed the table past its card.
+                        "whitespace-normal text-muted-foreground",
                       )}
                     >
-                      <Timestamp ts={c.expiresAt} />
+                      <Timestamp ts={c.expiresAt} wrap />
                     </TableCell>
                     <TableCell numeric className={cn(COL_USAGE, T.code)}>
                       {(() => {

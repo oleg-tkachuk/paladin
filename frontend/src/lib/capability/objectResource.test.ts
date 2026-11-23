@@ -18,6 +18,7 @@ import {
   objectGrantLabel,
   grantKeyProblem,
   isCollectionName,
+  labelBreakPieces,
   objectGrantProblem,
   objectGrantProblems,
   objectResource,
@@ -335,5 +336,29 @@ describe("objectGrantLabel", () => {
 
   it("keeps every prefix as stored without the capability's tenant", () => {
     expect(objectGrantLabel(own("docs/"), "")).toBe(own("docs/"));
+  });
+});
+
+describe("labelBreakPieces", () => {
+  it.each([
+    [
+      "a collection and key",
+      "e2e/0527f3d6 · contracts/2026/",
+      ["e2e/", "0527f3d6 ·", " contracts/", "2026/"],
+    ],
+    [
+      "a tenant id",
+      "object://01a0f4a9-7600/docs/",
+      ["object:/", "/", "01a0f4a9-", "7600/", "docs/"],
+    ],
+    ["a key with a dot", "report.pdf", ["report.", "pdf"]],
+    ["a word with no separator", "docs", ["docs"]],
+  ])("cuts %s after each separator", (_, label, pieces) => {
+    expect(labelBreakPieces(label)).toEqual(pieces);
+    expect(labelBreakPieces(label).join("")).toBe(label);
+  });
+
+  it("has no pieces for an empty label", () => {
+    expect(labelBreakPieces("")).toEqual([]);
   });
 });
