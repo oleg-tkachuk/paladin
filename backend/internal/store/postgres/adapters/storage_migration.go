@@ -97,18 +97,25 @@ func (r *StorageMigrationRepo) withTenantTx(ctx context.Context, tenantID uuid.U
 	return tx.Commit(ctx)
 }
 
-func (r *StorageMigrationRepo) CountObjects(ctx context.Context, tenantID uuid.UUID) (int64, error) {
-	var n int64
-	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
-		var e error
-		n, e = q.MigrationCountTenantObjects(ctx, pgUUID(tenantID))
-		return e
+// SetCopying holds the migration row, then counts the objects to copy and
+// moves provisioning -> copying with that total, on one transaction (see
+// worker.MigrationRepo): the count is taken under the lock a purge's
+// transaction also takes (package purgedebt), so it sees every purge that
+// got there first, and every later one finds 'copying'.
+func (r *StorageMigrationRepo) SetCopying(ctx context.Context, at worker.MigrationRead) (int64, error) {
+	var total int64
+	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if err := migrationMoved(q.LockStorageMigrationForCount(ctx, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		n, err := q.MigrationCountTenantObjects(ctx, pgUUID(at.TenantID))
+		if err != nil {
+			return fmt.Errorf("count objects: %w", err)
+		}
+		total = n
+		return migrationMoved(q.SetStorageMigrationTotal(ctx, n, worker.MigStateCopying, pgUUID(at.TenantID), at.State, at.Attempts))
 	})
-	return n, err
-}
-
-func (r *StorageMigrationRepo) SetCopying(ctx context.Context, at worker.MigrationRead, total int64) error {
-	return migrationMoved(r.q.SetStorageMigrationTotal(ctx, total, worker.MigStateCopying, pgUUID(at.TenantID), at.State, at.Attempts))
+	return total, err
 }
 
 func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UUID, afterCollection, afterKey string, limit int) ([]worker.ObjectRef, error) {
@@ -129,6 +136,51 @@ func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UU
 
 func (r *StorageMigrationRepo) AdvanceCopy(ctx context.Context, at worker.MigrationRead, copied int64, cursorCollection, cursorKey string) error {
 	return migrationMoved(r.q.AdvanceStorageMigrationCopy(ctx, copied, cursorCollection, cursorKey, pgUUID(at.TenantID), at.State, at.Attempts))
+}
+
+// idleInTransactionUnbounded is idle_in_transaction_session_timeout's "no
+// timeout" (Postgres reads 0 as disabled), for the transaction HoldObject
+// keeps open across a copy.
+const idleInTransactionUnbounded = "0"
+
+// HoldObject holds o's rows against a delete (FOR KEY SHARE) on a
+// transaction scoped to the tenant, runs fn while they are held and, with
+// progress, records the copy past o on the same transaction (see
+// worker.MigrationRepo). No row runs nothing and reports false.
+//
+// The transaction is idle while fn copies, for as long as the object takes
+// to copy, so the pool's idle-in-transaction timeout — which ends a session
+// that leaves a transaction open with no work — is lifted for it: under it a
+// copy longer than the timeout could never commit, and the migration would
+// retry it forever. A purge waiting for the row is bounded by its own
+// lock_timeout and retried; a dead worker's session ends with its connection.
+func (r *StorageMigrationRepo) HoldObject(ctx context.Context, tenantID uuid.UUID, o worker.ObjectRef, progress *worker.CopyProgress, fn func(context.Context) error) (bool, error) {
+	var held bool
+	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
+		if _, err := q.SetIdleInTransactionTimeout(ctx, idleInTransactionUnbounded); err != nil {
+			return fmt.Errorf("lift the idle-in-transaction timeout: %w", err)
+		}
+		ids, err := q.MigrationHoldObject(ctx, pgUUID(tenantID), o.Collection, o.Key)
+		if err != nil {
+			return fmt.Errorf("hold object: %w", err)
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		if err := fn(ctx); err != nil {
+			return err
+		}
+		held = true
+		if progress == nil {
+			return nil
+		}
+		return migrationMoved(q.AdvanceStorageMigrationCopy(ctx, progress.Copied, o.Collection, o.Key,
+			pgUUID(tenantID), progress.At.State, progress.At.Attempts))
+	})
+	if err != nil {
+		return false, err
+	}
+	return held, nil
 }
 
 func (r *StorageMigrationRepo) SetState(ctx context.Context, at worker.MigrationRead, to string) error {

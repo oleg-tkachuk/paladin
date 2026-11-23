@@ -11,6 +11,37 @@ INSERT INTO pending_purges (
             WHERE sb.name = $4 AND b.name = $5),
           $6, $7);
 
+-- name: InsertMigrationPurgeDebts :execrows
+-- The purge of an object while its tenant migrates (ADR-0015): one debt for
+-- each bucket of the migration other than the one the collection is bound to,
+-- which InsertPendingPurge recorded. Run on the transaction that deletes the
+-- row, after the delete, so the debts exist exactly when the row is gone.
+--
+-- Until 'cleaned', the object may have a copy in either bucket: the copy
+-- puts one in the target, the rebind leaves one in the source until cleanup,
+-- a rollback copies the target back, and a failed attempt leaves its copies
+-- in the target — through the retry's 'provisioning' too, until its copy
+-- overwrites them. 'cleaned' has removed the source copies. Only a ready
+-- bucket: a first attempt's target is still being provisioned and holds
+-- nothing, nor does one whose provisioning failed, and a debt there would
+-- stay pinned behind the bucket gate. Only while the bound bucket is one of
+-- the two: a public collection never moves, and its bucket is neither.
+-- migration_copy marks the debts as the migration's: they announce nothing.
+INSERT INTO pending_purges (tenant_id, object_id, bucket_id, collection_name, path, migration_copy)
+SELECT m.tenant_id, sqlc.arg('object_id'), x.bucket_id,
+       sqlc.arg('collection_name'), sqlc.arg('path'), true
+  FROM tenant_storage_migrations m
+ CROSS JOIN LATERAL (VALUES (m.source_bucket_id), (m.target_bucket_id)) AS x (bucket_id)
+  JOIN buckets b ON b.id = x.bucket_id
+  JOIN (SELECT bb.id FROM buckets bb
+          JOIN storage_backends sb ON sb.id = bb.backend_id
+         WHERE sb.name = sqlc.arg('bound_backend_name') AND bb.name = sqlc.arg('bound_bucket_name')) bound
+    ON bound.id IN (m.source_bucket_id, m.target_bucket_id)
+ WHERE m.tenant_id = sqlc.arg('tenant_id')
+   AND m.state IN ('provisioning', 'copying', 'rebinding', 'verifying', 'completed', 'rolling_back', 'failed')
+   AND b.provision_state = 'ready'
+   AND x.bucket_id <> bound.id;
+
 -- name: DeletePendingPurge :execrows
 DELETE FROM pending_purges WHERE id = $1;
 
@@ -25,6 +56,7 @@ DELETE FROM pending_purges WHERE id = $1;
 -- the buckets it refused, whose debt stays due, untouched, for a tick whose
 -- gate admits it.
 SELECT p.id, p.tenant_id, p.object_id, p.collection_name, p.path, p.attempts,
+       p.migration_copy,
        sb.name AS backend_name,
        b.name  AS bucket_name,
        b.id    AS bucket_id,

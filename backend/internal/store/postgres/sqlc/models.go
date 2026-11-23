@@ -666,6 +666,7 @@ type PendingPurge struct {
 	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
 	LastError      *string            `json:"last_error"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	MigrationCopy  bool               `json:"migration_copy"`
 }
 
 type PolicyVersion struct {

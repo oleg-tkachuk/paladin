@@ -11,7 +11,9 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
+	"go.uber.org/zap"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -23,6 +25,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/keyset"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/objectpath"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/purgedebt"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -789,12 +792,29 @@ func (r *ObjectRepo) HardDeleteTx(ctx context.Context, tx pgx.Tx, tenantID, obje
 
 // EnqueuePurgeTx records the byte-reclaim debt on the caller's tx — the same
 // tx that removes the objects row, so the handle outlives the row it describes.
+//
+// While the tenant migrates storage, the copies the migration made in its
+// other bucket are owed too, on the same tx (package purgedebt).
 func (r *ObjectRepo) EnqueuePurgeTx(ctx context.Context, tx pgx.Tx, p objecth.PurgeDebt) error {
-	if err := r.q.WithTx(tx).InsertPendingPurge(ctx,
+	qtx := r.q.WithTx(tx)
+	if err := qtx.InsertPendingPurge(ctx,
 		pgUUID(p.PurgeID), pgUUID(p.TenantID), pgUUID(p.ObjectID),
 		p.BackendID, p.BucketName, p.Collection, p.Key,
 	); err != nil {
 		return fmt.Errorf("enqueue purge: %w", err)
+	}
+	copies, err := purgedebt.RecordMigrationCopies(ctx, qtx, purgedebt.Purge{
+		TenantID: p.TenantID, ObjectID: p.ObjectID,
+		BackendID: p.BackendID, Bucket: p.BucketName,
+		Collection: p.Collection, Key: p.Key, State: string(p.ObjectState),
+	})
+	if err != nil {
+		return fmt.Errorf("enqueue purge: %w", err)
+	}
+	if copies > 0 {
+		logger.FromContext(ctx).Info("the tenant is migrating storage; the copies in its other bucket are owed too",
+			zap.String("object_id", p.ObjectID.String()), zap.String("tenant_id", p.TenantID.String()),
+			zap.Int64("copies", copies))
 	}
 	return nil
 }

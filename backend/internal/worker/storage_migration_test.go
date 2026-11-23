@@ -63,16 +63,42 @@ func (f *fakeMigRepo) BucketProvisionState(context.Context, string, string) (str
 	return f.bucketState, nil
 }
 
-func (f *fakeMigRepo) CountObjects(context.Context, uuid.UUID) (int64, error) {
-	return int64(len(f.objects)), nil
+func (f *fakeMigRepo) SetCopying(_ context.Context, at MigrationRead) (int64, error) {
+	if err := f.moveFrom(at, MigStateCopying); err != nil {
+		return 0, err
+	}
+	f.mig.ObjectsTotal = int64(len(f.objects))
+	return f.mig.ObjectsTotal, nil
 }
 
-func (f *fakeMigRepo) SetCopying(_ context.Context, at MigrationRead, total int64) error {
-	if err := f.moveFrom(at, MigStateCopying); err != nil {
-		return err
+// HoldObject runs fn when o is still among the objects, as the row lock
+// does, and records progress past it.
+func (f *fakeMigRepo) HoldObject(_ context.Context, _ uuid.UUID, o ObjectRef, progress *CopyProgress, fn func(context.Context) error) (bool, error) {
+	if !f.has(o) {
+		return false, nil
 	}
-	f.mig.ObjectsTotal = total
-	return nil
+	if err := fn(context.Background()); err != nil {
+		return false, err
+	}
+	if progress != nil {
+		return true, f.AdvanceCopy(context.Background(), progress.At, progress.Copied, o.Collection, o.Key)
+	}
+	return true, nil
+}
+
+// has reports whether o's row is still there; a purge removes it.
+func (f *fakeMigRepo) has(o ObjectRef) bool {
+	for _, x := range f.objects {
+		if x.Collection == o.Collection && x.Key == o.Key {
+			return true
+		}
+	}
+	for _, x := range f.written {
+		if x.Collection == o.Collection && x.Key == o.Key {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterCollection, afterKey string, limit int) ([]ObjectRef, error) {
@@ -254,6 +280,129 @@ func TestStorageMigration_HappyPath(t *testing.T) {
 		if !contains(c, "paladin-shared->paladin-"+tid.String()) {
 			t.Fatalf("copy did not go shared->dedicated: %q", c)
 		}
+	}
+}
+
+// purgingCopier purges an object the moment another is copied, as a purge
+// racing the copy does: its row goes, and the purge, which the copy had not
+// reached, takes it off the total.
+type purgingCopier struct {
+	fakeCopier
+	repo        *fakeMigRepo
+	after, gone string // purge gone when after is copied
+}
+
+func (c *purgingCopier) CopyObject(ctx context.Context, src, dst CopyLocation) error {
+	if err := c.fakeCopier.CopyObject(ctx, src, dst); err != nil {
+		return err
+	}
+	if src.Key == c.after {
+		kept := c.repo.objects[:0]
+		for _, o := range c.repo.objects {
+			if o.Key != c.gone {
+				kept = append(kept, o)
+			}
+		}
+		c.repo.objects = kept
+		c.repo.mig.ObjectsTotal--
+	}
+	return nil
+}
+
+// An object purged after the copy listed it but before it reached it used to
+// be copied all the same, its bytes left in the target with no row, and its
+// purge put the copy short of the count, failing the migration. It is now
+// skipped, and the count tells it from an object the copy missed.
+func TestStorageMigration_ObjectPurgedMidCopyIsSkipped(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateProvisioning,
+			SourceBackendID: "primary", SourceBucketName: "paladin-shared",
+			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
+		},
+		bucketState: "ready",
+		objects: []ObjectRef{
+			{Collection: "docs", Key: "a.txt"},
+			{Collection: "docs", Key: "b.txt"},
+			{Collection: "docs", Key: "c.txt"},
+		},
+	}
+	cop := &purgingCopier{repo: repo, after: "a.txt", gone: "b.txt"}
+	w := &StorageMigrationWorker{Repo: repo, Copier: cop, CopyBatch: 3}
+	runToTerminal(t, w, repo)
+
+	if repo.mig.State != MigStateCompleted {
+		t.Fatalf("state = %q (%s), want completed", repo.mig.State, repo.reason)
+	}
+	for _, c := range cop.copies {
+		if contains(c, "b.txt") {
+			t.Errorf("copied %q, purged before the copy reached it", c)
+		}
+	}
+	if repo.mig.ObjectsCopied != 2 || repo.mig.ObjectsTotal != 2 {
+		t.Errorf("copied %d of %d, want 2 of 2", repo.mig.ObjectsCopied, repo.mig.ObjectsTotal)
+	}
+}
+
+// A row missing from the copy's count still fails the copy short: the purge
+// is told from a row the copy did not see.
+func TestStorageMigration_HiddenRowStillFailsTheCopy(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateCopying, ObjectsTotal: 3,
+			SourceBackendID: "primary", SourceBucketName: "paladin-shared",
+			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
+		},
+		objects: []ObjectRef{{Collection: "docs", Key: "a.txt"}, {Collection: "docs", Key: "c.txt"}},
+	}
+	runToTerminal(t, newWorker(repo, &fakeCopier{}), repo)
+	if repo.mig.State != MigStateFailed || !contains(repo.reason, "copy incomplete") {
+		t.Fatalf("state = %q (%s), want failed as an incomplete copy", repo.mig.State, repo.reason)
+	}
+}
+
+// purgingHeader purges an object when the verify first asks the target for
+// it, as a purge during the verify does: the row and the target's copy go.
+type purgingHeader struct {
+	fakeHeader
+	repo *fakeMigRepo
+	gone string
+}
+
+func (h *purgingHeader) HeadObject(ctx context.Context, loc CopyLocation) (int64, error) {
+	if loc.Collection+"/"+loc.Key == h.gone {
+		delete(h.sizes, h.gone)
+		kept := h.repo.objects[:0]
+		for _, o := range h.repo.objects {
+			if o.Collection+"/"+o.Key != h.gone {
+				kept = append(kept, o)
+			}
+		}
+		h.repo.objects = kept
+	}
+	return h.fakeHeader.HeadObject(ctx, loc)
+}
+
+// An object purged during the verify is missing from the target because it
+// is gone, not because the copy missed it: the verify passes.
+func TestStorageMigration_ObjectPurgedMidVerifyPasses(t *testing.T) {
+	tid := uuid.New()
+	repo := &fakeMigRepo{
+		mig: StorageMigration{
+			TenantID: tid, State: MigStateVerifying, ObjectsTotal: 2, ObjectsCopied: 2,
+			SourceBackendID: "primary", SourceBucketName: "paladin-shared",
+			TargetBackendID: "primary", TargetBucketName: "paladin-" + tid.String(),
+		},
+		objects: []ObjectRef{{Collection: "docs", Key: "a.txt", SizeBytes: 1}, {Collection: "docs", Key: "b.txt", SizeBytes: 2}},
+		rebound: true,
+	}
+	hdr := &purgingHeader{fakeHeader: fakeHeader{sizes: map[string]int64{"docs/a.txt": 1, "docs/b.txt": 2}}, repo: repo, gone: "docs/b.txt"}
+	w := &StorageMigrationWorker{Repo: repo, Copier: &fakeCopier{}, Header: hdr, CopyBatch: 2, Now: time.Now}
+	runToTerminal(t, w, repo)
+	if repo.mig.State != MigStateCompleted {
+		t.Fatalf("state = %q (%s), want completed", repo.mig.State, repo.reason)
 	}
 }
 

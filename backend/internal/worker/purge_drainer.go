@@ -204,6 +204,12 @@ func (w *PurgeDrainer) drainOne(ctx context.Context, tx pgx.Tx, r sqlc.ListDuePu
 		logger.Warn("purge drainer: settle failed", zap.Error(err))
 		return err
 	}
+	if r.MigrationCopy {
+		// A storage migration's copy in its other bucket (package
+		// purgedebt): the object's own debt announces the purge, once.
+		logger.Info("purged a storage migration's copy", zap.Bool("superseded", verdict == objectpath.Superseded))
+		return nil
+	}
 	if err := w.emitPurged(ctx, tx, tenantID, r); err != nil {
 		// Roll the whole tick back rather than settle silently: an
 		// unannounced purge is worse than a repeated one, and the repeat is

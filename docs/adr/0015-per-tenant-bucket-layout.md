@@ -369,6 +369,44 @@ An operator's direct `BindCollectionToBucket` moves no bytes at all: an
 upload completed after one is moved like this, and its anchored copy stays
 in the old bucket with every other object's.
 
+## Addendum (2026-11-24): a purge during a migration owes both buckets
+
+The copy, the verify and the cleanup walk object rows; a purge deletes the
+row, then the bytes in the bucket the collection is bound to. Purged after
+its copy, an object left that copy in the target; purged between the rebind
+and cleanup, its source copy. Purges during the copy also put it short of the
+count it started from, which failed the migration as `copy incomplete`.
+
+Two ways were open: the purge owes both buckets, or the migration reconciles
+each bucket's keys against the rows. The second needs a listing of the
+tenant's prefix in both buckets, and its decision — no row, so delete — races
+every upload writing that prefix; it is correct only under the path lock, key
+by key, over the whole prefix. The first is chosen:
+
+- **The purge's transaction records a debt per bucket** (`purgedebt`,
+  `pending_purges.migration_copy`, migration 115), for each bucket of the
+  migration other than the bound one, in every state but `cleaned` — a
+  failed attempt leaves its copies in the target, through the retry's
+  `provisioning` — and only in a ready bucket; the purge drainer deletes and retries them
+  as any debt, and announces nothing for them, so `paladin.object.purged`
+  still fires once. Recorded with the row's delete, they survive a crash at
+  any later step; S3 deletes of an absent key succeed, so a repeat is free.
+- **The copy holds each row while it copies it** (`FOR KEY SHARE`) and
+  advances its cursor on that transaction. A purge either waits for the copy
+  and then owes the copy it made, or ran first and leaves no row to copy. The
+  rollback's copy back and the verify's check of a missing object hold the
+  row the same way. The hold's transaction is idle while the object copies,
+  so it lifts the pool's idle-in-transaction timeout for itself; a purge
+  waiting on it is bounded by `lock_timeout` and retried.
+- **A purge takes an object the copy has not reached off its total**, on its
+  transaction, after the row's delete — the copy's lock order — and the copy
+  phase counts its total under the migration row's lock, which a purge takes
+  too. A copy short of the total is still one that missed rows.
+
+Bytes a debt finds a new object's under the same key (`Superseded`) are left;
+the migration's own copy of that object overwrites them, or cleanup, which
+walks the new row, removes the source's.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

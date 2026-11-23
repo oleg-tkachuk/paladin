@@ -517,25 +517,23 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### A storage migration orphans the bytes of objects purged while it runs
+### Writes behind a storage migration's copy cursor are not copied before the rebind
 
 - **Status:** Deferred.
-- **Reason:** the copy, verify and cleanup walk object rows, and the
-  lifecycle purge and a permanent delete remove bytes from the bucket the
-  collection is bound to, then the row. Purged during the copy after its
-  object was copied, an object's target copy stays with no row; purged
-  between the rebind and cleanup, its source copy does, since cleanup no
-  longer lists it. Purges during the copy also lower the row count under the
-  one recorded at the start, so a copy that ends short of it fails the
-  migration (`copy incomplete`) though nothing was missed; with the trash
-  now counted, a tenant whose trash is being purged meets this more often.
-- **Definition of Done:** a purge during a migration removes the object's
-  bytes from both buckets (or cleanup walks the source bucket's tenant
-  prefix rather than the rows), the short-copy check tells a purged row
-  from a hidden one, and a test purges an object mid-copy and after the
-  rebind and finds neither bucket holding it.
-- **Blockers:** the purge paths are being reworked against the bucket gate
-  ("The lifecycle hard delete ignores a draining backend").
+- **Reason:** the copy walks object rows once, in (collection, path) order,
+  and the tenant keeps writing to the source meanwhile. An object uploaded,
+  or overwritten through a storage event, at a path the cursor has passed is
+  in the source only, or stale in the target. The verify HEADs the target
+  after the rebind: a missing object rolls the migration back, which is safe
+  but fails a busy tenant's migration over and over; an overwrite that kept
+  its size passes the verify, and the tenant then reads the old bytes.
+- **Definition of Done:** before the rebind, the copy catches up on every
+  object whose bytes were written (`bytes_written_at`) since the copy
+  started — a second pass from a recorded start time, repeated until it is
+  empty under the rebind's lock, as the rollback does with `rebound_at` — and
+  a test uploads behind the cursor and overwrites a copied object, and finds
+  both in the target after the rebind.
+- **Blockers:** none.
 
 ### A multipart upload completed after a storage migration's rebind is lost at cleanup
 

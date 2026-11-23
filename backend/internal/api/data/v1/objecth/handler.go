@@ -385,6 +385,9 @@ type PurgeDebt struct {
 	BucketName string
 	Collection string
 	Key        string
+	// ObjectState is the deleted row's state: a storage migration counted
+	// only live and trashed objects (package purgedebt).
+	ObjectState statemachine.State
 }
 
 type Object struct {
@@ -2132,13 +2135,14 @@ func (h *Handler) PermanentDelete(
 	// event above (ADR-0003), one floor down — over bytes instead of
 	// notifications.
 	debt := PurgeDebt{
-		PurgeID:    uuid.New(),
-		TenantID:   tenantID,
-		ObjectID:   obj.ObjectID,
-		BackendID:  backendID,
-		BucketName: bucket,
-		Collection: collection,
-		Key:        obj.Key,
+		PurgeID:     uuid.New(),
+		TenantID:    tenantID,
+		ObjectID:    obj.ObjectID,
+		BackendID:   backendID,
+		BucketName:  bucket,
+		Collection:  collection,
+		Key:         obj.Key,
+		ObjectState: obj.State,
 	}
 	if err := h.repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		if derr := deleteFn(ctx, tx, tenantID, objectID, rv); derr != nil {
