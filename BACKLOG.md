@@ -614,26 +614,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### The OAuth endpoints and `unary.newMessage` quote Go errors to the caller
-
-- **Status:** Deferred.
-- **Reason:** the RPC refusals are held to the no-package-prefix rule
-  (`apiutil/sentinel_text_test.go`), but the OAuth HTTP endpoints answer
-  `invalid_client` with the client authentication's own `err.Error()`
-  (`auth/oauth/handler.go` token and introspection paths, `revoke.go`), which
-  starts `oauth: bad credentials: …`; and `auth.ErrNoConsent` (`auth: the
-  grant consents to neither …`) is wrapped into the token exchange's
-  `ErrInvalidScope` (`auth/delegation/policy.go`), whose answer has not been
-  checked for it.
-  Alike, `unary.newMessage` (`api/unary/unary.go`) answers a procedure whose
-  message type is not registered with the registry's own error after the
-  procedure's name — a build fault, unreachable with generated stubs.
-- **Definition of Done:** each OAuth refusal's `error_description` is a fixed
-  sentence the package exports for the guard test, the cause logged at Warn;
-  a test per endpoint pins the text. `newMessage` answers a fixed sentence and
-  logs the registry's error at Error.
-- **Blockers:** none.
-
 ### The SDK fakes accept request text holding NUL
 
 - **Status:** Deferred.

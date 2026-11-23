@@ -8,7 +8,9 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	admin "github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/admin"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/batchh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/unary"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/auth/oauth"
 
 	// Links every handler and store package, so each one's init has
 	// registered its sentinels before the test reads the registry.
@@ -50,14 +52,17 @@ func TestBearerRefusalsNameNoPackage(t *testing.T) {
 }
 
 // A call with no principal or no tenant, a delegated capability refused for
-// its user, a handler built without a dependency, and a server built with no
-// handler are answered with their packages' own messages, not MapError: held
-// to the same rule here.
+// its user, a handler built without a dependency, a server built with no
+// handler, a message type the server cannot build, and a client the OAuth
+// token and revocation endpoints cannot authenticate are answered with their
+// packages' own messages, not MapError: held to the same rule here.
 func TestOwnRefusalsNameNoPackage(t *testing.T) {
 	for name, msgs := range map[string][]string{
-		"principal": auth.PrincipalRefusals(),
-		"batch":     batchh.FaultMessages(),
-		"unwired":   admin.UnwiredMessages(),
+		"principal":    auth.PrincipalRefusals(),
+		"batch":        batchh.FaultMessages(),
+		"unwired":      admin.UnwiredMessages(),
+		"unary":        {unary.MessageUnavailable},
+		"oauth client": oauth.ClientRefusals(),
 	} {
 		for _, msg := range msgs {
 			if packagePrefix.MatchString(msg) {

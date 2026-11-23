@@ -85,7 +85,7 @@ func TestReplayResponseDecodesThroughTheSchema(t *testing.T) {
 		t.Fatalf("proto.Marshal: %v", err)
 	}
 
-	replayed, err := replayResponse(probeSpec(), body)
+	replayed, err := replayResponse(t.Context(), probeSpec(), body)
 	if err != nil {
 		t.Fatalf("replayResponse: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestReplayResponseDecodesThroughTheSchema(t *testing.T) {
 // that as an unreplayable row and runs the handler, so it must be an error
 // rather than an empty message passed off as the cached answer.
 func TestReplayResponseNeedsASchema(t *testing.T) {
-	if _, err := replayResponse(connect.Spec{Procedure: unarytest.ProbeProcedure}, nil); err == nil {
+	if _, err := replayResponse(t.Context(), connect.Spec{Procedure: unarytest.ProbeProcedure}, nil); err == nil {
 		t.Fatal("replayed a response for a method with no schema")
 	}
 }

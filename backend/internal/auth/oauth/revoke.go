@@ -53,7 +53,7 @@ func (h *Handler) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.authenticateClient(r, client); err != nil {
-		h.jsonError(w, http.StatusUnauthorized, "invalid_client", err.Error())
+		h.refuseClient(w, err)
 		return
 	}
 	token := r.PostForm.Get(revokeParamToken)

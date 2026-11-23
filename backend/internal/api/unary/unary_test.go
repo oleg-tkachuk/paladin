@@ -42,7 +42,7 @@ func TestInterceptorAnswersWithoutTheHandler(t *testing.T) {
 	probe := &unarytest.Probe{OnCall: func(context.Context) error { handled = true; return nil }}
 	ic := unary.Interceptor(func(unary.Func) unary.Func {
 		return func(_ context.Context, spec connect.Spec, _ proto.Message) (proto.Message, error) {
-			res, err := unary.NewResponse(spec)
+			res, err := unary.NewResponse(context.Background(), spec)
 			if err != nil {
 				return nil, err
 			}
@@ -97,7 +97,7 @@ func TestInterceptorPassesStreamsOn(t *testing.T) {
 
 // A procedure without a protobuf schema cannot be decoded here.
 func TestNewRequestWithoutASchema(t *testing.T) {
-	if _, err := unary.NewRequest(connect.Spec{Procedure: "/x.Svc/M"}); connect.CodeOf(err) != connect.CodeInternal {
+	if _, err := unary.NewRequest(context.Background(), connect.Spec{Procedure: "/x.Svc/M"}); connect.CodeOf(err) != connect.CodeInternal {
 		t.Fatalf("err = %v, want Internal", err)
 	}
 }

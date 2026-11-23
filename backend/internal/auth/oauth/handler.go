@@ -427,7 +427,7 @@ func (h *Handler) tokenAuthCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.authenticateClient(r, client); err != nil {
-		h.jsonError(w, http.StatusUnauthorized, "invalid_client", err.Error())
+		h.refuseClient(w, err)
 		return
 	}
 
@@ -475,7 +475,7 @@ func (h *Handler) tokenRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.authenticateClient(r, client); err != nil {
-		h.jsonError(w, http.StatusUnauthorized, "invalid_client", err.Error())
+		h.refuseClient(w, err)
 		return
 	}
 
@@ -642,8 +642,6 @@ func r2RefreshToken(jti, familyID uuid.UUID, u authstore.User, grant authstore.O
 	}
 }
 
-// authenticateClient enforces client authentication: public clients pass
-// (PKCE is their proof), confidential clients must present a matching secret.
 func (h *Handler) unsupportedGrant(w http.ResponseWriter) {
 	supported := []string{GrantTypeAuthorizationCode, GrantTypeRefreshToken}
 	if h.exchange != nil {
@@ -652,6 +650,34 @@ func (h *Handler) unsupportedGrant(w http.ResponseWriter) {
 	h.jsonError(w, http.StatusBadRequest, "unsupported_grant_type", "grant_type must be one of "+strings.Join(supported, ", "))
 }
 
+// errInvalidClient is RFC 6749's error code for a client that failed
+// authentication.
+const errInvalidClient = "invalid_client"
+
+// The error_description of each invalid_client the token and revocation
+// endpoints answer: fixed sentences, never an error's text.
+const (
+	descUnknownClient        = "unknown client"
+	descClientSecretRequired = "client_secret required"
+	descClientSecretInvalid  = "invalid client_secret"
+)
+
+// ClientRefusals is every error_description an invalid_client answer of the
+// token and revocation endpoints carries, for the test holding every refusal
+// to the no-package-prefix rule.
+func ClientRefusals() []string {
+	return []string{descUnknownClient, descClientSecretRequired, descClientSecretInvalid}
+}
+
+// What authenticateClient refuses a confidential client for. They are logged,
+// never answered: refuseClient answers the fixed description of each.
+var (
+	errClientSecretMissing  = errors.New("oauth: the client presented no client_secret")
+	errClientSecretMismatch = errors.New("oauth: the client_secret does not match the client's")
+)
+
+// authenticateClient enforces client authentication: public clients pass
+// (PKCE is their proof), confidential clients must present a matching secret.
 func (h *Handler) authenticateClient(r *http.Request, client Client) error {
 	if client.Public || len(client.SecretHash) == 0 {
 		return nil
@@ -661,12 +687,33 @@ func (h *Handler) authenticateClient(r *http.Request, client Client) error {
 		secret = p
 	}
 	if secret == "" {
-		return errors.New("client_secret required")
+		return errClientSecretMissing
 	}
 	if err := auth.CheckApiKeySecret(client.SecretHash, secret); err != nil {
-		return errors.New("invalid client_secret")
+		return fmt.Errorf("%w: %w", errClientSecretMismatch, err)
 	}
 	return nil
+}
+
+// refuseClient answers a client that failed authentication as invalid_client
+// with the fixed description of why, and hands the cause to the request's
+// log line.
+func (h *Handler) refuseClient(w http.ResponseWriter, cause error) {
+	refusedFor(w, cause)
+	h.jsonError(w, http.StatusUnauthorized, errInvalidClient, clientRefusalOf(cause))
+}
+
+// clientRefusalOf is the description a client authentication failure is
+// answered with.
+func clientRefusalOf(cause error) string {
+	switch {
+	case errors.Is(cause, ErrClientNotFound):
+		return descUnknownClient
+	case errors.Is(cause, errClientSecretMissing):
+		return descClientSecretRequired
+	default:
+		return descClientSecretInvalid
+	}
 }
 
 // ─── /register (RFC 7591 DCR) ────────────────────────────────────────────────
@@ -953,7 +1000,7 @@ func (h *Handler) tokenClient(w http.ResponseWriter, r *http.Request, clientID s
 		return client, true
 	}
 	if errors.Is(err, ErrClientNotFound) {
-		h.jsonError(w, http.StatusUnauthorized, "invalid_client", "unknown client")
+		h.refuseClient(w, err)
 		return Client{}, false
 	}
 	h.serverError(r.Context(), w, "client lookup failed", err, zap.String("client_id", clientID))
