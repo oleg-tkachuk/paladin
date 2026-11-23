@@ -52,7 +52,9 @@ func (s *PolicyServer) SimulateAuthz(ctx context.Context, req *pb.SimulateAuthzR
 		ResourceName:      m.GetResourceName(),
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
+		// The handler answers with its own codes, as GetEffectivePolicy's
+		// does: a malformed question is the caller's, not a server fault.
+		return nil, err
 	}
 	return &pb.SimulateAuthzResponse{
 		Allowed:     out.Allowed,

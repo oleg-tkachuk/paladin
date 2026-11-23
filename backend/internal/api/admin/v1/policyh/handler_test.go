@@ -200,7 +200,8 @@ func TestSimulateAuthz(t *testing.T) {
 		_, err := h.SimulateAuthz(authedCtx(tid), SimulateAuthzInput{
 			ResourceName: "tenants/not-a-uuid/collections/k",
 		})
-		if err == nil || !strings.Contains(err.Error(), "invalid tenant id") {
+		wantCode(t, err, connect.CodeInvalidArgument)
+		if !strings.Contains(err.Error(), "invalid tenant id") {
 			t.Fatalf("expected parse error, got %v", err)
 		}
 		if len(fe.calls) != 0 {
@@ -253,7 +254,8 @@ func TestSimulateAuthz(t *testing.T) {
 			Action:       cedar.ActionGetObject.String(),
 			ResourceName: "tenants/" + tid.String(),
 		})
-		if err == nil || !strings.Contains(err.Error(), "authz") {
+		wantCode(t, err, connect.CodeInternal)
+		if !strings.Contains(err.Error(), "authz") {
 			t.Fatalf("expected wrapped authz error, got %v", err)
 		}
 	})
@@ -327,7 +329,8 @@ func TestGetEffectivePolicy(t *testing.T) {
 	t.Run("invalid resource name → parse error", func(t *testing.T) {
 		h := NewHandler(allowEngine(), &fakeStore{})
 		_, err := h.GetEffectivePolicy(authedCtx(tid), "tenants/bad-uuid", tid)
-		if err == nil || !strings.Contains(err.Error(), "invalid tenant id") {
+		wantCode(t, err, connect.CodeInvalidArgument)
+		if !strings.Contains(err.Error(), "invalid tenant id") {
 			t.Fatalf("expected parse error, got %v", err)
 		}
 	})

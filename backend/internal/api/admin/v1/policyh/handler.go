@@ -132,7 +132,7 @@ type SimulateAuthzOutput struct {
 func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*SimulateAuthzOutput, error) {
 	tenantID, collection, err := parseSimulateResource(in.ResourceName, in.PrincipalTenantID)
 	if err != nil {
-		return nil, err
+		return nil, rpcerr.New(connect.CodeInvalidArgument, err)
 	}
 	if err := h.authorizeInspect(ctx, tenantID, collection); err != nil {
 		return nil, err
@@ -159,7 +159,8 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 	}
 	decision, err := h.engine.IsAuthorized(ctx, princ, action, res, cedar.RequestContext{Now: time.Now()})
 	if err != nil {
-		return nil, fmt.Errorf("authz: %w", err)
+		h.log.Error("policy simulate: engine failed", zap.String("action", action.String()), zap.Error(err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("authz: %w", err))
 	}
 	return &SimulateAuthzOutput{
 		Allowed:     decision == cedar.DecisionAllow,
