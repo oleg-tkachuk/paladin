@@ -205,6 +205,28 @@ describe("CapabilitiesPage", () => {
     });
   });
 
+  // A resource prefix names the collection and key on one line; the full URI
+  // broke a character per line in the narrow column, so it moved to the title.
+  it("shows each resource prefix as one short line, the full URI on hover", async () => {
+    const tenant = "01a0f4a9-7600-77a9-862e-11ea31d523ca";
+    const uri = `object://${tenant}/e2e.0527f3d6/contracts/2026/`;
+    const other = "object://01a0f4a9-7600-77a9-862e-000000000000/docs/";
+    const cap = makeCap("c-1");
+    h.list.mockResolvedValue({
+      capabilities: [
+        {
+          ...cap,
+          subject: { ...cap.subject, tenantId: tenant },
+          caveats: { ...cap.caveats, resourcePrefixes: [uri, other] },
+        },
+      ],
+    });
+    render(<CapabilitiesPage />);
+    const label = await screen.findByText("e2e/0527f3d6 · contracts/2026/");
+    expect(label).toHaveAttribute("title", uri);
+    expect(screen.getByText(other)).toHaveAttribute("title", other);
+  });
+
   // A grant links here with its session: the list is what revoking it stops,
   // until the operator widens it to every session.
   it("lists one OAuth session's capabilities from the link, then every session's", async () => {

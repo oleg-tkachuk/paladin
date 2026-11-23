@@ -38,6 +38,7 @@ import { CapabilityDetailsPanel } from "./CapabilityDetailsPanel";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { openableRow } from "@/components/ui/RecordDialog";
 import { RevokeCapabilityDialog } from "./RevokeCapabilityDialog";
+import { objectGrantLabel } from "@/lib/capability/objectResource";
 import { RevokeRunDialog } from "./RevokeRunDialog";
 import { RevokeBiscuitCopyDialog } from "./RevokeBiscuitCopyDialog";
 import { BiscuitCopyUsageDialog } from "./BiscuitCopyUsageDialog";
@@ -594,16 +595,21 @@ export default function CapabilitiesPage() {
                           </Badge>
                         ))}
                       </div>
-                      {(c.caveats?.resourcePrefixes ?? []).length > 0 && (
+                      {/* One short line per prefix: the full URI broke a
+                          character per line in this narrow column. It stays
+                          in the tooltip and in the details panel. */}
+                      {(c.caveats?.resourcePrefixes ?? []).map((p) => (
                         <div
+                          key={p}
                           className={cn(
                             T.codeSmall,
-                            "mt-1 break-all text-muted-foreground",
+                            "mt-1 max-w-48 truncate text-muted-foreground @xl:max-w-64",
                           )}
+                          title={p}
                         >
-                          {c.caveats!.resourcePrefixes.join(", ")}
+                          {objectGrantLabel(p, c.subject?.tenantId ?? "")}
                         </div>
-                      )}
+                      ))}
                     </TableCell>
                     <TableCell className={COL_AUDIENCE}>
                       <div className="flex flex-wrap gap-1">
