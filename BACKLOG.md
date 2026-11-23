@@ -665,22 +665,19 @@ the same commit. Treat this file like a runtime invariant.
   logs the registry's error at Error.
 - **Blockers:** none.
 
-### Request text Postgres cannot store is suspected to answer Internal
+### The SDK fakes accept request text holding NUL
 
 - **Status:** Deferred.
-- **Reason:** Postgres stores no U+0000 in a `text` column or a `jsonb`
-  string, and no handler refuses one before the insert: object tags and
-  metadata, display names, user subjects and the other free-text fields reach
-  the store as the client sent them. The handler fuzz targets run over fakes,
-  which store anything, so they cannot see it; the database's refusal would
-  fall through the adapters' error mapping to Internal. Not yet confirmed
-  against Postgres.
-- **Definition of Done:** an integration test sends such text through one
-  write RPC and records the answer; if it is Internal, one refusal at the edge
-  answers any request string Postgres cannot store as InvalidArgument naming
-  the field, with a test per plane, and the handler fuzz targets assert it.
-- **Blockers:** whether the refusal belongs to every RPC or only to the
-  fields that are stored, which is a contract decision.
+- **Reason:** every plane refuses a request string holding U+0000 as
+  `INVALID_ARGUMENT` (`middleware.RefuseNUL`), but `paladintest` and
+  `paladin.testing` run protovalidate alone, so a test against either passes a
+  call the server refuses. The walker lives in `backend/internal/protonul`,
+  which the SDK modules cannot import.
+- **Definition of Done:** both fakes refuse such a request with the server's
+  text (`<field path>: holds a NUL character`) before their handlers, and
+  their fidelity tests pin it.
+- **Blockers:** where the walker lives so the SDK and the server share it —
+  a package of the Go SDK, and a port for Python.
 
 ### The handler fuzz targets do not reach UserService
 

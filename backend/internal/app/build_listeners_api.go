@@ -51,6 +51,7 @@ type BuildMeta struct {
 // /readyz to 503 at once.
 type planeShared struct {
 	validate     connect.ServerInterceptor
+	refuseNUL    connect.ServerInterceptor
 	idempotency  connect.ServerInterceptor
 	otel         connect.ServerInterceptor
 	tenantGate   connect.ServerInterceptor
@@ -204,6 +205,7 @@ func newPlaneShared(deps *SharedDeps, role config.Role) (planeShared, error) {
 
 	return planeShared{
 		validate:     validateInterceptor,
+		refuseNUL:    middleware.RefuseNUL(),
 		idempotency:  idempotencyInterceptor,
 		otel:         otelInt,
 		tenantGate:   tenantGate,
@@ -373,6 +375,10 @@ func assembleDataMux(ctx context.Context, deps *SharedDeps, shared planeShared) 
 		auth.RequireAudience(auth.AudienceData),
 		// After the principal, which carries the OAuth grant (ADR-0035).
 		auth.RequireOAuthWriteScope(),
+		// Refuses request text holding NUL, which Postgres cannot store; as
+		// soon as the principal is known, ahead of every layer that reads the
+		// request — the tenant freeze and the quota check look its names up.
+		shared.refuseNUL,
 		// Refuses a trashed or purged tenant's credentials; after every
 		// interceptor that establishes a principal, before validation and
 		// idempotency, so a refused call is never answered from memo.
@@ -541,6 +547,9 @@ func assembleIAMMux(ctx context.Context, deps *SharedDeps, meta BuildMeta, share
 		// After the principal, which carries the OAuth grant (ADR-0035). A
 		// permissive RPC with no principal passes it.
 		auth.RequireOAuthWriteScope(),
+		// See the data plane; here also ahead of the audit, which stores the
+		// request — a failed Login's included — in jsonb.
+		shared.refuseNUL,
 		// Refuses a trashed or purged tenant's credentials; after every
 		// interceptor that establishes a principal, before validation and
 		// idempotency, so a refused call is never answered from memo.

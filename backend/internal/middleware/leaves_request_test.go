@@ -72,6 +72,18 @@ func callBatchUpdateTags(ctx context.Context, h *batchHandler, parent string, in
 	return err
 }
 
+// The NUL refusal walks every string of the request.
+func TestRefuseNULLeavesTheRequest(t *testing.T) {
+	h := &batchHandler{}
+	if err := callBatchUpdateTags(principalCtx(uuid.New()), h, collectionIn(uuid.New()),
+		unarytest.LeavesRequest(t), RefuseNUL()); err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	if h.ctx == nil {
+		t.Fatal("the handler was not reached")
+	}
+}
+
 // The audit log reads the request after the handler returns, to record it.
 func TestAuditLeavesTheRequest(t *testing.T) {
 	w := &recordingAuditWriter{}

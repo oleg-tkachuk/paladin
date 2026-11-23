@@ -213,9 +213,9 @@ const (
 )
 
 // outcomeOf is how a failed call is logged: its message and its level, by
-// its code — and, for a code that reports the server failing, by whether err
-// is a refusal all the same (rpcerr.Refusal), which nothing on the server
-// failed to decide.
+// its code — and, for a code that reports the server failing or a client
+// mistake, by whether err is a refusal all the same (rpcerr.Refusal): a
+// verdict the server decided, logged at Warn.
 func outcomeOf(code connect.Code, err error) (string, zapcore.Level) {
 	switch code {
 	// The server is broken. Someone should be woken up by a rate of these —
@@ -237,8 +237,13 @@ func outcomeOf(code connect.Code, err error) (string, zapcore.Level) {
 	// An ordinary client mistake: a bad filter, a name that is not there, a
 	// token that expired. Info because these are normal traffic and an
 	// operator still has to be able to find them; Warn would cry wolf on every
-	// browser that probes an endpoint without a token.
+	// browser that probes an endpoint without a token. A refusal the server
+	// decided on as a rule of the whole API — a request string holding NUL —
+	// is logged as a refusal all the same.
 	default:
+		if rpcerr.Refused(err) {
+			return msgRPCRefused, zapcore.WarnLevel
+		}
 		return msgRPCRejected, zapcore.InfoLevel
 	}
 }
