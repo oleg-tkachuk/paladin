@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/oleg-tkachuk/limes"
+	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 )
 
 // Money crosses the API as google.type.Money and is counted as
@@ -69,7 +70,9 @@ func NanosOf(field string, m *money.Money) (limes.Nanos, string, error) {
 		return 0, "", nil
 	}
 	invalid := func(format string, args ...any) (limes.Nanos, string, error) {
-		return 0, "", connect.Errorf(connect.CodeInvalidArgument, "%s: "+format, append([]any{field}, args...)...)
+		// fmt.Errorf, not connect.Errorf: a %w here wraps the reason, where
+		// connect.Errorf's Sprintf printed it as a Go value.
+		return 0, "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("%s: "+format, append([]any{field}, args...)...))
 	}
 	unit := m.GetCurrencyCode()
 	if unit != "" {
