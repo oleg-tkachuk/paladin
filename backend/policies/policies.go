@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/cedar-policy/cedar-go"
@@ -62,8 +63,9 @@ var ErrUnparseable = errors.New("policy does not parse")
 
 // Check type-checks every policy in text against Schema in strict mode, the
 // mode that reports an attribute read that can raise an evaluation error. It
-// returns one finding per policy that does not type-check, and an error
-// wrapping ErrUnparseable when the text does not parse. name labels both.
+// returns one finding per policy that does not type-check, each one line, and
+// an error wrapping ErrUnparseable when the text does not parse. name labels
+// both.
 func Check(name string, text []byte) ([]string, error) {
 	r, err := Resolve()
 	if err != nil {
@@ -77,10 +79,28 @@ func Check(name string, text []byte) ([]string, error) {
 	var findings []string
 	for id, p := range ps.All() {
 		if err := v.Policy(string(id), (*xast.Policy)(p.AST())); err != nil {
-			findings = append(findings, fmt.Sprintf("%s %s: %v", name, id, err))
+			findings = append(findings, fmt.Sprintf("%s %s: %s", name, id, oneLine(err)))
 		}
 	}
 	return findings, nil
+}
+
+// findingSeparator joins the type errors of one policy into its finding.
+const findingSeparator = "; "
+
+// oneLine is err's text with the errors it joins separated by
+// findingSeparator: the validator joins a policy's type errors with a
+// newline, and a finding is shown to a client as one line.
+func oneLine(err error) string {
+	joined, ok := err.(interface{ Unwrap() []error })
+	if !ok {
+		return err.Error()
+	}
+	parts := make([]string, 0, len(joined.Unwrap()))
+	for _, e := range joined.Unwrap() {
+		parts = append(parts, oneLine(e))
+	}
+	return strings.Join(parts, findingSeparator)
 }
 
 // Validate is Check with every finding returned as one error.

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"path"
+	"strings"
 	"testing"
 )
 
@@ -65,5 +66,20 @@ permit (principal, action == Action::"ReadTenant", resource);`
 	}
 	if len(findings) != 2 {
 		t.Fatalf("findings = %q, want one per policy that does not type-check", findings)
+	}
+}
+
+// A policy with several type errors is still one finding, on one line: the
+// validator joins them with a newline, which reached the console raw.
+func TestCheckPutsAPolicysErrorsOnOneLine(t *testing.T) {
+	findings, err := Check("one", []byte(`permit(principal, action, resource) when { resource.nope == 1 };`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings = %q, want one for the one policy", findings)
+	}
+	if strings.Contains(findings[0], "\n") || strings.Count(findings[0], findingSeparator) == 0 {
+		t.Errorf("finding = %q, want its errors on one line, joined by %q", findings[0], findingSeparator)
 	}
 }
