@@ -65,20 +65,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ---
 
-### The proto still says `share` is `CAVEATS_ONLY`
-
-- **Status:** Deferred.
-- **Reason:** `CAPABILITY_GRANT_BASIS_CAVEATS_ONLY`'s comment in
-  `proto/paladin/admin/v1/capability_service.proto` reads "(share:
-  Delegate)", but `share` is now `BUILTIN` with `DelegateCapability`; a
-  proto comment change needs regenerated stubs in a `docs(proto)` commit of
-  its own.
-- **Definition of Done:** the comment names no operation (no row has the
-  basis now), the Go, Python and TypeScript stubs are regenerated, in one
-  `docs(proto)` commit.
-- **Blockers:** none.
-
-
 ## Deploy cutover: rename to `paladin`
 
 ### The `paladin` name has not been checked against trademark registers

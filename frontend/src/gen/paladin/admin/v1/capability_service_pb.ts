@@ -1625,7 +1625,8 @@ export enum CapabilityGrantBasis {
   PAIRED = 3,
 
   /**
-   * The caveats alone decide; no policy is asked (share: Delegate).
+   * The caveats alone decide; no policy is asked. No operation has this
+   * basis today.
    *
    * @generated from enum value: CAPABILITY_GRANT_BASIS_CAVEATS_ONLY = 4;
    */
