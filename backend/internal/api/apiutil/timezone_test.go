@@ -26,6 +26,21 @@ func TestValidateTimezone(t *testing.T) {
 	}
 }
 
+// An unknown name is refused in one quoted line: the loader's error repeated
+// it raw, control characters included, after "time:".
+func TestValidateTimezoneQuotesAnUnknownName(t *testing.T) {
+	t.Parallel()
+	for tz, want := range map[string]string{
+		"\x01":      `unknown timezone "\x01"`,
+		"../etc/x":  `unknown timezone "../etc/x"`,
+		"Mars/Base": `unknown timezone "Mars/Base"`,
+	} {
+		if err := ValidateTimezone(tz); err == nil || err.Error() != want {
+			t.Errorf("ValidateTimezone(%q) = %v, want %q", tz, err, want)
+		}
+	}
+}
+
 func TestValidateLocale(t *testing.T) {
 	t.Parallel()
 	good := []string{"en", "en-US", "uk-UA", "pt-BR", "zh-Hant-TW", "uk_UA"}

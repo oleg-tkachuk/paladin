@@ -27,8 +27,10 @@ func ValidateTimezone(s string) error {
 	if len(s) > 64 {
 		return fmt.Errorf("timezone too long (%d chars, max 64)", len(s))
 	}
+	// The loader's own error is left out: it repeats the name unquoted and
+	// starts with its package's name, and the caller is sent this text.
 	if _, err := time.LoadLocation(s); err != nil {
-		return fmt.Errorf("unknown timezone %q: %w", s, err)
+		return fmt.Errorf("unknown timezone %q", s)
 	}
 	return nil
 }
