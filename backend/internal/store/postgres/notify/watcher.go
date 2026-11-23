@@ -22,6 +22,15 @@ const (
 	backoffMax     = 5 * time.Second
 )
 
+// The lines a watcher logs its connection by: a drop, each failed attempt to
+// listen again, and the LISTEN re-established. Exported so the tests that drop
+// the connection assert on the same text.
+const (
+	MsgDropped   = "notify watch dropped; reconnecting"
+	MsgRetry     = "notify watch could not listen again; retrying"
+	MsgListening = "notify watch listening again; caches cleared"
+)
+
 // Watcher calls onNotify for every notification on one channel.
 //
 // It holds one pooled connection for its whole life, so whoever starts it
@@ -80,13 +89,14 @@ func (w *Watcher) loop(ctx context.Context, conn *pgxpool.Conn) {
 		if ctx.Err() != nil {
 			return
 		}
-		logger.FromContext(ctx).Warn("notify watch dropped; reconnecting", zap.String("channel", w.channel), zap.Error(err))
+		logger.FromContext(ctx).Warn(MsgDropped, zap.String("channel", w.channel), zap.Error(err))
 
 		conn = w.relisten(ctx)
 		if conn == nil {
 			return
 		}
-		w.reconnects.Add(1)
+		n := w.reconnects.Add(1)
+		logger.FromContext(ctx).Info(MsgListening, zap.String("channel", w.channel), zap.Uint64("reconnects", n))
 		// Anything announced during the gap went unheard.
 		w.onNotify()
 	}
@@ -109,11 +119,13 @@ func (w *Watcher) relisten(ctx context.Context) *pgxpool.Conn {
 			return nil
 		case <-time.After(backoff):
 		}
-		if conn, err := w.listen(ctx); err == nil {
+		conn, err := w.listen(ctx)
+		if err == nil {
 			return conn
 		}
 		if backoff *= 2; backoff > backoffMax {
 			backoff = backoffMax
 		}
+		logger.FromContext(ctx).Warn(MsgRetry, zap.String("channel", w.channel), zap.Duration("retry_in", backoff), zap.Error(err))
 	}
 }

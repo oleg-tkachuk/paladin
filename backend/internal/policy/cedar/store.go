@@ -168,6 +168,15 @@ func (s *PostgresStore) Watch(ctx context.Context) (<-chan ChangeEvent, error) {
 	return ch, nil
 }
 
+// The lines the policy watch logs its connection by: a drop, each failed
+// attempt to listen again, and the LISTEN re-established. Exported so the
+// tests that drop the connection assert on the same text.
+const (
+	MsgPolicyWatchDropped   = "cedar policy watch dropped; reconnecting"
+	MsgPolicyWatchRetry     = "cedar policy watch could not listen again; retrying"
+	MsgPolicyWatchListening = "cedar policy watch listening again; caches resynced"
+)
+
 // listen acquires a pooled connection and issues LISTEN policy_changed on it.
 // The caller owns Release.
 func (s *PostgresStore) listen(ctx context.Context) (*pgxpool.Conn, error) {
@@ -198,14 +207,14 @@ func (s *PostgresStore) watchLoop(ctx context.Context, conn *pgxpool.Conn, ch ch
 		// anything else — a permission change or a missing channel would spin
 		// this loop reconnecting forever. Which of the two it is can only be
 		// told from the error, and until now nothing wrote it down.
-		logger.FromContext(ctx).Warn("cedar policy watch dropped; reconnecting",
-			zap.Error(err))
+		logger.FromContext(ctx).Warn(MsgPolicyWatchDropped, zap.Error(err))
 
 		conn = s.relisten(ctx)
 		if conn == nil {
 			return // ctx cancelled while backing off
 		}
-		s.reconnects.Add(1)
+		n := s.reconnects.Add(1)
+		logger.FromContext(ctx).Info(MsgPolicyWatchListening, zap.Uint64("reconnects", n))
 		// Re-LISTEN succeeded; notifications fired during the gap are lost, so
 		// force a full resync. Any NOTIFY that races in just after the new
 		// LISTEN is redundant against this flush, never lost.
@@ -246,12 +255,14 @@ func (s *PostgresStore) relisten(ctx context.Context) *pgxpool.Conn {
 			return nil
 		case <-time.After(backoff):
 		}
-		if conn, err := s.listen(ctx); err == nil {
+		conn, err := s.listen(ctx)
+		if err == nil {
 			return conn
 		}
 		if backoff *= 2; backoff > watchBackoffMax {
 			backoff = watchBackoffMax
 		}
+		logger.FromContext(ctx).Warn(MsgPolicyWatchRetry, zap.Duration("retry_in", backoff), zap.Error(err))
 	}
 }
 
