@@ -445,7 +445,10 @@ func TestResolverGates_AllThreeRepos(t *testing.T) {
 			meta, err := adapters.NewPresignRepo(q, h.PoolMigrate).LookupBucketMeta(ctx, tenantID, collection, access)
 			return meta.BackendID, meta.BucketName, err
 		}},
-		{"multipart", adapters.NewMultipartRepo(q, h.PoolMigrate).LookupBucket},
+		{"multipart", func(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (string, string, error) {
+			meta, err := adapters.NewMultipartRepo(q, h.PoolMigrate).LookupBucketMeta(ctx, tenantID, collection, access)
+			return meta.BackendID, meta.BucketName, err
+		}},
 	}
 
 	tenantID := mustCreateTenant(t, h.PoolMigrate, "three-tenant")

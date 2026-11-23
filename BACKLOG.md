@@ -600,32 +600,6 @@ the same commit. Treat this file like a runtime invariant.
   under each.
 - **Blockers:** the replicator implementation, for the third.
 
-### AbortMultipartUpload skips the bucket gate for an anchored session
-
-- **Status:** Deferred.
-- **Reason:** an abort only releases parts, so it is deliberately left out of
-  the write gate: on a draining or provisioning backend it frees storage
-  rather than adding data. A session from before anchoring still resolves
-  with `write=true` (`multiparth.route`), so the same abort is refused there,
-  and its Cedar check runs on an empty binding.
-- **Definition of Done:** abort resolves the same way for both sessions —
-  through the gate as a read, refused only on a disabled backend — and is
-  authorized on the resolved binding; a test covers both session shapes.
-- **Blockers:** none.
-
-### Multipart writes gate on the collection's binding, not the anchored bucket
-
-- **Status:** Deferred.
-- **Reason:** CompleteMultipartUpload and PresignPart ask the write gate about
-  the collection's current binding (`multiparth.writeTarget`), then write to
-  the bucket the session was anchored to. After a storage migration rebinds
-  the collection, a session anchored to the old, draining backend passes the
-  gate on the new binding.
-- **Definition of Done:** the gate is asked about the anchored bucket's own
-  backend and provision state (a lookup by backend and bucket name), and a
-  test rebinds the collection mid-session.
-- **Blockers:** a store query by (backend, bucket) for the gate's state.
-
 ## API error messages
 
 ### The OAuth endpoints and `unary.newMessage` quote Go errors to the caller

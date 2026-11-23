@@ -320,13 +320,21 @@ func wantCode(t *testing.T, err error, want connect.Code) {
 	}
 }
 
+// The (backend, bucket) sessionForTenant's session was anchored to.
+const (
+	testSessionBackend = "backend-sess"
+	testSessionBucket  = "bucket-sess"
+)
+
+// sessionForTenant is an open session of tid's, anchored to a healthy bucket.
 func sessionForTenant(tid uuid.UUID) Session {
 	return Session{
+		BucketState:     healthyState,
 		UploadID:        "up-1",
 		ObjectID:        uuid.NewV7(),
 		TenantID:        tid,
-		BackendID:       "backend-sess",
-		Bucket:          "bucket-sess",
+		BackendID:       testSessionBackend,
+		Bucket:          testSessionBucket,
 		Collection:      "photos",
 		Key:             "cat.jpg",
 		StorageUploadID: "storage-up-9",
@@ -538,22 +546,6 @@ func TestCompleteMultipartUpload(t *testing.T) {
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
-	t.Run("bucket resolve error (empty session bucket) → not found", func(t *testing.T) {
-		repo := &fakeRepo{
-			getSessionFn: func(context.Context, string) (Session, error) {
-				s := sessionForTenant(tid)
-				s.Bucket = "" // force LookupBucket path
-				return s, nil
-			},
-			lookupBucketFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
-				return "", "", fmt.Errorf("gone: %w", apiutil.ErrNotFound)
-			},
-		}
-		_, err := newHandler(repo, &fakeStorage{}, allow()).
-			CompleteMultipartUpload(authedCtx(tid), CompleteArgs{UploadID: "up-1"})
-		wantCode(t, err, connect.CodeNotFound)
-	})
-
 	t.Run("storage complete error → internal, forwards parts", func(t *testing.T) {
 		parts := completeParts()
 		storage := &fakeStorage{completeFn: func([]PartETag) (string, int64, error) {
@@ -569,12 +561,12 @@ func TestCompleteMultipartUpload(t *testing.T) {
 		if storage.lastComplete.storageUploadID != "storage-up-9" {
 			t.Fatalf("storage upload id not forwarded: %q", storage.lastComplete.storageUploadID)
 		}
-		if storage.lastComplete.bucket != "bucket-sess" {
+		if storage.lastComplete.bucket != testSessionBucket {
 			t.Fatalf("storage not routed to session bucket: %q", storage.lastComplete.bucket)
 		}
 		// The session-anchored (backend, bucket) must reach the authz Resource
 		// so a bucket:/collection:-scoped PAT enforces on complete.
-		if authz.lastResource == nil || authz.lastResource.BucketName != "bucket-sess" || authz.lastResource.BackendID != "backend-sess" {
+		if authz.lastResource == nil || authz.lastResource.BucketName != testSessionBucket || authz.lastResource.BackendID != testSessionBackend {
 			t.Fatalf("authz Resource missing session binding: %+v", authz.lastResource)
 		}
 	})
@@ -707,22 +699,6 @@ func TestPresignPart(t *testing.T) {
 		}
 	})
 
-	t.Run("bucket resolve error (empty session bucket) → not found", func(t *testing.T) {
-		repo := &fakeRepo{
-			getSessionFn: func(context.Context, string) (Session, error) {
-				s := sessionForTenant(tid)
-				s.Bucket = ""
-				return s, nil
-			},
-			lookupBucketFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
-				return "", "", fmt.Errorf("gone: %w", apiutil.ErrNotFound)
-			},
-		}
-		_, _, _, err := newHandler(repo, &fakeStorage{}, allow()).
-			PresignPart(authedCtx(tid), "up-1", 1, time.Minute, testPartChecksum, SessionRef{})
-		wantCode(t, err, connect.CodeNotFound)
-	})
-
 	t.Run("ok returns storage url and routes to session bucket", func(t *testing.T) {
 		storage := &fakeStorage{presignFn: func() (string, map[string]string, time.Time, error) {
 			return "https://s3/presigned-part", map[string]string{"Content-Length": "5"}, time.Unix(1700000123, 0), nil
@@ -747,7 +723,7 @@ func TestPresignPart(t *testing.T) {
 		if storage.lastPresign.ttl != 7*time.Minute {
 			t.Fatalf("ttl not forwarded: got %v", storage.lastPresign.ttl)
 		}
-		if storage.lastPresign.backendID != "backend-sess" || storage.lastPresign.bucket != "bucket-sess" {
+		if storage.lastPresign.backendID != testSessionBackend || storage.lastPresign.bucket != testSessionBucket {
 			t.Fatalf("not routed to session backend/bucket: %q/%q", storage.lastPresign.backendID, storage.lastPresign.bucket)
 		}
 	})

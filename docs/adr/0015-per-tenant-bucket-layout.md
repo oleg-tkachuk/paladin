@@ -233,7 +233,7 @@ By RPC:
 | Access | RPCs |
 |---|---|
 | `BytesWrite` | `UploadObject`, `CompleteObject`, `CopyObject` (destination), `DeleteObject` with `permanent`, `RestoreObjectVersion`, presigned PUT, multipart initiate / complete / part URLs, batch copy (destination), permanent batch delete |
-| `Read` | `GetObject`, `DownloadObject`, list, presigned GET, `GetObjectLock`, `CopyObject` and batch copy (source), the HEAD `RestoreObject` makes |
+| `Read` | `GetObject`, `DownloadObject`, list, presigned GET, `GetObjectLock`, `CopyObject` and batch copy (source), the HEAD `RestoreObject` makes, `AbortMultipartUpload`, `ListParts` |
 | `MetadataWrite` | `UpdateObject` and the tag RPCs on it, `DeleteObject` to the trash, `RestoreObject`, `SetObjectRetention`, `SetObjectLegalHold`, the tag, restore and trash batches |
 | `Protective` | `SetObjectTaint`, setting or clearing |
 
@@ -257,6 +257,15 @@ What makes the `MetadataWrite` RPCs safe while a backend drains:
 - Two gaps in the migration itself do not depend on the gate and are
   recorded in BACKLOG: it leaves the trash behind, and its rollback copies
   back any object whose row changed after the rebind.
+
+A multipart session is decided on the bucket it was anchored to at
+initiate, where its parts are, never on the collection's current binding:
+`GetSession` reads that bucket's gate state with the session, and every RPC on
+the session asks the gate about it (`multiparth`, `target`). After this ADR's
+migration rebinds a collection, a session anchored to the draining source is
+refused a completion or a part URL there, whatever the new binding's state.
+`multipart_uploads.bucket_id` is `NOT NULL`, so there is no unanchored session
+to fall back from.
 
 ## Addendum (2026-11-22): background workers ask the same gate
 
@@ -308,9 +317,8 @@ the list of what it still holds if it is decommissioned instead.
 
 **An abort differs.** Multipart parts were never an object: no copy of the
 backend takes them, and aborting frees storage rather than adding data. The
-abort workers ask as `Read`, as BACKLOG's *AbortMultipartUpload skips the
-bucket gate for an anchored session* settles for the RPC: refused only on a
-disabled backend, which serves no Paladin-mediated operation.
+abort workers ask as `Read`, as `AbortMultipartUpload` does: refused only on
+a disabled backend, which serves no Paladin-mediated operation.
 
 **Provision states do not pin the teardown.** `BytesWrite` is refused on a
 bucket being deleted, but the bucket delete refuses while any debt names the
