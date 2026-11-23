@@ -11,4 +11,4 @@
   (`FAILED_PRECONDITION` or `UNAVAILABLE`) rather than `UNKNOWN`. A batch copy
   refused at run time is answered the same way.
 - The worker logs a refused batch at Warn and any other failed batch at Error
-  (it was Warn).
+  (it was Warn); a batch cut short by the worker's shutdown stays at Warn.

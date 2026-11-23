@@ -171,6 +171,37 @@ func TestAdmitBatchLogsByWhatItIs(t *testing.T) {
 	}
 }
 
+// cancellingExecutor stops the worker while it runs, as a shutdown does, and
+// returns the cancellation.
+type cancellingExecutor struct{ stop context.CancelFunc }
+
+func (e cancellingExecutor) Execute(ctx context.Context, _ operationh.Operation) ([]byte, error) {
+	e.stop()
+	return nil, context.Canceled
+}
+
+// An executor cut short by the worker's shutdown is logged at Warn, not as a
+// failure at Error, and the operation is still recorded.
+func TestRunnerLogsAShutdownAtWarn(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	repo := newMemRepo()
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	r := &Runner{Repo: repo, Executors: map[string]Executor{"X": cancellingExecutor{stop: stop}}, Logger: zap.New(core)}
+	id := uuid.New()
+	r.runOne(ctx, operationh.Operation{OperationID: id, TenantID: uuid.New(), Type: "X"})
+
+	if got := repo.final[id]; got.State != operationh.StateFailed {
+		t.Fatalf("operation state = %s, want FAILED", got.State)
+	}
+	if n := logs.FilterLevelExact(zapcore.ErrorLevel).Len(); n != 0 {
+		t.Errorf("%d Error lines for a shutdown; got %v", n, logs.All())
+	}
+	if logs.FilterMessage("executor stopped by the worker's shutdown").Len() != 1 {
+		t.Errorf("no shutdown line; got %v", logs.All())
+	}
+}
+
 // The runner records a gate refusal with the refusal's reason as the error
 // code, logged at Warn; any other executor failure is EXEC_FAILED at Error.
 func TestRunnerRecordsAGateRefusalByItsReason(t *testing.T) {

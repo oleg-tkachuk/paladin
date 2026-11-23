@@ -197,6 +197,16 @@ func (r *Runner) runOne(ctx context.Context, op operationh.Operation) {
 		r.markFailed(ctx, op, refusal.Reason.String(), err.Error())
 		return
 	}
+	if err != nil && ctx.Err() != nil {
+		// The worker is stopping and cancelled the executor: the operation
+		// is cut short, not broken.
+		logger.Warn("executor stopped by the worker's shutdown",
+			zap.Duration("duration", duration),
+			zap.Error(err),
+		)
+		r.markFailed(ctx, op, "EXEC_FAILED", err.Error())
+		return
+	}
 	if err != nil {
 		logger.Error("executor failed",
 			zap.Duration("duration", duration),
