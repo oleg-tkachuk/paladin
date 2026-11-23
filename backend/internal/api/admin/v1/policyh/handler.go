@@ -162,10 +162,27 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 		h.log.Error("policy simulate: engine failed", zap.String("action", action.String()), zap.Error(err))
 		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("authz: %w", err))
 	}
+	allowed := decision == cedar.DecisionAllow
 	return &SimulateAuthzOutput{
-		Allowed:     decision == cedar.DecisionAllow,
-		Explanation: fmt.Sprintf("simulated: %s on %s → %v", in.Action, in.ResourceName, decision),
+		Allowed:     allowed,
+		Explanation: explanation(action, in.ResourceName, allowed),
 	}, nil
+}
+
+// The verdicts an explanation names.
+const (
+	verdictAllow = "allow"
+	verdictDeny  = "deny"
+)
+
+// explanation is the one line SimulateAuthz answers with. The resource name is
+// the caller's text, so it is quoted: the console shows the line as it is.
+func explanation(action cedar.Action, resourceName string, allowed bool) string {
+	verdict := verdictDeny
+	if allowed {
+		verdict = verdictAllow
+	}
+	return fmt.Sprintf("simulated: %s on %q → %s", action, resourceName, verdict)
 }
 
 // parseSimulateResource extracts tenantID + collection from a v2 resource

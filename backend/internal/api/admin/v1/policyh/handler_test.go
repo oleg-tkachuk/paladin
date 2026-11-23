@@ -191,6 +191,17 @@ when { principal.tenant_id == resource.tenant_id };`)
 	})
 }
 
+// The explanation names the verdict in words and quotes the caller's resource
+// name: it printed the decision as a number and the name raw.
+func TestExplanationQuotesTheResourceAndNamesTheVerdict(t *testing.T) {
+	if got, want := explanation(cedar.ActionGetObject, "tenants/a\x10", true), `simulated: GetObject on "tenants/a\x10" → allow`; got != want {
+		t.Errorf("explanation = %q, want %q", got, want)
+	}
+	if got := explanation(cedar.ActionGetObject, "tenants/a", false); !strings.HasSuffix(got, "→ "+verdictDeny) {
+		t.Errorf("explanation = %q, want the deny verdict", got)
+	}
+}
+
 func TestSimulateAuthz(t *testing.T) {
 	tid := uuid.New()
 
