@@ -9,14 +9,12 @@ package cel
 import (
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 	"sync"
-	"unicode"
-	"unicode/utf8"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/clienttext"
 )
 
 // Program is re-exported so callers outside this package don't need to import
@@ -352,26 +350,6 @@ func (e *CompileError) Error() string {
 	return e.Message
 }
 
-// printable is s with each character that does not print, and each byte that
-// is not UTF-8, escaped as a Go string literal escapes it.
-func printable(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); {
-		r, size := utf8.DecodeRuneInString(s[i:])
-		switch {
-		case r == utf8.RuneError && size == 1:
-			fmt.Fprintf(&b, `\x%02x`, s[i])
-		case r == ' ' || unicode.IsPrint(r):
-			b.WriteRune(r)
-		default:
-			q := strconv.QuoteRune(r)
-			b.WriteString(q[1 : len(q)-1])
-		}
-		i += size
-	}
-	return b.String()
-}
-
 // CompileFirstError compiles `expr` against `schema` and, on failure,
 // returns a *CompileError carrying the first diagnostic's position.
 // Used by admin CELService.Validate to populate line/column in the
@@ -400,11 +378,11 @@ func compileChecked(schema *Schema, expr string) (*cel.Env, *cel.Ast, error) {
 	if iss != nil && iss.Err() != nil {
 		errs := iss.Errors()
 		if len(errs) == 0 {
-			return nil, nil, &CompileError{Message: printable(iss.Err().Error())}
+			return nil, nil, &CompileError{Message: clienttext.Printable(iss.Err().Error())}
 		}
 		first := errs[0]
 		return nil, nil, &CompileError{
-			Message: printable(first.Message),
+			Message: clienttext.Printable(first.Message),
 			Line:    first.Location.Line(),
 			Column:  first.Location.Column() + 1, // 0→1-indexed
 		}

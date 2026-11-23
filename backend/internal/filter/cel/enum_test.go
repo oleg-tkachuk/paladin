@@ -135,21 +135,6 @@ func TestCompileErrorEscapesWhatDoesNotPrint(t *testing.T) {
 	}
 }
 
-func TestPrintable(t *testing.T) {
-	for in, want := range map[string]string{
-		"plain text":  "plain text",
-		"at: '\x7f'":  `at: '\x7f'`,
-		"a\nb\tc":     `a\nb\tc`,
-		"bad \xff":    `bad \xff`,
-		"arrow → ok":  "arrow → ok",
-		"bidi \u202e": `bidi \u202e`,
-	} {
-		if got := printable(in); got != want {
-			t.Errorf("printable(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func enumField(t *testing.T, s *Schema, expr string) string {
 	t.Helper()
 	for f := range s.enums {
