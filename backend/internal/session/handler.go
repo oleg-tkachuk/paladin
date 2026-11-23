@@ -287,7 +287,7 @@ func (h *Handler) rotate(w http.ResponseWriter, r *http.Request) {
 		// Not a verdict on the session: the role cannot check it right now,
 		// as when iam restarts. 503 keeps the cookie, and the console keeps
 		// the session and asks again; a refused token stays IAM's 401.
-		h.log.Warn(msgAgeKeysUnavailable, zap.String(logPath, r.URL.Path), zap.Error(err))
+		h.log.Error(msgAgeKeysUnavailable, zap.String(logPath, r.URL.Path), zap.Error(err))
 		writeError(w, connect.CodeUnavailable, KeysUnavailableAnswer)
 		return
 	}
@@ -494,7 +494,7 @@ func (h *Handler) accessOrRefuse(w http.ResponseWriter, r *http.Request, refresh
 	case connect.CodeUnavailable:
 		// IAM could not check the session (its key set would not load, or it
 		// is restarting): the cookie stays, and the console asks again.
-		h.log.Warn(msgAccessUnavailable, zap.String(logPath, r.URL.Path), zap.String(logAudience, audience), zap.Error(err))
+		h.log.Error(msgAccessUnavailable, zap.String(logPath, r.URL.Path), zap.String(logAudience, audience), zap.Error(err))
 	default:
 		h.log.Error("session: minting an access token failed", zap.String(logPath, r.URL.Path), zap.String(logAudience, audience), zap.Error(err))
 	}

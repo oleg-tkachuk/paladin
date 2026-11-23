@@ -414,7 +414,7 @@ func TestRotateKeepsTheSessionWhenTheAgeDoesNotVerify(t *testing.T) {
 	if rec.Code != http.StatusNoContent || sessionCookie(rec) != nil {
 		t.Fatalf("unverified age = %d, cookie %v; want 204 and the cookie untouched", rec.Code, sessionCookie(rec))
 	}
-	assertOneLine(t, logs, msgAgeUnreadable, PathRefresh)
+	assertOneLine(t, logs, zapcore.WarnLevel, msgAgeUnreadable, PathRefresh)
 }
 
 // observe sends the role's log lines to the returned observer.
@@ -424,13 +424,13 @@ func (r *rig) observe() *observer.ObservedLogs {
 	return logs
 }
 
-// assertOneLine checks that msg was logged once, at Warn, naming path, and
+// assertOneLine checks that msg was logged once, at level, naming path, and
 // that no line holds the session's refresh token.
-func assertOneLine(t *testing.T, logs *observer.ObservedLogs, msg, path string) {
+func assertOneLine(t *testing.T, logs *observer.ObservedLogs, level zapcore.Level, msg, path string) {
 	t.Helper()
 	got := logs.FilterMessage(msg).All()
-	if len(got) != 1 || got[0].Level != zapcore.WarnLevel {
-		t.Fatalf("logged %v, want one %q at Warn", logs.All(), msg)
+	if len(got) != 1 || got[0].Level != level {
+		t.Fatalf("logged %v, want one %q at %s", logs.All(), msg, level)
 	}
 	if p := got[0].ContextMap()[logPath]; p != path {
 		t.Errorf("logged %s = %v, want %q", logPath, p, path)
@@ -470,7 +470,7 @@ func TestRotateAnswersUnavailableWhenTheKeysWillNotLoad(t *testing.T) {
 	logs := r.observe()
 	rec := r.call(http.MethodPost, PathRefresh, testRefresh, "")
 	assertUnavailable(t, rec, KeysUnavailableAnswer)
-	assertOneLine(t, logs, msgAgeKeysUnavailable, PathRefresh)
+	assertOneLine(t, logs, zapcore.ErrorLevel, msgAgeKeysUnavailable, PathRefresh)
 }
 
 // The routes that mint an access token leave the key check to IAM. When IAM
@@ -490,7 +490,7 @@ func TestRoutesAnswerUnavailableWhenIAMCannotCheckTheSession(t *testing.T) {
 			logs := r.observe()
 			rec := r.call(tc.method, tc.path, testRefresh, tc.body)
 			assertUnavailable(t, rec, iamDown)
-			assertOneLine(t, logs, msgAccessUnavailable, tc.path)
+			assertOneLine(t, logs, zapcore.ErrorLevel, msgAccessUnavailable, tc.path)
 			if len(r.calls) != 0 {
 				t.Errorf("planes were called: %v", r.calls)
 			}
