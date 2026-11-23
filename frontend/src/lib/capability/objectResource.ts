@@ -244,6 +244,31 @@ export function describeObjectGrant(
   };
 }
 
+/** Labels a prefix that names the capability's whole tenant. */
+export const WHOLE_TENANT_LABEL = "whole tenant";
+
+/** Separates the collection from the key in a short label. */
+export const LABEL_KEY_SEPARATOR = " · ";
+
+/**
+ * A one-line label for a stored resource prefix, for a table cell: the
+ * collection, and the key after LABEL_KEY_SEPARATOR when there is one, for a
+ * prefix in tenant; WHOLE_TENANT_LABEL for the tenant itself. Any other prefix
+ * — another tenant's, one cut short, one outside object:// — is returned as
+ * it is stored, since a shorter form could hide what it names.
+ */
+export function objectGrantLabel(prefix: string, tenant: string): string {
+  const own =
+    OBJECT_RESOURCE_SCHEME + tenant.toLowerCase() + RESOURCE_SEPARATOR;
+  if (!isUuid(tenant) || !prefix.startsWith(own)) return prefix;
+  if (prefix === own) return WHOLE_TENANT_LABEL;
+  const parts = parseObjectResource(prefix);
+  if (!parts) return prefix;
+  return parts.key === ""
+    ? parts.collection
+    : parts.collection + LABEL_KEY_SEPARATOR + parts.key;
+}
+
 /**
  * Why key may not end a grant's resource, or null. Empty is the whole
  * collection. Otherwise it names an object key, or every key under it when it

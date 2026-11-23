@@ -7,12 +7,15 @@ import {
   DOT_SEGMENT_REASON,
   DUPLICATE_GRANT,
   GRANT_REACH,
+  LABEL_KEY_SEPARATOR,
   MAX_COLLECTION_LENGTH,
   OBJECT_RESOURCE_SCHEME,
   TENANT_UNKNOWN,
+  WHOLE_TENANT_LABEL,
   collectionSegment,
   describeObjectGrant,
   firstObjectGrantProblem,
+  objectGrantLabel,
   grantKeyProblem,
   isCollectionName,
   objectGrantProblem,
@@ -292,5 +295,45 @@ describe("objectGrantProblems", () => {
 
   it("has nothing to refuse in no rows", () => {
     expect(firstObjectGrantProblem("", [])).toBeNull();
+  });
+});
+
+describe("objectGrantLabel", () => {
+  const OTHER = table.other_tenant;
+  const own = (rest: string) => OBJECT_RESOURCE_SCHEME + TENANT + "/" + rest;
+
+  it.each([
+    [
+      "a key prefix",
+      own("e2e.0527f3d6/contracts/2026/"),
+      "e2e/0527f3d6" + LABEL_KEY_SEPARATOR + "contracts/2026/",
+    ],
+    [
+      "one key",
+      own("docs/report.pdf"),
+      "docs" + LABEL_KEY_SEPARATOR + "report.pdf",
+    ],
+    ["a whole collection", own("docs/"), "docs"],
+    ["the whole tenant", own(""), WHOLE_TENANT_LABEL],
+  ])("shortens %s in the capability's tenant", (_, prefix, label) => {
+    expect(objectGrantLabel(prefix, TENANT)).toBe(label);
+  });
+
+  it("matches the tenant whatever case the capability carries it in", () => {
+    expect(objectGrantLabel(own("docs/"), TENANT.toUpperCase())).toBe("docs");
+  });
+
+  it.each([
+    ["another tenant's", OBJECT_RESOURCE_SCHEME + OTHER + "/docs/a"],
+    ["one cut short at the collection", own("docs")],
+    ["one with no collection the server writes", own("Bad_Name/a")],
+    ["one outside object://", "s3://bucket/a"],
+    ["the bare scheme", OBJECT_RESOURCE_SCHEME],
+  ])("keeps %s prefix as stored", (_, prefix) => {
+    expect(objectGrantLabel(prefix, TENANT)).toBe(prefix);
+  });
+
+  it("keeps every prefix as stored without the capability's tenant", () => {
+    expect(objectGrantLabel(own("docs/"), "")).toBe(own("docs/"));
   });
 });
