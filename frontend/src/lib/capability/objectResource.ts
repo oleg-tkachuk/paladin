@@ -269,6 +269,18 @@ export function objectGrantLabel(prefix: string, tenant: string): string {
     : parts.collection + LABEL_KEY_SEPARATOR + parts.key;
 }
 
+/** The characters a resource label may wrap after: path, id and label joins. */
+const LABEL_BREAK_AFTER = /(?<=[/.\-·])/u;
+
+/**
+ * label cut into the pieces a narrow column may wrap between: each ends at a
+ * "/", ".", "-" or "·", so a line breaks between path segments or id groups
+ * and never inside them. Joined, the pieces are label again.
+ */
+export function labelBreakPieces(label: string): string[] {
+  return label === "" ? [] : label.split(LABEL_BREAK_AFTER);
+}
+
 /**
  * Why key may not end a grant's resource, or null. Empty is the whole
  * collection. Otherwise it names an object key, or every key under it when it
