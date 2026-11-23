@@ -23,6 +23,7 @@ func FuzzValidate(f *testing.F) {
 		{"EventEnvelope", `type == "paladin.object.uploaded"`},
 		{"Object", `nonexistent_field == "x"`},
 		{"Object", `state == "available"`},
+		{"Object", "state == \"a\x07\""},
 		{"Object", `size_bytes > 1024 && key.startsWith("a/")`},
 		{"Collection", `name.matches("^a")`},
 		{"AuditLogEntry", `(`},

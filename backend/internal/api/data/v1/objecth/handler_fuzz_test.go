@@ -115,6 +115,7 @@ func FuzzListObjects(f *testing.F) {
 		{`state == "available"`, "", token, "", "→", "", "", "", false},
 		{`tags["env"] == "prod"`, "status", "x", "", "//", "nope", "a\"b", "\x00", false},
 		{`(`, "", "eyJ9", "", "", "", "", "", true},
+		{"state == \"a\x07\"", "", "", "", "", "a\x07", "", "", false},
 		{`[1,2,3].all(x, [1,2,3].all(y, x != y))`, "", token, "", "", "", "", "", true},
 	} {
 		f.Add(c.filter, c.order, c.desc, c.token, c.prefix, c.delimiter, c.state, c.tagKey, c.tagValue)
