@@ -21,6 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 	"uuid"
 
@@ -244,7 +245,7 @@ func (h *Handler) Issue(ctx context.Context, req *adminv1.CapabilityServiceIssue
 		},
 		Audience:        req.GetAudience(),
 		Caveats:         terms.caveats,
-		TTL:             time.Duration(req.GetTtlSeconds()) * time.Second,
+		TTL:             terms.ttl,
 		NotBefore:       terms.notBefore,
 		ConfirmationJKT: req.GetConfirmationJkt(),
 		ClientID:        clientID(caller),
@@ -310,7 +311,7 @@ func (h *Handler) Delegate(ctx context.Context, req *adminv1.CapabilityServiceDe
 		Audience:        terms.audience,
 		Caveats:         terms.caveats,
 		InheritCaveats:  terms.inherit,
-		TTL:             time.Duration(req.GetTtlSeconds()) * time.Second,
+		TTL:             terms.ttl,
 		NotBefore:       nbf,
 		ConfirmationJKT: req.GetConfirmationJkt(),
 	})
@@ -667,6 +668,7 @@ type issuance struct {
 	subject   limes.Principal
 	caveats   limes.Caveats
 	notBefore time.Time
+	ttl       time.Duration
 }
 
 // issuanceTerms reads and checks an Issue request: a subject in the caller's
@@ -687,6 +689,10 @@ func issuanceTerms(req *adminv1.CapabilityServiceIssueRequest, caller *auth.Prin
 	if err != nil {
 		return issuance{}, err
 	}
+	ttl, err := ttlOf(req.GetTtlSeconds())
+	if err != nil {
+		return issuance{}, err
+	}
 	var nbf time.Time
 	if t := req.GetNotBefore(); t.IsValid() {
 		nbf = t.AsTime()
@@ -696,7 +702,7 @@ func issuanceTerms(req *adminv1.CapabilityServiceIssueRequest, caller *auth.Prin
 			return issuance{}, err
 		}
 	}
-	return issuance{subject: subj, caveats: caveats, notBefore: nbf}, nil
+	return issuance{subject: subj, caveats: caveats, notBefore: nbf, ttl: ttl}, nil
 }
 
 // Refusals of a Delegate call by the capability it presents.
@@ -787,6 +793,7 @@ type delegation struct {
 	audience  []string
 	notBefore time.Time
 	subject   limes.Principal
+	ttl       time.Duration
 }
 
 // delegationTerms settles a Delegate request against its parent. No caveats
@@ -796,6 +803,11 @@ type delegation struct {
 // request's when it names them, else the parent's.
 func delegationTerms(req *adminv1.CapabilityServiceDelegateRequest, parent limes.Capability, currency string) (delegation, error) {
 	d := delegation{inherit: req.GetCaveats() == nil, audience: parent.Audience, subject: parent.Subject}
+	ttl, err := ttlOf(req.GetTtlSeconds())
+	if err != nil {
+		return delegation{}, err
+	}
+	d.ttl = ttl
 	if !d.inherit {
 		caveats, err := protoToCaveats(req.GetCaveats(), &parent.Caveats, currency)
 		if err != nil {
@@ -817,6 +829,20 @@ func delegationTerms(req *adminv1.CapabilityServiceDelegateRequest, parent limes
 		d.subject = subject
 	}
 	return d, nil
+}
+
+// maxTTLSeconds is the longest ttl_seconds a time.Duration holds. Converted
+// past it, the lifetime wrapped: a request for longer was refused as a
+// negative TTL, or minted with the default lifetime when it wrapped to zero.
+const maxTTLSeconds = int64(math.MaxInt64 / time.Second)
+
+// ttlOf is the lifetime ttl_seconds asks for; 0 is the issuer's default.
+func ttlOf(seconds int64) (time.Duration, error) {
+	if seconds > maxTTLSeconds {
+		return 0, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Sprintf("ttl_seconds: %d is over the limit of %d", seconds, maxTTLSeconds))
+	}
+	return time.Duration(seconds) * time.Second, nil
 }
 
 // budgetFor is the budget a capability gets: the one the request sets, else
