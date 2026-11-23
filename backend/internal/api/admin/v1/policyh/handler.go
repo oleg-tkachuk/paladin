@@ -132,7 +132,7 @@ type SimulateAuthzOutput struct {
 func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*SimulateAuthzOutput, error) {
 	tenantID, collection, err := parseSimulateResource(in.ResourceName, in.PrincipalTenantID)
 	if err != nil {
-		return nil, err
+		return nil, rpcerr.New(connect.CodeInvalidArgument, err)
 	}
 	if err := h.authorizeInspect(ctx, tenantID, collection); err != nil {
 		return nil, err
@@ -159,12 +159,30 @@ func (h *Handler) SimulateAuthz(ctx context.Context, in SimulateAuthzInput) (*Si
 	}
 	decision, err := h.engine.IsAuthorized(ctx, princ, action, res, cedar.RequestContext{Now: time.Now()})
 	if err != nil {
-		return nil, fmt.Errorf("authz: %w", err)
+		h.log.Error("policy simulate: engine failed", zap.String("action", action.String()), zap.Error(err))
+		return nil, rpcerr.New(connect.CodeInternal, fmt.Errorf("authz: %w", err))
 	}
+	allowed := decision == cedar.DecisionAllow
 	return &SimulateAuthzOutput{
-		Allowed:     decision == cedar.DecisionAllow,
-		Explanation: fmt.Sprintf("simulated: %s on %s → %v", in.Action, in.ResourceName, decision),
+		Allowed:     allowed,
+		Explanation: explanation(action, in.ResourceName, allowed),
 	}, nil
+}
+
+// The verdicts an explanation names.
+const (
+	verdictAllow = "allow"
+	verdictDeny  = "deny"
+)
+
+// explanation is the one line SimulateAuthz answers with. The resource name is
+// the caller's text, so it is quoted: the console shows the line as it is.
+func explanation(action cedar.Action, resourceName string, allowed bool) string {
+	verdict := verdictDeny
+	if allowed {
+		verdict = verdictAllow
+	}
+	return fmt.Sprintf("simulated: %s on %q → %s", action, resourceName, verdict)
 }
 
 // parseSimulateResource extracts tenantID + collection from a v2 resource

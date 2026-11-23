@@ -665,6 +665,62 @@ the same commit. Treat this file like a runtime invariant.
   logs the registry's error at Error.
 - **Blockers:** none.
 
+### Request text Postgres cannot store is suspected to answer Internal
+
+- **Status:** Deferred.
+- **Reason:** Postgres stores no U+0000 in a `text` column or a `jsonb`
+  string, and no handler refuses one before the insert: object tags and
+  metadata, display names, user subjects and the other free-text fields reach
+  the store as the client sent them. The handler fuzz targets run over fakes,
+  which store anything, so they cannot see it; the database's refusal would
+  fall through the adapters' error mapping to Internal. Not yet confirmed
+  against Postgres.
+- **Definition of Done:** an integration test sends such text through one
+  write RPC and records the answer; if it is Internal, one refusal at the edge
+  answers any request string Postgres cannot store as InvalidArgument naming
+  the field, with a test per plane, and the handler fuzz targets assert it.
+- **Blockers:** whether the refusal belongs to every RPC or only to the
+  fields that are stored, which is a contract decision.
+
+### The handler fuzz targets do not reach UserService
+
+- **Status:** Deferred.
+- **Reason:** `userh.CreateUser` and the password paths hash with the
+  production cost on every call, which leaves a fuzz search a handful of
+  inputs a second; the user subject and display name go unfuzzed at the
+  handler.
+- **Definition of Done:** a fuzz target drives `CreateUser` and `UpdateUser`
+  with a hasher of test cost injected through the handler, asserting the
+  `fuzzassert` invariants.
+- **Blockers:** the handler takes no hasher today.
+
+### The handler fuzz targets see no CHECK constraint they do not mirror
+
+- **Status:** Deferred.
+- **Reason:** the targets run over fakes that store anything, so a column
+  CHECK the handler does not enforce first is invisible to them. The
+  collection-name and tenant display-name CHECKs are now mirrored and
+  asserted, and user settings already were; the answer a request gets when a
+  CHECK refuses it — `Internal` through the adapters' fallback, by reading —
+  was not confirmed against Postgres, and the other CHECKs of the schema
+  (`object_tag_slug_format`, `api_tokens_rate_limit_rpm_check`) were not
+  traced to a handler.
+- **Definition of Done:** an integration test per write RPC sends a value
+  each CHECK on its table refuses and asserts `InvalidArgument`; any that
+  answers otherwise gets a handler refusal and a fuzz post-condition.
+- **Blockers:** none.
+
+### The MCP bridge converts a tool's `ttl_seconds` without a bound
+
+- **Status:** Deferred.
+- **Reason:** the presign tools (`mcp/bridge.go`) multiply `ttl_seconds` by
+  `time.Second` as the capability handler did before the fuzzing pass, so a
+  value past what a duration holds wraps and the server refuses a TTL the
+  agent did not send.
+- **Definition of Done:** the bridge refuses such a value as an invalid tool
+  argument naming the limit, with a test.
+- **Blockers:** none.
+
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)

@@ -65,6 +65,22 @@ func TestNanosOfRefusesWhatIsNotAnAmount(t *testing.T) {
 	}
 }
 
+// An unknown currency is refused with the reason as text, and the reason kept
+// as the cause: the refusal used to print it as a Go value.
+func TestNanosOfNamesAnUnknownCurrencyInWords(t *testing.T) {
+	_, _, err := NanosOf("max_budget", &money.Money{CurrencyCode: "not-a-currency", Units: 1})
+	ce, ok := errors.AsType[*connect.Error](err)
+	if !ok {
+		t.Fatalf("err = %v, want a connect error", err)
+	}
+	if want := `max_budget: unit_code "not-a-currency": not an ISO 4217 currency code`; ce.Message() != want {
+		t.Errorf("message = %q, want %q", ce.Message(), want)
+	}
+	if !errors.Is(err, ErrUnknownUnitCode) {
+		t.Error("the refusal does not wrap ErrUnknownUnitCode")
+	}
+}
+
 // withUnknownDouble is msg as a client built against an older contract sends
 // it: a double under field num, which this contract no longer declares.
 func withUnknownDouble(t *testing.T, msg proto.Message, num protowire.Number) {

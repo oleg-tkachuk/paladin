@@ -217,6 +217,28 @@ func TestSimulateAuthz_ForwardsThePrincipalTenant(t *testing.T) {
 	}
 }
 
+type refusingPolicy struct {
+	failingPolicy
+	code connect.Code
+}
+
+func (r refusingPolicy) SimulateAuthz(context.Context, policyh.SimulateAuthzInput) (*policyh.SimulateAuthzOutput, error) {
+	return nil, connect.NewError(r.code, "refused")
+}
+
+// The handler's refusal reaches the caller with its own code: the shim used
+// to answer every one of them, a malformed resource name included, as
+// Internal.
+func TestSimulateAuthz_KeepsTheHandlersCode(t *testing.T) {
+	for _, code := range []connect.Code{connect.CodeInvalidArgument, connect.CodePermissionDenied, connect.CodeUnauthenticated} {
+		srv := &PolicyServer{H: refusingPolicy{code: code}}
+		_, err := srv.SimulateAuthz(context.Background(), &pb.SimulateAuthzRequest{ResourceName: "tenants/x"})
+		if got := connect.CodeOf(err); got != code {
+			t.Errorf("code = %v, want the handler's %v", got, code)
+		}
+	}
+}
+
 type validatingPolicy struct {
 	failingPolicy
 	out *policyh.ValidateOutput

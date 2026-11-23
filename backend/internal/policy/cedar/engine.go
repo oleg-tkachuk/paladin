@@ -22,6 +22,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/capop"
 	"github.com/oleg-tkachuk/paladin/backend/internal/clientip"
+	"github.com/oleg-tkachuk/paladin/backend/internal/clienttext"
 )
 
 // Decision is the outcome of an authorization check.
@@ -1324,9 +1325,19 @@ func freezeExcept(action Action) string {
 
 // Validate parses the policy text and returns the parser error (or nil).
 // Exposed for pre-save UI validation; does not persist or compile into cache.
+//
+// The error is the client's to read: the text is parsed on its own first, so
+// a position is in the operator's text rather than in the compiled set the
+// built-in layer leads, and the parser's echo of the token it could not read
+// is escaped where it does not print.
 func Validate(text string) error {
-	_, err := compile(text)
-	return err
+	if _, err := cedar.NewPolicySetFromBytes("", []byte(text)); err != nil {
+		return errors.New(clienttext.Printable(err.Error()))
+	}
+	if _, err := compile(text); err != nil {
+		return errors.New(clienttext.Printable(err.Error()))
+	}
+	return nil
 }
 
 func userUID(p *Principal) cedartypes.EntityUID {

@@ -13,6 +13,8 @@ import (
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/clienttext"
 )
 
 // Program is re-exported so callers outside this package don't need to import
@@ -329,18 +331,21 @@ func SchemaNames() []string {
 // cel-go's Issues.Errors() yields []*cel.Error with Location.Line() /
 // .Column() — Line is 1-indexed, Column is 0-indexed in cel-go itself
 // but display strings add 1. We normalise to 1-indexed for both.
+//
+// Message is text a client reads — the validation RPC answers it, the list
+// RPCs refuse a filter with it — so it is one printable line: cel-go names the
+// token it could not read as the expression holds it, and a control character
+// there reached the client raw. Error adds the position, not cel-go's report
+// rendered against the source, which echoes the expression line by line.
 type CompileError struct {
 	Message string
 	Line    int
 	Column  int
-	// detail is cel-go's full report of every issue, rendered against the
-	// source, for callers that log the error rather than read its fields.
-	detail string
 }
 
 func (e *CompileError) Error() string {
-	if e.detail != "" {
-		return e.detail
+	if e.Line > 0 {
+		return fmt.Sprintf("%d:%d: %s", e.Line, e.Column, e.Message)
 	}
 	return e.Message
 }
@@ -373,14 +378,13 @@ func compileChecked(schema *Schema, expr string) (*cel.Env, *cel.Ast, error) {
 	if iss != nil && iss.Err() != nil {
 		errs := iss.Errors()
 		if len(errs) == 0 {
-			return nil, nil, &CompileError{Message: iss.Err().Error()}
+			return nil, nil, &CompileError{Message: clienttext.Printable(iss.Err().Error())}
 		}
 		first := errs[0]
 		return nil, nil, &CompileError{
-			Message: first.Message,
+			Message: clienttext.Printable(first.Message),
 			Line:    first.Location.Line(),
 			Column:  first.Location.Column() + 1, // 0→1-indexed
-			detail:  iss.Err().Error(),
 		}
 	}
 	if ast.OutputType() != cel.BoolType {
