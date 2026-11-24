@@ -32,6 +32,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 type lockFixture struct {
@@ -66,11 +67,9 @@ func newLockFixture(t *testing.T) (context.Context, lockFixture) {
 		t.Fatalf("seed collection: %v", err)
 	}
 
-	objectID := uuid.New()
-	mustExec(t, ctx, pool,
-		`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type)
-		 VALUES ($1, $2, $3, 'report.pdf', 'AVAILABLE', 'application/pdf')`,
-		objectID, tenant, collectionID)
+	objectID := seedObject(t, ctx, pool, objectrow.Row{
+		TenantID: tenant, CollectionID: collectionID, Path: "report.pdf", ContentType: "application/pdf",
+	})
 
 	versionID := uuid.NewV7()
 	mustExec(t, ctx, pool,

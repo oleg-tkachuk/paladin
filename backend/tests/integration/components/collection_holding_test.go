@@ -10,6 +10,7 @@ import (
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // A trashed object holds its collection as a live one does: the delete is
@@ -23,12 +24,10 @@ func TestCollectionHolding_CountsTheTrashToo(t *testing.T) {
 	repo := adapters.NewCollectionRepo(sqlc.New(pool), pool)
 
 	seed := func(path string, state sqlc.ObjectState) {
-		mustExec(t, ctx, pool, `
-			INSERT INTO objects (id, tenant_id, collection_id, path, state,
-			                     content_type, checksum_algorithm, size_bytes)
-			VALUES (gen_random_uuid(), $1, $2, $3, $4::object_state,
-			        'application/octet-stream', 0, 100)`,
-			f.tenantID, f.collectionID, path, string(state))
+		seedObject(t, ctx, pool, objectrow.Row{
+			TenantID: f.tenantID, CollectionID: f.collectionID, Path: path,
+			State: string(state), SizeBytes: objectrow.Ptr[int64](100),
+		})
 	}
 	seed("trashed", sqlc.ObjectStateDELETED)
 	got, err := repo.Holding(ctx, f.tenantID, f.collection)

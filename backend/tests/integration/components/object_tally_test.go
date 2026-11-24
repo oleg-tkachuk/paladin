@@ -5,6 +5,7 @@ package components
 import (
 	"context"
 	"testing"
+	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
@@ -12,6 +13,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // TallyObjects counts what the listing would return, by state and content
@@ -26,11 +28,10 @@ func TestTallyObjects(t *testing.T) {
 	seedBucketRow(t, ctx, admin)
 	seedCollectionFor(t, ctx, admin, tenant, "docs")
 	seedCollectionFor(t, ctx, admin, other, "docs")
-	insert := func(tenantArg any, path, state, contentType string) {
-		mustExec(t, ctx, admin, `
-			INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-			SELECT $1, c.id, $2, $3::object_state, $4
-			  FROM collections c WHERE c.tenant_id = $1 AND c.name = 'docs'`, tenantArg, path, state, contentType)
+	insert := func(tenantID uuid.UUID, path, state, contentType string) {
+		seedObject(t, ctx, admin, objectrow.Row{
+			TenantID: tenantID, Collection: "docs", Path: path, State: state, ContentType: contentType,
+		})
 	}
 	insert(tenant, "a/1.png", "AVAILABLE", "image/png")
 	insert(tenant, "a/2.png", "PENDING", "image/png")

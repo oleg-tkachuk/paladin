@@ -10,9 +10,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
-	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -177,9 +175,10 @@ func TestStorageMigrationPurgeLeavesNoBytesBehind(t *testing.T) {
 		"permanently deleted after the rebind": func(t *testing.T, f publicMigrationFixture) {
 			t.Helper()
 			h := permanentDeleteHandler(f.pool, storeObjects{s: f.store})
-			obj := objecth.Object{
-				ObjectID: f.objectID(t, ctx, "docs", purgedKey), TenantID: f.tenant,
-				Collection: "docs", Key: purgedKey, State: statemachine.StateDeleted,
+			obj, err := adapters.NewObjectRepo(sqlc.New(f.pool), f.pool).FindByName(ctx, f.tenant, "docs",
+				f.objectID(t, ctx, "docs", purgedKey).String())
+			if err != nil {
+				t.Fatalf("read the trashed object: %v", err)
 			}
 			if err := h.PermanentDelete(ctx, f.tenant, obj, 0, false); err != nil {
 				t.Fatalf("PermanentDelete: %v", err)

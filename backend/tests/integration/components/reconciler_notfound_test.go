@@ -18,6 +18,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // These drive the real ReconcilerV2 loop — real Transitioner, real
@@ -191,17 +192,18 @@ func TestPendingOverdueCountsWhatTheReconcilerCannotSettle(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 
-	seed := func(path, state, expires string) {
-		mustExec(t, ctx, pool, `
-			INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state,
-			                     content_type, checksum_algorithm, presign_expires_at)
-			SELECT $1, $2, c.id, c.bucket_id, $4, $5::object_state, 'application/octet-stream', 0,
-			       now() + $6::interval
-			  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection, path, state, expires)
+	// Every row keeps its anchor: the promoted one's URL is yet to settle.
+	seed := func(path, state string, expiresIn time.Duration) {
+		expires := time.Now().Add(expiresIn)
+		seedObject(t, ctx, pool, objectrow.Row{
+			TenantID: f.tenantID, Collection: f.collection, Path: path, State: state,
+			PresignExpiresAt: &expires, Unsettled: true,
+		})
 	}
-	seed("k-overdue", "PENDING", "-48 hours")
-	seed("k-not-due", "PENDING", "1 hour")
-	seed("k-settled", "AVAILABLE", "-48 hours")
+	const overdue, notDue = -48 * time.Hour, time.Hour
+	seed("k-overdue", objectrow.StatePending, overdue)
+	seed("k-not-due", objectrow.StatePending, notDue)
+	seed("k-settled", objectrow.StateAvailable, overdue)
 
 	probe := adapters.NewReconcilerProbe(sqlc.New(pool),
 		headFunc(func(context.Context, string, string, uuid.UUID, string, string) (string, int64, string, string, error) {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // TestListDistinctTags proves the ObjectRepo.ListDistinctTags scan that backs
@@ -30,11 +31,10 @@ func setupDistinctTags(t *testing.T) (context.Context, *pgxpool.Pool, fixture) {
 // insertTaggedObject adds one object carrying the given JSON tag map.
 func insertTaggedObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, state, tags string) {
 	t.Helper()
-	mustExec(t, ctx, pool,
-		`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, tags)
-		 SELECT $1, $2, c.id, $4, $5, 'application/octet-stream', 0, $6::jsonb FROM collections c
-		  WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection,
-		"k-"+uuid.New().String()[:8], state, tags)
+	seedObject(t, ctx, pool, objectrow.Row{
+		TenantID: f.tenantID, Collection: f.collection, Path: "k-" + uuid.New().String()[:8],
+		State: state, Tags: tags,
+	})
 }
 
 func TestListDistinctTags(t *testing.T) {

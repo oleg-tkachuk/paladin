@@ -57,10 +57,10 @@ func TestFolderListingScale(t *testing.T) {
 
 	start := time.Now()
 	mustExec(t, ctx, admin, `
-		INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, placement_bucket_id)
 		SELECT $1, c.id,
 		       'd' || (i % $3) || '/s' || ((i / $3) % $4) || '/o' || i,
-		       'AVAILABLE', 'text/plain'
+		       'AVAILABLE', 'text/plain', c.bucket_id
 		  FROM collections c, generate_series(1, $2) AS i
 		 WHERE c.tenant_id = $1 AND c.name = $5`,
 		tenant, objects, rootFolders, subFolders, scaleCollection)
@@ -109,8 +109,8 @@ func TestFolderListingScale(t *testing.T) {
 		t.Helper()
 		begin := time.Now()
 		mustExec(t, ctx, admin, `
-			INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-			SELECT $1, c.id, 'w/o' || i, 'AVAILABLE', 'text/plain'
+			INSERT INTO objects (tenant_id, collection_id, path, state, content_type, placement_bucket_id)
+			SELECT $1, c.id, 'w/o' || i, 'AVAILABLE', 'text/plain', c.bucket_id
 			  FROM collections c, generate_series($2::int, $2::int + $3::int - 1) AS i
 			 WHERE c.tenant_id = $1 AND c.name = $4`,
 			tenant, from, writeBatch, scaleCollection)

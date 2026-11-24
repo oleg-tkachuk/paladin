@@ -55,7 +55,7 @@ func TestMultipartCompositeChecksumRoundTrip(t *testing.T) {
 		t.Fatalf("read back checksum %q over %d-byte parts, want %q over %d", obj.Checksum, obj.ChecksumPartSizeBytes, composite, partSize)
 	}
 
-	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, objectID)
+	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE', placement_bucket_id = upload_bucket_id WHERE id = $1`, objectID)
 	// Nothing is written, and the caller is told so: a completion that went
 	// on as if it had been recorded assembled parts nothing was waiting for.
 	if err := repo.RecordCompositeChecksum(ctx, objectID, later, partSize); !errors.Is(err, multiparth.ErrNotPending) {

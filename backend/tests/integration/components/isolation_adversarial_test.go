@@ -19,6 +19,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // mkTenant inserts a bare tenant and returns its id + slug.
@@ -111,10 +112,9 @@ func TestAdversarial_RLSFiltersCrossTenantObjects(t *testing.T) {
 		 SELECT $1, $2, (SELECT b.id FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id
 			  WHERE sb.name = $3 AND b.name = $4)`,
 			tid, ok, backendID, bucket)
-		mustExec(t, ctx, pool,
-			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
-			 SELECT $1, $2, c.id, $4, 'AVAILABLE','text/plain',0
-			   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), tid, ok, "k-"+uuid.New().String()[:8])
+		seedObject(t, ctx, pool, objectrow.Row{
+			TenantID: tid, Collection: ok, Path: "k-" + uuid.New().String()[:8], ContentType: "text/plain",
+		})
 	}
 	seedObj(tenantA)
 	seedObj(tenantB)

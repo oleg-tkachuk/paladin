@@ -12,6 +12,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes"
 	"github.com/oleg-tkachuk/paladin/backend/internal/platformstats"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // seedCapability puts a capability of tenant, issued to a principal of kind,
@@ -118,18 +119,18 @@ func TestCollectRLSObjects(t *testing.T) {
 	big := seedFixture(t, ctx, pool)
 	small := seedFixture(t, ctx, pool)
 
-	insert := func(tenantID uuid.UUID, collection, state string, size any) {
+	insert := func(tenantID uuid.UUID, collection, state string, size *int64) {
 		t.Helper()
-		mustExec(t, ctx, pool,
-			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, size_bytes)
-		 SELECT $1, $2, c.id, $4, $5, 'application/octet-stream', 0, $6
-		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), tenantID, collection, "k-"+uuid.New().String()[:8], state, size)
+		seedObject(t, ctx, pool, objectrow.Row{
+			TenantID: tenantID, Collection: collection, Path: "k-" + uuid.New().String()[:8],
+			State: state, SizeBytes: size,
+		})
 	}
-	insert(big.tenantID, big.collection, "AVAILABLE", 100)
-	insert(big.tenantID, big.collection, "AVAILABLE", 200)
+	insert(big.tenantID, big.collection, "AVAILABLE", objectrow.Ptr[int64](100))
+	insert(big.tenantID, big.collection, "AVAILABLE", objectrow.Ptr[int64](200))
 	insert(big.tenantID, big.collection, "PENDING", nil) // size_bytes NULL until commit
-	insert(big.tenantID, big.collection, "DELETED", 50)
-	insert(small.tenantID, small.collection, "AVAILABLE", 7)
+	insert(big.tenantID, big.collection, "DELETED", objectrow.Ptr[int64](50))
+	insert(small.tenantID, small.collection, "AVAILABLE", objectrow.Ptr[int64](7))
 
 	census, err := platformstats.CollectRLS(ctx, pool, platformstats.TenantPage{})
 	if err != nil {
@@ -193,10 +194,10 @@ func TestCollectRLSPagesTheTenants(t *testing.T) {
 
 	insert := func(tenantID uuid.UUID, collection string) {
 		t.Helper()
-		mustExec(t, ctx, pool,
-			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, size_bytes)
-		 SELECT $1, $2, c.id, $4, 'AVAILABLE', 'application/octet-stream', 0, 1
-		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), tenantID, collection, "k-"+uuid.New().String()[:8])
+		seedObject(t, ctx, pool, objectrow.Row{
+			TenantID: tenantID, Collection: collection, Path: "k-" + uuid.New().String()[:8],
+			SizeBytes: objectrow.Ptr[int64](1),
+		})
 	}
 	insert(big.tenantID, big.collection)
 	insert(big.tenantID, big.collection)

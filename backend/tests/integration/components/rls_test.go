@@ -47,6 +47,17 @@ func TestRLSTenantIsolation(t *testing.T) {
 	fB := seedFixture(t, ctx, pool)
 	objA := seedPendingObject(t, ctx, pool, fA)
 	objB := seedPendingObject(t, ctx, pool, fB)
+	// The buckets the probes below anchor their rows to, so the rows are
+	// otherwise valid and only RLS can refuse one.
+	bucketOf := func(f fixture) uuid.UUID {
+		t.Helper()
+		var id uuid.UUID
+		if err := pool.QueryRow(ctx, `SELECT bucket_id FROM collections WHERE id = $1`, f.collectionID).Scan(&id); err != nil {
+			t.Fatalf("read bucket: %v", err)
+		}
+		return id
+	}
+	bucketA, bucketB := bucketOf(fA), bucketOf(fB)
 
 	// asApp runs fn in a tx where current_user = paladin_app and paladin.tenant_id =
 	// tenantGUC. Always rolled back, so cases don't bleed into each other
@@ -134,8 +145,8 @@ func TestRLSTenantIsolation(t *testing.T) {
 			// the RLS WITH CHECK (tenant_id must equal the GUC) can reject
 			// this — proving the policy, not a constraint, is the gate.
 			_, err := tx.Exec(ctx,
-				`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
-				 VALUES ($1, $2, $3, 'rls-probe', 'PENDING', 'application/octet-stream', 0)`, uuid.NewV7(), fB.tenantID, fB.collectionID)
+				`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, upload_bucket_id)
+				 VALUES ($1, $2, $3, 'rls-probe', 'PENDING', 'application/octet-stream', 0, $4)`, uuid.NewV7(), fB.tenantID, fB.collectionID, bucketB)
 			if err == nil {
 				t.Fatal("cross-tenant INSERT succeeded — WITH CHECK not enforced")
 			}
@@ -149,8 +160,8 @@ func TestRLSTenantIsolation(t *testing.T) {
 	t.Run("WITH CHECK allows own-tenant INSERT", func(t *testing.T) {
 		asApp(t, fA.tenantID.String(), func(tx pgx.Tx) {
 			_, err := tx.Exec(ctx,
-				`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm)
-				 VALUES ($1, $2, $3, 'rls-ok', 'PENDING', 'application/octet-stream', 0)`, uuid.NewV7(), fA.tenantID, fA.collectionID)
+				`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, upload_bucket_id)
+				 VALUES ($1, $2, $3, 'rls-ok', 'PENDING', 'application/octet-stream', 0, $4)`, uuid.NewV7(), fA.tenantID, fA.collectionID, bucketA)
 			if err != nil {
 				t.Fatalf("own-tenant INSERT rejected: %v", err)
 			}

@@ -60,8 +60,8 @@ func TestSearchObjectIDs_ScopedToTheSessionTenant(t *testing.T) {
 	seedCollectionFor(t, ctx, admin, tenantB, "docs")
 	for _, tid := range []uuid.UUID{tenantA, tenantB} {
 		mustExec(t, ctx, admin, `
-			INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags)
-			SELECT $1, c.id, 'k-' || g, 'AVAILABLE', 'text/plain', '{"env":"prod"}'
+			INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags, placement_bucket_id)
+			SELECT $1, c.id, 'k-' || g, 'AVAILABLE', 'text/plain', '{"env":"prod"}', c.bucket_id
 			  FROM generate_series(1, 5) g
 			  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tid)
 	}
@@ -135,10 +135,11 @@ func TestListObjects_SearchUnderRLS(t *testing.T) {
 	for _, tid := range []uuid.UUID{tenantA, tenantB} {
 		seedCollectionFor(t, ctx, admin, tid, "docs")
 		mustExec(t, ctx, admin, `
-			INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags)
+			INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags, placement_bucket_id)
 			SELECT $1, c.id, 'reports/q_' || g || '.pdf', 'AVAILABLE',
 			       CASE WHEN g % 2 = 0 THEN 'application/pdf' ELSE 'image/png' END,
-			       jsonb_build_object('env', CASE WHEN g % 1000 = 0 THEN 'prod' ELSE 'dev' END)
+			       jsonb_build_object('env', CASE WHEN g % 1000 = 0 THEN 'prod' ELSE 'dev' END),
+			       c.bucket_id
 			  FROM generate_series(1, 3000) g
 			  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tid)
 	}
@@ -203,12 +204,13 @@ func TestListObjects_DisjunctionUnderRLS(t *testing.T) {
 	seedBucketRow(t, ctx, admin)
 	seedCollectionFor(t, ctx, admin, tenant, "docs")
 	mustExec(t, ctx, admin, `
-		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags)
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags, placement_bucket_id)
 		SELECT $1, c.id, 'k/' || g, 'AVAILABLE',
 		       CASE WHEN g % 7 = 0 THEN 'image/png' ELSE 'text/plain' END,
 		       CASE WHEN g % 50 = 0 THEN '{"env":"prod"}'::jsonb
 		            WHEN g % 11 = 0 THEN '{"env":"stage"}'::jsonb
-		            ELSE '{}'::jsonb END
+		            ELSE '{}'::jsonb END,
+		       c.bucket_id
 		  FROM generate_series(1, 2000) g
 		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant)
 	pool := rlsPool(t, ctx, admin)
@@ -275,8 +277,8 @@ func TestListObjects_UnknownStateMatchesNothing(t *testing.T) {
 	seedBucketRow(t, ctx, admin)
 	seedCollectionFor(t, ctx, admin, tenant, "docs")
 	mustExec(t, ctx, admin, `
-		INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-		SELECT $1, c.id, 'k-' || g, 'AVAILABLE', 'text/plain'
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, placement_bucket_id)
+		SELECT $1, c.id, 'k-' || g, 'AVAILABLE', 'text/plain', c.bucket_id
 		  FROM generate_series(1, 5) g
 		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant)
 	pool := rlsPool(t, ctx, admin)
@@ -315,11 +317,13 @@ func TestIndexUsage_ObjectSearch(t *testing.T) {
 	pool := startPostgres(t)
 	f := seedFixture(t, ctx, pool)
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags, metadata)
-		SELECT $1, $2, 'logs/report_' || g || '.pdf', 'AVAILABLE', 'application/pdf',
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, tags, metadata, placement_bucket_id)
+		SELECT $1, c.id, 'logs/report_' || g || '.pdf', 'AVAILABLE', 'application/pdf',
 		       jsonb_build_object('env', CASE WHEN g % 1000 = 0 THEN 'prod' ELSE 'dev' END),
-		       jsonb_build_object('owner', 'team' || (g % 500))
-		  FROM generate_series(1, 20000) g`, f.tenantID, f.collectionID)
+		       jsonb_build_object('owner', 'team' || (g % 500)),
+		       c.bucket_id
+		  FROM generate_series(1, 20000) g
+		  JOIN collections c ON c.id = $2`, f.tenantID, f.collectionID)
 	analyze(t, ctx, pool, "objects")
 
 	const base = `SELECT o.id FROM public.objects o
@@ -385,13 +389,13 @@ func TestListObjects_LiveUnlessStateIsNamed(t *testing.T) {
 	seedCollectionFor(t, ctx, admin, tenant, "docs")
 	const live, trashed = 3, 2
 	mustExec(t, ctx, admin, `
-		INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-		SELECT $1, c.id, 'live-' || g, 'AVAILABLE', 'text/plain'
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, placement_bucket_id)
+		SELECT $1, c.id, 'live-' || g, 'AVAILABLE', 'text/plain', c.bucket_id
 		  FROM generate_series(1, $2::int) g
 		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant, live)
 	mustExec(t, ctx, admin, `
-		INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-		SELECT $1, c.id, 'gone-' || g, 'DELETED', 'text/plain'
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, placement_bucket_id)
+		SELECT $1, c.id, 'gone-' || g, 'DELETED', 'text/plain', c.bucket_id
 		  FROM generate_series(1, $2::int) g
 		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant, trashed)
 	pool := rlsPool(t, ctx, admin)

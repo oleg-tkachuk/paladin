@@ -9,6 +9,7 @@ import (
 	"uuid"
 
 	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 	"github.com/pressly/goose/v3"
 )
 
@@ -60,8 +61,10 @@ func TestFailedObjectsAreDiscardedByTheMigration(t *testing.T) {
 			t.Errorf("object %s was not FAILED and was removed", id)
 		}
 	}
-	// Its key is free again.
-	insert("failed.txt", "PENDING")
+	// Its key is free again, to a row the current schema accepts.
+	seedObject(t, ctx, pool, objectrow.Row{
+		TenantID: f.tenantID, Collection: f.collection, Path: "failed.txt", State: objectrow.StatePending,
+	})
 
 	// And the label is gone from object_state.
 	var labels []string
