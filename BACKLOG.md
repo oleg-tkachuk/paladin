@@ -773,20 +773,6 @@ the same commit. Treat this file like a runtime invariant.
   because of an implementation detail of one storage engine, and the shape the
   object and audit paths established is narrow-only for exactly that reason.
 
-### A failed rebind that no rule names answers FAILED_PRECONDITION
-
-- **Status:** Deferred.
-- **Reason:** `collectionh.rebindError` sends every error it does not
-  recognise to FAILED_PRECONDITION, a connection failure included, so a store
-  outage reads as a refusal. The catch-all stays because the constraints and
-  triggers a `collections.bucket_id` update can fire have not been
-  enumerated; moving it to Internal blind could turn a real refusal into one.
-- **Definition of Done:** every constraint and trigger on that update maps to
-  a sentinel in `CollectionRepo.Rebind` (a missing target bucket's NOT NULL
-  violation to `ErrBucketNotFound`, as create does); the catch-all becomes
-  `apiutil.MapError`, so anything else is Internal; tests cover each.
-- **Blockers:** none.
-
 ## Configuration
 
 ### `llm:` and `vector:` schema blocks removed — features never landed

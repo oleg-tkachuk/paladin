@@ -102,6 +102,25 @@ func TestStoreFailuresAnswerInternal(t *testing.T) {
 	}
 }
 
+// A failed rebind's line names the bucket it was moving to as well as the
+// collection, so the store failure can be traced to both.
+func TestRebindFailureNamesTheBucket(t *testing.T) {
+	const backend, bucket = "aws-eu", "paladin-prod"
+	tid := uuid.New()
+	h, logs := observed(&fakeRepo{rebindFn: func(context.Context, uuid.UUID, string, string, string, int64) error {
+		return errStore
+	}}, zapcore.ErrorLevel)
+	_, err := h.BindCollectionToBucket(authedCtx(tid), uuid.Nil(), "k", "storageBackends/"+backend+"/buckets/"+bucket, 0)
+	wantCode(t, err, connect.CodeInternal)
+	wantOneLine(t, logs, zapcore.ErrorLevel, tid)
+	got := logs.All()[0].ContextMap()
+	for k, v := range map[string]string{"collection": "k", logBackendID: backend, logBucketName: bucket} {
+		if got[k] != v {
+			t.Errorf("%s = %v, want %s", k, got[k], v)
+		}
+	}
+}
+
 // Every change to a collection is logged once at info: what changed, which
 // collection of which tenant, and who changed it.
 func TestChangesAreLogged(t *testing.T) {
