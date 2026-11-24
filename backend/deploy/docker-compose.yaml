@@ -69,7 +69,7 @@ services:
   seaweedfs:
     # Pinned, not `:latest`: a floating tag changes what the stack runs with
     # no commit of ours in between, and the e2e suite pins the same release.
-    image: chrislusf/seaweedfs:4.54@sha256:4b42c212543a0acd4c0e675215ecdcaf62a186ef98def76c7e12701871222d15
+    image: chrislusf/seaweedfs:4.55@sha256:7ca46aeae2f223b37e5d91593c17ab37738eec6df6ab69b48a0487f7643342b9
     container_name: paladin-seaweedfs
     # The filer reads notification.toml from its config search path, of
     # which /etc/seaweedfs is one; `weed server` has no flag naming the file.
