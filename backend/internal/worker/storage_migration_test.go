@@ -32,7 +32,13 @@ type fakeMigRepo struct {
 	// sourceRetention is what Complete was asked to keep the source copies
 	// for.
 	sourceRetention time.Duration
+	// settleWindow is what FinishRollback was asked to keep passing for.
+	settleWindow time.Duration
 }
+
+// transitionSettled is what the fake records for Settle, which leaves the
+// state as it is.
+const transitionSettled = "settled"
 
 func (f *fakeMigRepo) ListActive(context.Context, int) ([]StorageMigration, error) {
 	return []StorageMigration{f.m}, nil
@@ -122,8 +128,14 @@ func (f *fakeMigRepo) StartRollback(_ context.Context, _ MigrationRead, reason s
 	return nil
 }
 
-func (f *fakeMigRepo) FinishRollback(context.Context, MigrationRead) error {
+func (f *fakeMigRepo) FinishRollback(_ context.Context, _ MigrationRead, settleWindow time.Duration) error {
 	f.transitions = append(f.transitions, MigStateFailed)
+	f.settleWindow = settleWindow
+	return nil
+}
+
+func (f *fakeMigRepo) Settle(context.Context, MigrationRead) error {
+	f.transitions = append(f.transitions, transitionSettled)
 	return nil
 }
 
@@ -345,6 +357,80 @@ func TestRollingBackMovesBackAndFails(t *testing.T) {
 	}
 	if fmt.Sprint(repo.transitions) != fmt.Sprint([]string{MigStateFailed}) {
 		t.Errorf("transitions %v, want failed", repo.transitions)
+	}
+}
+
+// The rollback's end keeps the failed migration passing for the worker's
+// settle window.
+func TestRollingBackFailsWithItsSettleWindow(t *testing.T) {
+	repo := &fakeMigRepo{m: newMigration(MigStateRollingBack)}
+	w := newMigWorker(repo, newStore())
+	w.RollbackSettleWindow = time.Hour
+	if err := w.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if repo.settleWindow != time.Hour {
+		t.Errorf("settle window %v, want the worker's %v", repo.settleWindow, time.Hour)
+	}
+}
+
+// A rolled-back migration keeps passing after it failed: a request that read
+// the target binding before the switch back may anchor an upload to the
+// target, or bind a collection to it, after the rollback ended. The pass
+// points the uploads at the source again and moves the straggler back; the
+// migration settles only past settle_after with nothing holding the target,
+// and never completes.
+func TestFailedMovesStragglersBackUntilSettled(t *testing.T) {
+	s := newStore()
+	now := time.Now()
+	m := newMigration(MigStateFailed)
+	m.SettleAfter = now.Add(time.Hour)
+	repo := &fakeMigRepo{m: m}
+	repo.movable = []MoveCandidate{candidate(s, "dedicated", "late", etagA)}
+	w := newMigWorker(repo, s)
+	w.Now = func() time.Time { return now }
+	if err := w.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.repoints) == 0 || repo.repoints[0] != "dedicated>shared:"+LayoutShared {
+		t.Fatalf("repointed %v, want the uploads pointed at the source", repo.repoints)
+	}
+	if s.size["shared|c/late"] != 3 || len(repo.moved) != 1 {
+		t.Fatalf("moved %v; want the straggler moved back into the source", repo.moved)
+	}
+	if len(repo.transitions) != 0 {
+		t.Fatalf("transitions %v before settle_after, want none", repo.transitions)
+	}
+
+	repo.movable = nil
+	w.Now = func() time.Time { return now.Add(2 * time.Hour) }
+	for name, h := range holdsOfEachKind {
+		repo.holds = h
+		if err := w.Tick(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if len(repo.transitions) != 0 {
+			t.Fatalf("%s: transitions %v; want the passes to go on while the target is held", name, repo.transitions)
+		}
+	}
+	repo.holds = MigrationHolds{}
+	if err := w.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(repo.transitions) != fmt.Sprint([]string{transitionSettled}) {
+		t.Errorf("transitions %v, want settled", repo.transitions)
+	}
+}
+
+// A failed migration whose source left ready waits for it, as a rollback
+// does.
+func TestFailedWaitsForItsSource(t *testing.T) {
+	repo := &fakeMigRepo{m: newMigration(MigStateFailed), provision: map[string]string{"shared": bucketgate.ProvisionDeleting}}
+	if err := newMigWorker(repo, newStore()).Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.repoints) != 0 || len(repo.transitions) != 0 {
+		t.Errorf("repointed %v, transitions %v; want nothing", repo.repoints, repo.transitions)
 	}
 }
 

@@ -19,7 +19,8 @@ import (
 // The deadlines these tests run a migration with: URLs live up to the SigV4
 // ceiling, as on a deployment with the default max_ttl; a promoted object's
 // anchor settles a minute after its URL expires, a PENDING upload an hour
-// after; the source copies are kept an hour after the completion.
+// after; the source copies are kept an hour after the completion, and a
+// rolled-back migration keeps passing as long after it failed.
 const (
 	deadlinesMaxTTL        = 7 * 24 * time.Hour
 	deadlinesSettleGrace   = time.Minute
@@ -36,7 +37,8 @@ func (f publicMigrationFixture) deadlinesWorker(now func() time.Time) *worker.St
 	return &worker.StorageMigrationWorker{
 		Repo:   adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool),
 		Copier: f.store, Deleter: f.store, Header: f.store, Identity: f.store,
-		WriteWindow: deadlinesMaxTTL, SourceCopyRetention: deadlinesCopyRetention, Now: now, Logger: zap.NewNop(),
+		WriteWindow: deadlinesMaxTTL, SourceCopyRetention: deadlinesCopyRetention,
+		RollbackSettleWindow: deadlinesCopyRetention, Now: now, Logger: zap.NewNop(),
 	}
 }
 

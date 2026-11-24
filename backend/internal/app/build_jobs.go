@@ -462,7 +462,11 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// first pass.
 		WriteWindow:         cfg.Limits.Presign.MaxTTL,
 		SourceCopyRetention: cfg.Worker.Jobs.StorageMigration.SourceCopyRetention,
-		Logger:              l.Named("storage-migration"),
+		// A rolled-back migration keeps passing as long after it failed as a
+		// completed one keeps its source before the cleanup: the bound both
+		// give a request that read a binding before the switch.
+		RollbackSettleWindow: cfg.Worker.Jobs.StorageMigration.SourceCopyRetention,
+		Logger:               l.Named("storage-migration"),
 	})
 
 	return out

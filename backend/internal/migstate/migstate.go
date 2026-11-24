@@ -19,8 +19,10 @@ const (
 	Completed = "completed"
 	// Cleaned: the source copies are deleted. Terminal.
 	Cleaned = "cleaned"
-	// Failed: provisioning failed, or the rollback finished. Terminal, and
-	// retryable.
+	// Failed: provisioning failed, or the rollback finished. Retryable. After
+	// a rollback each pass still moves back what a request that read the
+	// target binding before the switch back left in the target, until the
+	// migration settles; a provisioning failure is settled as it fails.
 	Failed = "failed"
 	// RollingBack: new uploads go to the source again, and each pass moves
 	// the objects placed in the target back.

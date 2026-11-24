@@ -32,7 +32,8 @@ LIMIT 1;
 -- name: ListActiveStorageMigrations :many
 -- Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 -- still active — the worker must clean the source on it — and so is
--- 'rolling_back', which the worker must finish rolling back.
+-- 'rolling_back', which the worker must finish rolling back, and a 'failed'
+-- one not yet settled, whose passes move a straggler back from the target.
 SELECT sqlc.embed(m),
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
@@ -41,7 +42,7 @@ JOIN buckets sb           ON sb.id = m.source_bucket_id
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
 JOIN buckets tb           ON tb.id = m.target_bucket_id
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
-WHERE m.state NOT IN ('cleaned', 'failed')
+WHERE (m.state NOT IN ('cleaned', 'failed') OR (m.state = 'failed' AND m.settled_at IS NULL))
   -- A tenant in the trash is frozen: its migration resumes on restore.
   AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = m.tenant_id AND t.deleted_at IS NOT NULL)
 ORDER BY m.updated_at
@@ -259,8 +260,11 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
 -- name: FailStorageMigration :execrows
+-- A failure before anything was pointed at the target (its provisioning):
+-- nothing of the tenant can be there, so it is settled at once.
 UPDATE tenant_storage_migrations
-SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1, updated_at = now()
+SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1,
+    settled_at = now(), updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
@@ -279,25 +283,37 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
 -- name: FinishStorageMigrationRollback :execrows
 -- rolling_back -> failed, once nothing of the tenant is left in the target
 -- and no URL can write it. The reason the rollback started stays, and the
--- attempt too: the failure was counted when it started.
+-- attempt too: the failure was counted when it started. The passes go on
+-- until at least settle_after, for a request that read the target binding
+-- before the switch back and anchors to it after this.
 UPDATE tenant_storage_migrations
-SET state = sqlc.arg('to_state'), updated_at = now()
+SET state = sqlc.arg('to_state'), settle_after = now() + sqlc.arg('settle_window')::interval,
+    updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
+
+-- name: SettleStorageMigration :execrows
+-- A failed migration's passes stop: nothing of the tenant held the target
+-- past settle_after. Its state stays failed, retryable as before.
+UPDATE tenant_storage_migrations
+SET settled_at = now(), updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts') AND settled_at IS NULL;
 
 -- name: UploadWritesCloseAt :one
 -- The deadline a URL signed for the bucket (backend_name, bucket_name) must
 -- expire by: the bucket is being emptied by the tenant's migration — its
--- source while moving and until cleaned, its target while rolling back —
--- whose passes have set the deadline. No row: nothing bounds the URL but its
--- TTL.
+-- source while moving and until cleaned, its target while rolling back and
+-- until the failed migration settles — whose passes have set the deadline.
+-- No row: nothing bounds the URL but its TTL.
 SELECT m.writes_close_at::timestamptz AS writes_close_at
 FROM tenant_storage_migrations m
-JOIN buckets b           ON b.id = CASE WHEN m.state = 'rolling_back'
+JOIN buckets b           ON b.id = CASE WHEN m.state IN ('rolling_back', 'failed')
                                         THEN m.target_bucket_id ELSE m.source_bucket_id END
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE m.tenant_id = sqlc.arg('tenant_id')
-  AND m.state IN ('moving', 'completed', 'rolling_back')
+  AND (m.state IN ('moving', 'completed', 'rolling_back')
+       OR (m.state = 'failed' AND m.settled_at IS NULL))
   AND m.writes_close_at IS NOT NULL
   AND sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name');
 
@@ -391,6 +407,8 @@ SET source_bucket_id          = sb.id,
     cleanup_after             = NULL,
     completed_at              = NULL,
     cleaned_at                = NULL,
+    settle_after              = NULL,
+    settled_at                = NULL,
     updated_at                = now()
 FROM buckets sb
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
