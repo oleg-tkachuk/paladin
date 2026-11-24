@@ -23,9 +23,13 @@ import { useTenants } from "@/hooks/useTenants";
 import {
   BucketTable,
   BUCKET_FACETS,
+  BUCKETS_LIST,
+  bucketColumns,
   tenantLabelMap,
 } from "@/components/features/buckets/BucketTable";
 import { TableToolbar } from "@/components/ui/TableToolbar";
+import { exportColumns } from "@/lib/table/columns";
+import { csvExport, scopedListName } from "@/lib/table/csv";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { useTableFacets } from "@/hooks/useTableFacets";
 import { useTablePage } from "@/hooks/useTablePage";
@@ -220,6 +224,11 @@ export default function StorageBackendDetailPage() {
         searchLabel="Search this backend's buckets"
         placeholder="Search by name or display label…"
         facets={facets.controls}
+        csv={csvExport(
+          scopedListName(backendId, BUCKETS_LIST),
+          exportColumns(bucketColumns(tenantNames)),
+          shown,
+        )}
         count={{ shown: shown.length, total: bucketsHere.length }}
       />
       <BucketTable

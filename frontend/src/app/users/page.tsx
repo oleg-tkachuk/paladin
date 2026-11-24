@@ -52,6 +52,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { RelativeTime } from "@/components/RelativeTime";
 import { cn } from "@/lib/utils";
+import { exportColumns, type TableColumns } from "@/lib/table/columns";
+import { csvExport } from "@/lib/table/csv";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 import { TableScope } from "@/components/ui/TableScope";
 import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
@@ -79,6 +82,10 @@ const USER_FACETS: readonly Facet<User>[] = [
 ];
 
 type UserColumn = "user" | "tenant" | "login" | "state";
+
+/** A user as one line: the name shown, then the subject they sign in as. */
+const userText = (u: User) =>
+  u.displayName ? `${u.displayName} (${u.subject})` : u.subject;
 
 export default function UsersPage() {
   const {
@@ -151,6 +158,24 @@ export default function UsersPage() {
     ],
     [tenantByID],
   );
+  // The table's columns, which its header and an export both read.
+  const columns = useMemo<TableColumns<User, UserColumn | "roles" | "actions">>(
+    () => ({
+      user: { header: "User", text: userText },
+      tenant: {
+        header: "Tenant",
+        text: (u) => tenantByID.get(u.tenantId)?.slug ?? u.tenantId,
+      },
+      roles: { header: "Roles", text: (u) => u.roles.join(" ") },
+      login: {
+        header: "Last login",
+        text: (u) => formatTimestampUTC(u.lastLoginAt),
+      },
+      state: { header: "State", text: standing },
+      actions: { header: "Actions" },
+    }),
+    [tenantByID],
+  );
   const view = useTableView(facets.rows, {
     text: searchIn,
     accessors: sortBy,
@@ -183,6 +208,7 @@ export default function UsersPage() {
             searchLabel="Search users"
             placeholder="Search subject, display name, role, tenant slug…"
             facets={facets.controls}
+            csv={csvExport(TABLE_ID, exportColumns(columns), filtered)}
             count={
               usersQuery.data
                 ? { shown: filtered.length, total: users.length }
@@ -210,31 +236,35 @@ export default function UsersPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                label="User"
+                label={columns.user.header}
                 column="user"
                 className="@md:w-65"
                 {...sortProps}
               />
               <SortableHead
-                label="Tenant"
+                label={columns.tenant.header}
                 column="tenant"
                 className="hidden @lg:table-cell"
                 {...sortProps}
               />
-              <StaticHead className="hidden @md:table-cell">Roles</StaticHead>
+              <StaticHead className="hidden @md:table-cell">
+                {columns.roles.header}
+              </StaticHead>
               <SortableHead
-                label="Last login"
+                label={columns.login.header}
                 column="login"
                 className="hidden @md:table-cell"
                 {...sortProps}
               />
               <SortableHead
-                label="State"
+                label={columns.state.header}
                 column="state"
                 className="w-20"
                 {...sortProps}
               />
-              <StaticHead className="text-right @md:w-30">Actions</StaticHead>
+              <StaticHead className="text-right @md:w-30">
+                {columns.actions.header}
+              </StaticHead>
             </TableRow>
           </TableHeader>
           <ListBody

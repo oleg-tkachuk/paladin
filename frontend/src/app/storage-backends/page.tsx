@@ -81,6 +81,8 @@ import { useTableFacets } from "@/hooks/useTableFacets";
 import { useTablePage } from "@/hooks/useTablePage";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { TableScope } from "@/components/ui/TableScope";
+import { exportColumns, type TableColumns } from "@/lib/table/columns";
+import { csvExport } from "@/lib/table/csv";
 import { StatusDot } from "@/components/ui/StatusIcon";
 import { STATUS_BADGE } from "@/lib/ui/status";
 import { StatusBar, tallyStatus } from "@/components/ui/StatusBar";
@@ -185,6 +187,19 @@ const SORT_COLUMNS = [
   "health",
 ] as const;
 type BackendColumn = (typeof SORT_COLUMNS)[number];
+
+/** The table's columns, which its header and an export both read. */
+const COLUMNS: TableColumns<StorageBackend, BackendColumn | "actions"> = {
+  backend: { header: "Backend", text: (b) => b.backendId },
+  storage: {
+    header: "Storage",
+    text: (b) => STORAGE_KIND_LABELS[b.kind] ?? "",
+  },
+  region: { header: "Region", text: (b) => b.region },
+  state: { header: "State", text: (b) => lifecycleState(b).label },
+  health: { header: "Health", text: (b) => healthView(b).label },
+  actions: { header: "Actions" },
+};
 const BACKEND_SORT: SortAccessors<StorageBackend, BackendColumn> = {
   backend: (b) => b.backendId,
   storage: (b) => STORAGE_KIND_LABELS[b.kind] || undefined,
@@ -426,6 +441,7 @@ export default function StorageBackendsPage() {
             searchLabel="Search storage backends"
             placeholder="Search by ID, name, region, endpoint…"
             facets={facets.controls}
+            csv={csvExport(TABLE_ID, exportColumns(COLUMNS), sorted)}
             count={{ shown: sorted.length, total: backends.length }}
             actions={
               <>
@@ -460,28 +476,36 @@ export default function StorageBackendsPage() {
                   }
                 />
               </TableHead>
-              <SortableHead label="Backend" column="backend" {...sortProps} />
               <SortableHead
-                label="Storage"
+                label={COLUMNS.backend.header}
+                column="backend"
+                {...sortProps}
+              />
+              <SortableHead
+                label={COLUMNS.storage.header}
                 column="storage"
                 className="hidden @2xl:table-cell"
                 {...sortProps}
               />
               <SortableHead
-                label="Region"
+                label={COLUMNS.region.header}
                 column="region"
                 className="hidden @4xl:table-cell"
                 {...sortProps}
               />
-              <SortableHead label="State" column="state" {...sortProps} />
               <SortableHead
-                label="Health"
+                label={COLUMNS.state.header}
+                column="state"
+                {...sortProps}
+              />
+              <SortableHead
+                label={COLUMNS.health.header}
                 column="health"
                 className="hidden @lg:table-cell"
                 {...sortProps}
               />
               <TableHead className="w-12">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{COLUMNS.actions.header}</span>
               </TableHead>
             </TableRow>
           </TableHeader>

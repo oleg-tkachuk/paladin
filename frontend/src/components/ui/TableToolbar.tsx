@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { TablePrefsMenu } from "@/components/ui/TablePrefsMenu";
 import { FacetFilter } from "@/components/ui/FacetFilter";
+import { ExportCsvButton } from "@/components/ui/ExportCsvButton";
+import type { CsvExport } from "@/lib/table/csv";
 import type { FacetControl } from "@/hooks/useTableFacets";
 import { TABLE_SEARCH_ATTR } from "@/lib/tableKeys";
 import { FROSTED, STICKY_BELOW_TOPBAR } from "@/lib/ui/states";
@@ -45,6 +47,11 @@ interface TableToolbarProps<V extends string> {
   count?: { shown: number; total: number };
   /** Further filters, such as a select, set between the search and the rest. */
   children?: React.ReactNode;
+  /**
+   * The rows the list shows, as an export (csvExport): every page of them,
+   * after the search and the facets, in the sort. Omitted, no export shows.
+   */
+  csv?: CsvExport;
   /** The page's actions on the list, set at the end of the bar. */
   actions?: React.ReactNode;
   className?: string;
@@ -59,6 +66,7 @@ export function TableToolbar<V extends string>({
   facets,
   count,
   children,
+  csv,
   actions,
   className,
 }: TableToolbarProps<V>) {
@@ -133,6 +141,7 @@ export function TableToolbar<V extends string>({
       <div className="ml-auto flex items-center gap-2">
         {/* The table's own menu, when the list is in a TableScope. */}
         <TablePrefsMenu />
+        {csv ? <ExportCsvButton csv={csv} /> : null}
         {actions}
       </div>
     </div>

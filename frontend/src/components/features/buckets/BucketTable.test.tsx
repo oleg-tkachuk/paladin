@@ -5,8 +5,11 @@ import { create } from "@bufbuild/protobuf";
 import { BucketSchema } from "@/gen/paladin/admin/v1/types_pb";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
+import { exportColumns } from "@/lib/table/columns";
+
 import {
   BucketTable,
+  bucketColumns,
   GRANTEES_NAMED,
   NOT_SHARED_LABEL,
   spansBackends,
@@ -194,5 +197,47 @@ describe("BucketTable row intent", () => {
         queryKey: bucketDetailQuery("primary", "b1").queryKey,
       }),
     );
+  });
+});
+
+describe("bucketColumns", () => {
+  const exported = exportColumns(bucketColumns(tenants));
+  const line = (b: ReturnType<typeof bucket>) => exported.map((c) => c.text(b));
+
+  it("names the columns the table heads, the backend among them", () => {
+    expect(exported.map((c) => c.header)).toEqual([
+      "Bucket",
+      "Backend",
+      "Owner",
+      "Shared with",
+      "State",
+    ]);
+  });
+
+  it("writes every grantee and the state its badges say", () => {
+    expect(
+      line(
+        bucket({
+          grantedTenantIds: [A, B, C],
+          publicRead: true,
+        }),
+      ),
+    ).toEqual([
+      "b1",
+      "primary",
+      "Platform",
+      `tenant-a, Tenant B, ${C}`,
+      "Ready public",
+    ]);
+    expect(line(bucket())[3]).toBe(NOT_SHARED_LABEL);
+  });
+
+  it("heads the table with the same labels", () => {
+    table([bucket()]);
+    for (const header of ["Bucket", "Owner", "Shared with", "State"]) {
+      expect(
+        screen.getByRole("columnheader", { name: new RegExp(header) }),
+      ).toBeInTheDocument();
+    }
   });
 });

@@ -1,5 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@/test/utils";
+
+import { csvExport } from "@/lib/table/csv";
 
 import { TableToolbar } from "./TableToolbar";
 
@@ -150,5 +152,70 @@ describe("TableToolbar", () => {
     expect(
       screen.getAllByRole("button").map((b) => b.getAttribute("aria-label")),
     ).toEqual([null, "Filter by state", "Filter by health"]);
+  });
+
+  describe("export", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const NAME = [{ header: "Name", text: (r: { n: string }) => r.n }];
+    const toolbar = (rows: { n: string }[]) => (
+      <TableToolbar
+        query=""
+        onQueryChange={() => {}}
+        placeholder="Search…"
+        searchLabel="Search rows"
+        csv={csvExport("users", NAME, rows)}
+      />
+    );
+
+    it("offers no export unless the page hands one over", () => {
+      render(
+        <TableToolbar
+          query=""
+          onQueryChange={() => {}}
+          placeholder="Search…"
+          searchLabel="Search rows"
+        />,
+      );
+      expect(
+        screen.queryByRole("button", { name: "Export as CSV" }),
+      ).toBeNull();
+    });
+
+    it("cannot export a list that shows no rows", () => {
+      render(toolbar([]));
+      expect(
+        screen.getByRole("button", { name: "Export as CSV" }),
+      ).toBeDisabled();
+    });
+
+    it("saves the rows as a UTF-8 CSV named after the list", async () => {
+      const blobs: Blob[] = [];
+      URL.createObjectURL = vi.fn((b: Blob) => {
+        blobs.push(b);
+        return "blob:x";
+      });
+      URL.revokeObjectURL = vi.fn();
+      const names: string[] = [];
+      vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+        function (this: HTMLAnchorElement) {
+          names.push(this.download);
+        },
+      );
+      render(toolbar([{ n: "alice" }, { n: "=bob" }]));
+      fireEvent.click(screen.getByRole("button", { name: "Export as CSV" }));
+
+      expect(names).toHaveLength(1);
+      expect(names[0]).toMatch(/^users-\d{8}-\d{6}\.csv$/);
+      expect(blobs[0].type).toBe("text/csv;charset=utf-8");
+      const bytes = new Uint8Array(await blobs[0].arrayBuffer());
+      // The byte order mark, then the text.
+      expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+      expect(new TextDecoder().decode(bytes)).toBe(
+        `"Name"\r\n"alice"\r\n"'=bob"\r\n`,
+      );
+    });
   });
 });

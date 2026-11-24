@@ -65,6 +65,9 @@ import {
 import { COLLECTION_SORT_COLUMNS, sortCollections } from "@/lib/collectionSort";
 import { SortableHead, StaticHead } from "@/components/ui/SortHeader";
 import { TableScope } from "@/components/ui/TableScope";
+import { collectionColumns } from "@/components/features/collections/collectionColumns";
+import { exportColumns } from "@/lib/table/columns";
+import { csvExport } from "@/lib/table/csv";
 import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
 
 /** This list's id in the user's table preferences. */
@@ -154,6 +157,7 @@ export default function CollectionsPage() {
   // Counted over every collection in scope, which the list loads whole.
   const facetDefs = useMemo(() => collectionFacets(tenantNames), [tenantNames]);
   const facets = useTableFacets(collections, facetDefs, PAGE_TABLE);
+  const columns = useMemo(() => collectionColumns(tenantNames), [tenantNames]);
   const sorted = useMemo(
     () => sortCollections(facets.rows, sort.column, sort.direction),
     [facets.rows, sort],
@@ -209,6 +213,7 @@ export default function CollectionsPage() {
             searchLabel="Search collections"
             placeholder="Search by name or display label…"
             facets={facets.controls}
+            csv={csvExport(TABLE_ID, exportColumns(columns), sorted)}
             count={{ shown: sorted.length, total: collections.length }}
             actions={
               <>
@@ -231,29 +236,29 @@ export default function CollectionsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                label="Collection"
+                label={columns.name.header}
                 column="name"
                 current={sort}
                 onSort={handleSort}
               />
-              <StaticHead>Tenant</StaticHead>
+              <StaticHead>{columns.tenant.header}</StaticHead>
               <SortableHead
                 className="hidden @3xl:table-cell"
-                label="Display name"
+                label={columns.displayName.header}
                 column="displayName"
                 current={sort}
                 onSort={handleSort}
               />
               <SortableHead
                 className="hidden @md:table-cell"
-                label="Bucket"
+                label={columns.bucket.header}
                 column="bucket"
                 current={sort}
                 onSort={handleSort}
               />
               <UsageHeads current={sort} onSort={handleSort} />
               <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{columns.actions.header}</span>
               </TableHead>
             </TableRow>
           </TableHeader>

@@ -138,4 +138,40 @@ describe("UsersPage", () => {
       "/users/t-1/u-1",
     );
   });
+
+  // The export is what the list shows — narrowed, searched and sorted — and
+  // every page of it, not the page on screen.
+  it("exports every row the list shows, in its order", async () => {
+    const many = Array.from({ length: 60 }, (_, i) =>
+      user(`u-${i}`, `User${String(i).padStart(2, "0")}`),
+    );
+    h.listUsers.mockResolvedValue({
+      users: [...many, { ...user("u-x", "UserGone"), disabled: true }],
+      page: {},
+    });
+    window.history.replaceState(
+      null,
+      "",
+      "/users?state=active&q=user&sort=user&dir=desc",
+    );
+    const blobs: Blob[] = [];
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      blobs.push(b);
+      return "blob:x";
+    });
+    URL.revokeObjectURL = vi.fn();
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    render(<UsersPage />);
+    await screen.findByRole("link", { name: "User59" });
+    fireEvent.click(screen.getByRole("button", { name: "Export as CSV" }));
+    click.mockRestore();
+
+    const lines = (await blobs[0].text()).replace(/^\uFEFF/, "").split("\r\n");
+    expect(lines[0]).toBe('"User","Tenant","Roles","Last login","State"');
+    expect(lines.slice(1, -1)).toHaveLength(60);
+    expect(lines[1]).toBe('"User59 (user59)","t-1","","—","active"');
+    expect(lines[60]).toBe('"User00 (user00)","t-1","","—","active"');
+  });
 });

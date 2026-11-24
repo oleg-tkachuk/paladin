@@ -74,6 +74,23 @@ const TRASH_SORT: SortAccessors<Tenant, TrashColumn> = {
 };
 const TRASH_SEARCH = (t: Tenant) => [t.displayName, t.slug, t.tenantId];
 
+/**
+ * The table's columns, which its header and an export both read. Retention
+ * is written as the moment the tenant may be purged.
+ */
+const COLUMNS: TableColumns<Tenant, TrashColumn | "actions"> = {
+  tenant: {
+    header: "Tenant",
+    text: (t) => (t.displayName ? `${t.displayName} (${t.slug})` : t.slug),
+  },
+  deleted: { header: "Deleted", text: (t) => formatTimestampUTC(t.deletedAt) },
+  retention: {
+    header: "Retention",
+    text: (t) => formatTimestampUTC(t.purgeEligibleAt),
+  },
+  actions: { header: "Actions" },
+};
+
 import { HelpTip } from "@/components/ui/HelpTip";
 import { Fragment, useMemo, useState } from "react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
@@ -129,6 +146,9 @@ import { T } from "@/lib/ui/typography";
 import { cn } from "@/lib/utils";
 import { errorMessage } from "@/hooks/errorContract";
 import { TableScope } from "@/components/ui/TableScope";
+import { exportColumns, type TableColumns } from "@/lib/table/columns";
+import { csvExport } from "@/lib/table/csv";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 import { RetiredSlugs } from "@/components/features/tenants/RetiredSlugs";
 
 /** This list's id in the user's table preferences. */
@@ -308,6 +328,7 @@ export default function TrashPage() {
               searchLabel="Search the trash"
               placeholder="Search by name, slug or id…"
               facets={facets.controls}
+              csv={csvExport(TABLE_ID, exportColumns(COLUMNS), view.rows)}
               count={{ shown: view.rows.length, total: trashed.length }}
             />
             <Card className="p-0">
@@ -315,24 +336,24 @@ export default function TrashPage() {
                 <TableHeader>
                   <TableRow>
                     <SortableHead
-                      label="Tenant"
+                      label={COLUMNS.tenant.header}
                       column="tenant"
                       {...sortProps}
                     />
                     <SortableHead
-                      label="Deleted"
+                      label={COLUMNS.deleted.header}
                       column="deleted"
                       className="@md:w-40"
                       {...sortProps}
                     />
                     <SortableHead
-                      label="Retention"
+                      label={COLUMNS.retention.header}
                       column="retention"
                       className="@md:w-56"
                       {...sortProps}
                     />
                     <TableHead className="@md:w-44">
-                      <span className="sr-only">Actions</span>
+                      <span className="sr-only">{COLUMNS.actions.header}</span>
                     </TableHead>
                   </TableRow>
                 </TableHeader>

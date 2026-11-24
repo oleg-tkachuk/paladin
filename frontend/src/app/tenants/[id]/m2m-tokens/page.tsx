@@ -57,6 +57,9 @@ import { openableRow } from "@/components/ui/RecordDialog";
 import { useDetailPanel } from "@/hooks/useDetailPanel";
 import { Timestamp } from "@/components/Timestamp";
 import { TableScope } from "@/components/ui/TableScope";
+import { exportColumns, type TableColumns } from "@/lib/table/columns";
+import { csvExport, scopedListName } from "@/lib/table/csv";
+import { formatTimestampUTC } from "@/lib/format/timestamp";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "m2mTokens";
@@ -93,6 +96,38 @@ const TOKEN_SORT: SortAccessors<APIToken, TokenColumn> = {
   status: (t) => LIFECYCLE_BADGE[tokenLifecycle(t)].label,
 };
 const TOKEN_FACETS = [lifecycleFacet(tokenLifecycle)];
+
+/** What the rate column says of a token without a rate limit. */
+const UNLIMITED_RATE = "∞";
+/** What a time column says of a token never used, or one that never expires. */
+const NEVER = "never";
+const timeOrNever = (ts: APIToken["expiresAt"]) =>
+  ts ? formatTimestampUTC(ts) : NEVER;
+
+/**
+ * The table's columns, which its header and an export both read. The usage
+ * column is a live reading, not a fact of the token, and is not exported.
+ */
+const COLUMNS: TableColumns<APIToken, TokenColumn | "usage" | "actions"> = {
+  prefix: { header: "Prefix", text: (t) => t.prefix },
+  name: { header: "Name", text: (t) => t.displayName },
+  audience: { header: "Audience", text: (t) => t.audience.join(" ") },
+  rate: {
+    header: "Rate (rpm)",
+    text: (t) =>
+      t.rateLimit.case === "rateLimitRpm"
+        ? String(t.rateLimit.value)
+        : UNLIMITED_RATE,
+  },
+  usage: { header: "Usage (1m)" },
+  used: { header: "Last used", text: (t) => timeOrNever(t.lastUsedAt) },
+  expires: { header: "Expires", text: (t) => timeOrNever(t.expiresAt) },
+  status: {
+    header: "Status",
+    text: (t) => LIFECYCLE_BADGE[tokenLifecycle(t)].label,
+  },
+  actions: { header: "Actions" },
+};
 const TOKEN_SEARCH = (t: APIToken) => [
   t.displayName,
   t.prefix,
@@ -301,6 +336,11 @@ export default function M2MTokensPage() {
             searchLabel="Search M2M tokens"
             placeholder="Search by name, prefix, audience, role or scope…"
             facets={facets.controls}
+            csv={csvExport(
+              scopedListName(tenant.slug || tenantId, TABLE_ID),
+              exportColumns(COLUMNS),
+              visibleTokens,
+            )}
             count={
               tokensQuery.data
                 ? { shown: visibleTokens.length, total: tokens.length }
@@ -313,47 +353,51 @@ export default function M2MTokensPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                label="Prefix"
+                label={COLUMNS.prefix.header}
                 column="prefix"
                 className={cn(COL_PREFIX, "w-35")}
                 {...sortProps}
               />
-              <SortableHead label="Name" column="name" {...sortProps} />
               <SortableHead
-                label="Audience"
+                label={COLUMNS.name.header}
+                column="name"
+                {...sortProps}
+              />
+              <SortableHead
+                label={COLUMNS.audience.header}
                 column="audience"
                 className={COL_AUDIENCE}
                 {...sortProps}
               />
               <SortableHead
-                label="Rate (rpm)"
+                label={COLUMNS.rate.header}
                 column="rate"
                 className={COL_RATE}
                 {...sortProps}
               />
               <StaticHead className={cn(COL_USAGE, "w-35")}>
-                Usage (1m)
+                {COLUMNS.usage.header}
               </StaticHead>
               <SortableHead
-                label="Last used"
+                label={COLUMNS.used.header}
                 column="used"
                 className={COL_LAST_USED}
                 {...sortProps}
               />
               <SortableHead
-                label="Expires"
+                label={COLUMNS.expires.header}
                 column="expires"
                 className={COL_EXPIRES}
                 {...sortProps}
               />
               <SortableHead
-                label="Status"
+                label={COLUMNS.status.header}
                 column="status"
                 className="w-25"
                 {...sortProps}
               />
               <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{COLUMNS.actions.header}</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -444,7 +488,7 @@ export default function M2MTokensPage() {
                   >
                     {t.rateLimit.case === "rateLimitRpm"
                       ? t.rateLimit.value
-                      : "∞"}
+                      : UNLIMITED_RATE}
                   </TableCell>
                   <TableCell className={cn(COL_USAGE, T.code)}>
                     <TokenUsage
@@ -460,12 +504,12 @@ export default function M2MTokensPage() {
                       "text-muted-foreground",
                     )}
                   >
-                    {t.lastUsedAt ? <Timestamp ts={t.lastUsedAt} /> : "never"}
+                    {t.lastUsedAt ? <Timestamp ts={t.lastUsedAt} /> : NEVER}
                   </TableCell>
                   <TableCell
                     className={cn(COL_EXPIRES, T.code, "text-muted-foreground")}
                   >
-                    {t.expiresAt ? <Timestamp ts={t.expiresAt} /> : "never"}
+                    {t.expiresAt ? <Timestamp ts={t.expiresAt} /> : NEVER}
                   </TableCell>
                   <TableCell>
                     <TokenStatus token={t} />
