@@ -347,8 +347,9 @@ func TestReplicationLeavesATrashedObjectsReplica(t *testing.T) {
 	}
 }
 
-// A purged object's row is forgotten without a copy.
-func TestReplicationForgetsAPurgedObject(t *testing.T) {
+// A purged object's replica is deleted from the destination at its key, and
+// its row dropped.
+func TestReplicationDeletesAPurgedObjectsReplica(t *testing.T) {
 	store := newFakeReplicaStore()
 	obj := store.write("a")
 	rep := newScriptedReplicator(store, nil)
@@ -356,8 +357,118 @@ func TestReplicationForgetsAPurgedObject(t *testing.T) {
 	mustTick(t, w)
 	store.purge(obj.Row.ObjectID)
 	mustTick(t, w)
+	want := ReplicationTarget{
+		BackendID: gateDstBackend, BucketName: gateDstBucket,
+		TenantID: store.tenant, Collection: passCollection, Key: "a",
+	}
+	if len(rep.deleted) != 1 || rep.deleted[0] != want {
+		t.Errorf("deletes = %+v, want one at %+v", rep.deleted, want)
+	}
 	if len(rep.copied) != 1 || store.row("a") != nil {
-		t.Errorf("copies = %d, row = %+v; want the purged object's row forgotten", len(rep.copied), store.row("a"))
+		t.Errorf("copies = %d, row = %+v; want the row dropped", len(rep.copied), store.row("a"))
+	}
+}
+
+// A purged object the worker never copied into the current destination —
+// filtered out, or copied into one the bucket no longer names — is forgotten
+// with no delete.
+func TestReplicationDeletesOnlyAReplicaItWroteThere(t *testing.T) {
+	cases := map[string]func(*fakeReplicaStore, *ReplicationWorker){
+		"filtered out": func(_ *fakeReplicaStore, w *ReplicationWorker) {
+			filtered(w, `key.startsWith("keep/")`)
+		},
+		"another destination": func(s *fakeReplicaStore, _ *ReplicationWorker) {
+			s.mu.Lock()
+			s.rows["a"].claim.Replica = ReplicaCopy{BucketID: fakeBucketID(gateDstBackend, "old-dr")}
+			s.rows["a"].due = false
+			s.seeded[fakeSrcID.Bytes] = true
+			s.mu.Unlock()
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			store := newFakeReplicaStore()
+			obj := store.write("a")
+			rep := newScriptedReplicator(store, nil)
+			w := replicatingWorker(store, rep, nil)
+			setup(store, w)
+			mustTick(t, w)
+			store.purge(obj.Row.ObjectID)
+			mustTick(t, w)
+			if len(rep.deleted) != 0 || store.row("a") != nil {
+				t.Errorf("deletes = %+v, row = %+v; want the row forgotten without a delete", rep.deleted, store.row("a"))
+			}
+		})
+	}
+}
+
+// A delete that fails is retried by the row's backoff; a transient one ends
+// the bucket's tick, a permanent one does not.
+func TestReplicationRetriesAFailedDelete(t *testing.T) {
+	cases := map[string]struct {
+		err     error
+		stopped bool
+	}{
+		"transient": {errTransientCopy, true},
+		"permanent": {errPermanentCopy, false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			store := newFakeReplicaStore()
+			gone := store.write("a")
+			rep := newScriptedReplicator(store, map[string][]error{deleteScriptKey("a"): {tc.err}})
+			w := replicatingWorker(store, rep, nil)
+			mustTick(t, w)
+			store.purge(gone.Row.ObjectID)
+			store.write("b")
+			if err := w.tick(context.Background()); !errors.Is(err, tc.err) {
+				t.Fatalf("tick = %v, want %v", err, tc.err)
+			}
+			if r := store.row("a"); r == nil || r.due || r.claim.Attempts != 1 {
+				t.Fatalf("row %+v, want kept and put off", r)
+			}
+			if copiedB := slices.Contains(rep.copiedKeys(), "b"); copiedB == tc.stopped {
+				t.Errorf("copied b = %v, want %v", copiedB, !tc.stopped)
+			}
+			store.retryAll()
+			mustTick(t, w)
+			if len(rep.deleted) != 1 || store.row("a") != nil {
+				t.Errorf("after the retry: deletes = %d, row = %+v; want the replica deleted", len(rep.deleted), store.row("a"))
+			}
+		})
+	}
+}
+
+// A new object written at a purged key takes its row over: the purge's
+// delete is not run, and the new object is copied.
+func TestReplicationCopiesANewObjectAtAPurgedKey(t *testing.T) {
+	store := newFakeReplicaStore()
+	old := store.write("a")
+	rep := newScriptedReplicator(store, nil)
+	w := replicatingWorker(store, rep, nil)
+	mustTick(t, w)
+	store.purge(old.Row.ObjectID)
+	fresh := store.write("a")
+	mustTick(t, w)
+	if len(rep.deleted) != 0 || len(rep.copied) != 2 {
+		t.Fatalf("deletes = %d, copies = %d; want the new object copied over the old replica", len(rep.deleted), len(rep.copied))
+	}
+	if r := store.row("a"); r == nil || r.claim.Replica.ObjectID != fresh.Row.ObjectID {
+		t.Errorf("row %+v, want the new object's replica", r)
+	}
+}
+
+// A dry run deletes nothing and leaves the purged row due.
+func TestReplicationDryRunDeletesNothing(t *testing.T) {
+	store := newFakeReplicaStore()
+	obj := store.write("a")
+	store.mu.Lock()
+	store.rows["a"].claim.Replica = ReplicaCopy{BucketID: fakeDstID, ObjectID: obj.Row.ObjectID}
+	store.mu.Unlock()
+	store.purge(obj.Row.ObjectID)
+	mustTick(t, replicatingWorker(store, nil, nil))
+	if r := store.row("a"); r == nil || !r.due || r.claimed {
+		t.Errorf("row %+v, want it handed back due", r)
 	}
 }
 

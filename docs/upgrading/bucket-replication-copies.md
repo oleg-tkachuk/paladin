@@ -11,6 +11,9 @@
   it, however old; so does the first pass after its destination or filter
   changes. Expect that traffic on the first deploy.
 - An object rewritten in place is copied again.
+- A purged object's replica is deleted from the destination — a permanent
+  delete, the trash's expiry, or its tenant's purge. A move to the trash
+  keeps the replica.
 - `worker.jobs.replication.lookback_window` is removed; delete it from any
   values or config that set it, since the strict loader refuses an unknown
   key.

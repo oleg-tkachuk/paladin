@@ -381,6 +381,7 @@ type scriptedReplicator struct {
 	script   map[string][]error
 	attempts map[string]int
 	copied   []replicatedCall
+	deleted  []ReplicationTarget
 	// missing and missingErr answer SourceMissing.
 	missing    bool
 	missingErr error
@@ -397,6 +398,22 @@ func newScriptedReplicator(store *fakeReplicaStore, script map[string][]error) *
 
 func (s *scriptedReplicator) SourceMissing(context.Context, ReplicationTarget) (bool, error) {
 	return s.missing, s.missingErr
+}
+
+// deleteScriptKey is the script key a delete of key answers by.
+func deleteScriptKey(key string) string { return "delete:" + key }
+
+func (s *scriptedReplicator) DeleteReplica(_ context.Context, dst ReplicationTarget) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := deleteScriptKey(dst.Key)
+	n := s.attempts[k]
+	s.attempts[k] = n + 1
+	if errs := s.script[k]; n < len(errs) && errs[n] != nil {
+		return errs[n]
+	}
+	s.deleted = append(s.deleted, dst)
+	return nil
 }
 
 func (s *scriptedReplicator) Replicate(_ context.Context, src, dst ReplicationTarget, size int64) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 	"uuid"
 
@@ -13,16 +14,22 @@ import (
 )
 
 type fakeReplicaStore struct {
-	err     error
-	headErr error
-	gotSrc  objecth.Location
-	gotDst  objecth.Location
-	gotSize int64
+	err       error
+	headErr   error
+	deleteErr error
+	gotSrc    objecth.Location
+	gotDst    objecth.Location
+	gotSize   int64
 }
 
 func (f *fakeReplicaStore) Replicate(_ context.Context, src, dst objecth.Location, size int64) error {
 	f.gotSrc, f.gotDst, f.gotSize = src, dst, size
 	return f.err
+}
+
+func (f *fakeReplicaStore) DeleteObject(_ context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error {
+	f.gotDst = objecth.Location{BackendID: backendID, Bucket: bucket, TenantID: tenantID, Collection: collection, Key: key}
+	return f.deleteErr
 }
 
 func (f *fakeReplicaStore) Head(context.Context, string, string, uuid.UUID, string, string, string) (string, int64, string, string, error) {
@@ -88,3 +95,41 @@ func TestStorageReplicatorSourceMissing(t *testing.T) {
 		})
 	}
 }
+
+// A replica delete reaches the destination's key; a failure the SDK would
+// retry is transient, anything else is returned as it is.
+func TestStorageReplicatorDeleteReplica(t *testing.T) {
+	cases := []struct {
+		name          string
+		err           error
+		wantTransient bool
+	}{
+		{"deleted", nil, false},
+		{"throttled", fmt.Errorf("delete: %w", statusErr(http.StatusServiceUnavailable)), true},
+		{"refused", errors.New("access denied"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakeReplicaStore{deleteErr: tc.err}
+			dst := worker.ReplicationTarget{BackendID: "b", BucketName: "db", TenantID: uuid.New(), Collection: "c", Key: "k"}
+			err := newStorageReplicator(store).DeleteReplica(context.Background(), dst)
+			if !errors.Is(err, tc.err) {
+				t.Fatalf("DeleteReplica = %v, want %v kept in the chain", err, tc.err)
+			}
+			if got := errors.Is(err, worker.ErrCopyTransient); got != tc.wantTransient {
+				t.Errorf("ErrCopyTransient = %v, want %v", got, tc.wantTransient)
+			}
+			want := objecth.Location{BackendID: "b", Bucket: "db", TenantID: dst.TenantID, Collection: "c", Key: "k"}
+			if store.gotDst != want {
+				t.Errorf("deleted %+v, want %+v", store.gotDst, want)
+			}
+		})
+	}
+}
+
+// statusErr is an HTTP response error with the given status, as the SDK
+// reports one.
+type statusErr int
+
+func (e statusErr) Error() string       { return fmt.Sprintf("status %d", int(e)) }
+func (e statusErr) HTTPStatusCode() int { return int(e) }

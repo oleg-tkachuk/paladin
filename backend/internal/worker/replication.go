@@ -19,8 +19,10 @@
 //     bucket's rows wait, untouched, and the refusal is logged once per tick.
 //  2. Claim the bucket's due rows in batches. Each row names the object last
 //     written at its location; the object is read as it is now.
-//  3. Decide each row. An object that is gone or left the bucket drops its
-//     row; one in the trash keeps its replica; one the bucket's filter (CEL,
+//  3. Decide each row. An object purged from the source has its replica
+//     deleted from the destination (a byte write there, which the gate
+//     admitted as BytesWrite) and its row dropped; one that left the bucket
+//     drops its row; one in the trash keeps its replica; one the bucket's filter (CEL,
 //     over the same fields a ListObjects filter sees) does not match is
 //     settled; one whose replica already holds its current byte write is
 //     settled. Anything else is copied through StorageReplicator to the same
@@ -76,9 +78,13 @@ const (
 //
 // SourceMissing answers whether the source's key is absent from a bucket
 // confirmed reachable — true only then; an unreachable bucket is an error.
+//
+// DeleteReplica removes the replica at dst; a key already absent is no
+// failure. A failure a later attempt may cure wraps ErrCopyTransient.
 type StorageReplicator interface {
 	Replicate(ctx context.Context, src, dst ReplicationTarget, sizeBytes int64) error
 	SourceMissing(ctx context.Context, src ReplicationTarget) (bool, error)
+	DeleteReplica(ctx context.Context, dst ReplicationTarget) error
 }
 
 // ErrCopyTransient marks a copy failure worth retrying: throttling, a server
@@ -253,7 +259,7 @@ type replicationGates struct {
 
 // bucketPass is what one tick's pass over a bucket did.
 type bucketPass struct {
-	copied, current, filtered, missing, forgotten, retried int
+	copied, current, filtered, missing, deleted, forgotten, retried int
 	// failed is the first failure, which the tick reports.
 	failed error
 	// stopped is set once a failure ended the pass early.
@@ -316,7 +322,7 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, rb ReplicationBuc
 	}
 	summary := []zap.Field{
 		zap.Int("copied", pass.copied), zap.Int("current", pass.current), zap.Int("filtered", pass.filtered),
-		zap.Int("source_missing", pass.missing), zap.Int("forgotten", pass.forgotten), zap.Int("retried", pass.retried),
+		zap.Int("source_missing", pass.missing), zap.Int("deleted", pass.deleted), zap.Int("forgotten", pass.forgotten), zap.Int("retried", pass.retried),
 		zap.Bool("dry_run", r.Replicator == nil),
 	}
 	switch {
@@ -398,8 +404,7 @@ func (r *ReplicationWorker) replicateClaim(
 	log := okLog.With(zap.String(logKeyKey, c.Key))
 	switch {
 	case !found:
-		okLog.Debug("replicated object is gone from the source; forgetting its replica")
-		r.forget(ctx, log, pass, c)
+		r.deletePurged(ctx, okLog, log, pass, c, route)
 	case obj.BucketID != route.srcID:
 		okLog.Info("object's collection is no longer bound to the replicated bucket; forgetting its replica")
 		r.forget(ctx, log, pass, c)
@@ -489,6 +494,45 @@ func (r *ReplicationWorker) copyObject(
 		pass.stopped = true
 	default:
 		log.Warn("failed to copy object; retrying it later", zap.Error(err))
+		r.retry(ctx, log, pass, c, err)
+	}
+}
+
+// deletePurged deletes the replica of an object purged from the source — its
+// row gone, by a permanent delete, the trash's expiry or its tenant's purge —
+// and drops the row. Only a replica this worker wrote into the current
+// destination is deleted; a location it never copied, or copied into a
+// destination the bucket no longer names, is only forgotten.
+func (r *ReplicationWorker) deletePurged(
+	ctx context.Context, okLog, log *zap.Logger, pass *bucketPass, c ReplicaClaim, route replicaRoute,
+) {
+	if !c.Replica.BucketID.Valid || c.Replica.BucketID != route.dstID {
+		okLog.Debug("purged object has no replica in the destination; forgetting it")
+		r.forget(ctx, log, pass, c)
+		return
+	}
+	if r.Replicator == nil {
+		okLog.Info("dry-run delete")
+		r.release(ctx, log, pass, []ReplicaClaim{c})
+		return
+	}
+	err := r.Replicator.DeleteReplica(ctx, ReplicationTarget{
+		BackendID: route.dstBackend, BucketName: route.dstBucket,
+		TenantID: c.TenantID, Collection: c.Collection, Key: c.Key,
+	})
+	switch {
+	case err == nil:
+		pass.deleted++
+		okLog.Debug("deleted the replica of a purged object")
+		r.forget(ctx, log, pass, c)
+	case ctx.Err() != nil:
+		// Stopping: the claim's lease hands the row back.
+	case errors.Is(err, ErrCopyTransient):
+		log.Warn("failed to delete a purged object's replica; deferring the bucket to the next tick", zap.Error(err))
+		r.retry(ctx, log, pass, c, err)
+		pass.stopped = true
+	default:
+		log.Warn("failed to delete a purged object's replica; retrying it later", zap.Error(err))
 		r.retry(ctx, log, pass, c, err)
 	}
 }

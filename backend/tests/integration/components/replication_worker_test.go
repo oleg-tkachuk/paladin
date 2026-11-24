@@ -160,7 +160,9 @@ func (wr workerReplication) dst(key string) objecth.Location {
 // after it, and queued by its promote. One is a single PUT, whose ETag is its
 // MD5 and so is checked against the bytes streamed; the other a multipart
 // upload. Then the single one is overwritten in place — a later promote with
-// new bytes under the AVAILABLE row — and its replica follows.
+// new bytes under the AVAILABLE row — and its replica follows. Last, the
+// multipart one goes to the trash and keeps its replica, and the single one
+// is purged and its replica deleted.
 func TestReplicationWorkerCopiesAcrossBackends(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -195,6 +197,26 @@ func TestReplicationWorkerCopiesAcrossBackends(t *testing.T) {
 	wr.settled(t, ctx)
 	if got := wr.read(t, wr.dst("docs/single.txt")); !bytes.Equal(got, rewritten) {
 		t.Errorf("replica after the overwrite holds %q, want %q", got, rewritten)
+	}
+
+	// The trash keeps a replica; a purge deletes it.
+	mustExec(t, ctx, wr.pool, `UPDATE objects SET state = 'DELETED', terminated_at = now() WHERE path = $1 AND collection_id = $2`,
+		"docs/multi.bin", f.collectionID)
+	mustExec(t, ctx, wr.pool, `DELETE FROM objects WHERE id = $1`, singleID)
+	wr.settled(t, ctx)
+	var rows int
+	if err := wr.pool.QueryRow(ctx, `SELECT count(*) FROM object_replicas WHERE path = $1`, "docs/single.txt").Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 0 {
+		t.Errorf("the purged object's row is still there")
+	}
+	d := wr.dst("docs/single.txt")
+	if _, _, _, _, err := wr.router.Head(ctx, d.BackendID, d.Bucket, d.TenantID, d.Collection, d.Key, ""); !errors.Is(err, objecth.ErrStoredObjectNotFound) {
+		t.Errorf("HEAD of the purged object's replica = %v, want not found", err)
+	}
+	if got := wr.read(t, wr.dst("docs/multi.bin")); !bytes.Equal(got, multi) {
+		t.Errorf("the trashed object's replica holds %d bytes, want it kept", len(got))
 	}
 }
 

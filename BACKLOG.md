@@ -387,19 +387,6 @@ the same commit. Treat this file like a runtime invariant.
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### Replication does not propagate deletes
-
-- **Status:** Deferred.
-- **Reason:** the replication worker ([ADR-0050](docs/adr/0050-bucket-replication-copies-between-any-backends.md))
-  queues a purged object's location but only drops its row; the replica of
-  an object purged from the source stays in the destination bucket.
-- **Definition of Done:** a permanent delete or purge of a replicated object
-  removes its replica too (or a per-bucket setting says it is kept, on
-  purpose), through the purge outbox so a failed delete is retried, and a
-  test deletes a replicated object and finds its replica gone.
-- **Blockers:** whether a replica is a mirror or a retention copy — a product
-  decision.
-
 ### A streamed replica carries only the content type
 
 - **Status:** Deferred.
@@ -436,8 +423,8 @@ the same commit. Treat this file like a runtime invariant.
 - **Definition of Done:** a decision — mirror (delete what the filter or the
   destination no longer selects) or keep — written into ADR-0050, and if
   mirror, the worker deletes such replicas with a test for each case.
-- **Blockers:** whether a replica is a mirror or a retention copy, as for
-  deletes.
+- **Blockers:** whether a replica of a deselected object is still wanted — a
+  product decision; a purge already deletes its replica.
 
 ### `ResetPassword` — self-service email delivery
 

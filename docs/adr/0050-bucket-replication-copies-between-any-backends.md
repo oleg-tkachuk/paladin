@@ -61,8 +61,10 @@ at. The row is the work queue and the record at once.
   lease, which a later write does not shorten, so worker replicas take
   disjoint rows and one worker handles a location at a time.
 - *What the worker decides.* The row names the object last written at its
-  location, which is read as it is now. Gone, or bound to another bucket:
-  the row is dropped. In the trash: the replica stays. Outside the filter, or
+  location, which is read as it is now. Gone: its replica is deleted from the
+  destination, if this worker wrote one into the destination the bucket
+  names now, and the row is dropped. Bound to another bucket: the row is
+  dropped. In the trash: the replica stays. Outside the filter, or
   its replica already holds its current byte write: settled. Otherwise it is
   copied, and the replica recorded — destination, object, the byte write it
   copied (`bytes_written_at`, or the first commit for a row from before
@@ -76,6 +78,18 @@ at. The row is the work queue and the record at once.
   (`replication_seeds`). A change to the bucket's replication settings drops
   that record, so a new destination receives everything and a new filter is
   applied to everything.
+
+**Deletes.** A replica mirrors the bytes the source holds, not the object's
+lifecycle state. A move to the trash leaves the source's bytes in place, so
+it leaves the replica too, and a restore finds the replica current. A purge
+— a permanent delete, the trash's expiry, a tenant's purge — removes the
+object's row, whose delete trigger marks its location due; the worker deletes
+the replica, retried by the row's backoff like a copy, and drops the row only
+once the delete succeeded. The delete is a byte write on the destination, so
+it waits on the same `BytesWrite` gate as a copy. A location a newer object
+took over before the delete ran is that object's: the purge marks only the
+rows its own object owns, and the new object's copy replaces the replica
+instead.
 
 **What a failure is.** The adapter classifies; the worker decides. Every
 failure puts the one row off by its own backoff — one minute, doubling, at
@@ -122,9 +136,9 @@ naming no registered bucket is a failure.
 - The seed can miss an object only when one transaction inserts it
   `AVAILABLE` while replication is being enabled and commits after the seed
   ran; every other write is queued by its trigger once the enable commits.
-- Deletes are not replicated, and a streamed replica carries the source's
-  content type but not its other metadata. Both are in BACKLOG, as is an
-  operator view of the failed rows.
+- A purged object's replica is deleted; a trashed object's is kept.
+- A streamed replica carries the source's content type but not its other
+  metadata. That is in BACKLOG, as is an operator view of the failed rows.
 
 ## Alternatives considered
 
@@ -140,6 +154,14 @@ naming no registered bucket is a failure.
   written by Go. Every path that changes an object's row would have to
   remember to enqueue — the promote, the purge, a restore, a tag update — and
   one that forgot would never replicate; the trigger sees them all.
+- **Delete the replica on the move to the trash.** A trashed object is
+  restorable, and its bytes are still in the source; deleting the replica
+  would make a restore copy it again, and the replica would not survive the
+  window in which a mistaken delete is most often noticed.
+- **Delete replicas through `pending_purges`.** That queue holds bytes owed
+  by the source, and a storage migration also records its copies there;
+  neither is a replica. The replica location's own row already outlives the
+  object and retries.
 - **Pass over a failed object after a permanent error.** Stops the retries,
   but a configuration error — a credential, a missing bucket — reads as
   permanent and would pass every object it touched.
