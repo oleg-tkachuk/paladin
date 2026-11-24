@@ -241,7 +241,7 @@ func (h *Handler) CreateCollection(ctx context.Context, args CreateCollectionArg
 	// A backend must be named explicitly — there is no default. The connectshim
 	// resolves it from the named bucket or the tenant's default binding before
 	// we get here; an empty id at this point means neither was supplied.
-	if err := admitCollectionName(args.Collection); err != nil {
+	if err := AdmitCollectionName(args.Collection); err != nil {
 		return nil, h.answer(opCreate, args.TenantID, args.Collection, err)
 	}
 	if args.BackendID == "" {
@@ -369,24 +369,25 @@ func (h *Handler) EnsureCollection(ctx context.Context, args CreateCollectionArg
 	return true, nil
 }
 
-// validateEnsure refuses a self-provisioned collection that names no
-// collection or binding, or that would be public: self-service carries no
-// ConfigurePublicRead check, so it never publishes (ADR-0027).
-// admitCollectionName refuses a name outside the collection grammar before a
+// AdmitCollectionName refuses a name outside the collection grammar before a
 // row is written. The collections_name_format CHECK holds the same grammar,
-// and a name it refused reached the caller as Internal.
-func admitCollectionName(collection string) error {
+// and a name it refused reached the caller as Internal. It reads no state, so
+// a caller resolving anything from the store checks it first.
+func AdmitCollectionName(collection string) error {
 	if err := storagepath.ValidateCollection(collection); err != nil {
 		return rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("collection %q: %w", collection, err))
 	}
 	return nil
 }
 
+// validateEnsure refuses a self-provisioned collection that names no
+// collection or binding, or that would be public: self-service carries no
+// ConfigurePublicRead check, so it never publishes (ADR-0027).
 func validateEnsure(args CreateCollectionArgs) error {
 	if args.Collection == "" {
 		return connect.NewError(connect.CodeInvalidArgument, "collection is required")
 	}
-	if err := admitCollectionName(args.Collection); err != nil {
+	if err := AdmitCollectionName(args.Collection); err != nil {
 		return err
 	}
 	if args.BackendID == "" || args.BucketName == "" {

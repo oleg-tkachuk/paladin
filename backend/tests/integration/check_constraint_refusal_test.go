@@ -203,6 +203,16 @@ func TestCheckRefusal_CollectionService(t *testing.T) {
 			return err
 		}
 	}
+	// No bucket, so the shim would route through the tenant's default
+	// binding: the name is judged before that lookup, whatever it finds.
+	createUnbound := func(name string) func(context.Context) error {
+		return func(ctx context.Context) error {
+			_, err := client.CreateCollection(ctx, &pbadmin.CreateCollectionRequest{
+				Parent: parent, Collection: name, CollectionResource: &pbadmin.Collection{},
+			})
+			return err
+		}
+	}
 	update := func(ctx context.Context) error {
 		_, err := client.UpdateCollection(ctx, &pbadmin.UpdateCollectionRequest{
 			Name: current.GetName(), ResourceVersion: current.GetResourceVersion(),
@@ -215,6 +225,7 @@ func TestCheckRefusal_CollectionService(t *testing.T) {
 		{"CreateCollection collections_name_format (upper case)", create("Bad_Name", "")},
 		{"CreateCollection collections_name_format (empty segment)", create("a//b", "")},
 		{"CreateCollection collections_name_format (trailing slash)", create("a/", "")},
+		{"CreateCollection collections_name_format (no bucket named)", createUnbound("Bad_Name")},
 		{"UpdateCollection collections_cache_control_public_only (not an updatable path)", update},
 	})
 	// A public-collection rule, answered as every one of them is

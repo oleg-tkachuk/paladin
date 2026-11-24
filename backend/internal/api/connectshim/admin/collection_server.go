@@ -13,11 +13,13 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/rpcerr"
 
 	"connectrpc.com/connect/v2"
+	"go.uber.org/zap"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/connectshim/resolve"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/admin/v1/paladinadminv1connect"
@@ -72,33 +74,48 @@ func (s *CollectionServer) tenantParent(ctx context.Context, parent string) (uui
 	return t.TenantID, nil
 }
 
+// Log field keys and the operation name of the refusals CreateCollection
+// answers itself; the handler logs its own under the same keys.
+const (
+	logOp              = "op"
+	logCollection      = "collection"
+	logParent          = "parent"
+	logCode            = "code"
+	opCreateCollection = "CollectionService.CreateCollection"
+)
+
+// errNoDefaultBinding answers a create that names no bucket for a tenant with
+// no default binding to route it to.
+var errNoDefaultBinding = errors.New(
+	"no bucket specified and the tenant has no default binding; set one via SetTenantDefaultBinding or name a bucket")
+
 func (s *CollectionServer) CreateCollection(ctx context.Context, req *pb.CreateCollectionRequest) (*pb.Collection, error) {
 	if err := requireCompilablePolicy(req.GetCollectionResource().GetCedarPolicy()); err != nil {
 		return nil, err
 	}
-	m := req
-	tenantID, err := s.tenantParent(ctx, m.GetParent())
+	// The request is judged before anything is read for it: a malformed name
+	// or bucket is the caller's mistake whatever the tenant's state, and a
+	// missing default binding answered first hid it until the binding was set.
+	backend, bucket, err := admitCreateRequest(req)
+	if err != nil {
+		return nil, refuseCreate(ctx, req, err)
+	}
+	tenantID, err := s.tenantParent(ctx, req.GetParent())
 	if err != nil {
 		return nil, err
 	}
-	src := m.GetCollectionResource()
-	backend, bucket, _ := bucketRef(src.GetBucket())
+	src := req.GetCollectionResource()
 	// Bare-name ergonomics (ADR-0014 Phase 3): if the caller creates an
 	// collection without naming a bucket, route it to the tenant's default
 	// binding. This is the CREATION case only — an existing collection keeps its
 	// own (backend, bucket), which the Get/Update/Delete paths resolve from the
 	// row, never from the tenant default.
 	if bucket == "" {
-		// A tenant's default binding is a private bucket; a public collection
-		// has to say which public bucket it lives in (ADR-0027).
-		if src.GetAccess() == pb.CollectionAccess_COLLECTION_ACCESS_PUBLIC_READ {
-			return nil, apiutil.MapError(publicread.Rulef("a public collection must name its public bucket"))
-		}
 		db, err := s.bindings.GetDefaultBinding(ctx, tenantID)
 		if err != nil {
 			if errors.Is(err, tenanth.ErrNotFound) {
-				return nil, connect.NewError(connect.CodeFailedPrecondition,
-					"no bucket specified and the tenant has no default binding; set one via SetTenantDefaultBinding or name a bucket")
+				return nil, refuseCreate(ctx, req, connect.NewError(connect.CodeFailedPrecondition,
+					errNoDefaultBinding.Error()).WithCause(errNoDefaultBinding))
 			}
 			return nil, err
 		}
@@ -106,7 +123,7 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *pb.CreateC
 	}
 	args := objectkey.CreateCollectionArgs{
 		TenantID:     tenantID,
-		Collection:   m.GetCollection(),
+		Collection:   req.GetCollection(),
 		DisplayName:  src.GetDisplayName(),
 		BackendID:    backend,
 		BucketName:   bucket,
@@ -119,6 +136,40 @@ func (s *CollectionServer) CreateCollection(ctx context.Context, req *pb.CreateC
 		return nil, err
 	}
 	return collectionDomainToProto(out), nil
+}
+
+// admitCreateRequest refuses a create whose own fields are wrong, reading no
+// state: a collection outside the grammar, a bucket that is not a bucket
+// resource name, or a public collection that names no bucket. It returns the
+// named bucket, empty when the request names none.
+func admitCreateRequest(req *pb.CreateCollectionRequest) (backend, bucket string, err error) {
+	if err := objectkey.AdmitCollectionName(req.GetCollection()); err != nil {
+		return "", "", err
+	}
+	src := req.GetCollectionResource()
+	backend, bucket, err = bucketRef(src.GetBucket())
+	if err != nil {
+		return "", "", rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("bucket: %w", err))
+	}
+	// A tenant's default binding is a private bucket; a public collection
+	// has to say which public bucket it lives in (ADR-0027).
+	if bucket == "" && src.GetAccess() == pb.CollectionAccess_COLLECTION_ACCESS_PUBLIC_READ {
+		return "", "", publicread.Rulef("a public collection must name its public bucket")
+	}
+	return backend, bucket, nil
+}
+
+// refuseCreate logs a refusal CreateCollection answers before the handler
+// runs, at Warn, and returns it mapped for the caller.
+func refuseCreate(ctx context.Context, req *pb.CreateCollectionRequest, err error) error {
+	mapped := apiutil.MapError(err)
+	logger.FromContext(ctx).Warn("collection operation refused",
+		zap.String(logOp, opCreateCollection),
+		zap.String(logParent, req.GetParent()),
+		zap.String(logCollection, req.GetCollection()),
+		zap.String(logCode, connect.CodeOf(mapped).String()),
+		zap.Error(err))
+	return mapped
 }
 
 func (s *CollectionServer) GetCollection(ctx context.Context, req *pb.GetCollectionRequest) (*pb.Collection, error) {
