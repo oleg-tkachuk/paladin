@@ -179,7 +179,7 @@ func TestEveryIAMShimPropagatesHandlerErrors(t *testing.T) {
 
 		{"User.CreateUser", func() error {
 			_, err := userSrv.CreateUser(ctx, &pb.CreateUserRequest{
-				Parent: "tenants/" + tenantID.String(), Subject: "tester",
+				Parent: "tenants/" + tenantID.String(), Subject: "tester", InitialPassword: "p",
 			})
 			return err
 		}},

@@ -85,7 +85,9 @@ func TestUserRPCsResolveASlugParent(t *testing.T) {
 					return h.got.TenantID, err
 				},
 				"CreateUser": func(s *UserServer, h *listingUser) (uuid.UUID, error) {
-					_, err := s.CreateUser(tc.ctx, &pb.CreateUserRequest{Parent: "tenants/" + tc.slug, Subject: "u"})
+					_, err := s.CreateUser(tc.ctx, &pb.CreateUserRequest{
+						Parent: "tenants/" + tc.slug, Subject: "u", InitialPassword: "p",
+					})
 					return h.created.TenantID, err
 				},
 			} {
