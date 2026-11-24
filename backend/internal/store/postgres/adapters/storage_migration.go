@@ -363,6 +363,9 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, at worker.Migra
 			return fmt.Errorf("rebind %q: %w", ok, err)
 		}
 	}
+	if _, err := qtx.MigrationPlaceObjectsInTarget(ctx, pgUUID(tenantID)); err != nil {
+		return fmt.Errorf("place the objects in the target: %w", err)
+	}
 	if _, err := qtx.SetTenantStorageLayout(ctx, pgUUID(tenantID), "dedicated"); err != nil {
 		return fmt.Errorf("set storage_layout: %w", err)
 	}
@@ -551,6 +554,9 @@ func (r *StorageMigrationRepo) RebindBack(ctx context.Context, at worker.Migrati
 		if _, err := qtx.BindCollectionToBucket(ctx, pgUUID(tenantID), ok, sourceBackendID, sourceBucketName, 0); err != nil {
 			return fmt.Errorf("rebind %q back: %w", ok, err)
 		}
+	}
+	if _, err := qtx.MigrationPlaceObjectsInSource(ctx, pgUUID(tenantID)); err != nil {
+		return fmt.Errorf("place the objects in the source: %w", err)
 	}
 	if _, err := qtx.SetTenantStorageLayout(ctx, pgUUID(tenantID), "shared"); err != nil {
 		return fmt.Errorf("set storage_layout: %w", err)

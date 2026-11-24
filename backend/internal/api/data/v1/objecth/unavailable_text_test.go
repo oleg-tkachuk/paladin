@@ -37,7 +37,7 @@ func assertUnavailableText(t *testing.T, err error, want string) {
 
 func TestBytesCheckUnavailableNamesNoBackend(t *testing.T) {
 	t.Parallel()
-	obj := Object{ObjectID: uuid.New(), Collection: "docs", Key: "a.txt"}
+	obj := Object{ObjectID: uuid.New(), Collection: "docs", Key: "a.txt", Stored: storedIn("backend-7", "bucket-7")}
 	h := &Handler{repo: &fakeObjectRepo{}, storage: headStorage{err: errors.New(s3Failure)}}
 	assertUnavailableText(t, h.assertBytesPresent(context.Background(), uuid.New(), obj), msgBytesUnchecked)
 }

@@ -45,7 +45,7 @@ func (r *completeRepo) FindByName(context.Context, uuid.UUID, string, string) (O
 	if r.findErr != nil {
 		return Object{}, r.findErr
 	}
-	return r.obj, nil
+	return placedIn(r.obj, "backend-7", "bucket-7"), nil
 }
 
 func (r *completeRepo) LookupBucket(_ context.Context, _ uuid.UUID, _ string, access bucketgate.Access) (string, string, error) {

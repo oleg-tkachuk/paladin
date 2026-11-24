@@ -60,7 +60,8 @@ type fakeRepo struct {
 
 func (f *fakeRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (ObjectRef, error) {
 	if f.lookupObjectFn == nil {
-		return ObjectRef{Collection: collection, Key: "phys-key", State: "AVAILABLE", ContentType: "image/png", ETag: "etag-7"}, nil
+		return ObjectRef{Collection: collection, Key: "phys-key", State: "AVAILABLE", ContentType: "image/png", ETag: "etag-7",
+			Stored: &objecth.BucketRef{BackendID: "backend-1", Bucket: "bucket-1", State: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}}}, nil
 	}
 	return f.lookupObjectFn(ctx, tenantID, collection, objectID)
 }
@@ -660,7 +661,8 @@ func TestPresignGetETagBinding(t *testing.T) {
 	})
 	t.Run("requested for an object with no ETag", func(t *testing.T) {
 		repo := &fakeRepo{lookupObjectFn: func(_ context.Context, _ uuid.UUID, ok string, _ uuid.UUID) (ObjectRef, error) {
-			return ObjectRef{Collection: ok, Key: "k", State: "AVAILABLE"}, nil
+			return ObjectRef{Collection: ok, Key: "k", State: "AVAILABLE",
+				Stored: &objecth.BucketRef{BackendID: "backend-1", Bucket: "bucket-1", State: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}}}, nil
 		}}
 		_, _, _, err := NewHandler(repo, &fakeStorage{}, allowPolicy(), cfg).PresignGet(authedCtx(tid), "obj", validObjectID, 0, "", true)
 		wantCode(t, err, connect.CodeFailedPrecondition)

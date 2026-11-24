@@ -56,6 +56,7 @@ func (r *downloadRepo) FindByName(_ context.Context, tenantID uuid.UUID, collect
 		SizeBytes:   4096,
 		ContentType: "application/pdf",
 		ETag:        r.etag,
+		Stored:      storedIn("backend-7", r.bucket),
 	}, nil
 }
 

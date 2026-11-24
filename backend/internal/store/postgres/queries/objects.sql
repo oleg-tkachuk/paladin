@@ -39,29 +39,48 @@ SELECT id FROM collections WHERE tenant_id = $1 AND name = $2;
 -- name: GetObject :one
 -- The upload_* columns are the bucket a PENDING object's URL was signed for
 -- (migration 113) and the bucket gate's state there; NULL when it has none.
+-- The placement_* columns are the bucket the object's bytes are in (123,
+-- ADR-0051) and the gate's state there; NULL on a PENDING row. A row promoted
+-- by a binary from before 123 has no placement yet: its bytes are in its
+-- collection's bucket, as every row's were then.
 SELECT sqlc.embed(objects), c.name AS collection_name,
        usb.name AS upload_backend_name, ub.name AS upload_bucket_name,
        usb.enabled AS upload_enabled, usb.read_only AS upload_read_only,
-       ub.provision_state AS upload_provision_state
+       ub.provision_state AS upload_provision_state,
+       psb.name AS placement_backend_name, pb.name AS placement_bucket_name,
+       psb.enabled AS placement_enabled, psb.read_only AS placement_read_only,
+       pb.provision_state AS placement_provision_state
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 LEFT JOIN buckets ub           ON ub.id = objects.upload_bucket_id
 LEFT JOIN storage_backends usb ON usb.id = ub.backend_id
+LEFT JOIN buckets pb           ON pb.id = COALESCE(objects.placement_bucket_id,
+                                    CASE WHEN objects.state <> 'PENDING' THEN c.bucket_id END)
+LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE objects.tenant_id = $1 AND objects.id = $2;
 
 -- name: GetObjectsByIDs :many
 -- Batch lookup for batch-operation executors: one round-trip for the
 -- whole id list instead of one GetObject per id (a 1000-object batch
 -- used to issue 1000 sequential SELECTs before any state mutation).
-SELECT sqlc.embed(objects), c.name AS collection_name
+-- The placement_* columns are as GetObject's.
+SELECT sqlc.embed(objects), c.name AS collection_name,
+       psb.name AS placement_backend_name, pb.name AS placement_bucket_name,
+       psb.enabled AS placement_enabled, psb.read_only AS placement_read_only,
+       pb.provision_state AS placement_provision_state
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
+LEFT JOIN buckets pb           ON pb.id = COALESCE(objects.placement_bucket_id,
+                                    CASE WHEN objects.state <> 'PENDING' THEN c.bucket_id END)
+LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[]);
 
 -- name: LookupObjectByID :one
 -- Reads an object by id alone. Used by background workers (reconciler,
--- replicator) that don't carry a tenant context. Joins collections to
--- materialize the bucket binding so the caller can call S3 in one trip.
+-- replicator) that don't carry a tenant context, with the bucket the
+-- object's bytes are in (placement_bucket_id, ADR-0051) so the caller can
+-- call S3 in one trip; a PENDING row, placed nowhere yet, comes with its
+-- collection's bucket, as does a row a binary from before 123 promoted.
 -- checksum_algorithm tells a HEAD which stored checksum is the object's.
 -- enabled, read_only and provision_state are the bucket gate's state
 -- (bucketgate.State), for a worker that deletes the object's bytes.
@@ -72,7 +91,7 @@ SELECT o.id, o.tenant_id, o.path, o.state, o.checksum_algorithm,
        sb.enabled, sb.read_only, bk.provision_state
 FROM objects o
 JOIN collections c       ON c.id = o.collection_id
-JOIN buckets bk          ON bk.id = c.bucket_id
+JOIN buckets bk          ON bk.id = COALESCE(o.placement_bucket_id, c.bucket_id)
 JOIN storage_backends sb ON sb.id = bk.backend_id
 WHERE o.id = $1;
 
@@ -194,7 +213,9 @@ SELECT o.id, o.tenant_id, o.path, o.resource_version,
        sb.enabled, sb.read_only, b.provision_state
 FROM objects o
 JOIN collections k     ON k.id = o.collection_id
-JOIN buckets b         ON b.id = k.bucket_id
+-- The bucket the bytes are in (ADR-0051); a row a binary from before 123
+-- trashed has its bytes in its collection's bucket.
+JOIN buckets b         ON b.id = COALESCE(o.placement_bucket_id, k.bucket_id)
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
@@ -282,8 +303,21 @@ FROM list_object_prefixes(
 -- collections scan per returned row (the planner cannot size the id array).
 -- The collection is resolved once, by its unique (tenant_id, name), and
 -- still checked against every row.
-SELECT sqlc.embed(o), sqlc.arg('collection')::text AS collection_name
+--
+-- The placement_* columns are the bucket each object's bytes are in (123,
+-- ADR-0051), by primary key; NULL on a PENDING row. A row promoted by a
+-- binary from before 123 has its bytes in its collection's bucket.
+SELECT sqlc.embed(o), sqlc.arg('collection')::text AS collection_name,
+       psb.name AS placement_backend_name, pb.name AS placement_bucket_name,
+       psb.enabled AS placement_enabled, psb.read_only AS placement_read_only,
+       pb.provision_state AS placement_provision_state
 FROM objects o
+LEFT JOIN buckets pb           ON pb.id = COALESCE(o.placement_bucket_id,
+                                    CASE WHEN o.state <> 'PENDING' THEN
+                                        (SELECT c.bucket_id FROM collections c
+                                          WHERE c.tenant_id = sqlc.arg('tenant_id')::uuid
+                                            AND c.name = sqlc.arg('collection')::text) END)
+LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
             sqlc.arg('tenant_id')::uuid,

@@ -1019,6 +1019,47 @@ func (q *Queries) MigrationListUncopiedBack(ctx context.Context, tenantID pgtype
 	return items, nil
 }
 
+const migrationPlaceObjectsInSource = `-- name: MigrationPlaceObjectsInSource :execrows
+UPDATE objects o
+   SET placement_bucket_id = m.source_bucket_id
+  FROM tenant_storage_migrations m
+ WHERE m.tenant_id = $1
+   AND o.tenant_id = m.tenant_id
+   AND o.placement_bucket_id = m.target_bucket_id
+`
+
+// The mirror, in the rebind back's transaction: every object placed in the
+// target is read from the source again, which the rollback's copy back
+// filled before the rebind back could commit.
+func (q *Queries) MigrationPlaceObjectsInSource(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, migrationPlaceObjectsInSource, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const migrationPlaceObjectsInTarget = `-- name: MigrationPlaceObjectsInTarget :execrows
+UPDATE objects o
+   SET placement_bucket_id = m.target_bucket_id
+  FROM tenant_storage_migrations m
+ WHERE m.tenant_id = $1
+   AND o.tenant_id = m.tenant_id
+   AND o.placement_bucket_id = m.source_bucket_id
+`
+
+// Run in the rebind transaction, after the collections moved: every object
+// of the tenant placed in the source is read from the target from here on
+// (objects.placement_bucket_id, ADR-0051), which the copy and the catch-up
+// filled before the rebind could commit.
+func (q *Queries) MigrationPlaceObjectsInTarget(ctx context.Context, tenantID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, migrationPlaceObjectsInTarget, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordStorageMigrationCaughtUp = `-- name: RecordStorageMigrationCaughtUp :execrows
 INSERT INTO storage_migration_caught_up (tenant_id, object_id, written_at, etag)
 SELECT $1, $2, $3, $4

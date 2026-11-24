@@ -267,6 +267,10 @@ func (t *Transitioner) promote(
 	// It also clears the upload's anchor (upload_bucket_id, migration 113):
 	// the bytes are now where the object is read from, and a storage
 	// migration's cleanup no longer waits on the row.
+	//
+	// And it places the object (placement_bucket_id, ADR-0051) in the
+	// collection's bucket: checkPlacement has just confirmed the bytes are
+	// there, and every caller put or moved them there first.
 	const q = `
         UPDATE objects
            SET state = 'AVAILABLE',
@@ -276,7 +280,9 @@ func (t *Transitioner) promote(
                sequencer = COALESCE(NULLIF($5, ''), sequencer),
                committed_at = CASE WHEN state = 'PENDING' THEN now() ELSE committed_at END,
                bytes_written_at = clock_timestamp(),
-               upload_bucket_id = NULL
+               upload_bucket_id = NULL,
+               placement_bucket_id = (SELECT c.bucket_id FROM collections c
+                                       WHERE c.id = objects.collection_id)
          WHERE id = $1
            AND (
                 ($5 = '' AND state = 'PENDING')

@@ -22,15 +22,22 @@ type Placement struct {
 	StoragePath string // "<tenant>/<collection segment>/<key>" (storagepath.Compose)
 }
 
-// placementFor builds obj's placement from the collection's bucket binding.
-// An unresolved binding (the best-effort LookupBucket failed or the
-// collection is unbound) has no placement to report: nil, not a half-empty one.
-// Nor has an object whose key predates the key contract: its key composes to
-// no path of its own (storagepath.Compose refuses it).
-func placementFor(ctx context.Context, tenantID uuid.UUID, backendID, bucket string, obj *Object) *Placement {
-	if backendID == "" || bucket == "" {
+// placementFor builds obj's placement from the bucket its bytes are in
+// (Object.Stored, ADR-0051), which the collection's binding need not be; for
+// a PENDING upload, placed nowhere yet, the bucket its URL was signed for
+// (Object.Upload), where the bytes land. An object with neither has no
+// placement to report: nil, not a half-empty one. Nor has an object whose
+// key predates the key contract: its key composes to no path of its own
+// (storagepath.Compose refuses it).
+func placementFor(ctx context.Context, tenantID uuid.UUID, obj *Object) *Placement {
+	ref := obj.Stored
+	if ref == nil {
+		ref = obj.Upload
+	}
+	if ref == nil {
 		return nil
 	}
+	backendID, bucket := ref.BackendID, ref.Bucket
 	path, err := storagepath.Compose(tenantID, obj.Collection, obj.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("object key is outside the key contract; reporting no placement",
@@ -72,7 +79,7 @@ func (h *Handler) mayReadPlacement(ctx context.Context, principal *auth.Principa
 // attachPlacement sets obj.Placement for a single-object read when the caller
 // may see it. res is the resource the read was authorised against.
 func (h *Handler) attachPlacement(ctx context.Context, principal *auth.Principal, res *cedar.Resource, obj *Object) {
-	p := placementFor(ctx, res.TenantID, res.BackendID, res.BucketName, obj)
+	p := placementFor(ctx, res.TenantID, obj)
 	if p == nil {
 		return
 	}

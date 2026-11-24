@@ -126,7 +126,7 @@ func (q *Queries) GetObjectReplicationState(ctx context.Context, tenantID pgtype
 }
 
 const getReplicaObjects = `-- name: GetReplicaObjects :many
-SELECT o.id, o.state, c.bucket_id, o.path, o.content_type, o.size_bytes, o.external_ref,
+SELECT o.id, o.state, COALESCE(o.placement_bucket_id, c.bucket_id)::uuid AS bucket_id, o.path, o.content_type, o.size_bytes, o.external_ref,
        o.metadata, o.tags, o.created_at, o.updated_at, o.committed_at, o.resource_version,
        COALESCE(o.bytes_written_at, o.committed_at, o.created_at)::timestamptz AS written_at
   FROM objects o
@@ -152,7 +152,9 @@ type GetReplicaObjectsRow struct {
 }
 
 // The claimed rows' objects as they are now, with the bucket each one's
-// collection is bound to and the byte write a replica of it must match:
+// bytes are in (objects.placement_bucket_id, ADR-0051; a row a binary from
+// before 123 promoted has them in its collection's bucket) and the byte
+// write a replica of it must match:
 // bytes_written_at, which every promote sets, or for a row promoted before
 // migration 111 its first commit. Every column cel.ObjectVars projects, so
 // the bucket's filter sees what a ListObjects filter sees.
@@ -284,9 +286,13 @@ INSERT INTO object_replicas
     (source_bucket_id, tenant_id, collection_name, path, object_id, next_attempt_at)
 SELECT m.bucket_id, o.tenant_id, c.name, o.path, o.id, now()
   FROM marked m
-  JOIN collections c ON c.bucket_id = m.bucket_id
+  JOIN collections c ON TRUE
   JOIN objects o     ON o.tenant_id = c.tenant_id AND o.collection_id = c.id
- WHERE o.state = 'AVAILABLE'
+ -- A row a binary from before 123 promoted has its bytes in its collection's
+ -- bucket.
+ WHERE (o.placement_bucket_id = m.bucket_id
+        OR (o.placement_bucket_id IS NULL AND c.bucket_id = m.bucket_id))
+   AND o.state = 'AVAILABLE'
 ON CONFLICT (source_bucket_id, tenant_id, collection_name, path) DO UPDATE
    SET object_id       = EXCLUDED.object_id,
        generation      = object_replicas.generation + 1,
@@ -298,7 +304,8 @@ ON CONFLICT (source_bucket_id, tenant_id, collection_name, path) DO UPDATE
 
 // Per-object replication state (migration 121, ADR-0050). Every query here
 // runs on the worker's cross-tenant connection.
-// Queues every AVAILABLE object of the bucket's collections, once: the
+// Queues every AVAILABLE object whose bytes are in the bucket
+// (objects.placement_bucket_id, ADR-0051), once: the
 // replication_seeds row is written by the same statement, and a bucket that
 // has one is left alone. The triggers queue every write from then on; a
 // change to the bucket's replication settings drops the seed row, so the

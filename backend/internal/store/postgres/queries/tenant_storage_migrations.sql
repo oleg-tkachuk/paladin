@@ -493,6 +493,29 @@ SET rebound_at = now(), updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
+-- name: MigrationPlaceObjectsInTarget :execrows
+-- Run in the rebind transaction, after the collections moved: every object
+-- of the tenant placed in the source is read from the target from here on
+-- (objects.placement_bucket_id, ADR-0051), which the copy and the catch-up
+-- filled before the rebind could commit.
+UPDATE objects o
+   SET placement_bucket_id = m.target_bucket_id
+  FROM tenant_storage_migrations m
+ WHERE m.tenant_id = sqlc.arg('tenant_id')
+   AND o.tenant_id = m.tenant_id
+   AND o.placement_bucket_id = m.source_bucket_id;
+
+-- name: MigrationPlaceObjectsInSource :execrows
+-- The mirror, in the rebind back's transaction: every object placed in the
+-- target is read from the source again, which the rollback's copy back
+-- filled before the rebind back could commit.
+UPDATE objects o
+   SET placement_bucket_id = m.source_bucket_id
+  FROM tenant_storage_migrations m
+ WHERE m.tenant_id = sqlc.arg('tenant_id')
+   AND o.tenant_id = m.tenant_id
+   AND o.placement_bucket_id = m.target_bucket_id;
+
 -- name: StartStorageMigrationRollback :execrows
 -- verifying -> rolling_back. The verify failure is recorded and counted here,
 -- where it happened; the rollback that follows keeps both. The cursor starts

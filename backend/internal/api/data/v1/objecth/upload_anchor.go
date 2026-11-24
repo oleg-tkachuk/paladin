@@ -12,17 +12,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
-// UploadAnchor is the bucket a PENDING object's upload URL was signed for
-// (objects.upload_bucket_id, migration 113), with the bucket gate's state
-// there. A storage migration may rebind the collection between the presign
-// and the PUT, and the bytes land where the URL says: CompleteObject looks
-// for them here, and moves them to the collection's bucket.
-type UploadAnchor struct {
-	BackendID string
-	Bucket    string
-	State     bucketgate.State
-}
-
 // The log fields an upload's move between buckets is told by, wherever it
 // is moved: CompleteObject here, the reconciler's probe in adapters.
 const (
@@ -41,7 +30,7 @@ var ErrRelocatedSize = errors.New("the copy in the collection's bucket is not th
 // they then have to move to bound, the bucket the collection is bound to now:
 // the anchor, when it names another bucket than bound. No anchor — a row from
 // before migration 113 — or one naming bound needs no move.
-func UploadOrigin(anchor *UploadAnchor, bound Location) (Location, bool) {
+func UploadOrigin(anchor *BucketRef, bound Location) (Location, bool) {
 	if anchor == nil || (anchor.BackendID == bound.BackendID && anchor.Bucket == bound.Bucket) {
 		return bound, false
 	}

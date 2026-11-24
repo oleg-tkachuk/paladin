@@ -436,10 +436,21 @@ type Object struct {
 	// copy), or uuid.Nil.
 	CreatedByOperation uuid.UUID
 
-	// Upload is the bucket a PENDING object's upload URL was signed for, read
-	// by the single-object read the completion makes; nil when the row has
-	// none, and once the object is promoted.
-	Upload *UploadAnchor
+	// Upload is the bucket a PENDING object's upload URL was signed for
+	// (objects.upload_bucket_id, migration 113). A storage migration may
+	// rebind the collection between the presign and the PUT, and the bytes
+	// land where the URL says: CompleteObject looks for them here, and moves
+	// them to the collection's bucket. Read by the single-object read the
+	// completion makes; nil when the row has none, and once the object is
+	// promoted.
+	Upload *BucketRef
+
+	// Stored is the bucket the object's bytes are in
+	// (objects.placement_bucket_id, ADR-0051), which every read, copy and
+	// delete of them resolves; the collection's binding decides only where a
+	// new upload is signed. Set by the single-object and batch reads; nil on
+	// a PENDING object, whose bytes are confirmed nowhere yet.
+	Stored *BucketRef
 
 	// Placement is where the object's bytes physically live. Set only by the
 	// read paths (GetObject, LookupObject, ListObjects), and only when Cedar
@@ -1456,7 +1467,7 @@ func (h *Handler) authorizeEachRow(ctx context.Context, principal *auth.Principa
 // across the collection (NeedsPerObjectEval false); otherwise the per-row loop
 // decides placement per object instead.
 func (h *Handler) attachListPlacement(ctx context.Context, principal *auth.Principal, tenantID uuid.UUID, collection, backendID, bucket string, objs []Object) {
-	if len(objs) == 0 || backendID == "" || bucket == "" {
+	if len(objs) == 0 {
 		return
 	}
 	if !h.mayReadPlacement(ctx, principal, &cedar.Resource{
@@ -1466,7 +1477,7 @@ func (h *Handler) attachListPlacement(ctx context.Context, principal *auth.Princ
 		return
 	}
 	for i := range objs {
-		objs[i].Placement = placementFor(ctx, tenantID, backendID, bucket, &objs[i])
+		objs[i].Placement = placementFor(ctx, tenantID, &objs[i])
 	}
 }
 
@@ -1743,7 +1754,7 @@ func (h *Handler) DownloadObject(ctx context.Context, collection, objectID strin
 	}, cedar.ActionPresignGet, obj.SizeBytes, obj.ContentType); err != nil {
 		return nil, err
 	}
-	return h.presignDownload(ctx, tenantID, collection, obj, meta, ttl, disposition, requireETagMatch)
+	return h.presignDownload(ctx, tenantID, collection, obj, ttl, disposition, requireETagMatch)
 }
 
 // checkDownloadInput refuses a download that does not name its object, and
@@ -1778,11 +1789,17 @@ func (h *Handler) downloadTarget(ctx context.Context, tenantID uuid.UUID, collec
 
 // presignDownload signs an authorized download's GET URL. requireETagMatch
 // binds it to the object's current ETag.
-func (h *Handler) presignDownload(ctx context.Context, tenantID uuid.UUID, collection string, obj Object, meta BucketMeta, ttl time.Duration, disposition string, requireETagMatch bool) (*DownloadObjectOutput, error) {
+func (h *Handler) presignDownload(ctx context.Context, tenantID uuid.UUID, collection string, obj Object, ttl time.Duration, disposition string, requireETagMatch bool) (*DownloadObjectOutput, error) {
+	// Signed for the bucket the bytes are in, which the collection's binding
+	// need not be (ADR-0051).
+	at, err := StoredAt(obj, bucketgate.Read) // download (read)
+	if err != nil {
+		return nil, MapResolveErr(err)
+	}
 	args := PresignGetArgs{
-		BackendID:          meta.BackendID,
+		BackendID:          at.BackendID,
 		TenantID:           tenantID,
-		Bucket:             meta.BucketName,
+		Bucket:             at.Bucket,
 		Collection:         collection,
 		Key:                obj.Key,
 		TTL:                ttl,
@@ -2137,7 +2154,7 @@ func (h *Handler) PermanentDelete(
 	// first means a failed/blocked delete never touches storage; the
 	// only residual failure mode is an orphaned object in S3 (a
 	// reclaimable cost leak), never a live row with missing bytes.
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, collection, bucketgate.BytesWrite) // permanent delete (mutation)
+	backendID, bucket, err := h.deletedBytesAt(ctx, tenantID, obj) // permanent delete (mutation)
 	if err != nil {
 		return MapResolveErr(err)
 	}
@@ -2513,11 +2530,10 @@ func (h *Handler) copyDestination(ctx context.Context, tenantID uuid.UUID, in Co
 // storage copy, and the promotion with its event.
 func (h *Handler) copyBytes(ctx context.Context, tenantID uuid.UUID, in CopyObjectInput, src Object, dstMeta BucketMeta, destKey string) (*Object, error) {
 	dstBackendID, dstBucket := dstMeta.BackendID, dstMeta.BucketName
-	srcBackendID, srcBucket, err := h.repo.LookupBucket(ctx, tenantID, in.SourceCollection, bucketgate.Read) // copy source (read)
+	from, err := StoredAt(src, bucketgate.Read) // copy source (read), where its bytes are
 	if err != nil {
 		return nil, MapResolveErr(err)
 	}
-
 	publicURL, err := h.publicURL(ctx, dstMeta, tenantID, in.DestCollection, destKey)
 	if err != nil {
 		return nil, err
@@ -2540,9 +2556,7 @@ func (h *Handler) copyBytes(ctx context.Context, tenantID uuid.UUID, in CopyObje
 	if err != nil {
 		return nil, mapCreateErr(err)
 	}
-	if err := h.storage.CopyObject(ctx, Location{
-		BackendID: srcBackendID, TenantID: tenantID, Bucket: srcBucket, Collection: in.SourceCollection, Key: src.Key,
-	}, Location{
+	if err := h.storage.CopyObject(ctx, from, Location{
 		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
 		CacheControl: dstMeta.CacheControl, ContentType: src.ContentType,
 	}); err != nil {
@@ -2686,11 +2700,11 @@ const (
 // through a storage event; a HEAD that cannot reach the backend is
 // unavailable, not a refusal.
 func (h *Handler) assertBytesPresent(ctx context.Context, tenantID uuid.UUID, obj Object) error {
-	backendID, bucket, err := h.repo.LookupBucket(ctx, tenantID, obj.Collection, bucketgate.Read) // a HEAD; RestoreObject passed the write gate already
+	at, err := StoredAt(obj, bucketgate.Read) // a HEAD; RestoreObject passed the write gate already
 	if err != nil {
 		return MapResolveErr(err)
 	}
-	_, _, _, _, err = h.storage.Head(ctx, backendID, bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
+	_, _, _, _, err = h.storage.Head(ctx, at.BackendID, at.Bucket, tenantID, obj.Collection, obj.Key, obj.ChecksumAlgo)
 	switch {
 	case err == nil:
 		return nil

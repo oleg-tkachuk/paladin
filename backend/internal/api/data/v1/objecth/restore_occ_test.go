@@ -78,7 +78,7 @@ type restoreParentStub struct {
 }
 
 func (s *restoreParentStub) FindByName(context.Context, uuid.UUID, string, string) (Object, error) {
-	return s.obj, nil
+	return placedIn(s.obj, "backend-7", "bucket-7"), nil
 }
 
 // TestRestoreVersionComparesAgainstParent is the assertion the shape checks

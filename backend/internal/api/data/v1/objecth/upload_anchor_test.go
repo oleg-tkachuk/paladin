@@ -29,15 +29,15 @@ var openState = bucketgate.State{Enabled: true, ProvisionState: bucketgate.Provi
 func TestUploadOrigin(t *testing.T) {
 	bound := Location{BackendID: anchorBackend, TenantID: uuid.New(), Bucket: reboundBucket, Collection: "docs", Key: "a.txt"}
 	for name, tc := range map[string]struct {
-		anchor       *UploadAnchor
+		anchor       *BucketRef
 		wantBucket   string
 		wantBackend  string
 		wantRelocate bool
 	}{
 		"no anchor: a row from before the anchor": {nil, reboundBucket, anchorBackend, false},
-		"anchored to the bound bucket":            {&UploadAnchor{BackendID: anchorBackend, Bucket: reboundBucket}, reboundBucket, anchorBackend, false},
-		"anchored to the bucket before a rebind":  {&UploadAnchor{BackendID: anchorBackend, Bucket: anchoredBucket}, anchoredBucket, anchorBackend, true},
-		"same bucket name on another backend":     {&UploadAnchor{BackendID: otherBackend, Bucket: reboundBucket}, reboundBucket, otherBackend, true},
+		"anchored to the bound bucket":            {&BucketRef{BackendID: anchorBackend, Bucket: reboundBucket}, reboundBucket, anchorBackend, false},
+		"anchored to the bucket before a rebind":  {&BucketRef{BackendID: anchorBackend, Bucket: anchoredBucket}, anchoredBucket, anchorBackend, true},
+		"same bucket name on another backend":     {&BucketRef{BackendID: otherBackend, Bucket: reboundBucket}, reboundBucket, otherBackend, true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			origin, relocate := UploadOrigin(tc.anchor, bound)
@@ -87,7 +87,7 @@ func (s *bucketStorage) CopyObject(_ context.Context, src, dst Location) error {
 func anchoredUpload(state bucketgate.State) Object {
 	return Object{
 		ObjectID: uuid.NewV7(), Collection: "docs", Key: "a.txt",
-		Upload: &UploadAnchor{BackendID: anchorBackend, Bucket: anchoredBucket, State: state},
+		Upload: &BucketRef{BackendID: anchorBackend, Bucket: anchoredBucket, State: state},
 	}
 }
 

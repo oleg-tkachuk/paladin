@@ -125,7 +125,7 @@ func (r *ReconcilerProbe) headAt(ctx context.Context, loc objecth.Location, algo
 
 // uploadAnchor is the bucket the object's upload URL was signed for; nil when
 // the row has none.
-func (r *ReconcilerProbe) uploadAnchor(ctx context.Context, objectID uuid.UUID) (*objecth.UploadAnchor, error) {
+func (r *ReconcilerProbe) uploadAnchor(ctx context.Context, objectID uuid.UUID) (*objecth.BucketRef, error) {
 	a, err := r.q.LookupUploadBucket(ctx, pgUUID(objectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -133,7 +133,7 @@ func (r *ReconcilerProbe) uploadAnchor(ctx context.Context, objectID uuid.UUID) 
 	if err != nil {
 		return nil, fmt.Errorf("lookup upload bucket: %w", err)
 	}
-	return &objecth.UploadAnchor{BackendID: a.BackendName, Bucket: a.BucketName, State: bucketgate.State{
+	return &objecth.BucketRef{BackendID: a.BackendName, Bucket: a.BucketName, State: bucketgate.State{
 		Enabled: a.Enabled, ReadOnly: a.ReadOnly, ProvisionState: a.ProvisionState,
 	}}, nil
 }

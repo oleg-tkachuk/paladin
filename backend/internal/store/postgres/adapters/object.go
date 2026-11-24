@@ -206,7 +206,10 @@ func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uu
 	}
 	out := make([]objecth.Object, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, objectFromSQLC(row.Object, row.CollectionName))
+		obj := objectFromSQLC(row.Object, row.CollectionName)
+		obj.Stored = bucketRefFrom(row.PlacementBackendName, row.PlacementBucketName,
+			row.PlacementEnabled, row.PlacementReadOnly, row.PlacementProvisionState)
+		out = append(out, obj)
 	}
 	return out, nil
 }
@@ -290,6 +293,8 @@ func (r *ObjectRepo) ListObjects(ctx context.Context, args objecth.ListObjectsAr
 	out := make([]objecth.Object, 0, len(rows))
 	for _, row := range rows {
 		o := objectFromSQLC(row.Object, row.CollectionName)
+		o.Stored = bucketRefFrom(row.PlacementBackendName, row.PlacementBucketName,
+			row.PlacementEnabled, row.PlacementReadOnly, row.PlacementProvisionState)
 		// The SQL hints narrow; this decides, as the CEL pass does.
 		if !atLevel(o.Key, args.Prefix, args.Delimiter) {
 			continue
@@ -919,23 +924,27 @@ func (r *ObjectRepo) getByIDWith(ctx context.Context, q *sqlc.Queries, tenantID,
 		return objecth.Object{}, err
 	}
 	obj := objectFromSQLC(row.Object, row.CollectionName)
-	obj.Upload = uploadAnchorFrom(row)
+	obj.Upload = bucketRefFrom(row.UploadBackendName, row.UploadBucketName,
+		row.UploadEnabled, row.UploadReadOnly, row.UploadProvisionState)
+	obj.Stored = bucketRefFrom(row.PlacementBackendName, row.PlacementBucketName,
+		row.PlacementEnabled, row.PlacementReadOnly, row.PlacementProvisionState)
 	return obj, nil
 }
 
-// uploadAnchorFrom is the bucket the row's upload URL was signed for, as
-// GetObject joins it; nil when the row has none.
-func uploadAnchorFrom(row sqlc.GetObjectRow) *objecth.UploadAnchor {
-	if row.UploadBackendName == nil || row.UploadBucketName == nil {
+// bucketRefFrom is a bucket a query LEFT JOINed for an object row — the one
+// its upload URL was signed for, or the one its bytes are in — with the
+// bucket gate's state there; nil when the row names none.
+func bucketRefFrom(backend, bucket *string, enabled, readOnly *bool, provisionState *string) *objecth.BucketRef {
+	if backend == nil || bucket == nil {
 		return nil
 	}
-	return &objecth.UploadAnchor{
-		BackendID: *row.UploadBackendName,
-		Bucket:    *row.UploadBucketName,
+	return &objecth.BucketRef{
+		BackendID: *backend,
+		Bucket:    *bucket,
 		State: bucketgate.State{
-			Enabled:        row.UploadEnabled != nil && *row.UploadEnabled,
-			ReadOnly:       row.UploadReadOnly != nil && *row.UploadReadOnly,
-			ProvisionState: derefStr(row.UploadProvisionState),
+			Enabled:        enabled != nil && *enabled,
+			ReadOnly:       readOnly != nil && *readOnly,
+			ProvisionState: derefStr(provisionState),
 		},
 	}
 }

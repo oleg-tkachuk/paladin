@@ -31,11 +31,11 @@ type placementRepo struct {
 }
 
 func (r *placementRepo) FindByName(context.Context, uuid.UUID, string, string) (Object, error) {
-	return r.obj, nil
+	return placedIn(r.obj, "backend-list", "bucket-list"), nil
 }
 
 func (r *placementRepo) FindByPath(context.Context, uuid.UUID, string, string) (Object, error) {
-	return r.obj, nil
+	return placedIn(r.obj, "backend-list", "bucket-list"), nil
 }
 
 func (r *placementRepo) LookupBucket(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (string, string, error) {
@@ -75,8 +75,8 @@ func newPlacementFixture() placementFixture {
 		State: statemachine.StateAvailable, SizeBytes: 10, ContentType: "application/pdf",
 	}
 	page := []Object{
-		{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "public/a.txt", Tags: map[string]string{}},
-		{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "private/b.txt", Tags: map[string]string{}},
+		{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "public/a.txt", Tags: map[string]string{}, Stored: storedIn("backend-list", "bucket-list")},
+		{ObjectID: uuid.New(), TenantID: tenantID, Collection: "docs", Key: "private/b.txt", Tags: map[string]string{}, Stored: storedIn("backend-list", "bucket-list")},
 	}
 	return placementFixture{tenantID: tenantID, repo: &placementRepo{listRepo: listRepo{page: page}, obj: obj}}
 }
@@ -216,9 +216,8 @@ func (failPlacement) IsAuthorized(_ context.Context, _ *cedar.Principal, a cedar
 	return cedar.DecisionAllow, nil
 }
 
-// Placement is enrichment: an engine fault on its check, or a collection whose
-// bucket binding cannot be resolved, leaves the field unset and the read
-// succeeds.
+// Placement is enrichment: an engine fault on its check leaves the field unset
+// and the read succeeds.
 func TestPlacementNeverFailsTheRead(t *testing.T) {
 	t.Run("engine fault on the placement check", func(t *testing.T) {
 		f := newPlacementFixture()
@@ -230,14 +229,49 @@ func TestPlacementNeverFailsTheRead(t *testing.T) {
 			}
 		}
 	})
+}
+
+// Placement is where the row places the bytes (ADR-0051), not the
+// collection's binding: a binding that cannot be resolved, or one that has
+// moved, changes nothing in it.
+func TestPlacementIsTheRowsNotTheBinding(t *testing.T) {
 	t.Run("unresolved bucket binding", func(t *testing.T) {
 		f := newPlacementFixture()
 		f.repo.bucketErr = errors.New("lookup failed")
 		h := f.handler(cedartest.Engine(defaultPolicyFor(f.tenantID)))
 		for rpc, ps := range readAll(t, h, f.as(auth.PrincipalKindUser, "platform.admin"), f) {
 			for i, p := range ps {
-				if p != nil {
-					t.Errorf("%s[%d]: placement %+v reported without a bucket binding", rpc, i, *p)
+				if p == nil || p.Bucket != "bucket-list" {
+					t.Errorf("%s[%d]: placement %+v, want the row's bucket-list", rpc, i, p)
+				}
+			}
+		}
+	})
+	t.Run("a pending upload, where its URL writes", func(t *testing.T) {
+		f := newPlacementFixture()
+		f.repo.obj.State = statemachine.StatePending
+		f.repo.obj.Upload = storedIn("backend-up", "bucket-up")
+		h := f.handler(cedartest.Engine(defaultPolicyFor(f.tenantID)))
+		ctx := f.as(auth.PrincipalKindUser, "platform.admin")
+		got, err := h.GetObject(ctx, "docs", f.repo.obj.ObjectID.String())
+		if err != nil {
+			t.Fatalf("GetObject: %v", err)
+		}
+		if got.Placement == nil || got.Placement.Bucket != "bucket-up" {
+			t.Fatalf("placement %+v, want bucket-up, where the upload's bytes land", got.Placement)
+		}
+	})
+	t.Run("placed outside the binding", func(t *testing.T) {
+		f := newPlacementFixture()
+		f.repo.obj.Stored = storedIn("backend-old", "bucket-old")
+		for i := range f.repo.page {
+			f.repo.page[i].Stored = storedIn("backend-old", "bucket-old")
+		}
+		h := f.handler(cedartest.Engine(defaultPolicyFor(f.tenantID)))
+		for rpc, ps := range readAll(t, h, f.as(auth.PrincipalKindUser, "platform.admin"), f) {
+			for i, p := range ps {
+				if p == nil || p.BackendID != "backend-old" || p.Bucket != "bucket-old" {
+					t.Errorf("%s[%d]: placement %+v, want backend-old/bucket-old, where the row places the bytes", rpc, i, p)
 				}
 			}
 		}

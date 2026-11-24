@@ -138,9 +138,10 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 	}
 
 	// Bucket lookups are batch-invariant: same source / dest collection
-	// across the whole batch ⇒ resolve once.
-	srcBackendID, srcBucket, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcCollection, bucketgate.Read) // copy source (read)
-	if err != nil {
+	// across the whole batch ⇒ resolve once. The source collection is only
+	// admitted here: each object's bytes are read where it is placed
+	// (copyOne), which its collection's binding need not be (ADR-0051).
+	if _, _, err := e.Objects.LookupBucket(ctx, args.TenantID, args.SrcCollection, bucketgate.Read); err != nil { // copy source (read)
 		return nil, fmt.Errorf("lookup src bucket: %w", err)
 	}
 	dstMeta, err := e.Objects.LookupBucketMeta(ctx, args.TenantID, args.DstCollection, bucketgate.BytesWrite) // copy dest (mutation)
@@ -191,8 +192,7 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 		dstKey := args.KeyPrefix + src.Key
 		err := e.copyOne(ctx, copyJob{
 			op: op, args: args, src: src, dstKey: dstKey,
-			from: objecth.Location{BackendID: srcBackendID, TenantID: args.TenantID, Bucket: srcBucket, Collection: args.SrcCollection, Key: src.Key},
-			to:   objecth.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, Collection: args.DstCollection, Key: dstKey},
+			to: objecth.Location{BackendID: dstBackendID, TenantID: args.TenantID, Bucket: dstBucket, Collection: args.DstCollection, Key: dstKey},
 		})
 		if errors.Is(err, errAlreadyCopied) {
 			logAlreadyApplied(e.Logger, op, srcID, reasonAlreadyCopied)
@@ -220,8 +220,8 @@ func (e *BatchCopyExecutor) Execute(ctx context.Context, op operationh.Operation
 	return body, nil
 }
 
-// copyJob is one item of a batch copy: the source, where its bytes are, and
-// where the copy goes.
+// copyJob is one item of a batch copy: the source, where its bytes are (set
+// by copyOne), and where the copy goes.
 type copyJob struct {
 	op     operationh.Operation
 	args   batchh.BatchCopyArgs
@@ -248,6 +248,12 @@ func (e *BatchCopyExecutor) copyOne(ctx context.Context, job copyJob) error {
 			zap.String("object_id", job.src.ObjectID.String()), zap.Error(err))
 		return fmt.Errorf("%s: %w", objecth.FieldDestinationKey, err)
 	}
+	// The source's bytes are read where its row places them (ADR-0051).
+	from, err := objecth.StoredAt(job.src, bucketgate.Read)
+	if err != nil {
+		return fmt.Errorf("source bytes: %w", err)
+	}
+	job.from = from
 
 	dst, err := e.Objects.CreateObject(ctx, objecth.CreateObjectArgs{
 		TenantID:           job.args.TenantID,

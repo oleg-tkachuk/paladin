@@ -22,7 +22,7 @@ import (
 // then: a backend that cannot be reached says so instead.
 func TestRestoreChecksTheObjectsBytes(t *testing.T) {
 	t.Parallel()
-	obj := Object{ObjectID: uuid.New(), Collection: "docs", Key: "a.txt"}
+	obj := Object{ObjectID: uuid.New(), Collection: "docs", Key: "a.txt", Stored: storedIn("backend-7", "bucket-7")}
 	for name, tc := range map[string]struct {
 		headErr    error
 		wantCode   connect.Code
@@ -93,7 +93,7 @@ func TestRestoreObjectRefusesAnObjectWithoutBytes(t *testing.T) {
 		policy: allowAll{},
 		repo: &trashedObjectStub{restoreParentStub{obj: Object{
 			ObjectID: objectID, TenantID: tenantID, Collection: "docs", Key: "a.txt",
-			State: statemachine.StateDeleted, ResourceVersion: 4,
+			State: statemachine.StateDeleted, ResourceVersion: 4, Stored: storedIn("backend-7", "bucket-7"),
 		}}},
 		storage: headStorage{err: ErrStoredObjectNotFound},
 	}
