@@ -34,7 +34,7 @@ type fakeReplicator struct {
 	fail   bool
 }
 
-func (f *fakeReplicator) Replicate(_ context.Context, _ ReplicationTarget, dst ReplicationTarget) error {
+func (f *fakeReplicator) Replicate(_ context.Context, _ ReplicationTarget, dst ReplicationTarget, _ int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.fail {
@@ -267,7 +267,7 @@ type countingReplicator struct {
 	err      error
 }
 
-func (c *countingReplicator) Replicate(context.Context, ReplicationTarget, ReplicationTarget) error {
+func (c *countingReplicator) Replicate(context.Context, ReplicationTarget, ReplicationTarget, int64) error {
 	c.attempts++
 	return c.err
 }
