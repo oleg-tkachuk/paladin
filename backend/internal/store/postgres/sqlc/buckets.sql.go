@@ -35,6 +35,9 @@ SELECT 'pending_purges'::text, count(*)::bigint
 UNION ALL
 SELECT 'pending_multipart_aborts'::text, count(*)::bigint
     FROM pending_multipart_aborts WHERE bucket_id IN (SELECT id FROM target)
+UNION ALL
+SELECT 'objects'::text, count(*)::bigint
+    FROM objects WHERE placement_bucket_id IN (SELECT id FROM target)
 `
 
 type CountBucketReferencesRow struct {

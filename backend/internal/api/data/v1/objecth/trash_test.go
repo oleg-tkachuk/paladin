@@ -106,7 +106,7 @@ func (r *restoreRepo) FindByName(context.Context, uuid.UUID, string, string) (Ob
 	if r.findCalls > 1 && r.refindErr != nil {
 		return Object{}, r.refindErr
 	}
-	return r.obj, nil
+	return placedIn(r.obj, "backend-7", "bucket-7"), nil
 }
 
 func (r *restoreRepo) LiveCollision(context.Context, uuid.UUID, string, string) (bool, error) {

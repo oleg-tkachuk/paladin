@@ -48,6 +48,8 @@ func (r *PresignRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, coll
 		ChecksumAlgo:  checksumAlgoName(row.Object.ChecksumAlgorithm),
 		ChecksumValue: derefStr(row.Object.Checksum),
 		ETag:          derefStr(row.Object.Etag),
+		Stored: bucketRefFrom(row.PlacementBackendName, row.PlacementBucketName,
+			row.PlacementEnabled, row.PlacementReadOnly, row.PlacementProvisionState),
 	}, nil
 }
 

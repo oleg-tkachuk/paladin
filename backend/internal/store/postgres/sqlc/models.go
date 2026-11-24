@@ -593,6 +593,7 @@ type Object struct {
 	CreatedByOperation    pgtype.UUID        `json:"created_by_operation"`
 	BytesWrittenAt        pgtype.Timestamptz `json:"bytes_written_at"`
 	UploadBucketID        pgtype.UUID        `json:"upload_bucket_id"`
+	PlacementBucketID     pgtype.UUID        `json:"placement_bucket_id"`
 }
 
 type ObjectLock struct {

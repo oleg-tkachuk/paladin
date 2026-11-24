@@ -16,6 +16,9 @@ const (
 	RelationMultipartUploads       = "multipart_uploads"
 	RelationPendingPurges          = "pending_purges"
 	RelationPendingMultipartAborts = "pending_multipart_aborts"
+	// RelationObjects holds a bucket while an object's bytes are placed in
+	// it (objects.placement_bucket_id, ADR-0051).
+	RelationObjects = "objects"
 )
 
 // relationOther is what a caller is told for a relation with no noun: the
@@ -35,6 +38,7 @@ var relationNouns = map[string]string{
 	RelationMultipartUploads:       "multipart uploads",
 	RelationPendingPurges:          "objects awaiting purge",
 	RelationPendingMultipartAborts: "multipart uploads awaiting abort",
+	RelationObjects:                "objects stored in it",
 }
 
 // RelationNoun is the resource a caller knows relation as, and "other

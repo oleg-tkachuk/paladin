@@ -303,6 +303,10 @@ type Querier interface {
 	GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (GetIdempotencyKeyRow, error)
 	// The upload_* columns are the bucket a PENDING object's URL was signed for
 	// (migration 113) and the bucket gate's state there; NULL when it has none.
+	// The placement_* columns are the bucket the object's bytes are in (123,
+	// ADR-0051) and the gate's state there; NULL on a PENDING row. A row promoted
+	// by a binary from before 123 has no placement yet: its bytes are in its
+	// collection's bucket, as every row's were then.
 	GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error)
 	GetObjectLockByVersion(ctx context.Context, versionID pgtype.UUID) (GetObjectLockByVersionRow, error)
 	// Lock state for one object, so the delete handler can return a clear
@@ -320,6 +324,7 @@ type Querier interface {
 	// Batch lookup for batch-operation executors: one round-trip for the
 	// whole id list instead of one GetObject per id (a 1000-object batch
 	// used to issue 1000 sequential SELECTs before any state mutation).
+	// The placement_* columns are as GetObject's.
 	GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error)
 	GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
 	// Tenant scope only. Under RLS the caller sees its own tenant's row; a
@@ -549,6 +554,8 @@ type Querier interface {
 	// back the buckets it refused so the next claim leaves their rows out. One
 	// capped query both bounds the work and keeps a refused bucket's trash from
 	// heading every batch.
+	// The bucket the bytes are in (ADR-0051); a row a binary from before 123
+	// trashed has its bytes in its collection's bucket.
 	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListHardDeletableRow, error)
 	// Every tenant this subject belongs to, for the tenant switcher. Ordered by
 	// creation so the list is stable across calls rather than whatever the
@@ -599,6 +606,9 @@ type Querier interface {
 	// collections scan per returned row (the planner cannot size the id array).
 	// The collection is resolved once, by its unique (tenant_id, name), and
 	// still checked against every row.
+	//
+	// The placement_* columns are the bucket each object's bytes are in (123,
+	// ADR-0051), by primary key; NULL on a PENDING row.
 	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string, level *string, delimiter *string) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
@@ -715,8 +725,10 @@ type Querier interface {
 	// tenant takes, so uploads are not held up behind it.
 	LockTenantForStorageMigration(ctx context.Context, id pgtype.UUID) (TenantStorageLayout, error)
 	// Reads an object by id alone. Used by background workers (reconciler,
-	// replicator) that don't carry a tenant context. Joins collections to
-	// materialize the bucket binding so the caller can call S3 in one trip.
+	// replicator) that don't carry a tenant context, with the bucket the
+	// object's bytes are in (placement_bucket_id, ADR-0051) so the caller can
+	// call S3 in one trip; a PENDING row, placed nowhere yet, comes with its
+	// collection's bucket, as does a row a binary from before 123 promoted.
 	// checksum_algorithm tells a HEAD which stored checksum is the object's.
 	// enabled, read_only and provision_state are the bucket gate's state
 	// (bucketgate.State), for a worker that deletes the object's bytes.
@@ -837,6 +849,15 @@ type Querier interface {
 	// commit to fall behind: a promote stamped before a batch and committed
 	// after it is listed by the next.
 	MigrationListUncopiedBack(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32, limitCount int32) ([]MigrationListUncopiedBackRow, error)
+	// The mirror, in the rebind back's transaction: every object placed in the
+	// target is read from the source again, which the rollback's copy back
+	// filled before the rebind back could commit.
+	MigrationPlaceObjectsInSource(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// Run in the rebind transaction, after the collections moved: every object
+	// of the tenant placed in the source is read from the target from here on
+	// (objects.placement_bucket_id, ADR-0051), which the copy and the catch-up
+	// filled before the rebind could commit.
+	MigrationPlaceObjectsInTarget(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// The state of the row that owns a storage path now, if any.
 	ObjectStateAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) (ObjectState, error)
 	// The taint of the live object at a path, for the capability read gate. No

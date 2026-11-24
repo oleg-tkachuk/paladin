@@ -59,6 +59,9 @@ type ObjectRef struct {
 	ChecksumAlgo  string
 	ChecksumValue string // the checksum the object was registered with
 	ETag          string
+	// Stored is the bucket the object's bytes are in (ADR-0051), which a GET
+	// URL is signed for; nil on a PENDING object.
+	Stored *objecth.BucketRef
 }
 
 // ErrNotPending is returned by ExtendPendingPresign when the object left
@@ -156,9 +159,14 @@ func (h *Handler) PresignGet(ctx context.Context, collection, objectIDStr string
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return "", nil, time.Time{}, err
 	}
-	backendID, bucket := meta.BackendID, meta.BucketName
+	// Signed for the bucket the bytes are in, which the collection's binding
+	// need not be (ADR-0051).
+	at, err := obj.Stored.At(tenantID, collection, key, bucketgate.Read)
+	if err != nil {
+		return "", nil, time.Time{}, objecth.MapResolveErr(err)
+	}
 	args := objecth.PresignGetArgs{
-		BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: collection, Key: key,
+		BackendID: at.BackendID, TenantID: tenantID, Bucket: at.Bucket, Collection: collection, Key: key,
 		TTL: ttl, ContentDisposition: disposition,
 	}
 	if requireETagMatch {

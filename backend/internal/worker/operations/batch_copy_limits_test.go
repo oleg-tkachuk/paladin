@@ -30,7 +30,15 @@ type limitsCopyRepo struct {
 }
 
 func (r *limitsCopyRepo) FindByIDs(context.Context, uuid.UUID, []uuid.UUID) ([]objecth.Object, error) {
-	return r.sources, nil
+	out := make([]objecth.Object, len(r.sources))
+	for i, src := range r.sources {
+		if src.Stored == nil {
+			// Placed where the source collection is bound (LookupBucket).
+			src.Stored = &objecth.BucketRef{BackendID: "be", Bucket: "src-bucket", State: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}}
+		}
+		out[i] = src
+	}
+	return out, nil
 }
 func (*limitsCopyRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
 	return "be", "src-bucket", nil

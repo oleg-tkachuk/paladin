@@ -92,9 +92,12 @@ type copyFakeStorage struct {
 	copyErr error
 	// deleted records each DeleteObject's bucket and key.
 	deleted []string
+	// from records each CopyObject's source.
+	from []objecth.Location
 }
 
-func (f *copyFakeStorage) CopyObject(context.Context, objecth.Location, objecth.Location) error {
+func (f *copyFakeStorage) CopyObject(_ context.Context, src, _ objecth.Location) error {
+	f.from = append(f.from, src)
 	return f.copyErr
 }
 func (*copyFakeStorage) PresignPut(context.Context, objecth.PresignPutArgs) (string, map[string]string, time.Time, error) {
@@ -147,7 +150,8 @@ func (noAdoption) AdoptPending(context.Context, uuid.UUID, uuid.UUID, uuid.UUID,
 }
 
 func availableSrc() objecth.Object {
-	return objecth.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "k"}
+	return objecth.Object{ObjectID: uuid.New(), State: statemachine.StateAvailable, Key: "k",
+		Stored: &objecth.BucketRef{BackendID: "be", Bucket: "src-bucket", State: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}}}
 }
 
 // Storage copy fails → compensate by DiscardFailed; the returned error names
@@ -226,6 +230,31 @@ func TestCopyOneRefusesANonCanonicalDestinationKey(t *testing.T) {
 		if !errors.Is(err, storagepath.ErrNotCanonical) {
 			t.Errorf("dstKey %q: err = %v, want a key refusal", key, err)
 		}
+	}
+}
+
+// A batch copy reads each source where its row places the bytes (ADR-0051),
+// whatever the source collection is bound to now; a source placed nowhere
+// is refused without a copy.
+func TestCopyOneReadsTheSourcesPlacement(t *testing.T) {
+	st := &copyFakeStorage{}
+	e := &BatchCopyExecutor{Objects: &copyFakeRepo{created: objecth.Object{ObjectID: uuid.New()}}, Storage: st, Transitions: &copyFakeTransitioner{}}
+	src := availableSrc()
+	src.Stored = &objecth.BucketRef{BackendID: "be-old", Bucket: "old", State: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}}
+	if err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: src, dstKey: "k"}); err != nil {
+		t.Fatalf("copyOne: %v", err)
+	}
+	if len(st.from) != 1 || st.from[0].BackendID != "be-old" || st.from[0].Bucket != "old" {
+		t.Fatalf("copied from %+v, want be-old/old, where the source's bytes are", st.from)
+	}
+
+	unplaced := availableSrc()
+	unplaced.Stored = nil
+	st = &copyFakeStorage{}
+	e.Storage = st
+	err := e.copyOne(context.Background(), copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: unplaced, dstKey: "k"})
+	if !errors.Is(err, objecth.ErrNotStored) || len(st.from) != 0 {
+		t.Fatalf("a source placed nowhere: err = %v after %d copies, want ErrNotStored and none", err, len(st.from))
 	}
 }
 

@@ -145,29 +145,44 @@ func (q *Queries) ExtendPendingPresign(ctx context.Context, tenantID pgtype.UUID
 }
 
 const getObject = `-- name: GetObject :one
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, c.name AS collection_name,
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, objects.placement_bucket_id, c.name AS collection_name,
        usb.name AS upload_backend_name, ub.name AS upload_bucket_name,
        usb.enabled AS upload_enabled, usb.read_only AS upload_read_only,
-       ub.provision_state AS upload_provision_state
+       ub.provision_state AS upload_provision_state,
+       psb.name AS placement_backend_name, pb.name AS placement_bucket_name,
+       psb.enabled AS placement_enabled, psb.read_only AS placement_read_only,
+       pb.provision_state AS placement_provision_state
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 LEFT JOIN buckets ub           ON ub.id = objects.upload_bucket_id
 LEFT JOIN storage_backends usb ON usb.id = ub.backend_id
+LEFT JOIN buckets pb           ON pb.id = COALESCE(objects.placement_bucket_id,
+                                    CASE WHEN objects.state <> 'PENDING' THEN c.bucket_id END)
+LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE objects.tenant_id = $1 AND objects.id = $2
 `
 
 type GetObjectRow struct {
-	Object               Object  `json:"object"`
-	CollectionName       string  `json:"collection_name"`
-	UploadBackendName    *string `json:"upload_backend_name"`
-	UploadBucketName     *string `json:"upload_bucket_name"`
-	UploadEnabled        *bool   `json:"upload_enabled"`
-	UploadReadOnly       *bool   `json:"upload_read_only"`
-	UploadProvisionState *string `json:"upload_provision_state"`
+	Object                  Object  `json:"object"`
+	CollectionName          string  `json:"collection_name"`
+	UploadBackendName       *string `json:"upload_backend_name"`
+	UploadBucketName        *string `json:"upload_bucket_name"`
+	UploadEnabled           *bool   `json:"upload_enabled"`
+	UploadReadOnly          *bool   `json:"upload_read_only"`
+	UploadProvisionState    *string `json:"upload_provision_state"`
+	PlacementBackendName    *string `json:"placement_backend_name"`
+	PlacementBucketName     *string `json:"placement_bucket_name"`
+	PlacementEnabled        *bool   `json:"placement_enabled"`
+	PlacementReadOnly       *bool   `json:"placement_read_only"`
+	PlacementProvisionState *string `json:"placement_provision_state"`
 }
 
 // The upload_* columns are the bucket a PENDING object's URL was signed for
 // (migration 113) and the bucket gate's state there; NULL when it has none.
+// The placement_* columns are the bucket the object's bytes are in (123,
+// ADR-0051) and the gate's state there; NULL on a PENDING row. A row promoted
+// by a binary from before 123 has no placement yet: its bytes are in its
+// collection's bucket, as every row's were then.
 func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error) {
 	row := q.db.QueryRow(ctx, getObject, tenantID, iD)
 	var i GetObjectRow
@@ -199,12 +214,18 @@ func (q *Queries) GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype
 		&i.Object.CreatedByOperation,
 		&i.Object.BytesWrittenAt,
 		&i.Object.UploadBucketID,
+		&i.Object.PlacementBucketID,
 		&i.CollectionName,
 		&i.UploadBackendName,
 		&i.UploadBucketName,
 		&i.UploadEnabled,
 		&i.UploadReadOnly,
 		&i.UploadProvisionState,
+		&i.PlacementBackendName,
+		&i.PlacementBucketName,
+		&i.PlacementEnabled,
+		&i.PlacementReadOnly,
+		&i.PlacementProvisionState,
 	)
 	return i, err
 }
@@ -238,20 +259,32 @@ func (q *Queries) GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, 
 }
 
 const getObjectsByIDs = `-- name: GetObjectsByIDs :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, objects.placement_bucket_id, c.name AS collection_name,
+       psb.name AS placement_backend_name, pb.name AS placement_bucket_name,
+       psb.enabled AS placement_enabled, psb.read_only AS placement_read_only,
+       pb.provision_state AS placement_provision_state
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
+LEFT JOIN buckets pb           ON pb.id = COALESCE(objects.placement_bucket_id,
+                                    CASE WHEN objects.state <> 'PENDING' THEN c.bucket_id END)
+LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE objects.tenant_id = $1 AND objects.id = ANY($2::uuid[])
 `
 
 type GetObjectsByIDsRow struct {
-	Object         Object `json:"object"`
-	CollectionName string `json:"collection_name"`
+	Object                  Object  `json:"object"`
+	CollectionName          string  `json:"collection_name"`
+	PlacementBackendName    *string `json:"placement_backend_name"`
+	PlacementBucketName     *string `json:"placement_bucket_name"`
+	PlacementEnabled        *bool   `json:"placement_enabled"`
+	PlacementReadOnly       *bool   `json:"placement_read_only"`
+	PlacementProvisionState *string `json:"placement_provision_state"`
 }
 
 // Batch lookup for batch-operation executors: one round-trip for the
 // whole id list instead of one GetObject per id (a 1000-object batch
 // used to issue 1000 sequential SELECTs before any state mutation).
+// The placement_* columns are as GetObject's.
 func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error) {
 	rows, err := q.db.Query(ctx, getObjectsByIDs, tenantID, column2)
 	if err != nil {
@@ -289,7 +322,13 @@ func (q *Queries) GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, col
 			&i.Object.CreatedByOperation,
 			&i.Object.BytesWrittenAt,
 			&i.Object.UploadBucketID,
+			&i.Object.PlacementBucketID,
 			&i.CollectionName,
+			&i.PlacementBackendName,
+			&i.PlacementBucketName,
+			&i.PlacementEnabled,
+			&i.PlacementReadOnly,
+			&i.PlacementProvisionState,
 		); err != nil {
 			return nil, err
 		}
@@ -394,7 +433,7 @@ SELECT o.id, o.tenant_id, o.path, o.resource_version,
        sb.enabled, sb.read_only, b.provision_state
 FROM objects o
 JOIN collections k     ON k.id = o.collection_id
-JOIN buckets b         ON b.id = k.bucket_id
+JOIN buckets b         ON b.id = COALESCE(o.placement_bucket_id, k.bucket_id)
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE o.state = 'DELETED'
   AND o.terminated_at IS NOT NULL
@@ -447,6 +486,8 @@ type ListHardDeletableRow struct {
 // back the buckets it refused so the next claim leaves their rows out. One
 // capped query both bounds the work and keeps a refused bucket's trash from
 // heading every batch.
+// The bucket the bytes are in (ADR-0051); a row a binary from before 123
+// trashed has its bytes in its collection's bucket.
 func (q *Queries) ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListHardDeletableRow, error) {
 	rows, err := q.db.Query(ctx, listHardDeletable, terminatedAt, deferredBucketIds, batchSize)
 	if err != nil {
@@ -562,8 +603,13 @@ func (q *Queries) ListObjectVersionLocks(ctx context.Context, tenantID pgtype.UU
 }
 
 const listObjects = `-- name: ListObjects :many
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, o.upload_bucket_id, $1::text AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, o.upload_bucket_id, o.placement_bucket_id, $1::text AS collection_name,
+       psb.name AS placement_backend_name, pb.name AS placement_bucket_name,
+       psb.enabled AS placement_enabled, psb.read_only AS placement_read_only,
+       pb.provision_state AS placement_provision_state
 FROM objects o
+LEFT JOIN buckets pb           ON pb.id = o.placement_bucket_id
+LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
             $2::uuid,
@@ -592,8 +638,13 @@ ORDER BY o.id
 `
 
 type ListObjectsRow struct {
-	Object         Object `json:"object"`
-	CollectionName string `json:"collection_name"`
+	Object                  Object  `json:"object"`
+	CollectionName          string  `json:"collection_name"`
+	PlacementBackendName    *string `json:"placement_backend_name"`
+	PlacementBucketName     *string `json:"placement_bucket_name"`
+	PlacementEnabled        *bool   `json:"placement_enabled"`
+	PlacementReadOnly       *bool   `json:"placement_read_only"`
+	PlacementProvisionState *string `json:"placement_provision_state"`
 }
 
 // The full CEL filter is still applied by the caller post-load; the
@@ -616,6 +667,9 @@ type ListObjectsRow struct {
 // collections scan per returned row (the planner cannot size the id array).
 // The collection is resolved once, by its unique (tenant_id, name), and
 // still checked against every row.
+//
+// The placement_* columns are the bucket each object's bytes are in (123,
+// ADR-0051), by primary key; NULL on a PENDING row.
 func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string, level *string, delimiter *string) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		collection,
@@ -671,7 +725,13 @@ func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID p
 			&i.Object.CreatedByOperation,
 			&i.Object.BytesWrittenAt,
 			&i.Object.UploadBucketID,
+			&i.Object.PlacementBucketID,
 			&i.CollectionName,
+			&i.PlacementBackendName,
+			&i.PlacementBucketName,
+			&i.PlacementEnabled,
+			&i.PlacementReadOnly,
+			&i.PlacementProvisionState,
 		); err != nil {
 			return nil, err
 		}
@@ -702,7 +762,7 @@ SELECT o.id, o.tenant_id, o.path, o.state, o.checksum_algorithm,
        sb.enabled, sb.read_only, bk.provision_state
 FROM objects o
 JOIN collections c       ON c.id = o.collection_id
-JOIN buckets bk          ON bk.id = c.bucket_id
+JOIN buckets bk          ON bk.id = COALESCE(o.placement_bucket_id, c.bucket_id)
 JOIN storage_backends sb ON sb.id = bk.backend_id
 WHERE o.id = $1
 `
@@ -722,8 +782,10 @@ type LookupObjectByIDRow struct {
 }
 
 // Reads an object by id alone. Used by background workers (reconciler,
-// replicator) that don't carry a tenant context. Joins collections to
-// materialize the bucket binding so the caller can call S3 in one trip.
+// replicator) that don't carry a tenant context, with the bucket the
+// object's bytes are in (placement_bucket_id, ADR-0051) so the caller can
+// call S3 in one trip; a PENDING row, placed nowhere yet, comes with its
+// collection's bucket, as does a row a binary from before 123 promoted.
 // checksum_algorithm tells a HEAD which stored checksum is the object's.
 // enabled, read_only and provision_state are the bucket gate's state
 // (bucketgate.State), for a worker that deletes the object's bytes.
@@ -747,7 +809,7 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, o.upload_bucket_id, c.name AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, o.upload_bucket_id, o.placement_bucket_id, c.name AS collection_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
 WHERE o.tenant_id = $1
@@ -793,6 +855,7 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 		&i.Object.CreatedByOperation,
 		&i.Object.BytesWrittenAt,
 		&i.Object.UploadBucketID,
+		&i.Object.PlacementBucketID,
 		&i.CollectionName,
 	)
 	return i, err
@@ -910,7 +973,7 @@ func (q *Queries) RestoreObject(ctx context.Context, tenantID pgtype.UUID, iD pg
 }
 
 const scanPendingExpired = `-- name: ScanPendingExpired :many
-SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, c.name AS collection_name
+SELECT objects.id, objects.tenant_id, objects.collection_id, objects.path, objects.state, objects.content_type, objects.size_bytes, objects.etag, objects.checksum_algorithm, objects.checksum, objects.sequencer, objects.metadata, objects.tags, objects.external_ref, objects.current_version_id, objects.resource_version, objects.created_at, objects.updated_at, objects.committed_at, objects.terminated_at, objects.presign_expires_at, objects.taint, objects.checksum_part_size_bytes, objects.public_url, objects.created_by_operation, objects.bytes_written_at, objects.upload_bucket_id, objects.placement_bucket_id, c.name AS collection_name
 FROM objects
 JOIN collections c ON c.id = objects.collection_id
 WHERE state = 'PENDING'
@@ -962,6 +1025,7 @@ func (q *Queries) ScanPendingExpired(ctx context.Context, batchSize int32) ([]Sc
 			&i.Object.CreatedByOperation,
 			&i.Object.BytesWrittenAt,
 			&i.Object.UploadBucketID,
+			&i.Object.PlacementBucketID,
 			&i.CollectionName,
 		); err != nil {
 			return nil, err
