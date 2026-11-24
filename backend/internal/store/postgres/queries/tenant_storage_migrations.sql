@@ -337,6 +337,14 @@ SELECT storage_layout FROM tenants
 WHERE id = $1 AND deleted_at IS NULL
 FOR NO KEY UPDATE;
 
+-- name: LockStorageMigrationStart :exec
+-- Waits for every promote of the tenant in flight, and holds back every
+-- later one, until the transaction ends: each promote holds this lock shared
+-- before it reads the migration's row (migstate.LockSpaceStart). Taken by a
+-- transition into a fencing state from a non-fencing one, so every promote
+-- either committed before it or reads the row it leaves.
+SELECT pg_advisory_xact_lock(sqlc.arg('lock_space')::int, sqlc.arg('lock_key')::int);
+
 -- name: LatestStorageMigration :one
 SELECT id, state FROM tenant_storage_migrations
 WHERE tenant_id = $1

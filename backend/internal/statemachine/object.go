@@ -355,15 +355,8 @@ func verifyRegistration(ctx context.Context, exec dbExec, objectID uuid.UUID, si
 // purge take the object's row before the migration's too, so the order is
 // the same everywhere.
 func checkPlacement(ctx context.Context, exec dbExec, objectID uuid.UUID, placed *Placement) error {
-	const fence = `
-        SELECT 1
-          FROM tenant_storage_migrations m
-         WHERE m.tenant_id = (SELECT o.tenant_id FROM objects o WHERE o.id = $1)
-           AND m.state = ANY($2::text[])
-           FOR SHARE OF m
-    `
-	if _, err := exec.Exec(ctx, fence, objectID, migstate.FencingPromotes()); err != nil {
-		return fmt.Errorf("sm: hold the storage migration: %w", err)
+	if err := holdMigrationFence(ctx, exec, objectID); err != nil {
+		return err
 	}
 	if placed == nil {
 		return nil
@@ -382,6 +375,40 @@ func checkPlacement(ctx context.Context, exec dbExec, objectID uuid.UUID, placed
 	}
 	if bound != *placed {
 		return &BindingMovedError{Placed: *placed, Bound: bound}
+	}
+	return nil
+}
+
+// holdMigrationFence holds the object's tenant's storage migration row,
+// when it is in a fencing state, for the rest of the transaction.
+//
+// The row is read only after the tenant's start lock is held shared
+// (migstate.LockSpaceStart), in a statement of its own: under READ
+// COMMITTED that statement sees a migration started or retried before the
+// lock was granted, and a start, which takes the lock exclusively, waits for
+// this promote. Without it, a promote that read no fencing row could commit
+// after the copy started, stamped before copy_started_at, behind a cursor
+// that had passed its key — and the catch-up would skip it.
+func holdMigrationFence(ctx context.Context, exec dbExec, objectID uuid.UUID) error {
+	const tenantOf = `SELECT tenant_id FROM objects WHERE id = $1`
+	var tenant pgtype.UUID
+	if err := exec.QueryRow(ctx, tenantOf, objectID).Scan(&tenant); err != nil {
+		return fmt.Errorf("sm: read the object's tenant: %w", err)
+	}
+	tenantID := uuid.UUID(tenant.Bytes)
+	const lockShared = `SELECT pg_advisory_xact_lock_shared($1::int, $2::int)`
+	if _, err := exec.Exec(ctx, lockShared, migstate.LockSpaceStart, migstate.TenantLockKey(tenantID)); err != nil {
+		return fmt.Errorf("sm: hold the storage migration start lock: %w", err)
+	}
+	const fence = `
+        SELECT 1
+          FROM tenant_storage_migrations m
+         WHERE m.tenant_id = $1
+           AND m.state = ANY($2::text[])
+           FOR SHARE OF m
+    `
+	if _, err := exec.Exec(ctx, fence, tenantID, migstate.FencingPromotes()); err != nil {
+		return fmt.Errorf("sm: hold the storage migration: %w", err)
 	}
 	return nil
 }

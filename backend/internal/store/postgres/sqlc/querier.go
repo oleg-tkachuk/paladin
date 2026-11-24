@@ -648,6 +648,12 @@ type Querier interface {
 	// repoint the tenant's collections at a bucket a newer attempt is still
 	// filling.
 	LockStorageMigrationForRebind(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	// Waits for every promote of the tenant in flight, and holds back every
+	// later one, until the transaction ends: each promote holds this lock shared
+	// before it reads the migration's row (migstate.LockSpaceStart). Taken by a
+	// transition into a fencing state from a non-fencing one, so every promote
+	// either committed before it or reads the row it leaves.
+	LockStorageMigrationStart(ctx context.Context, lockSpace int32, lockKey int32) error
 	// Starting (or retrying) a migration: StartStorageMigration runs these in one
 	// transaction, in this order, and says why each step is there.
 	// Serialises starts for one tenant. tenant_storage_migrations has no unique

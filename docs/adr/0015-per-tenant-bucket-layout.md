@@ -563,6 +563,29 @@ nothing to move; it is logged at Error and skipped (BACKLOG). The rollback's
 mirror — a target event delivered after the rebind back — is not moved
 either (BACKLOG).
 
+## Addendum (2026-11-24): a start waits for the promotes in flight
+
+A promote holds the migration row only if the row is in a fencing state when
+the promote reads it. One that read it before the migration existed, or
+while it was `failed`, held nothing: it could commit after the copy listed
+past its key, stamped before `copy_started_at`, and the catch-up skipped it.
+
+Starting the copy only after a grace longer than any promote would rest on
+a guess about how long a promote runs; a lock is chosen. The tenant's
+row lock was not usable: the rebind updates `tenants` while holding the
+migration row, and a promote holding the tenant row while waiting on the
+migration row would close a cycle.
+
+- **Every promote holds the tenant's start lock shared**
+  (`pg_advisory_xact_lock_shared`, space `migstate.LockSpaceStart`, key
+  `migstate.TenantLockKey`), in a statement before the one that reads the
+  migration row. Promotes do not wait on each other.
+- **A transition into a fencing state from a non-fencing one takes it
+  exclusively**: a new start, a retry of a `failed` migration, and a stuck
+  rollback. It waits for every promote in flight; a later promote waits for
+  it, then reads the row it left and holds it. Taken only once no migration
+  is active, so no promote holding the lock waits on a row a worker holds.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

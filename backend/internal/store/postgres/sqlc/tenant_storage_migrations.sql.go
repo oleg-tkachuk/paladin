@@ -439,6 +439,20 @@ func (q *Queries) LockStorageMigrationForRebind(ctx context.Context, tenantID pg
 	return result.RowsAffected(), nil
 }
 
+const lockStorageMigrationStart = `-- name: LockStorageMigrationStart :exec
+SELECT pg_advisory_xact_lock($1::int, $2::int)
+`
+
+// Waits for every promote of the tenant in flight, and holds back every
+// later one, until the transaction ends: each promote holds this lock shared
+// before it reads the migration's row (migstate.LockSpaceStart). Taken by a
+// transition into a fencing state from a non-fencing one, so every promote
+// either committed before it or reads the row it leaves.
+func (q *Queries) LockStorageMigrationStart(ctx context.Context, lockSpace int32, lockKey int32) error {
+	_, err := q.db.Exec(ctx, lockStorageMigrationStart, lockSpace, lockKey)
+	return err
+}
+
 const lockTenantForStorageMigration = `-- name: LockTenantForStorageMigration :one
 
 SELECT storage_layout FROM tenants

@@ -9,3 +9,7 @@
   migration's cleanup deleted the source copy is logged at Error: those bytes
   are gone. The `serve ingest` role now copies objects between buckets, with
   the storage credentials it already uses for its HEADs.
+- Every promote now holds a transaction-scoped advisory lock for its tenant,
+  shared; starting or retrying a storage migration, and handing a stuck one
+  to the rollback, takes it exclusively, so the start waits for the
+  tenant's promotes in flight.

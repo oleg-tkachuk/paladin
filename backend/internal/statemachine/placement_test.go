@@ -100,6 +100,37 @@ func TestPromoteHoldsTheMigrationFence(t *testing.T) {
 	}
 }
 
+// The tenant's start lock is held shared, in a statement before the fence's:
+// the fence then sees a migration a start committed while the promote
+// waited, and a start waits for the promote.
+func TestPromoteHoldsTheStartLockBeforeTheFence(t *testing.T) {
+	sm := &Transitioner{}
+	ex := &fakeExec{row: fakeRow{state: string(StateAvailable)}}
+	if _, err := sm.promote(smCtx, ex, objID, nil, "etag", 1, "", "seq-1", SourceEvent); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if len(ex.execs) != 2 || !strings.Contains(ex.execs[0], "pg_advisory_xact_lock_shared") ||
+		!strings.Contains(ex.execs[1], "tenant_storage_migrations") {
+		t.Fatalf("statements = %q, want the shared start lock, then the fence", ex.execs)
+	}
+	if ex.execArgs[0] != fenceTenant {
+		t.Errorf("fence tenant = %v, want the object's, %v", ex.execArgs[0], fenceTenant)
+	}
+}
+
+// A promote whose tenant cannot be read takes no lock and changes nothing.
+func TestPromoteFailsWithoutTheObjectsTenant(t *testing.T) {
+	sm := &Transitioner{}
+	boom := errors.New("conn reset")
+	ex := &fakeExec{row: fakeRow{state: string(StateAvailable)}, tenantErr: boom}
+	if changed, err := sm.promote(smCtx, ex, objID, nil, "etag", 1, "", "seq-1", SourceEvent); !errors.Is(err, boom) || changed {
+		t.Fatalf("changed=%v err=%v, want the read's failure", changed, err)
+	}
+	if ex.execCalls != 0 || ex.querySQL != "" {
+		t.Fatal("a promote with no tenant locked or updated something")
+	}
+}
+
 // A fence that cannot be taken fails the promote: going on without it would
 // let a rebind pass the promote unseen.
 func TestPromoteFailsWithoutTheFence(t *testing.T) {
