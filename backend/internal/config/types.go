@@ -1122,6 +1122,10 @@ type Reconciler struct {
 	// reconciliation — protects against racing the upload path before the
 	// client has called Complete.
 	MinObjectAge time.Duration `yaml:"min_object_age" json:"min_object_age"`
+	// WriteSettleGrace: how long past its URL's expiry a promoted object's
+	// upload anchor is settled — the time a PUT the store accepted before the
+	// URL expired may still take to land (ADR-0051).
+	WriteSettleGrace time.Duration `yaml:"write_settle_grace" json:"write_settle_grace"`
 	// BatchSize caps how many stuck-PENDING rows are reconciled per tick.
 	BatchSize int `yaml:"batch_size" json:"batch_size"`
 }

@@ -524,6 +524,7 @@ worker.jobs.reconciler
 worker.jobs.reconciler.batch_size
 worker.jobs.reconciler.interval
 worker.jobs.reconciler.min_object_age
+worker.jobs.reconciler.write_settle_grace
 worker.jobs.refresh_token_reap
 worker.jobs.refresh_token_reap.interval
 worker.jobs.replication

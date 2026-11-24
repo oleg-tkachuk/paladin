@@ -372,6 +372,14 @@ worker: {
   reconciler: {
     interval:       =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30s"
     min_object_age: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"2h"
+    // How long past its URL's expiry a promoted object's upload anchor is
+    // settled (ADR-0051), and so how soon a storage migration can move it.
+    // It covers a PUT the store accepted just before the URL expired: Paladin
+    // does not proxy the bytes, so no timeout of its own bounds that upload.
+    // 5m streams limits.max_object_size at its default of 100MB at about
+    // 350 KiB/s, with clock skew between Paladin and the store to spare.
+    // Raise it with max_object_size, or for slower clients.
+    write_settle_grace: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
     batch_size:     int & >= 1 | *100
   }
   // Housekeeping: deletes audit_log rows older than audit_log_ttl.

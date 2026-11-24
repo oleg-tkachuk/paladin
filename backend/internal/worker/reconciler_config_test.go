@@ -16,11 +16,12 @@ func TestNewReconcilerV2Defaults(t *testing.T) {
 	r := NewReconcilerV2(nil, nil, ReconcilerV2Config{}, zap.NewNop())
 	if r.cfg.PollInterval != DefaultReconcilerPollInterval ||
 		r.cfg.PendingGraceTTL != DefaultReconcilerPendingGraceTTL ||
+		r.cfg.SettleGrace != DefaultReconcilerSettleGrace ||
 		r.cfg.BatchSize != DefaultReconcilerBatchSize {
 		t.Errorf("defaults = %+v", r.cfg)
 	}
 
-	set := ReconcilerV2Config{PollInterval: time.Second, PendingGraceTTL: time.Minute, BatchSize: 7}
+	set := ReconcilerV2Config{PollInterval: time.Second, PendingGraceTTL: time.Minute, SettleGrace: 3 * time.Second, BatchSize: 7}
 	if got := NewReconcilerV2(nil, nil, set, zap.NewNop()).cfg; got != set {
 		t.Errorf("set config = %+v, want %+v", got, set)
 	}

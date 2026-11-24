@@ -103,6 +103,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 			worker.ReconcilerV2Config{
 				PollInterval:    cfg.Worker.Jobs.Reconciler.Interval,
 				PendingGraceTTL: cfg.Worker.Jobs.Reconciler.MinObjectAge,
+				SettleGrace:     cfg.Worker.Jobs.Reconciler.WriteSettleGrace,
 				BatchSize:       cfg.Worker.Jobs.Reconciler.BatchSize,
 			},
 			l.Named("reconciler"),

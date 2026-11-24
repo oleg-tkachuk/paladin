@@ -264,7 +264,8 @@ worker:
   jobs:
     reconciler:                         # closes gaps when S3 events are unavailable / lost
       interval: 30s                     # how often to run a reconcile pass
-      min_object_age: 2h                # only objects older than this are eligible
+      min_object_age: 2h                # a PENDING upload is left this long past its URL's expiry
+      write_settle_grace: 5m            # a promoted object's anchor settles this long past its URL's expiry
       batch_size: 100
     housekeeping:                       # audit-log reaper
       interval: 1h                      # how often the reaper loop runs

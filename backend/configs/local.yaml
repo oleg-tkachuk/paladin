@@ -123,6 +123,7 @@ worker:
     reconciler:
       interval: 30s
       min_object_age: 2h
+      write_settle_grace: 5m
       batch_size: 100
     housekeeping:
       multipart_ttl: "72h"

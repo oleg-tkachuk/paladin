@@ -486,7 +486,7 @@ func TestScanExpiredAnchorsCollectsIDs(t *testing.T) {
 	sm := &Transitioner{pool: pool}
 
 	deferred := []pgtype.UUID{{Bytes: uuid.New(), Valid: true}}
-	got, err := sm.ScanExpiredAnchors(smCtx, 90*time.Second, 50, deferred)
+	got, err := sm.ScanExpiredAnchors(smCtx, AnchorGraces{Pending: 90 * time.Second, Settle: 2 * time.Minute}, 50, deferred)
 	if err != nil {
 		t.Fatalf("ScanExpiredAnchors: %v", err)
 	}
@@ -498,13 +498,16 @@ func TestScanExpiredAnchorsCollectsIDs(t *testing.T) {
 			t.Errorf("id[%d] = %v, want %v", i, got[i].ObjectID, want[i])
 		}
 	}
-	// The grace period travels as a Postgres interval string, and the
-	// deferred buckets as they were given.
-	if len(pool.queryArgsP) != 3 {
-		t.Fatalf("want 3 query args, got %v", pool.queryArgsP)
+	// Each grace travels as a Postgres interval string — the pending one
+	// first, the settle one last — and the deferred buckets as given.
+	if len(pool.queryArgsP) != 4 {
+		t.Fatalf("want 4 query args, got %v", pool.queryArgsP)
 	}
 	if pool.queryArgsP[0] != "1m30s" {
-		t.Errorf("interval arg = %v, want 1m30s", pool.queryArgsP[0])
+		t.Errorf("pending grace arg = %v, want 1m30s", pool.queryArgsP[0])
+	}
+	if pool.queryArgsP[3] != "2m0s" {
+		t.Errorf("settle grace arg = %v, want 2m0s", pool.queryArgsP[3])
 	}
 	if pool.queryArgsP[1] != 50 {
 		t.Errorf("limit arg = %v, want 50", pool.queryArgsP[1])
@@ -520,7 +523,7 @@ func TestScanExpiredAnchorsCollectsIDs(t *testing.T) {
 func TestScanExpiredAnchorsEmpty(t *testing.T) {
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{}}}
 
-	got, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil)
+	got, err := sm.ScanExpiredAnchors(smCtx, AnchorGraces{Pending: time.Minute, Settle: time.Minute}, 10, nil)
 	if err != nil {
 		t.Fatalf("ScanExpiredAnchors: %v", err)
 	}
@@ -534,7 +537,7 @@ func TestScanExpiredAnchorsEmpty(t *testing.T) {
 func TestScanExpiredAnchorsBindsNoDeferredBucketsAsAnEmptyArray(t *testing.T) {
 	pool := &fakePool{rows: &fakeRows{}}
 	sm := &Transitioner{pool: pool}
-	if _, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil); err != nil {
+	if _, err := sm.ScanExpiredAnchors(smCtx, AnchorGraces{Pending: time.Minute, Settle: time.Minute}, 10, nil); err != nil {
 		t.Fatalf("ScanExpiredAnchors: %v", err)
 	}
 	if got, ok := pool.queryArgsP[2].([]pgtype.UUID); !ok || got == nil || len(got) != 0 {
@@ -546,7 +549,7 @@ func TestScanExpiredAnchorsQueryError(t *testing.T) {
 	boom := errors.New("query failed")
 	sm := &Transitioner{pool: &fakePool{queryErr: boom}}
 
-	if _, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
+	if _, err := sm.ScanExpiredAnchors(smCtx, AnchorGraces{Pending: time.Minute, Settle: time.Minute}, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("cause must be wrapped, got %v", err)
 	}
 }
@@ -555,7 +558,7 @@ func TestScanExpiredAnchorsScanError(t *testing.T) {
 	boom := errors.New("bad scan")
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{ids: []uuid.UUID{uuid.New()}, scanErr: boom}}}
 
-	if _, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
+	if _, err := sm.ScanExpiredAnchors(smCtx, AnchorGraces{Pending: time.Minute, Settle: time.Minute}, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("want the scan error, got %v", err)
 	}
 }
@@ -566,7 +569,7 @@ func TestScanExpiredAnchorsSurfacesRowsErr(t *testing.T) {
 	boom := errors.New("connection lost mid-iteration")
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{ids: []uuid.UUID{uuid.New()}, finalErr: boom}}}
 
-	if _, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
+	if _, err := sm.ScanExpiredAnchors(smCtx, AnchorGraces{Pending: time.Minute, Settle: time.Minute}, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("want the rows error, got %v", err)
 	}
 }

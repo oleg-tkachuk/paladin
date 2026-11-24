@@ -169,7 +169,7 @@ func (f publicMigrationFixture) expireURLs(t *testing.T, ctx context.Context) {
 func (f publicMigrationFixture) settle(t *testing.T, ctx context.Context) {
 	t.Helper()
 	r := worker.NewReconcilerV2(statemachine.New(f.pool), adapters.NewReconcilerProbe(sqlc.New(f.pool), contentHead{s: f.store}),
-		worker.ReconcilerV2Config{PendingGraceTTL: time.Second}, zap.NewNop())
+		worker.ReconcilerV2Config{PendingGraceTTL: time.Second, SettleGrace: time.Second}, zap.NewNop())
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}

@@ -113,7 +113,7 @@ func TestWorkersLeaveATrashedTenantAlone(t *testing.T) {
 	})
 
 	t.Run("pending uploads", func(t *testing.T) {
-		ids, err := statemachine.New(f.pool).ScanExpiredAnchors(ctx, time.Minute, 10, nil)
+		ids, err := statemachine.New(f.pool).ScanExpiredAnchors(ctx, statemachine.AnchorGraces{Pending: time.Minute, Settle: time.Minute}, 10, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

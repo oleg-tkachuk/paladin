@@ -1086,6 +1086,10 @@ config:
       reconciler:
         interval: 30s
         min_object_age: 2h
+        # How long past its URL's expiry a promoted object's upload anchor
+        # settles, so a storage migration can move it: the time a PUT the
+        # store accepted just before the URL expired may take to land.
+        write_settle_grace: 5m
         batch_size: 100
       housekeeping:
         interval: 1h
