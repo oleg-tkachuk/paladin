@@ -62,21 +62,21 @@ func reconcileLogged(t *testing.T, pool *pgxpool.Pool, probe worker.StorageProbe
 	t.Helper()
 	core, logs := observer.New(zap.WarnLevel)
 	r := worker.NewReconcilerV2(statemachine.New(pool), probe, worker.ReconcilerV2Config{
-		PollInterval:    50 * time.Millisecond,
 		PendingGraceTTL: time.Second,
 	}, zap.New(core))
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	// One whole tick, run to its end. Run with a fixed sleep before cancelling
+	// raced the first tick under load: a context cancelled mid-tick cut the
+	// scan short and the line a test waits for was never logged. The tick's
+	// own error is not the test's business; the tests read what it logged.
+	ctx, cancel := context.WithTimeout(context.Background(), reconcileTickTimeout)
 	defer cancel()
-	done := make(chan struct{})
-	go func() {
-		_ = r.Run(ctx)
-		close(done)
-	}()
-	time.Sleep(300 * time.Millisecond)
-	cancel()
-	<-done
+	_ = r.RunOnce(ctx)
 	return logs
 }
+
+// reconcileTickTimeout bounds one reconciler tick in these tests: a hang
+// fails the test rather than the suite's deadline.
+const reconcileTickTimeout = 30 * time.Second
 
 func requireLogged(t *testing.T, logs *observer.ObservedLogs, msg string) {
 	t.Helper()
