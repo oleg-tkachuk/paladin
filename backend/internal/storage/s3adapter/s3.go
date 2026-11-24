@@ -656,6 +656,11 @@ func (c *Client) GetStream(ctx context.Context, bucket string, tenantID uuid.UUI
 		Bucket: aws.String(c.resolveBucket(bucket)),
 		Key:    aws.String(fullKey),
 	})
+	if notFound(err) {
+		// A GET answers with a body, so a missing key arrives with its code
+		// and is told apart from a missing bucket.
+		return nil, "", fmt.Errorf("get stream: %w: %w", ErrObjectNotFound, err)
+	}
 	if err != nil {
 		return nil, "", fmt.Errorf("get stream: %w", err)
 	}
@@ -952,8 +957,15 @@ func (w *StreamWriter) flushPart(n int64) error {
 	if n <= 0 || n > int64(len(w.buf)) {
 		n = int64(len(w.buf))
 	}
-	chunk := w.buf[:n]
+	if err := w.uploadPart(w.buf[:n]); err != nil {
+		return err
+	}
+	w.buf = append(w.buf[:0], w.buf[n:]...)
+	return nil
+}
 
+// uploadPart uploads chunk as the next part and feeds it to the checksum.
+func (w *StreamWriter) uploadPart(chunk []byte) error {
 	w.partNum++
 	out, err := w.c.s3.UploadPart(w.ctx, &s3.UploadPartInput{
 		Bucket:     aws.String(w.bucket),
@@ -972,10 +984,9 @@ func (w *StreamWriter) flushPart(n int64) error {
 	if w.hasher == nil {
 		w.hasher = newStreamingMD5()
 	}
-	// Both reads of chunk must happen before the compaction below, which
-	// overwrites the front of the backing array.
+	// Both reads of chunk must happen before flushPart compacts the buffer,
+	// which overwrites the front of the backing array.
 	w.hasher.Write(chunk)
-	w.buf = append(w.buf[:0], w.buf[n:]...)
 	return nil
 }
 
@@ -986,6 +997,14 @@ func (w *StreamWriter) Close() (string, int64, string, error) {
 	if err := w.flushPart(int64(len(w.buf))); err != nil {
 		_ = w.Abort()
 		return "", 0, "", err
+	}
+	if w.partNum == 0 {
+		// An empty object. CompleteMultipartUpload refuses an upload with no
+		// parts; one empty part is the last part, which may be short.
+		if err := w.uploadPart(nil); err != nil {
+			_ = w.Abort()
+			return "", 0, "", err
+		}
 	}
 	out, err := w.c.s3.CompleteMultipartUpload(w.ctx, &s3.CompleteMultipartUploadInput{
 		Bucket:          aws.String(w.bucket),
