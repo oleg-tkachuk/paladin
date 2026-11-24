@@ -100,6 +100,20 @@ JOIN buckets bk          ON bk.id = COALESCE(o.placement_bucket_id, o.upload_buc
 JOIN storage_backends sb ON sb.id = bk.backend_id
 WHERE o.id = $1;
 
+-- name: GetUploadedObject :one
+-- What paladin.object.uploaded reports of an object a worker promoted, or
+-- recorded a write of, read on the transaction that did it: the object as
+-- the change left it, and the bucket its collection is bound to, which names
+-- the object canonically as the data plane names it (ADR-0014).
+SELECT o.tenant_id, c.name AS collection_name, o.path, o.content_type,
+       o.size_bytes, o.etag,
+       sb.name AS backend_name, b.name AS bucket_name
+FROM objects o
+JOIN collections c       ON c.id = o.collection_id
+JOIN buckets b           ON b.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+WHERE o.id = $1;
+
 -- name: LookupObjectByKey :one
 -- Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
 -- The anchor_* columns name the bucket the object's upload URL was signed

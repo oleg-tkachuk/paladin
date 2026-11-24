@@ -105,6 +105,10 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 				PendingGraceTTL: cfg.Worker.Jobs.Reconciler.MinObjectAge,
 				SettleGrace:     cfg.Worker.Jobs.Reconciler.WriteSettleGrace,
 				BatchSize:       cfg.Worker.Jobs.Reconciler.BatchSize,
+				// The producer-only recorder the ingest uses: with storage
+				// ingest off, the reconciler is the only producer of
+				// paladin.object.uploaded for an explicit-mode upload.
+				Events: worker.NewEventRecorder(l.Named("reconciler-events")),
 			},
 			l.Named("reconciler"),
 		))

@@ -653,9 +653,9 @@ const (
 	payloadCollection       = eventtype.PayloadCollection
 	payloadKey              = eventtype.PayloadKey
 	payloadObjectID         = eventtype.PayloadObjectID
-	payloadSizeBytes        = "size_bytes"
-	payloadETag             = "etag"
-	payloadContentType      = "content_type"
+	payloadSizeBytes        = eventtype.PayloadSizeBytes
+	payloadETag             = eventtype.PayloadETag
+	payloadContentType      = eventtype.PayloadContentType
 	payloadUpdatedFields    = "updated_fields"
 	payloadMode             = "mode"
 	payloadBypassGovernance = "bypass_governance"

@@ -338,6 +338,30 @@ func TestBuildBackgroundJobs_AuditRetentionKeepsForever(t *testing.T) {
 // The selection is two lines of `if deps.X != nil`, and inverting either one
 // reinstates the incident. Handing in three distinct pointers makes which
 // pool each job received directly observable.
+// The reconciler promotes an upload whose completion never came and records a
+// write no storage event reported; with storage ingest off it is the only
+// producer of paladin.object.uploaded for an explicit-mode upload. It used to
+// be wired with no producer, and a webhook subscriber missed exactly those
+// writes, with nothing logged.
+func TestBuildBackgroundJobs_TheReconcilerAnnouncesUploads(t *testing.T) {
+	cfg := config.Config{}
+	cfg.Worker.Jobs.Reconciler.Interval = time.Second
+	deps := &SharedDeps{Cfg: cfg, Logger: zap.NewNop(), Pool: &pgxpool.Pool{}, ReaperPool: &pgxpool.Pool{}}
+
+	seen := false
+	for _, j := range BuildBackgroundJobs(deps) {
+		if r, ok := j.(*worker.ReconcilerV2); ok {
+			seen = true
+			if !r.Announces() {
+				t.Error("the reconciler is wired with no event producer")
+			}
+		}
+	}
+	if !seen {
+		t.Fatal("no reconciler built with its interval set")
+	}
+}
+
 func TestBuildBackgroundJobs_ReapersBindToTheBypassRLSPool(t *testing.T) {
 	runtimePool := &pgxpool.Pool{}
 	reaperPool := &pgxpool.Pool{}

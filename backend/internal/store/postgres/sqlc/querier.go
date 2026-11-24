@@ -338,6 +338,11 @@ type Querier interface {
 	// client that lost the rotation response never received. A revoked successor
 	// (its family killed) is not offered.
 	GetUnusedRefreshSuccessor(ctx context.Context, parentID pgtype.UUID) (RefreshToken, error)
+	// What paladin.object.uploaded reports of an object a worker promoted, or
+	// recorded a write of, read on the transaction that did it: the object as
+	// the change left it, and the bucket its collection is bound to, which names
+	// the object canonically as the data plane names it (ADR-0014).
+	GetUploadedObject(ctx context.Context, id pgtype.UUID) (GetUploadedObjectRow, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	GetUserBySubject(ctx context.Context, tenantID pgtype.UUID, subject string) (User, error)
 	// User-settings queries. Lazy 1:1 with users — a missing row at read time

@@ -523,21 +523,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### The reconciler's promotes and settles announce nothing
-
-- **Status:** Deferred.
-- **Reason:** `CompleteObject` and a storage event enqueue
-  `paladin.object.uploaded` with the promote; the reconciler promotes a
-  pending upload whose completion never came, and its settle of an expired
-  URL records a write no event reported (ADR-0051), on transactions that
-  enqueue no event, for it is wired with no event producer. A webhook
-  subscriber misses exactly the writes the reconciler finds.
-- **Definition of Done:** the reconciler is wired with the producer-only
-  dispatcher the ingest uses, its promote and its recorded settle enqueue
-  `paladin.object.uploaded` on their transaction, and a test settles a lost
-  write and finds the event.
-- **Blockers:** none.
-
 ### A URL of a deleted row can write bytes no row owns
 
 - **Status:** Deferred.

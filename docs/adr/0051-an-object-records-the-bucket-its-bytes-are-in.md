@@ -121,8 +121,9 @@ started before its URL expired), it HEADs the anchor.
   recorded it (a store that did not enforce the URL's binding, or an event
   lost). The bytes found are recorded as a promote would record them, the
   content version moves, and the anchor is cleared; logged at Warn. The
-  reconciler enqueues no `paladin.object.uploaded` for it, as it enqueues
-  none for its promotes (BACKLOG).
+  reconciler enqueues `paladin.object.uploaded` for it on the settle's
+  transaction, as it does for its promotes (amended 2026-11-25; until then
+  it enqueued none for either).
 - No bytes: logged at Error and the anchor cleared; the row is left as it is
   (a storage delete event is what trashes a row whose bytes went).
 
