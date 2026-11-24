@@ -95,9 +95,11 @@ ON CONFLICT (tenant_id) DO UPDATE
  WHERE tenant_default_bindings.bucket_id = sqlc.arg('from_bucket_id');
 
 -- name: MigrationCloseWrites :execrows
--- Records when the last URL that can write the bucket being emptied expires
--- (writes_close_at, ADR-0051), once per direction: no URL for it is signed
--- after this pass, and none signed before outlives limits.presign.max_ttl.
+-- Records the write deadline of the bucket being emptied (writes_close_at,
+-- ADR-0051), once per direction: a regenerated or part URL for a row or
+-- session anchored there expires by it, and is refused past it, so a client
+-- that keeps asking for one cannot hold the migration open. The completion
+-- does not wait for it: it waits for the anchors those URLs leave.
 UPDATE tenant_storage_migrations
 SET writes_close_at = COALESCE(writes_close_at, now() + sqlc.arg('window')::interval),
     updated_at = now()
@@ -176,10 +178,11 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
 
 -- name: MigrationHolds :one
 -- What keeps the bucket being emptied (from_bucket_id) in use, for the
--- migration's completion (ADR-0051): the tenant's objects placed there, its
--- rows anchored there (a URL signed for it may still write), its multipart
--- sessions there, its private collections and default binding still bound
--- there — and whether the last URL signed for it has expired by the grace.
+-- migration's completion and its cleanup (ADR-0051): the tenant's objects
+-- placed there, its rows anchored there (a URL signed for it may still write
+-- until the reconciler settles the row), its multipart sessions there, its
+-- private collections and default binding still bound there. Nothing else:
+-- every URL that can write the bucket is one of these rows.
 SELECT
     (SELECT count(*) FROM objects o JOIN collections c ON c.id = o.collection_id
       WHERE o.tenant_id = sqlc.arg('tenant_id') AND o.placement_bucket_id = sqlc.arg('from_bucket_id')
@@ -191,9 +194,7 @@ SELECT
     ((SELECT count(*) FROM collections c
        WHERE c.tenant_id = sqlc.arg('tenant_id') AND c.bucket_id = sqlc.arg('from_bucket_id') AND NOT c.public_read)
      + (SELECT count(*) FROM tenant_default_bindings d
-         WHERE d.tenant_id = sqlc.arg('tenant_id') AND d.bucket_id = sqlc.arg('from_bucket_id')))::bigint AS bound,
-    (m.writes_close_at IS NOT NULL
-     AND now() >= m.writes_close_at + sqlc.arg('grace')::interval)::bool AS writes_closed
+         WHERE d.tenant_id = sqlc.arg('tenant_id') AND d.bucket_id = sqlc.arg('from_bucket_id')))::bigint AS bound
 FROM tenant_storage_migrations m
 WHERE m.tenant_id = sqlc.arg('tenant_id') AND m.state = sqlc.arg('from_state')
   AND m.attempts = sqlc.arg('attempts');
@@ -213,8 +214,9 @@ RETURNING failed_passes;
 -- name: CompleteStorageMigration :execrows
 -- Every object moved and no URL left that can write the source: the source
 -- copies are kept until cleanup_after — the retention the operator asked for,
--- and at least the longest a GET URL signed for the source before its object
--- moved can live (get_window).
+-- and at least get_window (worker.jobs.storage_migration.source_copy_retention),
+-- by default the longest a GET URL signed for the source before its object
+-- moved can live.
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), error = '', completed_at = now(),
     cleanup_after = now() + GREATEST(make_interval(secs => cleanup_retention_seconds),
@@ -283,15 +285,16 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
 -- name: UploadWritesCloseAt :one
 -- The deadline a URL signed for the bucket (backend_name, bucket_name) must
 -- expire by: the bucket is being emptied by the tenant's migration — its
--- source while moving, its target while rolling back — whose passes have set
--- the deadline. No row: nothing bounds the URL but its TTL.
+-- source while moving and until cleaned, its target while rolling back —
+-- whose passes have set the deadline. No row: nothing bounds the URL but its
+-- TTL.
 SELECT m.writes_close_at::timestamptz AS writes_close_at
 FROM tenant_storage_migrations m
 JOIN buckets b           ON b.id = CASE WHEN m.state = 'rolling_back'
                                         THEN m.target_bucket_id ELSE m.source_bucket_id END
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE m.tenant_id = sqlc.arg('tenant_id')
-  AND m.state IN ('moving', 'rolling_back')
+  AND m.state IN ('moving', 'completed', 'rolling_back')
   AND m.writes_close_at IS NOT NULL
   AND sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name');
 

@@ -457,11 +457,12 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// A move compares the source's ETag with the row's, and the copy's
 		// digest with the source's.
 		Identity: migCopier,
-		// No URL outlives max_ttl, and a write through one lands within the
-		// reconciler's grace of its expiry.
-		WriteWindow: cfg.Limits.Presign.MaxTTL,
-		SettleGrace: cfg.Worker.Jobs.Reconciler.MinObjectAge,
-		Logger:      l.Named("storage-migration"),
+		// No URL outlives max_ttl: a regenerated or part URL for the bucket
+		// being emptied expires by its write deadline, max_ttl after the
+		// first pass.
+		WriteWindow:         cfg.Limits.Presign.MaxTTL,
+		SourceCopyRetention: cfg.Worker.Jobs.StorageMigration.SourceCopyRetention,
+		Logger:              l.Named("storage-migration"),
 	})
 
 	return out

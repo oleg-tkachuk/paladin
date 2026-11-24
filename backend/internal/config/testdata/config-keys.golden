@@ -530,6 +530,8 @@ worker.jobs.refresh_token_reap.interval
 worker.jobs.replication
 worker.jobs.replication.enabled
 worker.jobs.replication.interval
+worker.jobs.storage_migration
+worker.jobs.storage_migration.source_copy_retention
 worker.ops
 worker.ops.addr
 worker.ops.cors_allowed_origins

@@ -1,6 +1,8 @@
 # ADR-0051: An object records the bucket its bytes are in, and a storage migration moves objects one by one
 
 - **Status:** Accepted 2026-11-24 — implemented in the three stages below.
+  Amended 2026-11-24: the completion waits for the anchors, not for the
+  write deadline (see Amendment).
   Supersedes the storage-migration parts of
   [ADR-0015](0015-per-tenant-bucket-layout.md): Phase 3 and the migration
   addenda of 2026-11-24.
@@ -297,3 +299,64 @@ Each stage is its own pull request, merged before the next starts.
 3. **The old machinery is deleted.** The tables, columns, code and tests
    listed above, the closed BACKLOG entries, and the proto comments; this ADR
    becomes Accepted.
+
+## Amendment (2026-11-24): completion waits for the anchors, not a clock
+
+As first implemented, `completed` also required the write deadline plus
+`worker.jobs.reconciler.min_object_age` to have passed. With `max_ttl` at its
+SigV4 ceiling and the reconciler's grace at two hours, every migration took
+seven days and two hours, whatever URLs were actually signed (`put_ttl` is
+fifteen minutes by default). That term counted nothing the anchors do not:
+
+- Every URL that can write a bucket leaves a row the completion counts until
+  it cannot: `UploadObject` (PUT or POST) inserts its row anchored to the
+  bucket before signing; `RegenerateUploadURL` serves only a `PENDING` row,
+  signs for its anchor and moves `presign_expires_at` with the new URL;
+  `PresignPart` signs for an open multipart session; `CopyObject` and a batch
+  copy are Paladin's own writes, anchored at creation and settled with their
+  promote. The MCP tools call the same RPCs. A promoted row keeps its anchor
+  until the reconciler settles it, after its URL has expired.
+
+So `completed` is now the data condition alone: nothing of the tenant placed
+in or anchored to the source, no multipart session there, nothing bound to
+it. The write deadline (`writes_close_at`) stays, as the ceiling on
+regenerated and part URLs for the bucket being emptied — without it a client
+regenerating a `PENDING` URL could hold the migration open indefinitely —
+and it now also applies while the migration is `completed`.
+
+- **Two graces.** The reconciler settles a promoted object's anchor
+  `worker.jobs.reconciler.write_settle_grace` past its URL's expiry (default
+  five minutes: a PUT the store accepted before expiry streams
+  `max_object_size` at its default of 100 MB at about 350 KiB/s, with clock
+  skew to spare; Paladin does not proxy the bytes, so none of its timeouts
+  bounds the upload). `min_object_age` stays the grace of a `PENDING` upload,
+  left to its client and the storage events; such an upload to the source
+  holds the migration until it is promoted or discarded.
+- **Requests in flight across the switch.** An upload, a multipart initiate,
+  a copy or a collection may read a binding before a pass points it at the
+  target and insert its row after the completion; a batch copy resolves its
+  destination once for the batch. A `completed` migration therefore keeps
+  running its passes: it points such a collection at the target and moves
+  such an object once its anchor settles, and the cleanup runs only while
+  nothing holds the source. The irreversible step, `cleaned`, comes at least
+  `source_copy_retention` after the completion, long after any request that
+  read a binding before the switch.
+- **Source copies.** A presigned GET leaves no row, so the copies are kept a
+  fixed time after the completion:
+  `worker.jobs.storage_migration.source_copy_retention`, defaulting to
+  `limits.presign.max_ttl` — a GET URL's TTL is capped by `max_ttl` (or a
+  bucket's narrower ceiling), `get_ttl` is only its default. The operator's
+  `cleanup_retention_seconds` can only lengthen it. The completion does not
+  wait for it.
+
+What is left, and accepted:
+
+- A rollback ends in `failed`, which is terminal; a request that read the
+  target binding before the switch back may place an object in the target
+  after it. The object stays readable where it is placed, in the tenant's
+  own bucket, and a retry moves on from there.
+- The reconciler's discard of an expired `PENDING` row does not recheck
+  `presign_expires_at`, so a `RegenerateUploadURL` that lands between its
+  scan and the discard returns a URL whose row is gone. Its bytes belong to
+  no row and are never promoted (as for any deleted row's URL); the client's
+  `CompleteObject` then finds no object.

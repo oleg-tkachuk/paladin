@@ -1141,6 +1141,11 @@ config:
         batch_size: 100
       quota_reconcile:
         interval: 15m
+      # A completed storage migration keeps the source copies at least
+      # source_copy_retention, for presigned GET URLs signed before their
+      # objects moved. Unset, it follows limits.presign.max_ttl.
+      storage_migration: {}
+      #   source_copy_retention: 168h
 
   # Dispatcher role — durable webhook fan-out. The pod polls the
   # event_deliveries outbox (`001_initial_schema.sql`) and POSTs to customer

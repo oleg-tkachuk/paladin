@@ -469,6 +469,15 @@ worker: {
     max_backoff: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
     batch_size:  int & >= 1 | *100
   }
+  // Storage migration (ADR-0051). A migration completes once nothing of the
+  // tenant is placed in or anchored to its source; the source copies are
+  // then kept at least source_copy_retention, for the presigned GET URLs
+  // signed for them before their objects moved — those leave no row to wait
+  // for. The default is the longest a GET URL can live, max_ttl; a shorter
+  // value lets such a URL fail before it expires.
+  storage_migration: {
+    source_copy_retention: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *limits.presign.max_ttl
+  }
   } // close worker.jobs
 } // close worker
 
