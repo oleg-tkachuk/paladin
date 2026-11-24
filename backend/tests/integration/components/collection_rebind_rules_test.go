@@ -45,6 +45,7 @@ var collectionsRules = map[string]rebindRule{
 
 	"collections_bump_resource_version":     {cannotFire: "sets resource_version and updated_at, raises nothing"},
 	"collections_notify_policy_changed":     {cannotFire: "notifies only when cedar_policy changes"},
+	"collections_reseed_replication":        {cannotFire: "deletes the new bucket's replication seed, raises nothing"},
 	"collections_policy_insert":             {cannotFire: "fires on INSERT"},
 	"collections_policy_update":             {cannotFire: "fires on UPDATE OF cedar_policy"},
 	"collections_policy_delete":             {cannotFire: "fires on DELETE"},

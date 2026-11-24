@@ -392,12 +392,11 @@ worker: {
     enabled:  bool | *true
     interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"30m"
   }
-  // Replication: copies each replicated bucket's new objects to its
+  // Replication: copies each replicated bucket's due objects to its
   // destination bucket, on any backend (ADR-0050).
   replication: {
-    enabled:         bool | *false
-    interval:        =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
-    lookback_window: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"1h"
+    enabled:  bool | *false
+    interval: =~"^[0-9]+(ns|us|ms|s|m|h)$" | *"5m"
   }
   // Capability: drop expired capability records, with their revocation
   // rows, so both stay bounded. interval=0 disables; expired_for is how

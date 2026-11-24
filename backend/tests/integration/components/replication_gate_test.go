@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
@@ -14,10 +13,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
-
-// replicationClockSkew bounds how far the database clock the worker reads may
-// sit from the test's own: both run on this host.
-const replicationClockSkew = time.Minute
 
 // The replication worker asks the gate Read on the source, from the state the
 // listing returns, and BytesWrite on the destination, from its state read by
@@ -87,8 +82,8 @@ func TestReplicationReadsTheBucketGateStateOfBothSides(t *testing.T) {
 	}
 }
 
-// A destination that names no bucket, an object that is not there, and the
-// database clock answer as the worker expects.
+// A destination that names no bucket and an object that is not there answer
+// as the worker expects.
 func TestReplicationSourceEdges(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -104,12 +99,5 @@ func TestReplicationSourceEdges(t *testing.T) {
 	st, err := src.ObjectReplicationState(ctx, uuid.New(), uuid.New())
 	if err != nil || st.Found {
 		t.Errorf("ObjectReplicationState of no row = (%+v, %v), want not found", st, err)
-	}
-	now, err := adapters.NewReplicationWatermarkRepo(q).Now(ctx)
-	if err != nil {
-		t.Fatalf("Now: %v", err)
-	}
-	if d := time.Since(now); d > replicationClockSkew || d < -replicationClockSkew {
-		t.Errorf("database clock %v is %v from the test's", now, d)
 	}
 }

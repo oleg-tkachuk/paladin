@@ -12,12 +12,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 )
 
-// The fixture's destination, as replicatingFixture names it.
-const (
-	gateDstBackend = "secondary"
-	gateDstBucket  = "paladin-archive-dr"
-)
-
 // The gate states a side of a replication meets.
 var (
 	replDisabled = bucketgate.State{ProvisionState: bucketgate.ProvisionReady}
@@ -27,9 +21,9 @@ var (
 
 // The worker asks the gate Read on the source and BytesWrite on the
 // destination. Each case disables or drains one side: a refused side defers
-// the bucket — nothing copied, the watermark where it was, no failure — and
-// the refusal is logged once though the tick meets the bucket twice. A
-// draining source still serves reads, so it replicates.
+// the bucket — nothing claimed, every row still due, no failure — and the
+// refusal is logged once though the tick meets the bucket twice. A draining
+// source still serves reads, so it replicates.
 func TestReplicationAsksTheGateOnBothSides(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -46,10 +40,11 @@ func TestReplicationAsksTheGateOnBothSides(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f := newPassFixture()
-			rep := newScriptedReplicator(nil)
+			store := newFakeReplicaStore()
+			store.write("a")
+			rep := newScriptedReplicator(store, nil)
 			core, logs := observer.New(zapcore.WarnLevel)
-			w := f.worker([]LifecycleObjectRow{f.row("a", 2*passSettle)}, rep, zap.New(core))
+			w := replicatingWorker(store, rep, zap.New(core))
 			src := w.Buckets.(*fakeReplSource)
 			src.gateStates = map[string]bucketgate.State{tc.backend + "/" + tc.bucket: tc.state}
 			// The same bucket twice in one tick: the refusal is logged once.
@@ -58,14 +53,17 @@ func TestReplicationAsksTheGateOnBothSides(t *testing.T) {
 			if err := w.tick(context.Background()); err != nil {
 				t.Fatalf("tick = %v, want nil: a deferral is not a failure", err)
 			}
-			if got := len(rep.copiedKeys()) == 0; got != tc.deferred {
+			if got := len(rep.copied) == 0; got != tc.deferred {
 				t.Fatalf("copied %v, deferred = %v, want %v", rep.copiedKeys(), got, tc.deferred)
 			}
 			if !tc.deferred {
 				return
 			}
-			if got := f.stored(); f.advanced() {
-				t.Errorf("a deferred bucket advanced its watermark to %v", got)
+			if store.claims != 0 {
+				t.Errorf("a deferred bucket claimed %d times", store.claims)
+			}
+			if r := store.row("a"); !r.due || r.claim.Attempts != 0 {
+				t.Errorf("row due=%v attempts=%d, want it waiting untouched", r.due, r.claim.Attempts)
 			}
 			refusals := logs.FilterMessage("the bucket gate refuses this bucket; its work is deferred until the gate admits it").All()
 			if len(refusals) != 1 {
@@ -78,44 +76,22 @@ func TestReplicationAsksTheGateOnBothSides(t *testing.T) {
 	}
 }
 
-// A refused bucket is taken by the first tick whose gate admits it.
+// A refused bucket is taken by the first tick whose gate admits it, however
+// long it waited: what it queued stays queued.
 func TestReplicationTakesADeferredBucketOnceAdmitted(t *testing.T) {
-	f := newPassFixture()
-	rep := newScriptedReplicator(nil)
-	w := f.worker([]LifecycleObjectRow{f.row("a", 2*passSettle)}, rep, nil)
+	store := newFakeReplicaStore()
+	store.existing("seeded")
+	rep := newScriptedReplicator(store, nil)
+	w := replicatingWorker(store, rep, nil)
 	src := w.Buckets.(*fakeReplSource)
 	src.gateStates = map[string]bucketgate.State{gateDstBackend + "/" + gateDstBucket: replDisabled}
-	if err := w.tick(context.Background()); err != nil {
-		t.Fatalf("tick = %v", err)
-	}
+	mustTick(t, w)
+	store.write("written")
+	mustTick(t, w)
 	src.gateStates = nil
-	if err := w.tick(context.Background()); err != nil {
-		t.Fatalf("second tick = %v", err)
-	}
-	if got := rep.copiedKeys(); len(got) != 1 {
-		t.Errorf("copied %v after the gate admitted the bucket, want the object", got)
-	}
-}
-
-// A bucket deferred for longer than the lookback window still copies what
-// was in its first window: the window's start is written down on the first
-// pass, before the gate is asked, and does not slide with the clock.
-func TestReplicationKeepsTheFirstWindowOfADeferredBucket(t *testing.T) {
-	f := newPassFixture()
-	rep := newScriptedReplicator(nil)
-	w := f.worker([]LifecycleObjectRow{f.row("a", replicationTestLookback/2)}, rep, nil)
-	src := w.Buckets.(*fakeReplSource)
-	src.gateStates = map[string]bucketgate.State{gateDstBackend + "/" + gateDstBucket: replDisabled}
-	if err := w.tick(context.Background()); err != nil {
-		t.Fatalf("tick = %v", err)
-	}
-	f.now = f.now.Add(2 * replicationTestLookback)
-	src.gateStates = nil
-	if err := w.tick(context.Background()); err != nil {
-		t.Fatalf("second tick = %v", err)
-	}
-	if got := rep.copiedKeys(); len(got) != 1 {
-		t.Errorf("copied %v, want the object from the first window", got)
+	mustTick(t, w)
+	if got := rep.copiedKeys(); len(got) != 2 {
+		t.Errorf("copied %v after the gate admitted the bucket, want both objects", got)
 	}
 }
 
@@ -135,15 +111,16 @@ func TestReplicationRefusesADestinationItCannotRead(t *testing.T) {
 	}
 	for name, setup := range cases {
 		t.Run(name, func(t *testing.T) {
-			f := newPassFixture()
-			rep := newScriptedReplicator(nil)
-			w := f.worker([]LifecycleObjectRow{f.row("a", 2*passSettle)}, rep, nil)
+			store := newFakeReplicaStore()
+			store.write("a")
+			rep := newScriptedReplicator(store, nil)
+			w := replicatingWorker(store, rep, nil)
 			want := setup(w.Buckets.(*fakeReplSource))
 			if err := w.tick(context.Background()); !errors.Is(err, want) {
 				t.Errorf("tick = %v, want %v", err, want)
 			}
-			if got := rep.copiedKeys(); len(got) != 0 {
-				t.Errorf("copied %v into a destination with no state", got)
+			if len(rep.copied) != 0 {
+				t.Errorf("copied %v into a destination with no state", rep.copiedKeys())
 			}
 		})
 	}

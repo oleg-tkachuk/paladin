@@ -1,37 +1,38 @@
-// Replication worker — copies a replicated bucket's newly promoted objects to
-// its `replication.destination_bucket`, on the same backend or another one.
+// Replication worker — copies a replicated bucket's objects to its
+// `replication.destination_bucket`, on the same backend or another, and keeps
+// state per object (ADR-0050).
+//
+// The state is a queue in the database, one row per replica location (the
+// source bucket and the tenant, collection and key). A write that the replica
+// may not reflect marks its row due in the write's own transaction: a promote,
+// a change to a field the bucket's filter reads, a restore from the trash, the
+// object's purge. No timestamp window decides what the worker sees, so a
+// transaction of any length is never passed over, and a pass reads only the
+// rows that are due.
 //
 // Each tick, for every bucket with replication enabled:
 //
-//  0. Ask the bucket gate (ADR-0015): Read on the source, BytesWrite on the
+//  0. Queue the bucket's existing objects the first time the worker meets it,
+//     and again after its replication settings change.
+//  1. Ask the bucket gate (ADR-0015): Read on the source, BytesWrite on the
 //     destination, whose state is read by backend and bucket name. A refused
-//     bucket's copies are deferred — nothing copied, the watermark left where
-//     it is — and the refusal is logged once per tick; the first tick the gate
-//     admits both sides takes them.
-//  1. Read the bucket's watermark: every object committed at or before it has
-//     been replicated. A bucket whose watermark cannot be read is deferred for
-//     the tick, since guessing a window could pass objects never copied.
-//  2. Walk the objects of every collection bound to the bucket and select the
-//     AVAILABLE ones committed after the watermark and before the horizon —
-//     the database clock at the scan's start, less SettleDelay. committed_at
-//     is stamped by the database when the promote's transaction starts, and
-//     the row is visible only once it commits; the delay leaves a promote that
-//     takes less than SettleDelay to commit for a later pass, never behind it.
-//     An object the bucket's `replication.filter` (CEL, over the same fields a
-//     ListObjects filter sees) does not match is passed over; one the filter
-//     fails to evaluate on holds the watermark, as a failed copy does.
-//  3. Copy each through StorageReplicator to the same collection and key in
-//     the destination bucket. A transient failure is retried with exponential
-//     backoff; one that outlasts the retries stops the bucket for the tick,
-//     since its backend is likely down for every object after it.
-//  4. Advance the watermark to the latest committed_at the pass decided —
-//     copied, filtered out, or confirmed gone from the source — and only when
-//     the whole walk completed with every selected object decided. Never to
-//     the horizon itself: a row with an older stamp than the horizon that
-//     becomes visible after the pass is still after the watermark. Any other
-//     failure holds the watermark where it is, so the next tick selects the
-//     failed object again — and with it the objects after it, which copy
-//     again: a replica is overwritten with the same bytes.
+//     bucket's rows wait, untouched, and the refusal is logged once per tick.
+//  2. Claim the bucket's due rows in batches. Each row names the object last
+//     written at its location; the object is read as it is now.
+//  3. Decide each row. An object purged from the source has its replica
+//     deleted from the destination (a byte write there, which the gate
+//     admitted as BytesWrite) and its row dropped; one that left the bucket
+//     drops its row; one in the trash keeps its replica; one the bucket's filter (CEL,
+//     over the same fields a ListObjects filter sees) does not match is
+//     settled; one whose replica already holds its current byte write is
+//     settled. Anything else is copied through StorageReplicator to the same
+//     collection and key in the destination bucket, and the byte write it
+//     copied is recorded.
+//  4. A row settles only at the generation it was claimed at: a write during
+//     the copy leaves it due for a later pass. A failure puts the row off by
+//     its own backoff and leaves every other row alone; one still failing
+//     transiently ends the bucket's tick, since its backend is likely down
+//     for every object after it.
 package worker
 
 import (
@@ -50,23 +51,21 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
-// Retry and timing of the replication worker.
+// Batching, claims and retry of the replication worker.
 const (
-	// replicationCopyAttempts is how many times one object's copy is tried
-	// while it fails transiently, the first attempt included.
-	replicationCopyAttempts = 4
-	// replicationBackoffBase is the wait before the first retry; each later
-	// one doubles it, up to replicationBackoffMax.
-	replicationBackoffBase = time.Second
-	replicationBackoffMax  = 30 * time.Second
-	// replicationSettleDelay is how far behind the scan's start the horizon
-	// sits: an object's committed_at is stamped when its transaction starts,
-	// and the row is visible only once it commits.
-	replicationSettleDelay = time.Minute
-	// replicationDefaultInterval and replicationDefaultLookback stand in for
-	// an unset Interval and LookbackWindow.
+	// replicationClaimBatch is how many rows one claim takes: small, so a
+	// pass that stops early hands few back.
+	replicationClaimBatch = 32
+	// replicationClaimLease is how long a claim keeps other workers off a
+	// row: past it, a worker that died mid-batch loses the rows. Longer than
+	// one batch of large copies takes.
+	replicationClaimLease = time.Hour
+	// replicationRetryBase is how long a row waits after its first failed
+	// attempt; each later failure doubles it, up to replicationRetryMax.
+	replicationRetryBase = time.Minute
+	replicationRetryMax  = 6 * time.Hour
+	// replicationDefaultInterval stands in for an unset Interval.
 	replicationDefaultInterval = 5 * time.Minute
-	replicationDefaultLookback = time.Hour
 )
 
 // StorageReplicator copies one object from source → destination bucket.
@@ -79,9 +78,13 @@ const (
 //
 // SourceMissing answers whether the source's key is absent from a bucket
 // confirmed reachable — true only then; an unreachable bucket is an error.
+//
+// DeleteReplica removes the replica at dst; a key already absent is no
+// failure. A failure a later attempt may cure wraps ErrCopyTransient.
 type StorageReplicator interface {
 	Replicate(ctx context.Context, src, dst ReplicationTarget, sizeBytes int64) error
 	SourceMissing(ctx context.Context, src ReplicationTarget) (bool, error)
+	DeleteReplica(ctx context.Context, dst ReplicationTarget) error
 }
 
 // ErrCopyTransient marks a copy failure worth retrying: throttling, a server
@@ -89,10 +92,9 @@ type StorageReplicator interface {
 var ErrCopyTransient = errors.New("transient copy failure")
 
 // ErrCopyMismatch marks a replica that did not match its source, which the
-// implementation removed. It is retried as a transient failure, since the
-// source may have changed under the copy; one that outlasts the retries is
-// the object's own problem, not its backend's, so it holds the watermark
-// without stopping the bucket.
+// implementation removed. The source may have changed under the copy, so the
+// row is retried; the mismatch is the object's own problem, not its
+// backend's, so it does not end the bucket's tick.
 var ErrCopyMismatch = errors.New("replica does not match its source")
 
 // ReplicationTarget identifies one side of a copy. Collection + Key are the
@@ -112,7 +114,6 @@ type ReplicationTarget struct {
 // name, ErrReplicationDestinationUnknown when no such bucket is registered.
 type ReplicationSource interface {
 	ListBucketsWithReplication(ctx context.Context) ([]ReplicationBucket, error)
-	ListCollectionBindings(ctx context.Context, backendID, bucketName string) ([]CollectionBinding, error)
 	ObjectReplicationState(ctx context.Context, tenantID, objectID uuid.UUID) (ReplicationObjectState, error)
 	BucketGateState(ctx context.Context, backendID, bucketName string) (BucketGateState, error)
 }
@@ -143,78 +144,87 @@ type ReplicationObjectState struct {
 	ResourceVersion int64
 }
 
-// ReplicationClock is the database's clock, the one that stamps
-// objects.committed_at.
-type ReplicationClock interface {
-	Now(ctx context.Context) (time.Time, error)
-}
-
-// WatermarkStore persists the per-bucket replication high-water mark
-// across restarts. Implementations live in postgres adapters; the worker
-// only sees Get/Advance and degrades gracefully when the store is unset
-// (in-memory mode, suitable for dev / tests).
-type WatermarkStore interface {
-	Get(ctx context.Context, backendID, bucketName string) (time.Time, error)
-	Advance(ctx context.Context, backendID, bucketName string, t time.Time) error
-}
-
-// ReplicationWorker fans out cross-backend copies. A nil StorageReplicator
-// yields a worker that walks objects and logs intent without copying, and
-// never advances a watermark.
+// ReplicaStore is the per-object replication state: a queue of replica
+// locations a write marked due, and what each destination holds.
 //
-// WatermarkStore is optional. When set, the worker reads the per-bucket
-// high-water mark from the store on each tick and writes back after a
-// completed pass; an in-memory cache fronts both calls so the hot path
-// stays one DB roundtrip per bucket per tick. When unset, watermarks
-// live only in process memory (lost on restart — fine for dev).
+// SeedReplication queues every AVAILABLE object of a bucket the first time
+// it is called for it, and again after the bucket's replication settings
+// change; otherwise it queues nothing. It returns how many it queued.
+//
+// ClaimReplicas takes up to limit due rows of a bucket for this worker for
+// lease. Every claimed row must be given back: recorded, settled, retried,
+// released or forgotten — each at the claim's generation, so a write since
+// the claim leaves the row due.
+type ReplicaStore interface {
+	SeedReplication(ctx context.Context, sourceBucketID pgtype.UUID) (int64, error)
+	ClaimReplicas(ctx context.Context, sourceBucketID pgtype.UUID, limit int, lease time.Duration) ([]ReplicaClaim, error)
+	ReplicaObjects(ctx context.Context, ids []uuid.UUID) (map[uuid.UUID]ReplicaObject, error)
+	RecordReplicaCopy(ctx context.Context, c ReplicaClaim, copied ReplicaCopy) error
+	SettleReplica(ctx context.Context, c ReplicaClaim) error
+	RetryReplica(ctx context.Context, c ReplicaClaim, delay time.Duration, reason string) error
+	ReleaseReplica(ctx context.Context, c ReplicaClaim) error
+	ForgetReplica(ctx context.Context, c ReplicaClaim) error
+}
+
+// ReplicaClaim is one claimed replica location: the object last written
+// there, the generation the claim read, and what the destination holds.
+type ReplicaClaim struct {
+	SourceBucketID pgtype.UUID
+	TenantID       uuid.UUID
+	Collection     string
+	Key            string
+	ObjectID       uuid.UUID
+	Generation     int64
+	// Attempts is how many attempts failed since the last write or success.
+	Attempts int
+	// Replica is what replication last wrote at this location; its
+	// BucketID is invalid when it wrote nothing.
+	Replica ReplicaCopy
+}
+
+// ReplicaCopy is a replica as written: the destination bucket, the object
+// copied, the byte write it copied and its size.
+type ReplicaCopy struct {
+	BucketID  pgtype.UUID
+	ObjectID  uuid.UUID
+	WrittenAt time.Time
+	SizeBytes int64
+}
+
+// holds reports whether the replica in dst is obj's current byte write.
+func (c ReplicaCopy) holds(dst pgtype.UUID, obj ReplicaObject) bool {
+	return c.BucketID.Valid && c.BucketID == dst && c.ObjectID == obj.Row.ObjectID && c.WrittenAt.Equal(obj.WrittenAt)
+}
+
+// ReplicaObject is a claimed row's object as it is now: the fields the filter
+// reads, the bucket its collection is bound to, and its current byte write.
+type ReplicaObject struct {
+	Row       LifecycleObjectRow
+	BucketID  pgtype.UUID
+	WrittenAt time.Time
+}
+
+// ReplicationWorker copies each replicated bucket's due objects. A nil
+// StorageReplicator yields a worker that claims and logs intent without
+// copying, and gives every row back as it found it.
 type ReplicationWorker struct {
 	Buckets    ReplicationSource
-	Objects    LifecycleObjectIter
+	Replicas   ReplicaStore
 	Replicator StorageReplicator
-	Watermarks WatermarkStore
-	// Clock measures the horizon; nil measures it on Now, which is skewed
-	// from the database's by however far the pod's clock is.
-	Clock    ReplicationClock
-	Interval time.Duration
-	Logger   *zap.Logger
-	Now      func() time.Time
-
-	// LookbackWindow caps how far back the worker scans on first run when
-	// no watermark is found in the store.
-	LookbackWindow time.Duration
+	Interval   time.Duration
+	Logger     *zap.Logger
 	// CELEvaluator compiles each bucket's replication.filter, once per bucket
 	// per tick through its cache. A bucket with a filter and no evaluator is
 	// not replicated: copying everything would ignore the filter.
 	CELEvaluator *cel.Evaluator
-	// SettleDelay holds the horizon this far behind the scan's start; zero
-	// takes replicationSettleDelay in Run.
-	SettleDelay time.Duration
-
-	// sleep waits between retries; nil waits on a timer. Tests replace it.
-	sleep func(ctx context.Context, d time.Duration) error
-
-	watermarks map[string]time.Time // in-memory cache of last-seen committed_at
 }
 
 func (r *ReplicationWorker) Run(ctx context.Context) error {
 	if r.Interval <= 0 {
 		r.Interval = replicationDefaultInterval
 	}
-	if r.Now == nil {
-		r.Now = time.Now
-	}
-	if r.LookbackWindow <= 0 {
-		r.LookbackWindow = replicationDefaultLookback
-	}
-	if r.SettleDelay <= 0 {
-		r.SettleDelay = replicationSettleDelay
-	}
-	if r.watermarks == nil {
-		r.watermarks = map[string]time.Time{}
-	}
 	r.log().Info("replication worker starting",
 		zap.Duration("interval", r.Interval),
-		zap.Duration("lookback_window", r.LookbackWindow),
 		zap.Bool("dry_run", r.Replicator == nil))
 	return RunTicker(ctx, "replication", r.Interval, r.tick)
 }
@@ -247,32 +257,28 @@ type replicationGates struct {
 	src, dst *bucketDeferrals
 }
 
-// bucketPass is what one tick's walk of a bucket did.
+// bucketPass is what one tick's pass over a bucket did.
 type bucketPass struct {
-	copied, filtered, missing int
-	// covered is the latest committed_at among the objects the pass decided.
-	covered time.Time
-	// held is the first failure that keeps the watermark where it is.
-	held error
-	// stopped is set once a failure ended the walk early.
+	copied, current, filtered, missing, deleted, forgotten, retried int
+	// failed is the first failure, which the tick reports.
+	failed error
+	// stopped is set once a failure ended the pass early.
 	stopped bool
 }
 
-// decided records an object the pass is done with.
-func (p *bucketPass) decided(committed time.Time) {
-	if committed.After(p.covered) {
-		p.covered = committed
-	}
+// replicaRoute is where one bucket's objects replicate from and to, and the
+// bucket's compiled filter (nil: every object).
+type replicaRoute struct {
+	bucket                admindomain.Bucket
+	srcID, dstID          pgtype.UUID
+	dstBackend, dstBucket string
+	filter                celpkg.Program
 }
 
-// errPassStopped ends an object walk early; the failure that caused it is the
-// pass's held error.
-var errPassStopped = errors.New("replication pass stopped")
-
-// processBucket copies one bucket's new objects and returns the first failure
-// it logged. An object that fails to copy for good does not stop the others;
-// one still failing transiently after its retries stops the bucket for the
-// tick. A dry run is not a failure.
+// processBucket replicates one bucket's due rows and returns the first
+// failure it logged. A row that fails does not stop the others; one still
+// failing transiently stops the bucket for the tick. A dry run is not a
+// failure.
 func (r *ReplicationWorker) processBucket(ctx context.Context, rb ReplicationBucket, gates replicationGates) error {
 	b := rb.Bucket
 	if !b.Replication.Enabled || b.Replication.DestinationBucket == "" {
@@ -285,18 +291,18 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, rb ReplicationBuc
 		return err
 	}
 	bucketLog = bucketLog.With(zap.String(logKeyDstBackend, dstBackend), zap.String(logKeyDstBucket, dstBucket))
-	now, err := r.clockNow(ctx)
+	// Before the gate: what is queued waits for the gate, and nothing written
+	// meanwhile is missed, since the triggers queue it.
+	queued, err := r.Replicas.SeedReplication(ctx, rb.ID)
 	if err != nil {
-		bucketLog.Warn("failed to read the database clock; deferring the bucket to the next tick", zap.Error(err))
+		bucketLog.Warn("failed to queue the bucket's objects for replication; deferring the bucket to the next tick", zap.Error(err))
 		return err
 	}
-	// Before the gate: a bucket seen for the first time has its window's
-	// start written down now, so deferring it does not slide the window.
-	cutoff, err := r.cutoff(ctx, b.BackendID, b.BucketName, now)
-	if err != nil {
-		return err
+	if queued > 0 {
+		bucketLog.Info("queued the bucket's objects for replication", zap.Int64("objects", queued))
 	}
-	if admitted, err := r.admitBoth(ctx, bucketLog, rb, dstBackend, dstBucket, gates); !admitted {
+	dst, admitted, err := r.admitBoth(ctx, bucketLog, rb, dstBackend, dstBucket, gates)
+	if !admitted {
 		return err
 	}
 	filter, err := r.compileFilter(b.Replication.Filter)
@@ -305,98 +311,289 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, rb ReplicationBuc
 			zap.String("filter", b.Replication.Filter), zap.Error(err))
 		return err
 	}
-	horizon := now.Add(-r.SettleDelay)
-	bindings, err := r.Buckets.ListCollectionBindings(ctx, b.BackendID, b.BucketName)
-	if err != nil {
-		bucketLog.Warn("failed to list collection bindings", zap.Error(err))
-		return err
+	route := replicaRoute{
+		bucket: b, srcID: rb.ID, dstID: dst.ID, dstBackend: dstBackend, dstBucket: dstBucket, filter: filter,
 	}
 	var pass bucketPass
-	for _, bind := range bindings {
-		if ctx.Err() != nil || pass.stopped {
+	for !pass.stopped && ctx.Err() == nil {
+		if !r.replicateBatch(ctx, bucketLog, &pass, route) {
 			break
 		}
-		log := bucketLog.With(
-			zap.String(logKeyTenant, bind.TenantID.String()),
-			zap.String(logKeyCollection, bind.Collection),
-		)
-		err := r.Objects.IterateObjects(ctx, bind.TenantID, bind.Collection, func(row LifecycleObjectRow) error {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			if row.State != string(statemachine.StateAvailable) {
-				return nil
-			}
-			committed := row.CreatedAt
-			if row.CommittedAt != nil {
-				committed = *row.CommittedAt
-			}
-			if !committed.After(cutoff) || committed.After(horizon) {
-				return nil // replicated already, or left for a later tick
-			}
-			return r.replicateRow(ctx, log, &pass, row, committed, replicaRoute{
-				bucket: b, dstBackend: dstBackend, dstBucket: dstBucket, bind: bind, filter: filter,
-			})
-		})
-		if err != nil && !errors.Is(err, errPassStopped) && ctx.Err() == nil {
-			log.Warn("failed to iterate objects", zap.Error(err))
-			keepFirst(&pass.held, err)
-			pass.stopped = true
+	}
+	summary := []zap.Field{
+		zap.Int("copied", pass.copied), zap.Int("current", pass.current), zap.Int("filtered", pass.filtered),
+		zap.Int("source_missing", pass.missing), zap.Int("deleted", pass.deleted), zap.Int("forgotten", pass.forgotten), zap.Int("retried", pass.retried),
+		zap.Bool("dry_run", r.Replicator == nil),
+	}
+	switch {
+	case pass.failed != nil || pass.stopped:
+		bucketLog.Info("replication pass ended with failures", summary...)
+	case pass == bucketPass{}:
+		bucketLog.Debug("replication pass found nothing due")
+	default:
+		bucketLog.Info("replication pass complete", summary...)
+	}
+	return pass.failed
+}
+
+// replicateBatch claims one batch of due rows and decides each. It reports
+// whether another batch may follow: false once nothing was due, a claim
+// failed, or the worker is dry-running — a dry run hands its rows back due,
+// so a second claim would take them again.
+func (r *ReplicationWorker) replicateBatch(ctx context.Context, log *zap.Logger, pass *bucketPass, route replicaRoute) bool {
+	claims, err := r.Replicas.ClaimReplicas(ctx, route.srcID, replicationClaimBatch, replicationClaimLease)
+	if err != nil {
+		if ctx.Err() == nil {
+			log.Warn("failed to claim due replicas", zap.Error(err))
+			keepFirst(&pass.failed, err)
+		}
+		return false
+	}
+	if len(claims) == 0 {
+		return false
+	}
+	ids := make([]uuid.UUID, 0, len(claims))
+	for _, c := range claims {
+		ids = append(ids, c.ObjectID)
+	}
+	objects, err := r.Replicas.ReplicaObjects(ctx, ids)
+	if err != nil {
+		log.Warn("failed to read the claimed objects; handing them back", zap.Error(err))
+		keepFirst(&pass.failed, err)
+		r.release(ctx, log, pass, claims)
+		return false
+	}
+	for i, c := range claims {
+		if ctx.Err() != nil || pass.stopped {
+			r.release(ctx, log, pass, claims[i:])
+			return false
+		}
+		obj, found := objects[c.ObjectID]
+		r.replicateClaim(ctx, log, pass, c, obj, found, route)
+	}
+	return r.Replicator != nil
+}
+
+// release hands claims back due, untouched. A cancelled context cannot write
+// them back; their lease runs out instead.
+func (r *ReplicationWorker) release(ctx context.Context, log *zap.Logger, pass *bucketPass, claims []ReplicaClaim) {
+	if ctx.Err() != nil {
+		return
+	}
+	for _, c := range claims {
+		if err := r.Replicas.ReleaseReplica(ctx, c); err != nil {
+			log.Warn("failed to hand a claimed replica back; it waits out its lease",
+				zap.String(logKeyObjectID, c.ObjectID.String()), zap.Error(err))
+			keepFirst(&pass.failed, err)
 		}
 	}
+}
+
+// replicateClaim decides one claimed row: forget it, settle it, or copy its
+// object.
+func (r *ReplicationWorker) replicateClaim(
+	ctx context.Context, bucketLog *zap.Logger, pass *bucketPass, c ReplicaClaim, obj ReplicaObject, found bool, route replicaRoute,
+) {
+	// The success lines name the object by id alone; a failure line adds its
+	// key, which an operator needs to find the object.
+	okLog := bucketLog.With(
+		zap.String(logKeyTenant, c.TenantID.String()),
+		zap.String(logKeyCollection, c.Collection),
+		zap.String(logKeyObjectID, c.ObjectID.String()),
+	)
+	log := okLog.With(zap.String(logKeyKey, c.Key))
+	switch {
+	case !found:
+		r.deletePurged(ctx, okLog, log, pass, c, route)
+	case obj.BucketID != route.srcID:
+		okLog.Info("object's collection is no longer bound to the replicated bucket; forgetting its replica")
+		r.forget(ctx, log, pass, c)
+	case obj.Row.State != string(statemachine.StateAvailable):
+		// In the trash the source still holds the bytes, and the replica
+		// stays; a restore marks the row due again.
+		okLog.Debug("object is not available; leaving its replica as it is", zap.String("state", obj.Row.State))
+		r.settle(ctx, log, pass, c)
+	default:
+		r.copyObject(ctx, okLog, log, pass, c, obj, route)
+	}
+}
+
+// copyObject copies an AVAILABLE object unless the filter passes it over or
+// its replica is current, and records the outcome on the row.
+func (r *ReplicationWorker) copyObject(
+	ctx context.Context, okLog, log *zap.Logger, pass *bucketPass, c ReplicaClaim, obj ReplicaObject, route replicaRoute,
+) {
+	if route.filter != nil {
+		match, err := cel.Match(route.filter, lifecycleRowToCELVars(obj.Row))
+		if err != nil {
+			// Neither copied nor known to be outside the filter: retried
+			// until the filter or the object changes.
+			log.Warn("failed to evaluate the replication filter", zap.Error(err))
+			r.retry(ctx, log, pass, c, err)
+			return
+		}
+		if !match {
+			pass.filtered++
+			okLog.Debug("object is outside the replication filter")
+			r.settle(ctx, log, pass, c)
+			return
+		}
+	}
+	if c.Replica.holds(route.dstID, obj) {
+		pass.current++
+		okLog.Debug("replica already holds the object's current bytes")
+		r.settle(ctx, log, pass, c)
+		return
+	}
+	if r.Replicator == nil {
+		okLog.Info("dry-run match")
+		r.release(ctx, log, pass, []ReplicaClaim{c})
+		return
+	}
+	src := ReplicationTarget{
+		BackendID: route.bucket.BackendID, BucketName: route.bucket.BucketName,
+		TenantID: c.TenantID, Collection: c.Collection, Key: c.Key,
+	}
+	dst := ReplicationTarget{
+		BackendID: route.dstBackend, BucketName: route.dstBucket,
+		TenantID: c.TenantID, Collection: c.Collection, Key: c.Key,
+	}
+	err := r.Replicator.Replicate(ctx, src, dst, obj.Row.SizeBytes)
+	switch {
+	case err == nil:
+		pass.copied++
+		okLog.Debug("replicated object", zap.Int64("size_bytes", obj.Row.SizeBytes))
+		if err := r.Replicas.RecordReplicaCopy(ctx, c, ReplicaCopy{
+			BucketID: route.dstID, ObjectID: obj.Row.ObjectID, WrittenAt: obj.WrittenAt, SizeBytes: obj.Row.SizeBytes,
+		}); err != nil {
+			log.Warn("failed to record a replica; the object is copied again", zap.Error(err))
+			keepFirst(&pass.failed, err)
+		}
+	case ctx.Err() != nil:
+		// Stopping: the claim's lease hands the row back.
+	case errors.Is(err, ErrObjectMissing):
+		gone, why := r.confirmSourceGone(ctx, src, obj.Row)
+		if !gone {
+			log.Warn("source object reported missing but not confirmed; retrying it later",
+				zap.String("reason", why), zap.Error(err))
+			r.retry(ctx, log, pass, c, err)
+			return
+		}
+		// The row is unchanged and still AVAILABLE, and the source's bucket
+		// holds no such key: nothing to copy until the object is written
+		// again, which marks the row due.
+		pass.missing++
+		log.Warn("source object missing; passing over it", zap.Error(err))
+		r.settle(ctx, log, pass, c)
+	case errors.Is(err, ErrCopyMismatch):
+		log.Warn("replica did not match its source; retrying it later", zap.Error(err))
+		r.retry(ctx, log, pass, c, err)
+	case errors.Is(err, ErrCopyTransient):
+		log.Warn("failed to copy object; deferring the bucket to the next tick", zap.Error(err))
+		r.retry(ctx, log, pass, c, err)
+		pass.stopped = true
+	default:
+		log.Warn("failed to copy object; retrying it later", zap.Error(err))
+		r.retry(ctx, log, pass, c, err)
+	}
+}
+
+// deletePurged deletes the replica of an object purged from the source — its
+// row gone, by a permanent delete, the trash's expiry or its tenant's purge —
+// and drops the row. Only a replica this worker wrote into the current
+// destination is deleted; a location it never copied, or copied into a
+// destination the bucket no longer names, is only forgotten.
+func (r *ReplicationWorker) deletePurged(
+	ctx context.Context, okLog, log *zap.Logger, pass *bucketPass, c ReplicaClaim, route replicaRoute,
+) {
+	if !c.Replica.BucketID.Valid || c.Replica.BucketID != route.dstID {
+		okLog.Debug("purged object has no replica in the destination; forgetting it")
+		r.forget(ctx, log, pass, c)
+		return
+	}
+	if r.Replicator == nil {
+		okLog.Info("dry-run delete")
+		r.release(ctx, log, pass, []ReplicaClaim{c})
+		return
+	}
+	err := r.Replicator.DeleteReplica(ctx, ReplicationTarget{
+		BackendID: route.dstBackend, BucketName: route.dstBucket,
+		TenantID: c.TenantID, Collection: c.Collection, Key: c.Key,
+	})
+	switch {
+	case err == nil:
+		pass.deleted++
+		okLog.Debug("deleted the replica of a purged object")
+		r.forget(ctx, log, pass, c)
+	case ctx.Err() != nil:
+		// Stopping: the claim's lease hands the row back.
+	case errors.Is(err, ErrCopyTransient):
+		log.Warn("failed to delete a purged object's replica; deferring the bucket to the next tick", zap.Error(err))
+		r.retry(ctx, log, pass, c, err)
+		pass.stopped = true
+	default:
+		log.Warn("failed to delete a purged object's replica; retrying it later", zap.Error(err))
+		r.retry(ctx, log, pass, c, err)
+	}
+}
+
+// settle records a row as decided at its claim's generation.
+func (r *ReplicationWorker) settle(ctx context.Context, log *zap.Logger, pass *bucketPass, c ReplicaClaim) {
+	if err := r.Replicas.SettleReplica(ctx, c); err != nil {
+		log.Warn("failed to settle a replica; it is decided again", zap.Error(err))
+		keepFirst(&pass.failed, err)
+	}
+}
+
+// forget drops the row of an object that is gone or left the bucket.
+func (r *ReplicationWorker) forget(ctx context.Context, log *zap.Logger, pass *bucketPass, c ReplicaClaim) {
+	if err := r.Replicas.ForgetReplica(ctx, c); err != nil {
+		log.Warn("failed to forget a replica; it is decided again", zap.Error(err))
+		keepFirst(&pass.failed, err)
+		return
+	}
+	pass.forgotten++
+}
+
+// retry puts a failed row off by its backoff, and reports the failure for the
+// tick.
+func (r *ReplicationWorker) retry(ctx context.Context, log *zap.Logger, pass *bucketPass, c ReplicaClaim, cause error) {
+	pass.retried++
+	keepFirst(&pass.failed, cause)
 	if ctx.Err() != nil {
-		return pass.held // stopping: nothing failed, and nothing advances
+		return
 	}
-	if pass.held != nil || r.Replicator == nil {
-		bucketLog.Info("replication pass held the watermark",
-			zap.Int("copied", pass.copied), zap.Int("filtered", pass.filtered), zap.Int("source_missing", pass.missing),
-			zap.Time("watermark", cutoff), zap.Bool("dry_run", r.Replicator == nil))
-		return pass.held
+	delay := replicationRetryDelay(c.Attempts + 1)
+	if err := r.Replicas.RetryReplica(ctx, c, delay, cause.Error()); err != nil {
+		log.Warn("failed to put a replica off; it waits out its lease", zap.Error(err))
+		return
 	}
-	if pass.covered.IsZero() {
-		bucketLog.Debug("replication pass found nothing new", zap.Time("watermark", cutoff))
-		return nil
-	}
-	if err := r.advance(ctx, b.BackendID, b.BucketName, pass.covered); err != nil {
-		return err
-	}
-	bucketLog.Info("replication pass complete",
-		zap.Int("copied", pass.copied), zap.Int("filtered", pass.filtered), zap.Int("source_missing", pass.missing),
-		zap.Time("watermark", pass.covered))
-	return nil
+	log.Debug("replica retry scheduled", zap.Int("attempt", c.Attempts+1), zap.Duration("backoff", delay))
 }
 
 // admitBoth asks the gate about both sides of a bucket's replication: Read on
 // the source, BytesWrite on the destination. A refusal is a deferral, not a
 // failure — false with no error, logged once a tick by the gate's deferrals —
-// while a destination whose state cannot be read is a failure.
+// while a destination whose state cannot be read is a failure. It returns
+// the destination's id and state.
 func (r *ReplicationWorker) admitBoth(
 	ctx context.Context, log *zap.Logger, rb ReplicationBucket, dstBackend, dstBucket string, gates replicationGates,
-) (bool, error) {
+) (BucketGateState, bool, error) {
 	if !gates.src.admit(bucketGateRow{
 		ID: rb.ID, BackendName: rb.BackendID, BucketName: rb.BucketName,
 		Enabled: rb.State.Enabled, ReadOnly: rb.State.ReadOnly, ProvisionState: rb.State.ProvisionState,
 	}) {
-		return false, nil
+		return BucketGateState{}, false, nil
 	}
 	dst, err := r.Buckets.BucketGateState(ctx, dstBackend, dstBucket)
 	if err != nil {
 		log.Warn("failed to read the replication destination's state; deferring the bucket to the next tick", zap.Error(err))
-		return false, err
+		return BucketGateState{}, false, err
 	}
-	return gates.dst.admit(bucketGateRow{
+	return dst, gates.dst.admit(bucketGateRow{
 		ID: dst.ID, BackendName: dstBackend, BucketName: dstBucket,
 		Enabled: dst.State.Enabled, ReadOnly: dst.State.ReadOnly, ProvisionState: dst.State.ProvisionState,
 	}), nil
-}
-
-// replicaRoute is where one collection's objects replicate from and to, and
-// the bucket's compiled filter (nil: every object).
-type replicaRoute struct {
-	bucket                admindomain.Bucket
-	dstBackend, dstBucket string
-	bind                  CollectionBinding
-	filter                celpkg.Program
 }
 
 // compileFilter compiles a bucket's replication filter; an empty one is nil,
@@ -411,133 +608,22 @@ func (r *ReplicationWorker) compileFilter(expr string) (celpkg.Program, error) {
 	return r.CELEvaluator.Compile(cel.ObjectSchema, expr)
 }
 
-// replicateRow copies one selected row and records the outcome on pass. It
-// returns errPassStopped when the walk must end.
-func (r *ReplicationWorker) replicateRow(
-	ctx context.Context, log *zap.Logger, pass *bucketPass, row LifecycleObjectRow, committed time.Time, route replicaRoute,
-) error {
-	// The success line names the object by id alone; a failure line adds its
-	// key, which an operator needs to find the object.
-	okLog := log.With(zap.String(logKeyObjectID, row.ObjectID.String()))
-	log = okLog.With(zap.String(logKeyKey, row.Key))
-	if route.filter != nil {
-		match, err := cel.Match(route.filter, lifecycleRowToCELVars(row))
-		if err != nil {
-			// Neither copied nor known to be outside the filter: the object
-			// holds the watermark until the filter or the object changes.
-			log.Warn("failed to evaluate the replication filter", zap.Error(err))
-			keepFirst(&pass.held, err)
-			return nil
-		}
-		if !match {
-			pass.filtered++
-			pass.decided(committed)
-			return nil
-		}
-	}
-	if r.Replicator == nil {
-		okLog.Info("dry-run match")
-		return nil
-	}
-	src := ReplicationTarget{
-		BackendID: route.bucket.BackendID, BucketName: route.bucket.BucketName,
-		TenantID: route.bind.TenantID, Collection: route.bind.Collection, Key: row.Key,
-	}
-	dst := ReplicationTarget{
-		BackendID: route.dstBackend, BucketName: route.dstBucket,
-		TenantID: route.bind.TenantID, Collection: route.bind.Collection, Key: row.Key,
-	}
-	err := r.copyWithRetry(ctx, log, src, dst, row.SizeBytes)
-	switch {
-	case err == nil:
-		pass.copied++
-		pass.decided(committed)
-		okLog.Debug("replicated object", zap.Int64("size_bytes", row.SizeBytes))
-		return nil
-	case ctx.Err() != nil:
-		return ctx.Err()
-	case errors.Is(err, ErrObjectMissing):
-		gone, why := r.confirmSourceGone(ctx, src, row)
-		if !gone {
-			log.Warn("source object reported missing but not confirmed; holding the watermark",
-				zap.String("reason", why), zap.Error(err))
-			keepFirst(&pass.held, err)
-			return nil
-		}
-		// The row is unchanged and still AVAILABLE, and the source's bucket
-		// holds no such key: nothing to copy now or later, so the object
-		// does not hold the watermark.
-		pass.missing++
-		pass.decided(committed)
-		log.Warn("source object missing; passing over it", zap.Error(err))
-		return nil
-	case errors.Is(err, ErrCopyMismatch):
-		log.Warn("replica did not match its source after retries; holding the watermark",
-			zap.Int("attempts", replicationCopyAttempts), zap.Error(err))
-		keepFirst(&pass.held, err)
-		return nil
-	case errors.Is(err, ErrCopyTransient):
-		log.Warn("failed to copy object after retries; deferring the bucket to the next tick",
-			zap.Int("attempts", replicationCopyAttempts), zap.Error(err))
-		keepFirst(&pass.held, err)
-		pass.stopped = true
-		return errPassStopped
-	default:
-		log.Warn("failed to copy object", zap.Error(err))
-		// Carry on with the next object; the tick reports this one.
-		keepFirst(&pass.held, err)
-		return nil
-	}
-}
-
-// copyWithRetry copies one object, retrying a transient failure with
-// exponential backoff up to replicationCopyAttempts tries in all.
-func (r *ReplicationWorker) copyWithRetry(ctx context.Context, log *zap.Logger, src, dst ReplicationTarget, size int64) error {
-	for attempt := 1; ; attempt++ {
-		err := r.Replicator.Replicate(ctx, src, dst, size)
-		if err == nil || !errors.Is(err, ErrCopyTransient) || attempt >= replicationCopyAttempts {
-			return err
-		}
-		wait := replicationBackoff(attempt)
-		log.Warn("transient copy failure; retrying",
-			zap.Int("attempt", attempt), zap.Duration("backoff", wait), zap.Error(err))
-		if err := r.wait(ctx, wait); err != nil {
-			return err
-		}
-	}
-}
-
-// replicationBackoff is the wait after the given failed attempt (1-based):
-// replicationBackoffBase doubled per earlier attempt, capped at
-// replicationBackoffMax.
-func replicationBackoff(attempt int) time.Duration {
-	d := replicationBackoffBase
+// replicationRetryDelay is the wait after the given failed attempt
+// (1-based): replicationRetryBase doubled per earlier attempt, capped at
+// replicationRetryMax.
+func replicationRetryDelay(attempt int) time.Duration {
+	d := replicationRetryBase
 	for i := 1; i < attempt; i++ {
 		d *= 2
-		if d >= replicationBackoffMax {
-			return replicationBackoffMax
+		if d >= replicationRetryMax {
+			return replicationRetryMax
 		}
 	}
 	return d
 }
 
-// wait sleeps for d, or until ctx is done.
-func (r *ReplicationWorker) wait(ctx context.Context, d time.Duration) error {
-	if r.sleep != nil {
-		return r.sleep(ctx, d)
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
-}
-
 // confirmSourceGone checks a copy's not-found before the object is passed
-// over: the row must be unchanged — still AVAILABLE, at the version the walk
+// over: the row must be unchanged — still AVAILABLE, at the version the claim
 // read — and a fresh HEAD must find the key absent from a reachable bucket.
 // Anything short of that answers false with the reason.
 func (r *ReplicationWorker) confirmSourceGone(ctx context.Context, src ReplicationTarget, row LifecycleObjectRow) (bool, string) {
@@ -558,73 +644,6 @@ func (r *ReplicationWorker) confirmSourceGone(ctx context.Context, src Replicati
 		return false, "the source HEAD finds the object"
 	}
 	return true, ""
-}
-
-// clockNow is the database clock, or Now without one.
-func (r *ReplicationWorker) clockNow(ctx context.Context) (time.Time, error) {
-	if r.Clock == nil {
-		return r.Now(), nil
-	}
-	return r.Clock.Now(ctx)
-}
-
-// cutoff resolves the start of a bucket's window. Layering:
-//  1. in-memory cache (hot path, no DB hit)
-//  2. WatermarkStore (cold start / new bucket)
-//  3. now − LookbackWindow (no prior state), written as the watermark at
-//     once: a window computed afresh each tick would slide, and a bucket
-//     deferred or held for longer than the lookback would lose the objects
-//     that slid out of it.
-//
-// A watermark the store fails to return is an error: the lookback in its
-// place could start after objects the stored watermark had not reached, and
-// the pass would then move the watermark past them uncopied.
-func (r *ReplicationWorker) cutoff(ctx context.Context, backendID, bucketName string, now time.Time) (time.Time, error) {
-	key := backendID + "/" + bucketName
-	if t, ok := r.watermarks[key]; ok {
-		return t, nil
-	}
-	if r.Watermarks != nil {
-		t, err := r.Watermarks.Get(ctx, backendID, bucketName)
-		if err != nil {
-			r.log().Warn("failed to read the replication watermark; deferring the bucket to the next tick",
-				zap.String(logKeyBackend, backendID), zap.String(logKeyBucket, bucketName), zap.Error(err))
-			return time.Time{}, err
-		}
-		if !t.IsZero() {
-			r.watermarks[key] = t
-			return t, nil
-		}
-	}
-	start := now.Add(-r.LookbackWindow)
-	if err := r.advance(ctx, backendID, bucketName, start); err != nil {
-		return time.Time{}, err
-	}
-	r.log().Info("replication window opened for a bucket with no watermark",
-		zap.String(logKeyBackend, backendID), zap.String(logKeyBucket, bucketName), zap.Time("watermark", start))
-	return start, nil
-}
-
-// advance moves the watermark forward — first in memory, then to the
-// store. Monotonic: never moves backward. A store failure is returned for the
-// tick to report; the in-memory mark still moves, and the next completed pass
-// writes a later one.
-func (r *ReplicationWorker) advance(ctx context.Context, backendID, bucketName string, t time.Time) error {
-	key := backendID + "/" + bucketName
-	if cur, ok := r.watermarks[key]; ok && !t.After(cur) {
-		return nil
-	}
-	r.watermarks[key] = t
-	if r.Watermarks != nil {
-		if err := r.Watermarks.Advance(ctx, backendID, bucketName, t); err != nil {
-			r.log().Warn("failed to advance watermark",
-				zap.String(logKeyBackend, backendID),
-				zap.String(logKeyBucket, bucketName),
-				zap.Error(err))
-			return err
-		}
-	}
-	return nil
 }
 
 func (r *ReplicationWorker) log() *zap.Logger {

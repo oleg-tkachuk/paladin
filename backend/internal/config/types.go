@@ -869,9 +869,8 @@ type Lifecycle struct {
 // Replication copies objects between backends per BucketReplication
 // (ADR-0050). Optional — `enabled: false` runs no replication at all.
 type Replication struct {
-	Enabled        bool          `yaml:"enabled" json:"enabled"`
-	Interval       time.Duration `yaml:"interval" json:"interval"`
-	LookbackWindow time.Duration `yaml:"lookback_window" json:"lookback_window"`
+	Enabled  bool          `yaml:"enabled" json:"enabled"`
+	Interval time.Duration `yaml:"interval" json:"interval"`
 }
 
 // Housekeeping has no pending_ttl and no delete_orphaned_parts: both were read

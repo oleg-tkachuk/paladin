@@ -15,6 +15,7 @@ import (
 type replicaStore interface {
 	Replicate(ctx context.Context, src, dst objecth.Location, sizeBytes int64) error
 	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (string, int64, string, string, error)
+	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error
 }
 
 // storageReplicator adapts the storage router to worker.StorageReplicator,
@@ -66,6 +67,21 @@ func (r storageReplicator) SourceMissing(ctx context.Context, src worker.Replica
 		return true, nil
 	default:
 		return false, err
+	}
+}
+
+// DeleteReplica deletes a purged object's replica. S3 answers a delete of an
+// absent key with success, so a replica already gone is no failure; a failure
+// the SDK would retry is worker.ErrCopyTransient.
+func (r storageReplicator) DeleteReplica(ctx context.Context, dst worker.ReplicationTarget) error {
+	err := r.s.DeleteObject(ctx, dst.BackendID, dst.BucketName, dst.TenantID, dst.Collection, dst.Key)
+	switch {
+	case err == nil:
+		return nil
+	case r.isTransient(err):
+		return fmt.Errorf("%w: %w", worker.ErrCopyTransient, err)
+	default:
+		return err
 	}
 }
 

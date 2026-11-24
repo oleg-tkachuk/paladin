@@ -67,6 +67,12 @@ type Querier interface {
 	// DO NOTHING + RETURNING tells us in one round-trip whether this is the
 	// first sighting (claimed = true → process) or a duplicate (false → skip).
 	ClaimIngestedEvent(ctx context.Context, eventID string, source string, type_ string, subject *string) (string, error)
+	// Claims up to limit of a bucket's due rows for one worker, oldest first.
+	// FOR UPDATE SKIP LOCKED and the claim's lease keep concurrent worker
+	// replicas on disjoint rows; a write that marks a claimed row due again
+	// leaves the lease alone, so one worker handles a location at a time. A
+	// tenant in the trash is frozen: its rows wait for a restore or a purge.
+	ClaimReplicas(ctx context.Context, lease pgtype.Interval, bucketID pgtype.UUID, claimLimit int32) ([]ClaimReplicasRow, error)
 	ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// The collection whose policy layer the name tenants/{tenant}/collections/{name} addresses.
 	CollectionIDForPolicy(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error)
@@ -256,6 +262,9 @@ type Querier interface {
 	// In 'provisioning' it only takes the row's lock: the count is taken under
 	// it (LockStorageMigrationForCount), after this purge is visible.
 	ForgetPurgedFromStorageMigrationCount(ctx context.Context, objectState string, tenantID pgtype.UUID, collectionName string, path string) error
+	// Drops the row of an object that is gone or left the bucket, unless a write
+	// took the location since the claim: the row is then the new object's.
+	ForgetReplica(ctx context.Context, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string, generation int64) (int64, error)
 	// Drops what an attempt's catch-up recorded (migration 116): at the start of
 	// an attempt's copy, which copies everything again, and once it completes.
 	ForgetStorageMigrationCaughtUp(ctx context.Context, tenantID pgtype.UUID) error
@@ -317,7 +326,12 @@ type Querier interface {
 	// platform admin's cross-tenant read sees every row.
 	GetQuotaByID(ctx context.Context, id pgtype.UUID) (Quota, error)
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
-	GetReplicationWatermark(ctx context.Context, name string, name_2 string) (pgtype.Timestamptz, error)
+	// The claimed rows' objects as they are now, with the bucket each one's
+	// collection is bound to and the byte write a replica of it must match:
+	// bytes_written_at, which every promote sets, or for a row promoted before
+	// migration 111 its first commit. Every column cel.ObjectVars projects, so
+	// the bucket's filter sees what a ListObjects filter sees.
+	GetReplicaObjects(ctx context.Context, ids []pgtype.UUID) ([]GetReplicaObjectsRow, error)
 	GetStorageBackendV2(ctx context.Context, name string) (GetStorageBackendV2Row, error)
 	// The latest, as StartStorageMigration reads it: a start used to be able to
 	// leave a tenant with two rows (see LockTenantForStorageMigration).
@@ -915,6 +929,10 @@ type Querier interface {
 	// in place whichever promotes the object first: this upload's completion, or
 	// the storage event, which carries no checksum.
 	RecordCompositeChecksum(ctx context.Context, checksum *string, partSizeBytes *int64, objectID pgtype.UUID) (int64, error)
+	// Records the replica a copy wrote, and settles the row unless a write
+	// marked it due again since the claim (generation): that write is copied by
+	// a later pass.
+	RecordReplicaCopy(ctx context.Context, replicaBucketID pgtype.UUID, replicaObjectID pgtype.UUID, replicaWrittenAt pgtype.Timestamptz, replicaSizeBytes *int64, generation int64, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string) error
 	// Records the catch-up's copy of an object: the write it took and the ETag
 	// the target reported for it. Only while the migration is as the worker read
 	// it: a stale worker's copy is not taken for the current attempt's.
@@ -929,13 +947,12 @@ type Querier interface {
 	// Undoes a claim whose handling failed, so the broker's redelivery is
 	// handled rather than skipped as a duplicate.
 	ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error
+	// Gives a claimed row back untouched, due as it was: a pass that stopped
+	// before reaching it, or a dry run.
+	ReleaseReplica(ctx context.Context, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string) error
 	// Forgets a retired slug and says whose it was; no row when it was not
 	// retired.
 	ReleaseTenantSlug(ctx context.Context, slug string) (pgtype.UUID, error)
-	// The database's clock, which stamps objects.committed_at: the replication
-	// worker's horizon is measured on it, so no clock skew between a worker pod
-	// and the database moves the watermark past rows not yet stamped.
-	ReplicationClock(ctx context.Context) (pgtype.Timestamptz, error)
 	// Records a RUNNING operation's latest {processed, total} snapshot. Its own
 	// column, so the arguments in metadata survive the whole run — the stale
 	// reclaimer used to fail an operation whose metadata had been overwritten by
@@ -978,6 +995,10 @@ type Querier interface {
 	// still 'failed' — the compare-and-set that, behind the tenant lock, lets
 	// exactly one of two concurrent retries through.
 	RetryFailedStorageMigration(ctx context.Context, cleanupRetentionSeconds int64, iD pgtype.UUID, sourceBackendName string, sourceBucketName string, targetBackendName string, targetBucketName string) (TenantStorageMigration, error)
+	// Records a failed attempt and puts the row off by the worker's backoff,
+	// unless a write marked it due again since the claim: that write is tried
+	// afresh.
+	RetryReplica(ctx context.Context, generation int64, lastError string, delay pgtype.Interval, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string) error
 	// Idempotent: a token already revoked keeps its revoked_at.
 	RevokeAPIToken(ctx context.Context, id pgtype.UUID) error
 	// Removes a grant unless the tenant still has a collection in the bucket: the
@@ -1031,6 +1052,14 @@ type Querier interface {
 	RotateStorageBackendCredentials(ctx context.Context, name string, credentialsSecretRef string, column3 int64) (int64, error)
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
+	// Per-object replication state (migration 121, ADR-0050). Every query here
+	// runs on the worker's cross-tenant connection.
+	// Queues every AVAILABLE object of the bucket's collections, once: the
+	// replication_seeds row is written by the same statement, and a bucket that
+	// has one is left alone. The triggers queue every write from then on; a
+	// change to the bucket's replication settings drops the seed row, so the
+	// bucket is queued again. Returns how many rows it queued.
+	SeedReplication(ctx context.Context, bucketID pgtype.UUID) (int64, error)
 	SetBucketConstraints(ctx context.Context, name string, name_2 string, constraints []byte, expectedVersion int64) (int64, error)
 	SetBucketLifecycle(ctx context.Context, name string, name_2 string, lifecycleRules []byte, expectedVersion int64) (int64, error)
 	SetBucketObjectLock(ctx context.Context, name string, name_2 string, objectLockEnabled bool, objectLockDefaultMode *ObjectLockMode, objectLockDefaultRetentionSeconds int64, expectedVersion int64) (int64, error)
@@ -1125,6 +1154,10 @@ type Querier interface {
 	// nonexistent bucket would be told it succeeded.
 	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) (int64, error)
 	SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error)
+	// Settles a row the worker decided without writing a replica — filtered
+	// out, already current, its object trashed, its source confirmed missing —
+	// unless a write marked it due again since the claim.
+	SettleReplica(ctx context.Context, generation int64, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string) error
 	// Sets deleted_at on an active row. expected_version=0 means
 	// "no OCC guard" (legacy / scripted path); a non-zero value enforces
 	// the match. Updates resource_version + updated_at so audit reflects
@@ -1212,10 +1245,6 @@ type Querier interface {
 	// Same OCC contract as UpsertTenantQuota. bucket_quotas has no RLS
 	// (044_bucket_quotas.sql): the handler's role and Cedar checks gate the write.
 	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64, expectedVersion int64) (int64, error)
-	// Monotonic upsert: never moves the watermark backwards. Concurrent
-	// replicas may try to advance with stale values; the GREATEST() guard
-	// preserves the highest seen committed_at.
-	UpsertReplicationWatermark(ctx context.Context, name string, name_2 string, watermark pgtype.Timestamptz) error
 	// Keyed by backend NAME: callers are health probes that know the config key.
 	// Record the outcome of a TestBackend probe (the schema baseline (001_initial_schema.sql)). DERIVED, advisory
 	// state in its own 1:1 table — writing it does NOT touch storage_backends, so

@@ -387,59 +387,32 @@ the same commit. Treat this file like a runtime invariant.
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### Replication does not propagate deletes
+### Operators cannot see or redrive failed replication objects
 
 - **Status:** Deferred.
-- **Reason:** the replication worker ([ADR-0050](docs/adr/0050-bucket-replication-copies-between-any-backends.md))
-  copies objects promoted after its watermark; an object deleted or purged
-  from the source stays in the destination bucket.
-- **Definition of Done:** a permanent delete or purge of a replicated object
-  removes its replica too (or a per-bucket setting says it is kept, on
-  purpose), through the purge outbox so a failed delete is retried, and a
-  test deletes a replicated object and finds its replica gone.
-- **Blockers:** whether a replica is a mirror or a retention copy — a product
-  decision.
-
-### Replication misses an object whose bytes change without a new commit
-
-- **Status:** Deferred.
-- **Reason:** the replication worker selects objects by `committed_at`, which
-  the promote stamps only on the move from `PENDING`. A later write that
-  changes an `AVAILABLE` object's bytes in place — an event-driven re-promote
-  with a newer sequencer, a version restore, a copy onto an existing key —
-  keeps the old stamp, so the replica keeps the old bytes.
-- **Definition of Done:** a change of an object's bytes is visible to the
-  worker — a stamp the worker selects on moves with every byte write, or the
-  per-object replication state records the version it copied — and a test
-  overwrites a replicated object and finds the replica updated.
+- **Reason:** the replication worker keeps per-object state
+  ([ADR-0050](docs/adr/0050-bucket-replication-copies-between-any-backends.md)):
+  a failing object's row in `object_replicas` holds its attempts, last error
+  and next attempt, and backs off to six hours. Nothing outside the database
+  reads it: the console and the admin API show no replication state, and an
+  operator who fixed a cause waits out the backoff.
+- **Definition of Done:** an admin RPC lists a bucket's failed replicas
+  (key, attempts, last error, next attempt) and redrives them (due now), on a
+  standard contract the console shows, with tests for both.
 - **Blockers:** none.
 
-### A streamed replica carries only the content type
+### A replica outlives a filter that stops matching it
 
 - **Status:** Deferred.
-- **Reason:** across backends `ObjectRouter.Replicate` streams the source into
-  a multipart upload that sets the content type alone; a public collection's
-  `Cache-Control` and any other stored metadata are not copied. A server-side
-  copy on one backend keeps them.
-- **Definition of Done:** the streamed path copies the source's
-  `Cache-Control`, `Content-Disposition` and user metadata to the replica, and
-  a test compares a cross-backend replica's headers with its source's.
-- **Blockers:** none.
-
-### A held replication object makes every later pass copy again
-
-- **Status:** Deferred.
-- **Reason:** the replication watermark is one timestamp per bucket. While
-  one object fails to copy for good, the watermark stays below it and each
-  pass copies again every object after it, overwriting the replicas with the
-  same bytes; and each pass walks every object of every bound collection,
-  whatever the watermark.
-- **Definition of Done:** replication keeps per-object state — copied at
-  which version, or failed and why — so a pass copies only what is new or
-  changed, reads only rows after the watermark, and an operator can list and
-  redrive the failed ones; a test holds one object and counts one copy of
-  each other object across passes.
-- **Blockers:** none.
+- **Reason:** the replication filter decides what is copied, not what is
+  kept: an object whose tags change so the filter no longer matches keeps its
+  replica, as does every replica in a destination the bucket no longer names
+  and the replica of an object whose collection is rebound elsewhere.
+- **Definition of Done:** a decision — mirror (delete what the filter or the
+  destination no longer selects) or keep — written into ADR-0050, and if
+  mirror, the worker deletes such replicas with a test for each case.
+- **Blockers:** whether a replica of a deselected object is still wanted — a
+  product decision; a purge already deletes its replica.
 
 ### `ResetPassword` — self-service email delivery
 

@@ -151,7 +151,7 @@ that long has passed since its purge; unset, it stays until released.
 `oauth_clients`, `oauth_authorization_codes`.
 
 **Storage topology** — `storage_backends`, `storage_backend_health`,
-`storage_backend_features`, `buckets`, `bucket_grants`, `replication_state`. A bucket row can exist before the physical
+`storage_backend_features`, `buckets`, `bucket_grants`, `replication_seeds`. A bucket row can exist before the physical
 bucket does: `provision_state` carries the asynchronous provisioning.
 
 **Namespaces** — `collections`. A collection is a logical namespace bound to
@@ -161,7 +161,8 @@ boundary and carry ids inside.
 
 **Objects** — `objects`, `object_versions`, `object_locks`,
 `multipart_uploads`, `pending_multipart_aborts`, `pending_purges`,
-`erased_objects`. State is the
+`erased_objects`, `object_replicas` (the replication queue and record, one
+row per replica location, which triggers on `objects` mark due; `121`). State is the
 `object_state` enum: `PENDING` → `AVAILABLE`, and `DELETED` for soft
 deletion. An object that cannot become available is deleted, not kept in a
 state of its own (`statemachine.DiscardFailed`; FAILED was dropped in 079). `objects.current_version_id` carries a deferred composite FK
