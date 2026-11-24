@@ -38,6 +38,7 @@ SELECT 'pending_multipart_aborts'::text, count(*)::bigint
 UNION ALL
 SELECT 'objects'::text, count(*)::bigint
     FROM objects WHERE placement_bucket_id IN (SELECT id FROM target)
+                    OR upload_bucket_id IN (SELECT id FROM target)
 `
 
 type CountBucketReferencesRow struct {
@@ -56,6 +57,8 @@ type CountBucketReferencesRow struct {
 // Rows come back for relations with a zero count too; the caller decides what
 // to do with those. tenant_storage_migrations carries two of the constraints
 // (source and target), so it is matched on both columns and reported once.
+// An object holds the bucket it is placed in and the one its upload URL is
+// anchored to (migration 132).
 func (q *Queries) CountBucketReferences(ctx context.Context, name string, name_2 string) ([]CountBucketReferencesRow, error) {
 	rows, err := q.db.Query(ctx, countBucketReferences, name, name_2)
 	if err != nil {

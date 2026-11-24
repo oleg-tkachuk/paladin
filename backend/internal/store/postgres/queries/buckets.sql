@@ -88,5 +88,8 @@ UNION ALL
 SELECT 'pending_multipart_aborts'::text, count(*)::bigint
     FROM pending_multipart_aborts WHERE bucket_id IN (SELECT id FROM target)
 UNION ALL
+-- An object holds the bucket it is placed in and the one its upload URL is
+-- anchored to (migration 132).
 SELECT 'objects'::text, count(*)::bigint
-    FROM objects WHERE placement_bucket_id IN (SELECT id FROM target);
+    FROM objects WHERE placement_bucket_id IN (SELECT id FROM target)
+                    OR upload_bucket_id IN (SELECT id FROM target);

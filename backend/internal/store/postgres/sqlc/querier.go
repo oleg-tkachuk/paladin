@@ -94,6 +94,8 @@ type Querier interface {
 	// Rows come back for relations with a zero count too; the caller decides what
 	// to do with those. tenant_storage_migrations carries two of the constraints
 	// (source and target), so it is matched on both columns and reported once.
+	// An object holds the bucket it is placed in and the one its upload URL is
+	// anchored to (migration 132).
 	CountBucketReferences(ctx context.Context, name string, name_2 string) ([]CountBucketReferencesRow, error)
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState, liveOnly bool) (int64, error)
