@@ -238,9 +238,71 @@ function sameChoice(a: readonly string[], b: readonly string[]): boolean {
 function parseFacet<R>(raw: string | null, facet: Facet<R>): readonly string[] {
   if (raw === null) return facet.initial ?? NO_CHOICE;
   if (raw === FACET_ANY && facet.initial?.length) return NO_CHOICE;
-  const values = [...new Set(raw.split(VALUE_SEPARATOR))].filter(Boolean);
-  if (!facet.options) return values;
-  return facet.options.map((o) => o.value).filter((v) => values.includes(v));
+  return knownValues(facet, raw.split(VALUE_SEPARATOR));
+}
+
+/**
+ * The answers of `values` the facet can hold, once each: all of them without
+ * a fixed vocabulary, else the vocabulary's, in its order.
+ */
+function knownValues<R>(
+  facet: Facet<R>,
+  values: readonly string[],
+): readonly string[] {
+  const unique = [...new Set(values)].filter(Boolean);
+  if (!facet.options) return unique;
+  return facet.options.map((o) => o.value).filter((v) => unique.includes(v));
+}
+
+/**
+ * Whether the URL names a choice in any of the table's facets — "any"
+ * included, which is a choice of no narrowing, not the absence of one.
+ */
+export function urlNamesFacets<R>(
+  params: URLSearchParams,
+  facets: readonly Facet<R>[],
+  url: TableUrl,
+): boolean {
+  return facets.some((f) => params.has(facetParam(f, url)));
+}
+
+/**
+ * The choices a list opens on. The URL wins: a link or a reload naming any
+ * facet opens as it names them, and the facets it leaves out at their
+ * initial choice. Only a URL naming none takes the choices the user saved,
+ * each read as a URL's would be, a facet saved without one at its initial.
+ */
+export function openingSelection<R>(
+  params: URLSearchParams,
+  facets: readonly Facet<R>[],
+  url: TableUrl,
+  saved: FacetSelection | undefined,
+): FacetSelection {
+  if (!saved || urlNamesFacets(params, facets, url)) {
+    return parseFacets(params, facets, url);
+  }
+  return Object.fromEntries(
+    facets.map((f) => {
+      const values = saved[f.id];
+      return [f.id, values ? knownValues(f, values) : (f.initial ?? NO_CHOICE)];
+    }),
+  );
+}
+
+/**
+ * The choices worth saving for the next visit: each facet moved from its
+ * initial choice, emptied ones included. None moved is nothing to save.
+ */
+export function rememberedSelection<R>(
+  facets: readonly Facet<R>[],
+  selection: FacetSelection,
+): Record<string, string[]> | undefined {
+  const moved: Record<string, string[]> = {};
+  for (const f of facets) {
+    const values = chosen(selection, f.id);
+    if (!sameChoice(values, f.initial ?? NO_CHOICE)) moved[f.id] = [...values];
+  }
+  return Object.keys(moved).length ? moved : undefined;
 }
 
 /** Every facet's choices as the URL names them. */

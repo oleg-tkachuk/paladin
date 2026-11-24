@@ -5,7 +5,11 @@
 // owns the query and the filter, whether it filters in the browser
 // (useTableView) or on the server, so every table looks and behaves alike.
 import type React from "react";
-import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import {
+  BookmarkIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
+} from "@heroicons/react/24/outline";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,9 +18,15 @@ import { TablePrefsMenu } from "@/components/ui/TablePrefsMenu";
 import { FacetFilter } from "@/components/ui/FacetFilter";
 import { ExportCsvButton } from "@/components/ui/ExportCsvButton";
 import type { CsvExport } from "@/lib/table/csv";
-import type { FacetControl } from "@/hooks/useTableFacets";
+import type { FacetControl, SavedFacets } from "@/hooks/useTableFacets";
+import { CLEAR_FILTERS_LABEL } from "@/components/ui/EmptyState";
 import { TABLE_SEARCH_ATTR } from "@/lib/tableKeys";
 import { FROSTED, STICKY_BELOW_TOPBAR } from "@/lib/ui/states";
+
+/** Says the list opened on facet choices saved from an earlier visit. */
+export const SAVED_FACETS_LABEL = "Saved filters";
+const SAVED_FACETS_HINT =
+  "The filters chosen on an earlier visit open this list until cleared.";
 
 /** One choice of a toolbar filter. */
 export interface ToolbarFilterOption<V extends string> {
@@ -43,6 +53,11 @@ interface TableToolbarProps<V extends string> {
    * A page offers these or `filter`, not both.
    */
   facets?: readonly FacetControl[];
+  /**
+   * The facet choices saved from an earlier visit, from useTableFacets: the
+   * bar says they are on and clears them. Null or omitted, it says nothing.
+   */
+  savedFacets?: SavedFacets | null;
   /** The rows showing and the rows loaded; omitted, no count shows. */
   count?: { shown: number; total: number };
   /** Further filters, such as a select, set between the search and the rest. */
@@ -64,6 +79,7 @@ export function TableToolbar<V extends string>({
   searchLabel,
   filter,
   facets,
+  savedFacets,
   count,
   children,
   csv,
@@ -108,6 +124,22 @@ export function TableToolbar<V extends string>({
       {facets?.map(({ id, ...facet }) => (
         <FacetFilter key={id} {...facet} />
       ))}
+      {savedFacets ? (
+        <span
+          className="inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground"
+          title={SAVED_FACETS_HINT}
+        >
+          <BookmarkIcon className="size-3.5" />
+          {SAVED_FACETS_LABEL}
+          <button
+            type="button"
+            onClick={savedFacets.clear}
+            className="ml-1 font-medium text-foreground underline-offset-2 hover:underline"
+          >
+            {CLEAR_FILTERS_LABEL}
+          </button>
+        </span>
+      ) : null}
       {filter ? (
         <div
           role="group"

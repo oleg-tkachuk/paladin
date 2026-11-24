@@ -26,6 +26,12 @@ const TablePrefsSchema = z.object({
   pageSize: z.optional(z.literal(PAGE_SIZES)),
   /** Table, tiles or summary (lib/table/viewMode). */
   view: z.optional(z.enum(VIEW_MODES)),
+  /**
+   * The facet choices the list opens with when its URL names none, by facet
+   * id (lib/table/facets rememberedSelection). Only the facets the user moved
+   * from their initial choice.
+   */
+  facets: z.optional(z.record(z.string(), z.array(z.string()))),
 });
 
 export type TablePrefs = z.infer<typeof TablePrefsSchema>;

@@ -154,6 +154,26 @@ describe("TableToolbar", () => {
     ).toEqual([null, "Filter by state", "Filter by health"]);
   });
 
+  it("says when saved filters are on, and clears them", () => {
+    const clear = vi.fn();
+    const bar = (saved: { clear: () => void } | null) => (
+      <TableToolbar
+        query=""
+        onQueryChange={() => {}}
+        placeholder="Search…"
+        searchLabel="Search rows"
+        savedFacets={saved}
+      />
+    );
+    const { rerender } = render(bar(null));
+    expect(screen.queryByText("Saved filters")).toBeNull();
+
+    rerender(bar({ clear }));
+    expect(screen.getByText("Saved filters")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(clear).toHaveBeenCalledOnce();
+  });
+
   describe("export", () => {
     afterEach(() => {
       vi.restoreAllMocks();

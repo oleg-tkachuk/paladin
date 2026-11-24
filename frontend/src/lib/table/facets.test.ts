@@ -10,7 +10,10 @@ import {
   filterByFacets,
   groupFacetCounts,
   initialSelection,
+  openingSelection,
   parseFacets,
+  rememberedSelection,
+  urlNamesFacets,
   serverCounting,
   type Facet,
 } from "./facets";
@@ -225,5 +228,79 @@ describe("serverCounting", () => {
     ["no counts, inexact", [], false, FACET_COUNTING.withheld],
   ])("reads %s", (_, counts, exact, want) => {
     expect(serverCounting(counts, exact)).toBe(want);
+  });
+});
+
+describe("remembered choices", () => {
+  const params = (qs: string) => new URLSearchParams(qs);
+  const SAVED = { state: ["off"], tag: ["eu"] };
+
+  it.each([
+    ["", PAGE_TABLE, false],
+    ["q=x&sort=id", PAGE_TABLE, false],
+    ["state=off", PAGE_TABLE, true],
+    ["tag=eu", PAGE_TABLE, true],
+    // "any" is a choice: the URL says no narrowing, on purpose.
+    ["state=any", PAGE_TABLE, true],
+    // Another table's facet is not this one's.
+    ["state=off", GRANTS, false],
+    ["grants.tag=eu", GRANTS, true],
+  ])("a URL ?%s names a facet of the table: %s", (qs, url, want) => {
+    expect(urlNamesFacets(params(qs), FACETS, url as TableUrl)).toBe(want);
+  });
+
+  // URL wins; the saved choices fill in only when it names none.
+  it.each([
+    ["no URL facet, saved", "", SAVED, { state: ["off"], tag: ["eu"] }],
+    ["no URL facet, nothing saved", "", undefined, { state: ["on"], tag: [] }],
+    [
+      "a search alone is not a facet",
+      "q=x",
+      SAVED,
+      { state: ["off"], tag: ["eu"] },
+    ],
+    [
+      "the URL names one facet",
+      "tag=prod",
+      SAVED,
+      { state: ["on"], tag: ["prod"] },
+    ],
+    ["the URL names any", "state=any", SAVED, { state: [], tag: [] }],
+    [
+      "a facet not saved opens at its initial",
+      "",
+      { tag: ["eu"] },
+      { state: ["on"], tag: ["eu"] },
+    ],
+    [
+      "a saved answer the vocabulary dropped is dropped",
+      "",
+      { state: ["gone", "off", "off"] },
+      { state: ["off"], tag: [] },
+    ],
+    [
+      "a saved emptied facet opens emptied",
+      "",
+      { state: [] },
+      { state: [], tag: [] },
+    ],
+  ])("%s", (_, qs, saved, want) => {
+    expect(openingSelection(params(qs), FACETS, PAGE_TABLE, saved)).toEqual(
+      want,
+    );
+  });
+
+  it.each([
+    ["at the initial choice", { state: ["on"], tag: [] }, undefined],
+    ["moved in one facet", { state: ["on"], tag: ["eu"] }, { tag: ["eu"] }],
+    ["emptied from its initial", { state: [], tag: [] }, { state: [] }],
+    [
+      "moved in both, in any order",
+      { state: ["off", "on"], tag: ["eu"] },
+      { state: ["off", "on"], tag: ["eu"] },
+    ],
+    ["reordered is not moved", { state: ["on"] }, undefined],
+  ])("saves the choices %s", (_, selection, want) => {
+    expect(rememberedSelection(FACETS, selection)).toEqual(want);
   });
 });
