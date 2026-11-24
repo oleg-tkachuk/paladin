@@ -72,11 +72,27 @@ import { COLLECTION_SORT_COLUMNS, sortCollections } from "@/lib/collectionSort";
 import { SortableHead } from "@/components/ui/SortHeader";
 import { BucketNameLink } from "@/components/features/buckets/BucketNameLink";
 import { TableScope } from "@/components/ui/TableScope";
+import {
+  collectionColumns,
+  TENANT_COLUMN,
+} from "@/components/features/collections/collectionColumns";
+import { exportColumns } from "@/lib/table/columns";
+import { csvExport, scopedListName } from "@/lib/table/csv";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "tenantCollections";
 
 const SORT_COLUMNS = COLLECTION_SORT_COLUMNS;
+
+/** The list's name in an export, after the tenant it is in. */
+const LIST_NAME = "collections";
+
+/**
+ * The table's columns. Every row is this tenant's, so the tenant column
+ * shows nowhere and is not exported.
+ */
+const COLUMNS = collectionColumns(new Map());
+const EXPORTED = exportColumns(COLUMNS, [TENANT_COLUMN]);
 type SortColumn = (typeof SORT_COLUMNS)[number];
 
 export default function TenantCollectionsPage() {
@@ -236,6 +252,11 @@ export default function TenantCollectionsPage() {
             searchLabel="Search collections"
             placeholder="Search by name or display label…"
             facets={facets.controls}
+            csv={csvExport(
+              scopedListName(tenant.slug || tenant.tenantId, LIST_NAME),
+              EXPORTED,
+              sorted,
+            )}
             count={{ shown: sorted.length, total: list.length }}
             actions={
               <>
@@ -258,28 +279,28 @@ export default function TenantCollectionsPage() {
           <TableHeader>
             <TableRow>
               <SortableHead
-                label="Collection"
+                label={COLUMNS.name.header}
                 column="name"
                 current={sort}
                 onSort={handleSort}
               />
               <SortableHead
                 className="hidden @xs:table-cell"
-                label="Display name"
+                label={COLUMNS.displayName.header}
                 column="displayName"
                 current={sort}
                 onSort={handleSort}
               />
               <SortableHead
                 className="hidden @md:table-cell"
-                label="Bucket"
+                label={COLUMNS.bucket.header}
                 column="bucket"
                 current={sort}
                 onSort={handleSort}
               />
               <UsageHeads current={sort} onSort={handleSort} />
               <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{COLUMNS.actions.header}</span>
               </TableHead>
             </TableRow>
           </TableHeader>

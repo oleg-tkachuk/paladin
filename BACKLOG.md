@@ -827,6 +827,28 @@ the same commit. Treat this file like a runtime invariant.
 
 ## UI / Admin Console
 
+### CSV export on the remaining lists
+
+- **Status:** Deferred.
+- **Reason:** the toolbar's export (`csv` on TableToolbar, columns from
+  `lib/table/columns`) is wired on the lists that load whole and render a
+  plain table: users, tenants, trash, storage backends, buckets (platform,
+  tenant, backend), collections (platform, tenant) and M2M tokens. The other
+  toolbars have none yet. The server-paged lists — audit (which has its
+  server-side export), operations, capabilities, objects and a collection's
+  trash — hold one page at a time, so "what the list shows" needs a
+  decision: the page loaded, or every page fetched for the file. The
+  objects list also honours hidden columns, which its export must too.
+  The rest are client lists not yet moved onto column definitions: MCP
+  sessions, catalogue and authorizations, connected applications, a user's
+  capabilities, a bucket's grants, a bucket's collections (grouped by
+  tenant), the config view and the topology list.
+- **Definition of Done:** each of those lists declares its columns once,
+  its header reads them, and its toolbar is handed `csvExport` over the rows
+  it shows; the server-paged ones export by the rule decided above, with a
+  test each.
+- **Blockers:** the server-paged rule.
+
 ### Console UX programme (2026-10-19)
 
 The entries below are one programme, agreed on 2026-10-19, to make the console
@@ -843,14 +865,6 @@ left waits on the owner: each entry says what was decided.
   transitions on the state changes that carry meaning, all off under
   `prefers-reduced-motion`.
 - **Blockers:** none — taken up only if asked for.
-
-#### CSV export of a list
-
-- **Status:** Deferred (owner decision 2026-10-19: not now).
-- **Reason:** a list cannot be taken out of the console.
-- **Definition of Done:** CSV export of what a list shows, in its order and
-  with its filters, from the rows the shared table hooks hold.
-- **Blockers:** none — taken up when it is asked for.
 
 #### Facet choices remembered between visits
 

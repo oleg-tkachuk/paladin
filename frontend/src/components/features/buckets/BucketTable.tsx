@@ -34,8 +34,12 @@ import { cn } from "@/lib/utils";
 
 import { BucketTenancyBadge } from "./BucketTenancyBadge";
 import { ProvisionStateBadge } from "./ProvisionStateBadge";
-import { PublicReadBadge } from "./PublicReadBadge";
+import { PUBLIC_READ_LABEL, PublicReadBadge } from "./PublicReadBadge";
+import type { TableColumns } from "@/lib/table/columns";
 import { TenantHoverCard } from "@/components/features/hover/ResourceHoverCards";
+
+/** A list of buckets as its export is named, after the resource it is in. */
+export const BUCKETS_LIST = "buckets";
 
 /** The columns a bucket list sorts by. */
 export const BUCKET_SORT_COLUMNS = ["backend", "name"] as const;
@@ -128,6 +132,41 @@ export function tenantLabel(
   return t?.displayName || t?.slug || id;
 }
 
+/** A bucket's state as its badges say it: "Ready", "Ready public". */
+function bucketStateText(b: Bucket): string {
+  const state = provisionStatus(b.provisionState).label;
+  return b.publicRead ? `${state} ${PUBLIC_READ_LABEL}` : state;
+}
+
+/**
+ * A bucket list's columns, which its header and an export both read. The
+ * table leaves out the backend when every row shares one; an export keeps it.
+ */
+export function bucketColumns(
+  tenants: ReadonlyMap<string, TenantLabel>,
+): TableColumns<
+  Bucket,
+  BucketSortColumn | "owner" | "shared" | "state" | "actions"
+> {
+  return {
+    name: { header: "Bucket", text: (b) => b.bucketId },
+    backend: { header: "Backend", text: (b) => b.backendId },
+    owner: {
+      header: "Owner",
+      text: (b) => tenantLabel(tenants, b.ownerTenantId),
+    },
+    shared: {
+      header: "Shared with",
+      text: (b) =>
+        b.grantedTenantIds.length === 0
+          ? NOT_SHARED_LABEL
+          : b.grantedTenantIds.map((id) => tenantLabel(tenants, id)).join(", "),
+    },
+    state: { header: "State", text: bucketStateText },
+    actions: { header: "Actions" },
+  };
+}
+
 /** Whether the rows span more than one backend. */
 export function spansBackends(buckets: readonly Bucket[]): boolean {
   return new Set(buckets.map((b) => b.backendId)).size > 1;
@@ -153,6 +192,7 @@ export function BucketTable({
   rowActions,
 }: BucketTableProps) {
   const showBackend = spansBackends(buckets);
+  const cols = bucketColumns(tenants);
   const columns = FIXED_COLUMNS + (showBackend ? 1 : 0) + (rowActions ? 1 : 0);
 
   const head = (label: string, column: BucketSortColumn, className = "") =>
@@ -173,16 +213,17 @@ export function BucketTable({
       <Table>
         <TableHeader>
           <TableRow>
-            {head("Bucket", "name")}
-            {showBackend && head("Backend", "backend", "hidden @md:table-cell")}
-            <StaticHead>Owner</StaticHead>
+            {head(cols.name.header, "name")}
+            {showBackend &&
+              head(cols.backend.header, "backend", "hidden @md:table-cell")}
+            <StaticHead>{cols.owner.header}</StaticHead>
             <StaticHead className="hidden @lg:table-cell">
-              Shared with
+              {cols.shared.header}
             </StaticHead>
-            <StaticHead className="@md:w-40">State</StaticHead>
+            <StaticHead className="@md:w-40">{cols.state.header}</StaticHead>
             {rowActions && (
               <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{cols.actions.header}</span>
               </TableHead>
             )}
           </TableRow>

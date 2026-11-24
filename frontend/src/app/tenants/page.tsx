@@ -62,6 +62,8 @@ import { noticeFromLabels } from "@/lib/notice";
 import { StatusBar, tallyStatus } from "@/components/ui/StatusBar";
 import { ViewModeSwitcher } from "@/components/ui/ViewModeSwitcher";
 import { useTableViewMode } from "@/hooks/useTableViewMode";
+import { exportColumns, type TableColumns } from "@/lib/table/columns";
+import { csvExport } from "@/lib/table/csv";
 import { plainLabels, tenantStatus } from "./tenantView";
 import { TenantSummary, TenantTiles } from "./TenantViews";
 
@@ -70,6 +72,25 @@ const TABLE_ID = "tenants";
 
 const SORT_COLUMNS = ["slug", "displayName"] as const;
 type SortColumn = (typeof SORT_COLUMNS)[number];
+
+/** The table's columns, which its header and an export both read. */
+const COLUMNS: TableColumns<
+  Tenant,
+  SortColumn | "bucket" | "labels" | "id" | "actions"
+> = {
+  slug: { header: "Slug", text: (t) => t.slug },
+  displayName: { header: "Display name", text: (t) => t.displayName },
+  bucket: { header: "Default bucket", text: (t) => t.defaultBucket },
+  labels: {
+    header: "Labels",
+    text: (t) =>
+      plainLabels(t.labels)
+        .map(([k, v]) => `${k}=${String(v)}`)
+        .join(" "),
+  },
+  id: { header: "Tenant ID", text: (t) => t.tenantId },
+  actions: { header: "Actions" },
+};
 
 /**
  * Whether a tenant has a default bucket — one without cannot provision a
@@ -225,6 +246,7 @@ export default function TenantsPage() {
             searchLabel="Search tenants"
             placeholder="Search tenants by ID or name…"
             facets={facets.controls}
+            csv={csvExport(TABLE_ID, exportColumns(COLUMNS), filtered)}
             count={
               tenants.length > 0
                 ? { shown: filtered.length, total: tenants.length }
@@ -254,26 +276,28 @@ export default function TenantsPage() {
             <TableRow>
               <SortableHead
                 className="@md:w-55"
-                label="Slug"
+                label={COLUMNS.slug.header}
                 column="slug"
                 current={sort}
                 onSort={handleSort}
               />
               <SortableHead
-                label="Display name"
+                label={COLUMNS.displayName.header}
                 column="displayName"
                 current={sort}
                 onSort={handleSort}
               />
               <StaticHead className="hidden @4xl:table-cell">
-                Default bucket
+                {COLUMNS.bucket.header}
               </StaticHead>
-              <StaticHead className="hidden @md:table-cell">Labels</StaticHead>
+              <StaticHead className="hidden @md:table-cell">
+                {COLUMNS.labels.header}
+              </StaticHead>
               <StaticHead className="hidden @5xl:table-cell w-70">
-                Tenant ID
+                {COLUMNS.id.header}
               </StaticHead>
               <TableHead className="w-12 text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{COLUMNS.actions.header}</span>
               </TableHead>
             </TableRow>
           </TableHeader>

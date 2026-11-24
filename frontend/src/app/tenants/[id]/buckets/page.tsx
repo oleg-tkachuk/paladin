@@ -61,11 +61,15 @@ import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDi
 import {
   BucketTable,
   BUCKET_FACETS,
+  BUCKETS_LIST,
+  bucketColumns,
   tenantLabelMap,
   BUCKET_SORT_COLUMNS,
   type BucketSortColumn,
 } from "@/components/features/buckets/BucketTable";
 import { useTableFacets } from "@/hooks/useTableFacets";
+import { exportColumns } from "@/lib/table/columns";
+import { csvExport, scopedListName } from "@/lib/table/csv";
 import { useTablePage } from "@/hooks/useTablePage";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { useTenants } from "@/hooks/useTenants";
@@ -223,6 +227,11 @@ export default function TenantBucketsPage() {
         searchLabel="Search buckets"
         placeholder="Search by name or display label…"
         facets={facets.controls}
+        csv={csvExport(
+          scopedListName(tenant.slug || tenant.tenantId, BUCKETS_LIST),
+          exportColumns(bucketColumns(tenantNames)),
+          filtered,
+        )}
         actions={
           <>
             <Button

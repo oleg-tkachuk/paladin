@@ -43,6 +43,7 @@ import { BucketDeleteDialog } from "@/components/features/buckets/BucketDeleteDi
 import {
   BucketTable,
   BUCKET_FACETS,
+  bucketColumns,
   tenantLabelMap,
   BUCKET_SORT_COLUMNS,
   type BucketSortColumn,
@@ -52,6 +53,8 @@ import { useTablePage } from "@/hooks/useTablePage";
 import { TablePagination } from "@/components/ui/TablePagination";
 import { bucketHref } from "@/lib/navigation/hrefs";
 import { TableScope } from "@/components/ui/TableScope";
+import { exportColumns } from "@/lib/table/columns";
+import { csvExport } from "@/lib/table/csv";
 
 /** This list's id in the user's table preferences. */
 const TABLE_ID = "buckets";
@@ -182,6 +185,11 @@ export default function BucketsPage() {
           searchLabel="Search buckets"
           placeholder="Search by name or display label…"
           facets={facets.controls}
+          csv={csvExport(
+            TABLE_ID,
+            exportColumns(bucketColumns(tenantNames)),
+            filtered,
+          )}
           count={
             buckets.length > 0
               ? { shown: filtered.length, total: buckets.length }
