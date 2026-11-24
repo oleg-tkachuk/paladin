@@ -125,7 +125,8 @@ func (s *CloudEventsSource) parseEvent(raw []byte) (CloudEvent, error) {
 	subjFields.Sequencer = env.PaladinSequencer
 
 	t, err := time.Parse(time.RFC3339Nano, env.Time)
-	if err != nil {
+	reported := err == nil
+	if !reported {
 		t = time.Now()
 	}
 
@@ -150,6 +151,7 @@ func (s *CloudEventsSource) parseEvent(raw []byte) (CloudEvent, error) {
 		Source:          source,
 		ID:              id,
 		Time:            t,
+		TimeReported:    reported,
 		DataContentType: env.DataContentType,
 		Subject:         env.Subject,
 		Data:            env.Data,

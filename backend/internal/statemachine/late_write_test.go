@@ -39,11 +39,13 @@ func TestLateSkipReason(t *testing.T) {
 
 // A late target write after a rollback is moved only when its event reports
 // a write made after the rebind — the target received the migration's own
-// copies before it — and the row records nothing since the rebind back.
+// copies before it, and the clocks differ by up to LateWriteClockMargin — and
+// the row records nothing since the rebind back.
 func TestLateSkipReasonAfterTheRebindBack(t *testing.T) {
 	rebound := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
 	reboundBack := rebound.Add(time.Hour)
-	beforeRebind, rollingBack, sinceBack := rebound.Add(-time.Minute), rebound.Add(time.Minute), reboundBack.Add(time.Minute)
+	beforeRebind, sinceBack := rebound.Add(-time.Minute), reboundBack.Add(time.Minute)
+	rollingBack, withinMargin := rebound.Add(2*LateWriteClockMargin), rebound.Add(LateWriteClockMargin/2)
 	back := lateMove{movedAt: reboundBack, reboundAt: rebound, back: true}
 	for name, tc := range map[string]struct {
 		row       lateRow
@@ -51,7 +53,9 @@ func TestLateSkipReasonAfterTheRebindBack(t *testing.T) {
 		want      string
 	}{
 		"a write while rolling back":       {lateRow{state: StateAvailable, writtenAt: &beforeRebind, follows: true}, rollingBack, ""},
-		"a write at the rebind":            {lateRow{state: StateAvailable, follows: true}, rebound, ""},
+		"a write at the margin":            {lateRow{state: StateAvailable, follows: true}, rebound.Add(LateWriteClockMargin), ""},
+		"a write at the rebind":            {lateRow{state: StateAvailable, follows: true}, rebound, LateSkipBeforeRebind},
+		"within the clock margin":          {lateRow{state: StateAvailable, follows: true}, withinMargin, LateSkipBeforeRebind},
 		"recorded in the target before it": {lateRow{state: StateAvailable, writtenAt: &rollingBack, follows: true}, rollingBack, ""},
 		"the migration's copy":             {lateRow{state: StateAvailable, writtenAt: &beforeRebind, follows: true}, beforeRebind, LateSkipBeforeRebind},
 		"no time reported":                 {lateRow{state: StateAvailable, follows: true}, time.Time{}, LateSkipNoEventTime},

@@ -124,6 +124,7 @@ func (s *SeaweedFSSource) parseEvent(raw []byte) (CloudEvent, error) {
 		Source:          s.URI,
 		ID:              seaweedFSID(p.Key, p.EventType, version),
 		Time:            t,
+		TimeReported:    ok,
 		DataContentType: "application/json",
 		Subject: fmt.Sprintf(
 			"tenants/%s/collections/%s/objects-by-key/%s",

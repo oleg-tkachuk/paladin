@@ -7,6 +7,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/bucketstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/features"
 	"github.com/oleg-tkachuk/paladin/backend/internal/uploadpolicy"
 )
@@ -171,7 +172,7 @@ type BucketProvisionRow struct {
 // forever.
 const (
 	BucketProvisionStatePending        = "pending"
-	BucketProvisionStateReady          = "ready"
+	BucketProvisionStateReady          = bucketstate.Ready
 	BucketProvisionStateFailed         = "failed"
 	BucketProvisionStateDeleting       = "deleting"
 	BucketProvisionStateDeletionFailed = "deletion_failed"

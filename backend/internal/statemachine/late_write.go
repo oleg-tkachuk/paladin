@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/bucketstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 )
 
@@ -37,9 +38,10 @@ type LateSourceWrite struct {
 	// earlier source writes.
 	Sequencer string
 	// WrittenAt is when the event's store reported the write (the event's
-	// time); zero when it did not say. A write moved back after a rollback
-	// must postdate the rebind: the target received the migration's own
-	// copies before it, and their events are no tenant's write.
+	// time); zero when it did not say, or when the time is the ingest's own
+	// clock. A write moved back after a rollback must postdate the rebind by
+	// LateWriteClockMargin: the target received the migration's own copies
+	// before it, and their events are no tenant's write.
 	WrittenAt time.Time
 	// Move copies the object's bytes from the migration's source into To,
 	// under the same key, and reports what To then holds. A source that no
@@ -52,6 +54,15 @@ type MovedBytes struct {
 	ETag string
 	Size int64
 }
+
+// LateWriteClockMargin is how far past the rebind a target write's reported
+// time must be for it to be moved back after a rollback. The time is the
+// store's clock and rebound_at the database's: within the margin, a catch-up
+// copy made just before the rebind cannot be told from a tenant's write made
+// just after it, and the move would put a migration's copy, perhaps the one
+// its verify failed on, over the source. A tenant write that close to the
+// rebind is skipped and logged instead.
+const LateWriteClockMargin = time.Minute
 
 // ErrNotMigratedFrom is a late write whose bucket is not the source of a
 // storage migration that rebound the object's collection to the bucket it is
@@ -85,13 +96,15 @@ const (
 	// since the rebind, which is later than anything written to the source.
 	// After a rollback: written in the source since the rebind back.
 	LateSkipWrittenSinceRebind = "the object was written since the rebind"
-	// LateSkipNoEventTime: a target event after a rollback that does not say
-	// when the write was made cannot be told from the migration's own copy.
-	LateSkipNoEventTime = "the event does not say when the target was written"
+	// LateSkipNoEventTime: a target event after a rollback whose store did
+	// not say when the write was made cannot be told from the migration's
+	// own copy.
+	LateSkipNoEventTime = "the store did not say when the target was written"
 	// LateSkipBeforeRebind: a target event after a rollback that reports a
-	// write from before the rebind reports the migration's own copy, perhaps
-	// the one its verify failed on, not a tenant's write.
-	LateSkipBeforeRebind = "the event reports a target write from before the rebind"
+	// write from before the rebind, or within LateWriteClockMargin after it,
+	// may report the migration's own copy, perhaps the one its verify failed
+	// on, rather than a tenant's write.
+	LateSkipBeforeRebind = "the event reports a target write from before the rebind, or too close after it to tell"
 )
 
 // LateWriteSkippedError is ErrLateWriteSkipped with its reason.
@@ -215,7 +228,9 @@ func lockLateRow(ctx context.Context, exec dbExec, objectID uuid.UUID, sequencer
 // while fromBucket still holds what it held:
 // one that rebound it from its source (migstate.ReboundToTarget), or one
 // whose rollback rebound it back from its target (migstate.ReboundBackToSource,
-// rebound_back_at set, migration 119). None is ErrNotMigratedFrom.
+// rebound_back_at set, migration 119) while that target is still a bucket
+// that exists (bucketstate.Ready): one deleted, or being deleted, ends the
+// window. None is ErrNotMigratedFrom.
 func migratedFrom(ctx context.Context, exec dbExec, objectID uuid.UUID, fromBucket string, to Placement) (lateMove, error) {
 	const q = `
         SELECT from_backend, from_bucket, moved_at, rebound_at, back
@@ -242,13 +257,14 @@ func migratedFrom(ctx context.Context, exec dbExec, objectID uuid.UUID, fromBuck
                    AND tb.name = $2 AND ssb.name = $3 AND sb.name = $4
                    AND m.state = ANY($6::text[])
                    AND m.rebound_at IS NOT NULL AND m.rebound_back_at IS NOT NULL
+                   AND tb.provision_state = $7
                ) moves
          ORDER BY created_at DESC
          LIMIT 1
     `
 	var mv lateMove
 	err := exec.QueryRow(ctx, q, objectID, fromBucket, to.BackendID, to.Bucket,
-		migstate.ReboundToTarget(), migstate.ReboundBackToSource()).
+		migstate.ReboundToTarget(), migstate.ReboundBackToSource(), bucketstate.Ready).
 		Scan(&mv.from.BackendID, &mv.from.Bucket, &mv.movedAt, &mv.reboundAt, &mv.back)
 	if isNoRows(err) {
 		return lateMove{}, ErrNotMigratedFrom
@@ -269,7 +285,7 @@ func lateSkipReason(r lateRow, w LateSourceWrite, mv lateMove) string {
 		return LateSkipNoSequencer
 	case mv.back && w.WrittenAt.IsZero():
 		return LateSkipNoEventTime
-	case mv.back && w.WrittenAt.Before(mv.reboundAt):
+	case mv.back && w.WrittenAt.Before(mv.reboundAt.Add(LateWriteClockMargin)):
 		return LateSkipBeforeRebind
 	case r.writtenAt != nil && !r.writtenAt.Before(mv.movedAt):
 		return LateSkipWrittenSinceRebind

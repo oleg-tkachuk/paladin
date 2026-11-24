@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
@@ -72,6 +73,34 @@ func TestHandleRoutesAnEventFromAnotherBucket(t *testing.T) {
 			}
 			if tc.wantLate && (late.w.FromBucket != "shared" || late.w.To != bound || late.w.Sequencer != "0001") {
 				t.Errorf("late write = %+v, want from shared into %+v with the event's sequencer", late.w, bound)
+			}
+		})
+	}
+}
+
+// The late write is decided on when the store says the write was made. A
+// time the adapter took from its own clock says only when the event arrived,
+// and reaches the decision as unknown.
+func TestHandlePassesOnlyAReportedWriteTime(t *testing.T) {
+	at := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	for name, tc := range map[string]struct {
+		reported bool
+		want     time.Time
+	}{
+		"reported by the store": {true, at},
+		"the ingest's clock":    {false, time.Time{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			late := &lateRecorder{}
+			h := &PromoteHandler{Lookup: boundLookup("be-1", "dedicated"), Transitioner: &placingPromoter{}, Logger: zap.NewNop(),
+				Late: late, Mover: noMove{}}
+			ev := lateEvent("shared")
+			ev.Time, ev.TimeReported = at, tc.reported
+			if err := h.Handle(context.Background(), ev); err != nil {
+				t.Fatalf("Handle: %v", err)
+			}
+			if !late.w.WrittenAt.Equal(tc.want) {
+				t.Fatalf("late write's time = %v, want %v", late.w.WrittenAt, tc.want)
 			}
 		})
 	}

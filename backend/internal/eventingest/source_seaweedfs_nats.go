@@ -149,6 +149,7 @@ func (s *SeaweedFSNATSSource) parseEvent(raw []byte) (CloudEvent, error) {
 		Source:          s.URI,
 		ID:              id,
 		Time:            t,
+		TimeReported:    ok,
 		DataContentType: "application/octet-stream", // proto-marshalled body
 		Subject: fmt.Sprintf(
 			"tenants/%s/collections/%s/objects-by-key/%s",

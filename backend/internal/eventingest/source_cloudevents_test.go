@@ -2,6 +2,7 @@ package eventingest
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -47,6 +48,19 @@ func TestCloudEventsSource_Parse_Canonical(t *testing.T) {
 	}
 	if ev.SubjectFields.SizeBytes != 4096 {
 		t.Errorf("size = %d (lost paladinsize extension)", ev.SubjectFields.SizeBytes)
+	}
+	if !ev.TimeReported {
+		t.Error("the envelope's time is not reported as the store's")
+	}
+
+	// Without a readable time the receipt clock stands in, and says so.
+	noTime := strings.Replace(string(body), `"time": "2026-01-01T00:00:00Z",`, "", 1)
+	ev, err = parseOne(src, []byte(noTime), "application/json")
+	if err != nil {
+		t.Fatalf("Parse without a time: %v", err)
+	}
+	if ev.TimeReported || ev.Time.IsZero() {
+		t.Errorf("time = %v, reported %v; want the receipt clock, not reported", ev.Time, ev.TimeReported)
 	}
 }
 

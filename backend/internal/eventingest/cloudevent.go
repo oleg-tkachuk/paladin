@@ -59,13 +59,18 @@ const (
 // underlying event (S3 sequencer, MQ message-id, hash of subject+
 // timestamp+seq — adapter's choice, just be deterministic).
 type CloudEvent struct {
-	SpecVersion     string    // always "1.0"
-	Type            EventType // paladin.object.uploaded | paladin.object.deleted
-	Source          string    // e.g. "seaweedfs://primary"
-	ID              string    // unique per logical event; drives dedup
-	Time            time.Time // when the source emitted the event
-	DataContentType string    // typically "application/json"
-	Subject         string    // canonical resource ref — see SubjectFields
+	SpecVersion string    // always "1.0"
+	Type        EventType // paladin.object.uploaded | paladin.object.deleted
+	Source      string    // e.g. "seaweedfs://primary"
+	ID          string    // unique per logical event; drives dedup
+	Time        time.Time // when the source emitted the event
+	// TimeReported: Time is the one the store's payload carried. False
+	// when the adapter found none it could read and fell back to its own
+	// clock, which says when the event was received, not when the write
+	// was made: a decision on when a write happened treats it as unknown.
+	TimeReported    bool
+	DataContentType string // typically "application/json"
+	Subject         string // canonical resource ref — see SubjectFields
 
 	// Data is the source-specific payload, opaque to the worker but
 	// available to the handler if it wants to reach back into native

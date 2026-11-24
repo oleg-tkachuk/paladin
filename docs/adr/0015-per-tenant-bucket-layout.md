@@ -651,8 +651,17 @@ skipped; the source kept the older bytes. The forward move decides against
   rules with the rebind back in place of the rebind.
 - **Only a write the tenant made.** The target also received the
   migration's own copies, perhaps the one the verify failed on, and their
-  events are uploaded events like any other. The event's time must be at or
-  after `rebound_at`; one without a time is skipped and logged.
+  events are uploaded events like any other. The event's time must be at
+  least `statemachine.LateWriteClockMargin` past `rebound_at`: it is the
+  store's clock against the database's, and a catch-up copy made just
+  before the rebind cannot be told from a tenant's write just after it. A
+  time the ingest adapter took from its own clock, because the payload
+  carried none it could read (`CloudEvent.TimeReported`), says when the
+  event arrived and counts as none. Such events are skipped and logged; a
+  tenant write inside the margin is lost to this path.
+- **Only while the target is there.** The rollback's target must still be
+  a bucket that exists (`provision_state` `ready`); deleting it ends the
+  window, as a retry does by clearing both times.
 
 Not covered (BACKLOG): an event delivered after a retry has started, and a
 row whose sequencer came from the source, which the target's event cannot be

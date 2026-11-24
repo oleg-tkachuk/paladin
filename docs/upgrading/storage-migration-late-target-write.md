@@ -7,6 +7,9 @@
   bucket that is delivered after the rebind back is no longer skipped: the
   ingest copies the object's bytes into the source bucket and promotes them
   there, logged as "late source write moved into the collection's bucket".
-  It is skipped, logged at Info, when the event's time is before the
-  migration's rebind or missing (the migration's own copies raise such
-  events), or when the object was written since the rebind back.
+  It is skipped, logged at Info, when the event's time is missing, earlier
+  than a minute after the migration's rebind (the migration's own copies
+  raise such events, and the store's clock is not the database's), or taken
+  from the ingest's own clock because the payload carried none; when the
+  object was written since the rebind back; or once the dedicated bucket is
+  being deleted or the migration is retried.

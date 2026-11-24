@@ -447,7 +447,7 @@ func (h *PromoteHandler) lateSourceWrite(ctx context.Context, logger *zap.Logger
 	resourceName := h.objectResourceName(ctx, ev.SubjectFields.TenantID, collection, key)
 	w := statemachine.LateSourceWrite{
 		FromBucket: ev.SubjectFields.Bucket, To: bound, Sequencer: ev.SubjectFields.Sequencer,
-		WrittenAt: ev.Time,
+		WrittenAt: reportedWriteTime(ev),
 		Move: func(ctx context.Context, from, to statemachine.Placement) (statemachine.MovedBytes, error) {
 			return h.Mover.MoveObjectBytes(ctx, objectID, from, to)
 		},
@@ -478,6 +478,16 @@ func (h *PromoteHandler) lateSourceWrite(ctx context.Context, logger *zap.Logger
 		h.record(ctx, logger, ev, actionObjectUploaded, resourceName, tenant, objectID)
 	}
 	return nil
+}
+
+// reportedWriteTime is when the store says the event's write was made; zero
+// when the adapter fell back to its own clock, which says only when the event
+// arrived (CloudEvent.TimeReported).
+func reportedWriteTime(ev CloudEvent) time.Time {
+	if !ev.TimeReported {
+		return time.Time{}
+	}
+	return ev.Time
 }
 
 // objectResourceName builds the canonical (A-shape) object resource name

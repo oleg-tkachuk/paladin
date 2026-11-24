@@ -118,8 +118,8 @@ func TestSeaweedFSNATSSource_Parse_IDFromTheClock(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Parse at %s: %v", at, err)
 		}
-		if !ev.Time.Equal(at) {
-			t.Errorf("Time = %s, want the clock's %s", ev.Time, at)
+		if !ev.Time.Equal(at) || ev.TimeReported {
+			t.Errorf("Time = %s, reported %v; want the clock's %s, not reported", ev.Time, ev.TimeReported, at)
 		}
 		return ev
 	}
@@ -309,8 +309,8 @@ func TestSeaweedFSNATSSource_Parse_IDFromTheEntry(t *testing.T) {
 	}
 
 	first := parseAt(clock, committed(commitTs))
-	if !first.Time.Equal(time.Unix(0, commitTs)) {
-		t.Errorf("Time = %s, want the commit time", first.Time)
+	if !first.Time.Equal(time.Unix(0, commitTs)) || !first.TimeReported {
+		t.Errorf("Time = %s, reported %v; want the commit time, reported", first.Time, first.TimeReported)
 	}
 	if later := parseAt(clock.Add(time.Hour), committed(commitTs)); later.ID != first.ID {
 		t.Error("a redelivery an hour later has a new id: dedup would not catch it")

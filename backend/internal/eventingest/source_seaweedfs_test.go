@@ -46,8 +46,8 @@ func TestSeaweedFSSource_ParseCapturedCreate(t *testing.T) {
 	if f.SizeBytes != int64(len("hello")) || f.Etag != webhookObjectMD5 {
 		t.Errorf("size, etag = %d, %q; want %d, %q", f.SizeBytes, f.Etag, len("hello"), webhookObjectMD5)
 	}
-	if !ev.Time.Equal(time.Unix(0, webhookCommitTs)) {
-		t.Errorf("time = %v, want the entry's commit time", ev.Time)
+	if !ev.Time.Equal(time.Unix(0, webhookCommitTs)) || !ev.TimeReported {
+		t.Errorf("time = %v, reported %v; want the entry's commit time, reported", ev.Time, ev.TimeReported)
 	}
 }
 
