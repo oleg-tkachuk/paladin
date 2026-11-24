@@ -519,6 +519,43 @@ func TestSetReplication_ForwardsArgs(t *testing.T) {
 	}
 }
 
+// A filter the replication worker could not compile is refused before it is
+// stored; a valid one is forwarded.
+func TestSetReplication_ValidatesTheFilter(t *testing.T) {
+	cases := []struct {
+		filter string
+		want   connect.Code
+	}{
+		{"1 + 1", connect.CodeInvalidArgument},
+		{"no_such_field == 1", connect.CodeInvalidArgument},
+		{`key.startsWith("reports/")`, 0},
+		{"", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.filter, func(t *testing.T) {
+			repo := &fakeRepo{getBucket: admindomain.Bucket{BucketName: "acme"}}
+			h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})
+			r := admindomain.BucketReplication{Enabled: true, DestinationBucket: "dr-bucket", Filter: tc.filter}
+			_, err := h.SetReplication(ctxAs(apiutil.RoleBucketAdmin), "primary", "acme", r, 1)
+			if tc.want == 0 {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if repo.gotReplicationArg != r {
+					t.Errorf("forwarded %+v, want %+v", repo.gotReplicationArg, r)
+				}
+				return
+			}
+			if code(err) != tc.want {
+				t.Fatalf("code = %v, want %v", code(err), tc.want)
+			}
+			if repo.gotReplicationArg != (admindomain.BucketReplication{}) {
+				t.Error("repo.SetReplication must not be called with a filter that fails validation")
+			}
+		})
+	}
+}
+
 func TestSetReplication_VersionMismatchAborts(t *testing.T) {
 	repo := &fakeRepo{setReplicationErr: admindomain.ErrVersionMismatch}
 	h := NewHandler(repo, okProvisioner{onBackend: true}, allowAuthorizer{})

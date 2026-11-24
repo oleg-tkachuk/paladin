@@ -10,6 +10,9 @@
 //     AVAILABLE ones committed after the watermark and before the horizon —
 //     the scan's start less SettleDelay, so a row whose commit stamp predates
 //     its visibility is not passed before it can be seen.
+//     An object the bucket's `replication.filter` (CEL, over the same fields a
+//     ListObjects filter sees) does not match is passed over; one the filter
+//     fails to evaluate on holds the watermark, as a failed copy does.
 //  3. Copy each through StorageReplicator to the same collection and key in
 //     the destination bucket. A transient failure is retried with exponential
 //     backoff; one that outlasts the retries stops the bucket for the tick,
@@ -27,9 +30,11 @@ import (
 	"time"
 	"uuid"
 
+	celpkg "cel.dev/cel-go/cel"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
@@ -113,6 +118,10 @@ type ReplicationWorker struct {
 	// LookbackWindow caps how far back the worker scans on first run when
 	// no watermark is found in the store.
 	LookbackWindow time.Duration
+	// CELEvaluator compiles each bucket's replication.filter, once per bucket
+	// per tick through its cache. A bucket with a filter and no evaluator is
+	// not replicated: copying everything would ignore the filter.
+	CELEvaluator *cel.Evaluator
 	// SettleDelay holds the horizon this far behind the scan's start; zero
 	// takes replicationSettleDelay in Run.
 	SettleDelay time.Duration
@@ -166,7 +175,7 @@ func (r *ReplicationWorker) tick(ctx context.Context) error {
 
 // bucketPass is what one tick's walk of a bucket did.
 type bucketPass struct {
-	copied, missing int
+	copied, filtered, missing int
 	// held is the first failure that keeps the watermark where it is.
 	held error
 	// stopped is set once a failure ended the walk early.
@@ -192,6 +201,12 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 		return err
 	}
 	bucketLog = bucketLog.With(zap.String(logKeyDstBackend, dstBackend), zap.String(logKeyDstBucket, dstBucket))
+	filter, err := r.compileFilter(b.Replication.Filter)
+	if err != nil {
+		bucketLog.Error("replication filter does not compile; the bucket is not replicated until it is fixed",
+			zap.String("filter", b.Replication.Filter), zap.Error(err))
+		return err
+	}
 	cutoff, err := r.cutoff(ctx, b.BackendID, b.BucketName)
 	if err != nil {
 		return err
@@ -225,7 +240,9 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 			if !committed.After(cutoff) || committed.After(horizon) {
 				return nil // replicated already, or left for a later tick
 			}
-			return r.replicateRow(ctx, log, &pass, row, b, dstBackend, dstBucket, bind)
+			return r.replicateRow(ctx, log, &pass, row, replicaRoute{
+				bucket: b, dstBackend: dstBackend, dstBucket: dstBucket, bind: bind, filter: filter,
+			})
 		})
 		if err != nil && !errors.Is(err, errPassStopped) && ctx.Err() == nil {
 			log.Warn("failed to iterate objects", zap.Error(err))
@@ -238,7 +255,7 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 	}
 	if pass.held != nil || r.Replicator == nil {
 		bucketLog.Info("replication pass held the watermark",
-			zap.Int("copied", pass.copied), zap.Int("source_missing", pass.missing),
+			zap.Int("copied", pass.copied), zap.Int("filtered", pass.filtered), zap.Int("source_missing", pass.missing),
 			zap.Time("watermark", cutoff), zap.Bool("dry_run", r.Replicator == nil))
 		return pass.held
 	}
@@ -246,29 +263,63 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 		return err
 	}
 	bucketLog.Info("replication pass complete",
-		zap.Int("copied", pass.copied), zap.Int("source_missing", pass.missing),
+		zap.Int("copied", pass.copied), zap.Int("filtered", pass.filtered), zap.Int("source_missing", pass.missing),
 		zap.Time("watermark", horizon))
 	return nil
+}
+
+// replicaRoute is where one collection's objects replicate from and to, and
+// the bucket's compiled filter (nil: every object).
+type replicaRoute struct {
+	bucket                admindomain.Bucket
+	dstBackend, dstBucket string
+	bind                  CollectionBinding
+	filter                celpkg.Program
+}
+
+// compileFilter compiles a bucket's replication filter; an empty one is nil,
+// which selects every object.
+func (r *ReplicationWorker) compileFilter(expr string) (celpkg.Program, error) {
+	if expr == "" {
+		return nil, nil //nolint:nilnil // no filter: every object is selected
+	}
+	if r.CELEvaluator == nil {
+		return nil, errNoEvaluator
+	}
+	return r.CELEvaluator.Compile(cel.ObjectSchema, expr)
 }
 
 // replicateRow copies one selected row and records the outcome on pass. It
 // returns errPassStopped when the walk must end.
 func (r *ReplicationWorker) replicateRow(
-	ctx context.Context, log *zap.Logger, pass *bucketPass, row LifecycleObjectRow,
-	b admindomain.Bucket, dstBackend, dstBucket string, bind CollectionBinding,
+	ctx context.Context, log *zap.Logger, pass *bucketPass, row LifecycleObjectRow, route replicaRoute,
 ) error {
 	log = log.With(zap.String(logKeyObjectID, row.ObjectID.String()), zap.String(logKeyKey, row.Key))
+	if route.filter != nil {
+		match, err := cel.Match(route.filter, lifecycleRowToCELVars(row))
+		if err != nil {
+			// Neither copied nor known to be outside the filter: the object
+			// holds the watermark until the filter or the object changes.
+			log.Warn("failed to evaluate the replication filter", zap.Error(err))
+			keepFirst(&pass.held, err)
+			return nil
+		}
+		if !match {
+			pass.filtered++
+			return nil
+		}
+	}
 	if r.Replicator == nil {
 		log.Info("dry-run match")
 		return nil
 	}
 	src := ReplicationTarget{
-		BackendID: b.BackendID, BucketName: b.BucketName,
-		TenantID: bind.TenantID, Collection: bind.Collection, Key: row.Key,
+		BackendID: route.bucket.BackendID, BucketName: route.bucket.BucketName,
+		TenantID: route.bind.TenantID, Collection: route.bind.Collection, Key: row.Key,
 	}
 	dst := ReplicationTarget{
-		BackendID: dstBackend, BucketName: dstBucket,
-		TenantID: bind.TenantID, Collection: bind.Collection, Key: row.Key,
+		BackendID: route.dstBackend, BucketName: route.dstBucket,
+		TenantID: route.bind.TenantID, Collection: route.bind.Collection, Key: row.Key,
 	}
 	err := r.copyWithRetry(ctx, log, src, dst, row.SizeBytes)
 	switch {

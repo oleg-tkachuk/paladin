@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 )
 
 // scriptedReplicator answers each copy by the object's key: the errors listed
@@ -321,6 +323,86 @@ func TestReplicationStopsQuietlyWhenCancelled(t *testing.T) {
 	}
 	if got := f.stored(); !got.IsZero() {
 		t.Errorf("watermark advanced to %v on a cancelled pass", got)
+	}
+}
+
+// filtered sets the fixture bucket's replication filter and wires an
+// evaluator.
+func filtered(w *ReplicationWorker, expr string) *ReplicationWorker {
+	src := w.Buckets.(*fakeReplSource)
+	src.buckets[0].Replication.Filter = expr
+	w.CELEvaluator = cel.NewEvaluator()
+	return w
+}
+
+// The filter selects what is copied; an object it does not match is passed
+// over, and does not hold the watermark.
+func TestReplicationCopiesOnlyWhatTheFilterMatches(t *testing.T) {
+	f := newPassFixture()
+	rep := newScriptedReplicator(nil)
+	rows := []LifecycleObjectRow{f.row("keep/a", 2*passSettle), f.row("skip/b", 3*passSettle)}
+	w := filtered(f.worker(rows, rep, nil), `key.startsWith("keep/")`)
+
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v", err)
+	}
+	if got := rep.copiedKeys(); len(got) != 1 || got[0] != "keep/a" {
+		t.Errorf("copied %v, want only the object the filter matches", got)
+	}
+	if got := f.stored(); !got.Equal(f.horizon()) {
+		t.Errorf("watermark = %v, want the horizon: a filtered object is decided", got)
+	}
+}
+
+// An object the filter fails to evaluate on is neither copied nor passed: it
+// holds the watermark.
+func TestReplicationHoldsTheWatermarkOnAFilterError(t *testing.T) {
+	f := newPassFixture()
+	rep := newScriptedReplicator(nil)
+	w := filtered(f.worker([]LifecycleObjectRow{f.row("a", 2*passSettle)}, rep, nil), `int(key) > 0`) // "a" is no int
+
+	if err := w.tick(context.Background()); err == nil {
+		t.Fatal("tick = nil, want the evaluation failure")
+	}
+	if got := rep.copiedKeys(); len(got) != 0 {
+		t.Errorf("copied %v on a filter that could not decide", got)
+	}
+	if got := f.stored(); !got.IsZero() {
+		t.Errorf("watermark advanced to %v past an undecided object", got)
+	}
+}
+
+// A filter that does not compile, or one with no evaluator to run it, stops
+// the bucket: copying everything would ignore it.
+func TestReplicationRefusesAFilterItCannotRun(t *testing.T) {
+	cases := map[string]func(*ReplicationWorker) *ReplicationWorker{
+		"does not compile": func(w *ReplicationWorker) *ReplicationWorker { return filtered(w, "1 + 1") },
+		"no evaluator": func(w *ReplicationWorker) *ReplicationWorker {
+			w = filtered(w, `key.startsWith("a")`)
+			w.CELEvaluator = nil
+			return w
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newPassFixture()
+			rep := newScriptedReplicator(nil)
+			core, logs := observer.New(zapcore.ErrorLevel)
+			w := setup(f.worker([]LifecycleObjectRow{f.row("a", 2*passSettle)}, rep, zap.New(core)))
+
+			if err := w.tick(context.Background()); err == nil {
+				t.Fatal("tick = nil, want the filter's failure")
+			}
+			if got := rep.copiedKeys(); len(got) != 0 {
+				t.Errorf("copied %v under a filter that cannot run", got)
+			}
+			if got := f.stored(); !got.IsZero() {
+				t.Errorf("watermark advanced to %v", got)
+			}
+			if logs.Len() != 1 {
+				t.Errorf("error lines = %d, want 1", logs.Len())
+			}
+		})
 	}
 }
 
