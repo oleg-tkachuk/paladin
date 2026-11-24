@@ -556,12 +556,18 @@ the same commit. Treat this file like a runtime invariant.
 - **Reason:** the rollback records each write it copied back
   (`storage_migration_copied_back`, migration 118) instead of walking a
   cursor, so `tenant_storage_migrations.rollback_cursor_at` and
-  `rollback_cursor_id` are dead. Dropping them in the same release would
-  break a binary still running during the rollout: sqlc expands
-  `sqlc.embed` into a column list that names them.
-- **Definition of Done:** a migration drops both columns, the queries that
-  reset them stop doing so, and sqlc is regenerated.
-- **Blockers:** a release that no longer reads them is deployed everywhere.
+  `rollback_cursor_id` are dead. Every binary so far still names them:
+  sqlc expands `sqlc.embed` and `RETURNING m.*` into column lists that do,
+  and three UPDATEs reset them. The migrate hook runs before the new pods,
+  so a drop would break every running pod's migration queries until they
+  were replaced. As of 2026-11-24 no release contains the change that
+  stopped reading them (`git tag --contains f08c401f4` is empty; latest
+  v42.1.0).
+- **Definition of Done:** first a release whose queries no longer name the
+  columns (explicit column lists for `tenant_storage_migrations`, the
+  resets removed) is deployed everywhere; then a migration drops both
+  columns and sqlc is regenerated.
+- **Blockers:** the first step, which no release has shipped yet.
 
 ### A source write whose storage event never arrives holds the cleanup
 
