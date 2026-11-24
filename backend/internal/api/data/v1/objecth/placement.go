@@ -23,16 +23,21 @@ type Placement struct {
 }
 
 // placementFor builds obj's placement from the bucket its bytes are in
-// (Object.Stored, ADR-0051), which the collection's binding need not be. An
-// object placed nowhere — a PENDING upload — has no placement to report: nil,
-// not a half-empty one. Nor has an object whose key predates the key
-// contract: its key composes to no path of its own (storagepath.Compose
-// refuses it).
+// (Object.Stored, ADR-0051), which the collection's binding need not be; for
+// a PENDING upload, placed nowhere yet, the bucket its URL was signed for
+// (Object.Upload), where the bytes land. An object with neither has no
+// placement to report: nil, not a half-empty one. Nor has an object whose
+// key predates the key contract: its key composes to no path of its own
+// (storagepath.Compose refuses it).
 func placementFor(ctx context.Context, tenantID uuid.UUID, obj *Object) *Placement {
-	if obj.Stored == nil {
+	ref := obj.Stored
+	if ref == nil {
+		ref = obj.Upload
+	}
+	if ref == nil {
 		return nil
 	}
-	backendID, bucket := obj.Stored.BackendID, obj.Stored.Bucket
+	backendID, bucket := ref.BackendID, ref.Bucket
 	path, err := storagepath.Compose(tenantID, obj.Collection, obj.Key)
 	if err != nil {
 		logger.FromContext(ctx).Warn("object key is outside the key contract; reporting no placement",

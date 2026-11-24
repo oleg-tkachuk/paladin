@@ -247,6 +247,20 @@ func TestPlacementIsTheRowsNotTheBinding(t *testing.T) {
 			}
 		}
 	})
+	t.Run("a pending upload, where its URL writes", func(t *testing.T) {
+		f := newPlacementFixture()
+		f.repo.obj.State = statemachine.StatePending
+		f.repo.obj.Upload = storedIn("backend-up", "bucket-up")
+		h := f.handler(cedartest.Engine(defaultPolicyFor(f.tenantID)))
+		ctx := f.as(auth.PrincipalKindUser, "platform.admin")
+		got, err := h.GetObject(ctx, "docs", f.repo.obj.ObjectID.String())
+		if err != nil {
+			t.Fatalf("GetObject: %v", err)
+		}
+		if got.Placement == nil || got.Placement.Bucket != "bucket-up" {
+			t.Fatalf("placement %+v, want bucket-up, where the upload's bytes land", got.Placement)
+		}
+	})
 	t.Run("placed outside the binding", func(t *testing.T) {
 		f := newPlacementFixture()
 		f.repo.obj.Stored = storedIn("backend-old", "bucket-old")
