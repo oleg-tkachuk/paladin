@@ -13,7 +13,7 @@ import (
 )
 
 // ReplicaRepo is the per-object replication state (object_replicas,
-// migration 119) the replication worker claims and records on.
+// migration 121) the replication worker claims and records on.
 type ReplicaRepo struct {
 	q *sqlc.Queries
 }

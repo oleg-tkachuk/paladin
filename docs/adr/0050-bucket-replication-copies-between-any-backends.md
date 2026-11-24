@@ -50,7 +50,7 @@ stream restates what the source's GET answered — `Content-Type`,
 is copied as stored, so a `Content-Encoding: gzip` object stays encoded.
 
 **The state.** One row per replica location in `object_replicas` (migration
-119): the source bucket, and the tenant, collection and key the replica lands
+121): the source bucket, and the tenant, collection and key the replica lands
 at. The row is the work queue and the record at once.
 
 - *What marks a row due.* Triggers on `objects`, in the writing transaction:

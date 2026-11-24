@@ -162,7 +162,7 @@ boundary and carry ids inside.
 **Objects** — `objects`, `object_versions`, `object_locks`,
 `multipart_uploads`, `pending_multipart_aborts`, `pending_purges`,
 `erased_objects`, `object_replicas` (the replication queue and record, one
-row per replica location, which triggers on `objects` mark due; `119`). State is the
+row per replica location, which triggers on `objects` mark due; `121`). State is the
 `object_state` enum: `PENDING` → `AVAILABLE`, and `DELETED` for soft
 deletion. An object that cannot become available is deleted, not kept in a
 state of its own (`statemachine.DiscardFailed`; FAILED was dropped in 079). `objects.current_version_id` carries a deferred composite FK

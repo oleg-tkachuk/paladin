@@ -1052,7 +1052,7 @@ type Querier interface {
 	RotateStorageBackendCredentials(ctx context.Context, name string, credentialsSecretRef string, column3 int64) (int64, error)
 	// Reconciler picks up PENDING rows whose presign has expired.
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
-	// Per-object replication state (migration 119, ADR-0050). Every query here
+	// Per-object replication state (migration 121, ADR-0050). Every query here
 	// runs on the worker's cross-tenant connection.
 	// Queues every AVAILABLE object of the bucket's collections, once: the
 	// replication_seeds row is written by the same statement, and a bucket that

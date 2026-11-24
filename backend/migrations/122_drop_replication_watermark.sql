@@ -2,7 +2,7 @@
 -- +goose StatementBegin
 
 -- The per-bucket replication watermark is replaced by per-object state
--- (object_replicas, 119; ADR-0050). Nothing reads it any more.
+-- (object_replicas, 121; ADR-0050). Nothing reads it any more.
 DROP TABLE replication_state;
 
 -- +goose StatementEnd

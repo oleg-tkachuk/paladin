@@ -1,4 +1,4 @@
--- Per-object replication state (migration 119, ADR-0050). Every query here
+-- Per-object replication state (migration 121, ADR-0050). Every query here
 -- runs on the worker's cross-tenant connection.
 
 -- name: SeedReplication :execrows

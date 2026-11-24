@@ -23,5 +23,5 @@
 - `SetReplication` refuses a `filter` that does not compile as CEL, with
   `INVALID_ARGUMENT`. A stored filter that does not compile stops its
   bucket's replication, logged at ERROR, until it is fixed.
-- Migrations 119 and 120 add triggers on `objects` and `buckets` and drop
+- Migrations 121 and 122 add triggers on `objects` and `buckets` and drop
   `replication_state`. See ADR-0050.
