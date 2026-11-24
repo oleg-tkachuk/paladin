@@ -111,7 +111,7 @@ func (r *ObjectRouter) replicaStream(ctx context.Context, src, dst objecth.Locat
 		return fmt.Errorf("%w: source holds %d bytes, the row %d", ErrReplicaMismatch, *out.ContentLength, sizeBytes)
 	}
 
-	w, err := dstC.Open(ctx, dst.Bucket, dst.TenantID, dst.Collection, dst.Key, aws.ToString(out.ContentType), sizeBytes)
+	w, err := dstC.OpenWithHeaders(ctx, dst.Bucket, dst.TenantID, dst.Collection, dst.Key, sourceHeaders(out), sizeBytes)
 	if err != nil {
 		return destinationErr("open destination", err)
 	}
@@ -130,6 +130,21 @@ func (r *ObjectRouter) replicaStream(ctx context.Context, src, dst objecth.Locat
 		return dstC.discardReplica(ctx, dst, fmt.Errorf("%w: wrote md5 %s, the source's ETag is %s", ErrReplicaMismatch, digest, want))
 	}
 	return nil
+}
+
+// sourceHeaders are the stored headers and user metadata the source's GET
+// answered with, which a streamed replica is written with: a server-side
+// copy keeps them by itself (MetadataDirective COPY), a stream must restate
+// them.
+func sourceHeaders(out *s3.GetObjectOutput) ObjectHeaders {
+	return ObjectHeaders{
+		ContentType:        aws.ToString(out.ContentType),
+		CacheControl:       aws.ToString(out.CacheControl),
+		ContentDisposition: aws.ToString(out.ContentDisposition),
+		ContentEncoding:    aws.ToString(out.ContentEncoding),
+		ContentLanguage:    aws.ToString(out.ContentLanguage),
+		Metadata:           out.Metadata,
+	}
 }
 
 // sourceDigest is the MD5 a GET's ETag states, when it states one: a

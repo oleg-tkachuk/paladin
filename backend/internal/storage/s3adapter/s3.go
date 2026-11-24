@@ -871,15 +871,51 @@ func (c *Client) PresignPart(ctx context.Context, bucket string, tenantID uuid.U
 // Open returns a StreamWriter that uploads a single object via S3 multipart.
 // 8 MiB parts are a reasonable default that balances memory vs S3 minimums.
 func (c *Client) Open(ctx context.Context, bucket string, tenantID uuid.UUID, collection, key, contentType string, sizeHint int64) (*StreamWriter, error) {
+	return c.OpenWithHeaders(ctx, bucket, tenantID, collection, key, ObjectHeaders{ContentType: contentType}, sizeHint)
+}
+
+// ObjectHeaders are the stored headers and user metadata an object is served
+// with. An empty field is not set.
+type ObjectHeaders struct {
+	ContentType        string
+	CacheControl       string
+	ContentDisposition string
+	ContentEncoding    string
+	ContentLanguage    string
+	// Metadata is the user metadata (x-amz-meta-*), keyed without the prefix.
+	Metadata map[string]string
+}
+
+// optionalString is s as an SDK field, nil when empty so the header is not
+// sent.
+func optionalString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return aws.String(s)
+}
+
+// OpenWithHeaders is Open with every stored header the object is to carry,
+// for a copy that must keep its source's: a replica.
+func (c *Client) OpenWithHeaders(
+	ctx context.Context, bucket string, tenantID uuid.UUID, collection, key string, h ObjectHeaders, sizeHint int64,
+) (*StreamWriter, error) {
 	resolvedBucket := c.resolveBucket(bucket)
 	fullKey, err := composeKey(tenantID, collection, key)
 	if err != nil {
 		return nil, err
 	}
 	in := &s3.CreateMultipartUploadInput{
-		Bucket:      aws.String(resolvedBucket),
-		Key:         aws.String(fullKey),
-		ContentType: aws.String(contentType),
+		Bucket:             aws.String(resolvedBucket),
+		Key:                aws.String(fullKey),
+		ContentType:        aws.String(h.ContentType),
+		CacheControl:       optionalString(h.CacheControl),
+		ContentDisposition: optionalString(h.ContentDisposition),
+		ContentEncoding:    optionalString(h.ContentEncoding),
+		ContentLanguage:    optionalString(h.ContentLanguage),
+	}
+	if len(h.Metadata) > 0 {
+		in.Metadata = h.Metadata
 	}
 	c.applyMultipartSSE(in)
 	out, err := c.s3.CreateMultipartUpload(ctx, in)

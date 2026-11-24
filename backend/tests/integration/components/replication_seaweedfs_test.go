@@ -4,15 +4,20 @@ package components
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
 	"testing"
 	"uuid"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/config"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/storagepath"
 )
 
 // replicationPartSize is the destination's multipart part size: S3's minimum
@@ -28,6 +33,8 @@ const replicationBodyParts = 2
 type replicationFixture struct {
 	reg    *s3adapter.BackendRegistry
 	router *s3adapter.ObjectRouter
+	// sdk is each backend's own SDK client, for reading stored headers.
+	sdk map[string]*s3.Client
 }
 
 const (
@@ -62,7 +69,109 @@ func newReplicationFixture(t *testing.T) replicationFixture {
 			t.Fatalf("create bucket %s on %s: %v", b.bucket, b.backend, err)
 		}
 	}
-	return replicationFixture{reg: reg, router: s3adapter.NewObjectRouter(reg)}
+	sdkA, _ := seaweedClients(t, epA, ak, sk)
+	sdkB, _ := seaweedClients(t, epB, ak, sk)
+	return replicationFixture{
+		reg: reg, router: s3adapter.NewObjectRouter(reg),
+		sdk: map[string]*s3.Client{"a": sdkA, "b": sdkB},
+	}
+}
+
+// head reads the stored headers at loc.
+func (f replicationFixture) head(t *testing.T, loc objecth.Location) *s3.HeadObjectOutput {
+	t.Helper()
+	key, err := storagepath.Compose(loc.TenantID, loc.Collection, loc.Key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := f.sdk[loc.BackendID].HeadObject(context.Background(), &s3.HeadObjectInput{
+		Bucket: aws.String(loc.Bucket), Key: aws.String(key),
+	})
+	if err != nil {
+		t.Fatalf("head %s/%s: %v", loc.BackendID, loc.Bucket, err)
+	}
+	return out
+}
+
+// The headers a replica must keep: a gzip-encoded body, so a transparent
+// decompression on the way through would fail the size and digest checks.
+var replicaSourceHeaders = s3adapter.ObjectHeaders{
+	ContentType:        "application/json",
+	CacheControl:       "public, max-age=60",
+	ContentDisposition: `attachment; filename="report.json.gz"`,
+	ContentEncoding:    "gzip",
+	ContentLanguage:    "uk",
+	Metadata:           map[string]string{"owner": "finance"},
+}
+
+// TestReplicaKeepsTheSourceHeaders writes a source with every stored header
+// and user metadata, replicates it both ways — streamed across two stores,
+// server-side within one — and reads each replica's headers back.
+func TestReplicaKeepsTheSourceHeaders(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("integration")
+	}
+	f := newReplicationFixture(t)
+	ctx := context.Background()
+	tenant := uuid.New()
+	const collection, key = "docs", "report.json.gz"
+
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	if _, err := zw.Write([]byte(`{"total": 42}`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	body := gz.Bytes()
+	c, err := f.reg.For(ctx, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := c.OpenWithHeaders(ctx, replSrcBucket, tenant, collection, key, replicaSourceHeaders, int64(len(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	src := objecth.Location{BackendID: "a", Bucket: replSrcBucket, TenantID: tenant, Collection: collection, Key: key}
+	for name, dst := range map[string]objecth.Location{
+		"streamed":    {BackendID: "b", Bucket: replDstBucket, TenantID: tenant, Collection: collection, Key: key},
+		"server-side": {BackendID: "a", Bucket: replSameBucket, TenantID: tenant, Collection: collection, Key: key},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := f.router.Replicate(ctx, src, dst, int64(len(body))); err != nil {
+				t.Fatalf("Replicate: %v", err)
+			}
+			if got := f.read(t, dst); !bytes.Equal(got, body) {
+				t.Errorf("replica holds %d bytes, want the encoded %d", len(got), len(body))
+			}
+			want, got := f.head(t, src), f.head(t, dst)
+			for _, h := range []struct {
+				name      string
+				want, got *string
+			}{
+				{"Content-Type", want.ContentType, got.ContentType},
+				{"Cache-Control", want.CacheControl, got.CacheControl},
+				{"Content-Disposition", want.ContentDisposition, got.ContentDisposition},
+				{"Content-Encoding", want.ContentEncoding, got.ContentEncoding},
+				{"Content-Language", want.ContentLanguage, got.ContentLanguage},
+			} {
+				if aws.ToString(h.got) != aws.ToString(h.want) || aws.ToString(h.want) == "" {
+					t.Errorf("%s = %q, want the source's %q", h.name, aws.ToString(h.got), aws.ToString(h.want))
+				}
+			}
+			if got.Metadata["owner"] != replicaSourceHeaders.Metadata["owner"] {
+				t.Errorf("user metadata = %v, want %v", got.Metadata, replicaSourceHeaders.Metadata)
+			}
+		})
+	}
 }
 
 // put writes body to (backend, bucket) through that backend's own client.

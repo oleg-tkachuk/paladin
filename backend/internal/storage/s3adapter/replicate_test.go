@@ -202,6 +202,57 @@ func TestReplicateAcrossBackendsStreams(t *testing.T) {
 	}
 }
 
+// The stored headers a streamed replica must keep, as the source answers
+// them and as the destination's multipart create must carry them.
+var replicaHeaders = map[string]string{
+	"Content-Type":        "application/pdf",
+	"Cache-Control":       "public, max-age=60",
+	"Content-Disposition": `attachment; filename="r.pdf"`,
+	"Content-Encoding":    "identity",
+	"Content-Language":    "uk",
+	"X-Amz-Meta-Owner":    "finance",
+}
+
+// A streamed replica is created with every stored header and the user
+// metadata its source's GET answered with.
+func TestReplicateStreamCarriesTheSourceHeaders(t *testing.T) {
+	fSrc, fDst := newFakeS3(t), newFakeS3(t)
+	fSrc.route = func(w http.ResponseWriter, r *http.Request, _, key string) bool {
+		if r.Method == http.MethodGet && key != "" {
+			for k, v := range replicaHeaders {
+				w.Header().Set(k, v)
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, fakeBodyText)
+			return true
+		}
+		return false
+	}
+	rt := NewObjectRouter(registryWith(map[string]*Client{
+		"src": newTestClient(t, fSrc.srv.URL), "dst": newTestClient(t, fDst.srv.URL),
+	}))
+	src, dst := replicaLocs("src", "dst")
+	if err := rt.Replicate(testCtx, src, dst, streamSize); err != nil {
+		t.Fatalf("Replicate: %v", err)
+	}
+	var create *s3Req
+	fDst.mu.Lock()
+	for i, r := range fDst.reqs {
+		if r.Method == http.MethodPost && r.Query.Has("uploads") {
+			create = &fDst.reqs[i]
+		}
+	}
+	fDst.mu.Unlock()
+	if create == nil {
+		t.Fatal("the destination saw no multipart create")
+	}
+	for k, want := range replicaHeaders {
+		if got := create.Header.Get(k); got != want {
+			t.Errorf("%s = %q, want %q", k, got, want)
+		}
+	}
+}
+
 // The streamed replica is checked against the row's size and, where the
 // source's ETag is a plain MD5, against that digest.
 func TestReplicateStreamVerifiesTheReplica(t *testing.T) {

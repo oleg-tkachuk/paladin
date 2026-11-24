@@ -42,7 +42,12 @@ whole. Every replica is verified: a server-side copy is read back with a
 HEAD, a streamed one counts the bytes written and, where the source's ETag
 is a plain MD5, compares the digest. A replica that does not match is
 deleted and reported as a mismatch. The replica lands at the same tenant,
-collection and key in the destination bucket.
+collection and key in the destination bucket, with the source's stored
+headers: a server-side copy keeps them (`MetadataDirective` COPY), and a
+stream restates what the source's GET answered — `Content-Type`,
+`Cache-Control`, `Content-Disposition`, `Content-Encoding`,
+`Content-Language` and the user metadata — on the multipart create. The body
+is copied as stored, so a `Content-Encoding: gzip` object stays encoded.
 
 **The state.** One row per replica location in `object_replicas` (migration
 119): the source bucket, and the tenant, collection and key the replica lands
@@ -137,8 +142,8 @@ naming no registered bucket is a failure.
   `AVAILABLE` while replication is being enabled and commits after the seed
   ran; every other write is queued by its trigger once the enable commits.
 - A purged object's replica is deleted; a trashed object's is kept.
-- A streamed replica carries the source's content type but not its other
-  metadata. That is in BACKLOG, as is an operator view of the failed rows.
+- A replica carries its source's stored headers on either path. An
+  operator view of the failed rows is in BACKLOG.
 
 ## Alternatives considered
 

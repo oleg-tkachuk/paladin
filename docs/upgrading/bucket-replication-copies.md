@@ -14,6 +14,9 @@
 - A purged object's replica is deleted from the destination — a permanent
   delete, the trash's expiry, or its tenant's purge. A move to the trash
   keeps the replica.
+- A replica keeps its source's `Cache-Control`, `Content-Disposition`,
+  `Content-Encoding`, `Content-Language`, content type and user metadata,
+  across backends as well as within one.
 - `worker.jobs.replication.lookback_window` is removed; delete it from any
   values or config that set it, since the strict loader refuses an unknown
   key.

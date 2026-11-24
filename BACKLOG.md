@@ -387,18 +387,6 @@ the same commit. Treat this file like a runtime invariant.
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### A streamed replica carries only the content type
-
-- **Status:** Deferred.
-- **Reason:** across backends `ObjectRouter.Replicate` streams the source into
-  a multipart upload that sets the content type alone; a public collection's
-  `Cache-Control` and any other stored metadata are not copied. A server-side
-  copy on one backend keeps them.
-- **Definition of Done:** the streamed path copies the source's
-  `Cache-Control`, `Content-Disposition` and user metadata to the replica, and
-  a test compares a cross-backend replica's headers with its source's.
-- **Blockers:** none.
-
 ### Operators cannot see or redrive failed replication objects
 
 - **Status:** Deferred.
