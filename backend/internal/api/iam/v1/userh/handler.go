@@ -230,10 +230,11 @@ func createTenant(named, caller uuid.UUID, p *auth.Principal) (uuid.UUID, error)
 	return named, nil
 }
 
-// validateCreate refuses a create that names no user or no password. Input
+// ValidateCreate refuses a create that names no user or no password. Input
 // first: without a subject the request names no user, and Cedar would be
-// asked about the Tenant instead.
-func validateCreate(in CreateUserInput) error {
+// asked about the Tenant instead. It reads no state, so a caller resolving
+// the tenant from the store checks it before that lookup.
+func ValidateCreate(in CreateUserInput) error {
 	if in.Subject == "" {
 		return connect.NewError(connect.CodeInvalidArgument, "subject required")
 	}
@@ -252,8 +253,8 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 	if in.TenantID, err = createTenant(in.TenantID, caller, p); err != nil {
 		return nil, h.answer(opCreate, UserRef{TenantID: caller}, err)
 	}
-	if err := validateCreate(in); err != nil {
-		return nil, err
+	if err := ValidateCreate(in); err != nil {
+		return nil, h.answer(opCreate, UserRef{TenantID: in.TenantID}, err)
 	}
 	if err := h.authorize(ctx, cedar.ActionManageUser,
 		authstore.User{TenantID: in.TenantID, Subject: in.Subject}); err != nil {

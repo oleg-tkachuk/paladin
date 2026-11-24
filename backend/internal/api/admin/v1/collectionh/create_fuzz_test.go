@@ -29,6 +29,8 @@ func FuzzCreateCollection(f *testing.F) {
 		{"docs", "", "", "", "", false},
 		{"docs", "", "b", "n", "max-age=60", false},
 		{"Docs", "", "b", "n", "", false},
+		// A malformed name beside a visibility rule it also breaks.
+		{"Docs", "", "b", "n", "max-age=60", false},
 		{"a//b", "x\x00", "b", "n", "no-store\n", true},
 	} {
 		f.Add(c.name, c.displayName, c.backend, c.bucket, c.cacheControl, c.public)
@@ -40,6 +42,11 @@ func FuzzCreateCollection(f *testing.F) {
 			PublicRead: public, CacheControl: cacheControl,
 		})
 		fuzzassert.Refusal(t, err, createCodes, name, displayName, backend, bucket, cacheControl)
+		// A malformed name is the request's fault whatever else is wrong, so
+		// no binding or visibility rule may answer for it first.
+		if storagepath.ValidateCollection(name) != nil && connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Fatalf("collection %q answered %v, want InvalidArgument (err: %v)", name, connect.CodeOf(err), err)
+		}
 		if err != nil {
 			return
 		}

@@ -13,12 +13,14 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"github.com/oleg-tkachuk/limes"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/iam/v1/userh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	authstore "github.com/oleg-tkachuk/paladin/backend/internal/auth/store"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 	pb "github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1"
 	"github.com/oleg-tkachuk/paladin/sdk/go/gen/paladin/iam/v1/paladiniamv1connect"
 )
@@ -82,20 +84,38 @@ func (s *UserServer) tenantParent(ctx context.Context, parent string) (uuid.UUID
 	return t.TenantID, nil
 }
 
+// Log field keys and the operation name of the refusals CreateUser answers
+// itself; the handler logs its own.
+const (
+	logOp        = "op"
+	logParent    = "parent"
+	logCode      = "code"
+	opCreateUser = "UserService.CreateUser"
+)
+
 func (s *UserServer) CreateUser(ctx context.Context, req *pb.CreateUserRequest) (*pb.User, error) {
 	m := req
-	tenantID, err := s.tenantParent(ctx, m.GetParent())
-	if err != nil {
-		return nil, err
-	}
-	out, err := s.H.CreateUser(ctx, userh.CreateUserInput{
-		TenantID:        tenantID,
+	in := userh.CreateUserInput{
 		Subject:         m.GetSubject(),
 		DisplayName:     m.GetDisplayName(),
 		InitialPassword: m.GetInitialPassword(),
 		Roles:           m.GetRoles(),
 		Scopes:          scopesFromProto(m.GetScopes()),
-	})
+	}
+	// The request is judged before the parent's slug is looked up: a missing
+	// subject or password is the caller's mistake whichever tenant it names.
+	if err := userh.ValidateCreate(in); err != nil {
+		logger.FromContext(ctx).Warn("user operation refused",
+			zap.String(logOp, opCreateUser), zap.String(logParent, m.GetParent()),
+			zap.String(logCode, connect.CodeOf(err).String()), zap.Error(err))
+		return nil, err
+	}
+	tenantID, err := s.tenantParent(ctx, m.GetParent())
+	if err != nil {
+		return nil, err
+	}
+	in.TenantID = tenantID
+	out, err := s.H.CreateUser(ctx, in)
 	if err != nil {
 		return nil, err
 	}
