@@ -77,8 +77,8 @@ require (
 	golang.org/x/crypto v0.59.0
 	golang.org/x/mod v0.43.0
 	golang.org/x/sync v0.25.0
-	google.golang.org/genproto v0.0.0-20261118221215-c8830f628b3f
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261118221215-c8830f628b3f
+	google.golang.org/genproto v0.0.0-20261123191846-1e707ab9fbc2
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261123191846-1e707ab9fbc2
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
@@ -291,7 +291,7 @@ require (
 	golang.org/x/tools v0.52.1-0.20261106145633-d407941a339a // indirect
 	google.golang.org/api v0.304.0 // indirect
 	google.golang.org/genai v1.75.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20261118221215-c8830f628b3f // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20261123191846-1e707ab9fbc2 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
