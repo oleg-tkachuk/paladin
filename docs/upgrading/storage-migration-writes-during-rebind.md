@@ -30,7 +30,10 @@
   uploaded or overwritten behind the copy's cursor no longer roll the
   migration back or leave the tenant reading older bytes. The verify also
   checks such an object's write time and its ETag against the catch-up's
-  copy, not its size alone.
+  copy, not its size alone. A migration already past its copy when this
+  ships has no `copy_started_at` and counts from its creation: one in
+  `rebinding` catches up on every write since, and one in `verifying` rolls
+  back if anything was written during its copy, and can be retried.
 - While a migration is provisioning, copying, rebinding, verifying or
   rolling back, every promote of one of the tenant's objects holds the
   migration's row for its transaction (`FOR SHARE`). Promotes do not wait on

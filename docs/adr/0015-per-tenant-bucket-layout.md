@@ -493,9 +493,11 @@ and the promote's fence, and moves only what changed.
 
 - **The copy's start is fenced.** `copy_started_at` (migration 116) is read
   with `clock_timestamp()` under the migration row's lock, which every
-  promote holds while the migration provisions. So every object written
-  before it was promoted before the copy listed anything, and is copied
-  after its write; every later write is stamped after it.
+  promote holds while the migration provisions. So every promote that took
+  the fence committed before the copy listed anything, and is copied after
+  its write; every later write is stamped after it. A promote that ran its
+  fence before the migration's row existed holds nothing, and can commit
+  across the copy's start stamped before it (BACKLOG).
 - **The catch-up has no cursor.** It lists the live and trashed private
   objects whose `bytes_written_at` is at or after the copy's start and whose
   latest write it has not copied (`storage_migration_caught_up`, one row per

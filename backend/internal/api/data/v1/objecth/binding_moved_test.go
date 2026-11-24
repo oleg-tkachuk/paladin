@@ -65,3 +65,32 @@ func TestCopyObjectDiscardsACopyTheRebindRefused(t *testing.T) {
 		t.Errorf("discarded %v (%v), want the destination as a failed copy", sm.markedFailed, sm.markFailedBy)
 	}
 }
+
+// A completion promotes where it found the bytes, and a copy where it wrote
+// them: the bucket the collection was resolved to, which the promote checks
+// it is still bound to.
+func TestPromoteNamesTheResolvedBucket(t *testing.T) {
+	want := statemachine.Placement{BackendID: "backend-7", Bucket: "bucket-7"}
+
+	sm := &fakeStateMachine{changed: true}
+	repo := &completeRepo{}
+	h, _, _, _, ctx, tenantID := tailHandler(t, repo, headStorage{etag: "e1", size: 12}, sm)
+	repo.obj = pendingObject(tenantID)
+	if _, err := h.CompleteObject(ctx, CompleteObjectInput{Collection: "docs", ObjectID: repo.obj.ObjectID.String()}); err != nil {
+		t.Fatalf("CompleteObject: %v", err)
+	}
+	if sm.promotedIn == nil || *sm.promotedIn != want {
+		t.Errorf("completion promoted in %+v, want %+v", sm.promotedIn, want)
+	}
+
+	sm = &fakeStateMachine{changed: true}
+	repo = &completeRepo{}
+	h, _, _, _, ctx, tenantID = tailHandler(t, repo, noopStorage{}, sm)
+	repo.obj = copySource(tenantID)
+	if _, err := h.CopyObject(ctx, CopyObjectInput{SourceCollection: "src", SourceObjectID: uuid.New().String(), DestCollection: "dst"}); err != nil {
+		t.Fatalf("CopyObject: %v", err)
+	}
+	if sm.promotedIn == nil || *sm.promotedIn != want {
+		t.Errorf("copy promoted in %+v, want %+v", sm.promotedIn, want)
+	}
+}

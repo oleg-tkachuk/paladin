@@ -40,6 +40,8 @@ type fakeStateMachine struct {
 	promotedETag string
 	promotedSize int64
 	promoteCalls int
+	// promotedIn is the placement the last promote named.
+	promotedIn *statemachine.Placement
 
 	markedFailed []uuid.UUID
 	markFailedBy []statemachine.FailureReason
@@ -52,7 +54,7 @@ func (f *fakeStateMachine) PromoteToAvailableInTx(
 	onPromoted func(context.Context, pgx.Tx) error,
 ) (bool, error) {
 	f.promoteCalls++
-	f.promotedID, f.promotedETag, f.promotedSize = objectID, etag, sizeBytes
+	f.promotedID, f.promotedETag, f.promotedSize, f.promotedIn = objectID, etag, sizeBytes, placed
 	if f.promoteErr != nil {
 		return false, f.promoteErr
 	}

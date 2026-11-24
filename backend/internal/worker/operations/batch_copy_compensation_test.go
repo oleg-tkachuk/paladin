@@ -119,14 +119,17 @@ type copyFakeTransitioner struct {
 	markFailedHit bool
 	promoteHit    bool
 	promoteErr    error
+	// placed is the placement the last promote named.
+	placed *statemachine.Placement
 }
 
 func (f *copyFakeTransitioner) DiscardFailed(context.Context, uuid.UUID, statemachine.FailureReason) error {
 	f.markFailedHit = true
 	return f.markFailedErr
 }
-func (f *copyFakeTransitioner) PromoteToAvailable(context.Context, uuid.UUID, *statemachine.Placement, string, int64, string, string, statemachine.Source) (bool, error) {
+func (f *copyFakeTransitioner) PromoteToAvailable(_ context.Context, _ uuid.UUID, placed *statemachine.Placement, _ string, _ int64, _, _ string, _ statemachine.Source) (bool, error) {
 	f.promoteHit = true
+	f.placed = placed
 	return f.promoteErr == nil, f.promoteErr
 }
 func (*copyFakeTransitioner) SoftDelete(context.Context, uuid.UUID, int64) error { panic("unused") }
@@ -238,6 +241,9 @@ func TestCopyOneDiscardsADestinationTheRebindMoved(t *testing.T) {
 	err := e.fill(context.Background(), job, uuid.New())
 	if !errors.Is(err, statemachine.ErrBindingMoved) {
 		t.Fatalf("err = %v, want the refusal", err)
+	}
+	if want := (statemachine.Placement{BackendID: "be-1", Bucket: "shared"}); tr.placed == nil || *tr.placed != want {
+		t.Errorf("promoted in %+v, want the destination's bucket %+v", tr.placed, want)
 	}
 	if len(st.deleted) != 1 || st.deleted[0] != "shared|dst/k" {
 		t.Errorf("deleted %v, want the copy in the bucket it left", st.deleted)

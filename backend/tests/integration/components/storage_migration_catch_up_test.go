@@ -193,6 +193,122 @@ func TestStorageMigrationCatchesUpANewObjectBehindTheCursor(t *testing.T) {
 	}
 }
 
+// countingCopier copies through the store and, after the nth copy of a key,
+// runs the hook registered for that key and count.
+type countingCopier struct {
+	*fakeObjectStore
+	mu     sync.Mutex
+	copies map[string]int
+	hooks  map[string]func()
+}
+
+func (c *countingCopier) CopyObject(ctx context.Context, src, dst worker.CopyLocation) error {
+	if err := c.fakeObjectStore.CopyObject(ctx, src, dst); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.copies[src.Key]++
+	hook := c.hooks[fmt.Sprintf("%s#%d", src.Key, c.copies[src.Key])]
+	c.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return nil
+}
+
+// An object the catch-up copied and that was overwritten again before the
+// rebind is copied again: the catch-up records the write it took, not that
+// it took the object. obj-1 and obj-2 are overwritten once the copy is past
+// them; while the catch-up copies obj-2, obj-1 — already caught up — is
+// overwritten a second time, at the same size.
+func TestStorageMigrationCatchesUpAnObjectWrittenAgain(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := catchUpFixture(t, ctx)
+	const lastKey = "obj-3"
+	mustExec(t, ctx, f.pool, `INSERT INTO objects (tenant_id, collection_id, path, state, content_type, size_bytes)
+		SELECT $1, c.id, $2, 'AVAILABLE', 'image/png', $3 FROM collections c WHERE c.tenant_id = $1 AND c.name = 'docs'`,
+		f.tenant, lastKey, behindSize)
+	f.store.put(f.loc(f.private, "docs", lastKey), behindSize)
+	sm := statemachine.New(f.pool)
+	seq := 0
+	overwrite := func(key string) string {
+		seq++
+		f.store.put(f.loc(f.private, "docs", key), behindSize)
+		etag, _ := f.store.ObjectETag(ctx, f.loc(f.private, "docs", key))
+		if _, err := sm.PromoteToAvailable(ctx, f.objectID(t, ctx, "docs", key), f.sourcePlacement(), etag, behindSize, "",
+			fmt.Sprintf("seq-%03d", seq), statemachine.SourceEvent); err != nil {
+			t.Errorf("overwrite %s: %v", key, err)
+		}
+		return etag
+	}
+	var latest string
+	copier := &countingCopier{fakeObjectStore: f.store, copies: map[string]int{}, hooks: map[string]func(){
+		lastKey + "#1": func() { overwrite(behindKey); overwrite(hookKey) },
+		hookKey + "#2": func() { latest = overwrite(behindKey) },
+	}}
+	w := &worker.StorageMigrationWorker{
+		Repo:   adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool),
+		Copier: copier, Deleter: f.store, Header: f.store, Identity: f.store,
+		Interval: 10 * time.Millisecond, CopyBatch: 1,
+		Now: func() time.Time { return time.Now().Add(time.Hour) },
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		_ = w.Run(runCtx)
+		close(done)
+	}()
+	for runCtx.Err() == nil && f.migrationState(t, ctx) != worker.MigStateCleaned {
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if state := f.migrationState(t, ctx); state != worker.MigStateCleaned {
+		t.Fatalf("migration at %s, want cleaned", state)
+	}
+	if latest == "" {
+		t.Fatal("the second overwrite never ran")
+	}
+	f.assertLatestInTarget(t, ctx, behindKey, latest)
+}
+
+// A catch-up copy recorded for a migration no longer as the worker read it —
+// another attempt, or another state — is not taken for the current one's.
+func TestCatchUpIsNotRecordedForAMigrationThatMoved(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := catchUpFixture(t, ctx)
+	at := worker.MigrationRead{TenantID: f.tenant, State: worker.MigStateRebinding}
+	mustExec(t, ctx, f.pool, `UPDATE tenant_storage_migrations SET state = $2, copy_started_at = now() - interval '1 hour' WHERE tenant_id = $1`,
+		f.tenant, worker.MigStateRebinding)
+	id := f.objectID(t, ctx, "docs", behindKey)
+	f.store.put(f.loc(f.private, "docs", behindKey), behindSize)
+	if _, err := statemachine.New(f.pool).PromoteToAvailable(ctx, id, f.sourcePlacement(), "e", behindSize, "", overwriteSeq, statemachine.SourceEvent); err != nil {
+		t.Fatalf("overwrite: %v", err)
+	}
+	repo := adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool)
+	objs, err := repo.ListUncaughtUp(ctx, at, 10)
+	if err != nil || len(objs) != 1 {
+		t.Fatalf("ListUncaughtUp = %v, %v; want the overwritten object", objs, err)
+	}
+	stale := at
+	stale.Attempts++
+	if _, err := repo.CatchUpObject(ctx, stale, objs[0], func(context.Context) (*string, error) { return nil, nil }); !errors.Is(err, worker.ErrMigrationMoved) {
+		t.Fatalf("CatchUpObject for another attempt = %v, want ErrMigrationMoved", err)
+	}
+	if objs, err := repo.ListUncaughtUp(ctx, at, 10); err != nil || len(objs) != 1 {
+		t.Fatalf("after a stale copy ListUncaughtUp = %v, %v; want the object still behind", objs, err)
+	}
+	if held, err := repo.CatchUpObject(ctx, at, objs[0], func(context.Context) (*string, error) { return nil, nil }); err != nil || !held {
+		t.Fatalf("CatchUpObject = %v, %v; want it recorded", held, err)
+	}
+	if objs, err := repo.ListUncaughtUp(ctx, at, 10); err != nil || len(objs) != 0 {
+		t.Fatalf("after the copy ListUncaughtUp = %v, %v; want none", objs, err)
+	}
+}
+
 // attempts is how often the tenant's migration has failed.
 func (f publicMigrationFixture) attempts(t *testing.T, ctx context.Context) int {
 	t.Helper()

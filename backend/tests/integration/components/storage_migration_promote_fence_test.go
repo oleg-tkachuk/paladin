@@ -10,8 +10,10 @@ import (
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
+	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -88,4 +90,51 @@ func heldPromote(ctx context.Context, sm *statemachine.Transitioner, id uuid.UUI
 		done <- err
 	}()
 	return done
+}
+
+// rebindingProbe HEADs through the reconciler's probe, then runs rebind: the
+// collection moves between the HEAD and the promote.
+type rebindingProbe struct {
+	worker.StorageProbe
+	rebind func()
+}
+
+func (p rebindingProbe) HeadByObjectID(ctx context.Context, id uuid.UUID) (string, int64, string, string, statemachine.Placement, bool, error) {
+	etag, size, sum, seq, placed, found, err := p.StorageProbe.HeadByObjectID(ctx, id)
+	p.rebind()
+	return etag, size, sum, seq, placed, found, err
+}
+
+// The reconciler promotes where its probe found the bytes; a rebind after
+// the HEAD refuses that promote, and the row stays PENDING, anchored, for the
+// next tick to move.
+func TestReconcilerLeavesPendingAnUploadTheRebindOvertook(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := seedPublicMigrationFixture(t, ctx)
+	f.addCollection(t, ctx, "docs", f.private, false)
+	id := f.presignBeforeRebind(t, ctx)
+	f.store.put(f.loc(f.private, "docs", lateKey), lateSize)
+	at := f.startedMigration(t, ctx, worker.MigStateRebinding)
+	mustExec(t, ctx, f.pool, `UPDATE objects SET presign_expires_at = now() - interval '48 hours' WHERE id = $1`, id)
+
+	repo := adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool)
+	probe := rebindingProbe{
+		StorageProbe: adapters.NewReconcilerProbe(sqlc.New(f.pool), storeObjects{s: f.store, notFound: s3adapter.ErrObjectNotFound}),
+		rebind: func() {
+			if err := repo.RebindTenant(ctx, at, f.backend, f.dedicated); err != nil {
+				t.Errorf("rebind: %v", err)
+			}
+		},
+	}
+	r := worker.NewReconcilerV2(statemachine.New(f.pool), probe, worker.ReconcilerV2Config{PendingGraceTTL: time.Second}, zap.NewNop())
+	if err := r.RunOnce(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if state := f.stateOf(t, ctx, id); state != string(statemachine.StatePending) {
+		t.Fatalf("the upload is %s after a rebind overtook its HEAD, want PENDING", state)
+	}
+	if got := f.uploadAnchor(t, ctx, id); got != f.private {
+		t.Fatalf("the upload is anchored to %q, want %s", got, f.private)
+	}
 }

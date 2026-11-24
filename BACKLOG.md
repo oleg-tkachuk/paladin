@@ -536,6 +536,24 @@ the same commit. Treat this file like a runtime invariant.
   and finds its object in the source after the rebind back.
 - **Blockers:** none.
 
+### A promote in flight when a storage migration starts escapes its fence
+
+- **Status:** Deferred.
+- **Reason:** a promote holds the migration row only if the row is in a
+  fencing state when the promote reads it. One that read it before the
+  migration was created (or while it was `failed`) and commits after the
+  copy's start is stamped before `copy_started_at`, so the catch-up skips it,
+  and the copy may have listed its key before it committed. A new object is
+  then missing from the target and the verify rolls back; an overwrite of
+  the same size keeps the older bytes in the target. The window is one
+  promote transaction long.
+- **Definition of Done:** the copy's start waits for promotes that began
+  before the migration existed — `StartStorageMigration` takes a lock every
+  promote takes, or the copy starts only after a grace longer than a promote
+  can run — and a test holds a promote open across the start and finds its
+  bytes in the target.
+- **Blockers:** none.
+
 ### An overwrite whose storage event arrives after a storage migration's rebind is dropped
 
 - **Status:** Deferred.
