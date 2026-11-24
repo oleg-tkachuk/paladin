@@ -312,7 +312,11 @@ fifteen minutes by default). That term counted nothing the anchors do not:
   it cannot: `UploadObject` (PUT or POST) inserts its row anchored to the
   bucket before signing; `RegenerateUploadURL` serves only a `PENDING` row,
   signs for its anchor and moves `presign_expires_at` with the new URL;
-  `PresignPart` signs for an open multipart session; `CopyObject` and a batch
+  `PresignPart` signs for an open multipart session, and the completion that
+  assembles it settles the object's anchor with its promote — the store has
+  consumed the upload, so no part URL can write again, where the anchor used
+  to hold a migration until the session's deadline, a day after the
+  initiate; `CopyObject` and a batch
   copy are Paladin's own writes, anchored at creation and settled with their
   promote. The MCP tools call the same RPCs. A promoted row keeps its anchor
   until the reconciler settles it, after its URL has expired.

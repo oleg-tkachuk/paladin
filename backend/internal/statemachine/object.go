@@ -125,8 +125,9 @@ func (t *Transitioner) PromoteToAvailable(
 type Placement struct {
 	BackendID string
 	Bucket    string
-	// Settled is a promote of bytes Paladin wrote itself, a copy: no URL of
-	// the row can write the key again, so the anchor is settled with the
+	// Settled is a promote after which no URL of the row can write the key
+	// again — bytes Paladin wrote itself (a copy), or a multipart upload the
+	// store assembled and so consumed — so the anchor is settled with the
 	// promote rather than when a URL expires.
 	Settled bool
 }
