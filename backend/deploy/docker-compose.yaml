@@ -44,7 +44,7 @@ x-paladin-base: &paladin-base
 
 services:
   postgres:
-    image: postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60
+    image: postgres:19.0@sha256:4ae330eb888b3b769aa542424859059d8e37507e365d3d48024446dacd8c4d8d
     container_name: paladin-postgres
     environment:
       POSTGRES_DB: paladin
@@ -99,7 +99,7 @@ services:
   # image is already pinned here and carries openssl, whose default output
   # is the PKCS#8 PEM limes reads.
   paladin-capability-key:
-    image: postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60
+    image: postgres:19.0@sha256:4ae330eb888b3b769aa542424859059d8e37507e365d3d48024446dacd8c4d8d
     container_name: paladin-capability-key
     restart: "no"
     entrypoint: ["sh", "-c", "test -s /keys/capability.pem || (openssl genpkey -algorithm ed25519 -out /keys/capability.pem && chmod 0444 /keys/capability.pem); test -s /session/session-key.pem || (openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out /session/session-key.pem && chmod 0444 /session/session-key.pem)"]
@@ -130,7 +130,7 @@ services:
   # connects as it (configs/compose.yaml), so on a fresh volume nothing could
   # start without this. Same step as the e2e stack's promote-app-role.
   paladin-promote-app-role:
-    image: postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60
+    image: postgres:19.0@sha256:4ae330eb888b3b769aa542424859059d8e37507e365d3d48024446dacd8c4d8d
     container_name: paladin-promote-app-role
     restart: "no"
     environment:
