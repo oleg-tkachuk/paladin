@@ -90,7 +90,7 @@ func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID
 	if origin, relocate := objecth.UploadOrigin(anchor, bound); relocate {
 		b, moved, err := r.relocate(ctx, objectID, origin, bound, algo, bucketgate.State{
 			Enabled: row.Enabled, ReadOnly: row.ReadOnly, ProvisionState: row.ProvisionState,
-		})
+		}, uploadRelocation)
 		if err != nil || moved {
 			return b.etag, b.size, b.checksum, b.sequencer, placed, moved, err
 		}
@@ -138,10 +138,29 @@ func (r *ReconcilerProbe) uploadAnchor(ctx context.Context, objectID uuid.UUID) 
 	}}, nil
 }
 
-// relocate copies an upload's bytes from origin, the bucket its URL named,
-// into bound, and reports what bound then holds. moved is false, with no
-// error, when origin holds nothing: the bytes, if any, are in bound.
-func (r *ReconcilerProbe) relocate(ctx context.Context, objectID uuid.UUID, origin, bound objecth.Location, algo string, boundState bucketgate.State) (probedBytes, bool, error) {
+// relocation is what one kind of move logs: when origin holds nothing, and
+// once the bytes are moved.
+type relocation struct {
+	notInOrigin string
+	moved       string
+}
+
+// uploadRelocation is an upload's move from the bucket its URL named.
+var uploadRelocation = relocation{
+	notInOrigin: "upload not in the bucket its URL named; looking in the collection's bucket",
+	moved:       "upload moved into the collection's bucket, which a storage migration rebound since its URL was signed",
+}
+
+// lateWriteRelocation is a late source write's move (MoveObjectBytes).
+var lateWriteRelocation = relocation{
+	notInOrigin: "late source write: the migration's source no longer holds the object",
+	moved:       "late source write moved into the collection's bucket, which a storage migration rebound since it was written",
+}
+
+// relocate copies an object's bytes from origin into bound, and reports
+// what bound then holds. moved is false, with no error, when origin holds
+// nothing: the bytes, if any, are in bound.
+func (r *ReconcilerProbe) relocate(ctx context.Context, objectID uuid.UUID, origin, bound objecth.Location, algo string, boundState bucketgate.State, what relocation) (probedBytes, bool, error) {
 	log := r.log.With(zap.String(objecth.LogFieldObjectID, objectID.String()), zap.String(objecth.LogFieldTenantID, bound.TenantID.String()),
 		zap.String(objecth.LogFieldCollection, bound.Collection),
 		zap.String(objecth.LogFieldFromBucket, origin.Bucket), zap.String(objecth.LogFieldToBucket, bound.Bucket))
@@ -150,7 +169,7 @@ func (r *ReconcilerProbe) relocate(ctx context.Context, objectID uuid.UUID, orig
 		return probedBytes{}, false, err
 	}
 	if !found {
-		log.Info("upload not in the bucket its URL named; looking in the collection's bucket")
+		log.Info(what.notInOrigin)
 		return probedBytes{}, false, nil
 	}
 	if err := bucketgate.Check(bucketgate.BytesWrite, boundState); err != nil {
@@ -172,8 +191,35 @@ func (r *ReconcilerProbe) relocate(ctx context.Context, objectID uuid.UUID, orig
 	if b.checksum == "" {
 		b.checksum = up.checksum
 	}
-	log.Info("upload moved into the collection's bucket, which a storage migration rebound since its URL was signed")
+	log.Info(what.moved)
 	return b, true, nil
+}
+
+// MoveObjectBytes copies an object's bytes from from, a storage migration's
+// source, into to, the bucket its collection is bound to now, under the same
+// key, and reports what to then holds (statemachine.LateSourceWrite). The
+// copy writes bytes, so it asks the bucket gate as a write on the
+// collection's bucket. A source that holds nothing is
+// statemachine.ErrLateWriteGone.
+func (r *ReconcilerProbe) MoveObjectBytes(ctx context.Context, objectID uuid.UUID, from, to statemachine.Placement) (statemachine.MovedBytes, error) {
+	row, err := r.q.LookupObjectByID(ctx, pgUUID(objectID))
+	if err != nil {
+		return statemachine.MovedBytes{}, fmt.Errorf("lookup object: %w", err)
+	}
+	bound := objecth.Location{BackendID: to.BackendID, TenantID: uuidFrom(row.TenantID), Bucket: to.Bucket,
+		Collection: row.CollectionName, Key: row.Path}
+	origin := bound
+	origin.BackendID, origin.Bucket = from.BackendID, from.Bucket
+	b, moved, err := r.relocate(ctx, objectID, origin, bound, checksumAlgoName(row.ChecksumAlgorithm), bucketgate.State{
+		Enabled: row.Enabled, ReadOnly: row.ReadOnly, ProvisionState: row.ProvisionState,
+	}, lateWriteRelocation)
+	if err != nil {
+		return statemachine.MovedBytes{}, err
+	}
+	if !moved {
+		return statemachine.MovedBytes{}, fmt.Errorf("%w: %s/%s", statemachine.ErrLateWriteGone, from.BackendID, from.Bucket)
+	}
+	return statemachine.MovedBytes{ETag: b.etag, Size: b.size}, nil
 }
 
 // DeleteByObjectID removes an object's stored bytes — the reconciler's

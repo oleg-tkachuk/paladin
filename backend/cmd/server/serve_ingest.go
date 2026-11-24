@@ -131,20 +131,24 @@ func runIngest(
 	// does; the `serve dispatcher` pod fans it out (ADR-0044).
 	ingestEvents := worker.NewEventRecorder(l.Named("ingest-events"))
 
+	// A delete event is believed only when a HEAD at the object's current
+	// placement finds nothing; the probe reads the placement through the
+	// same BYPASSRLS queries. It also moves a write a storage migration's
+	// source reports after the rebind into the collection's bucket.
+	ingestProbe := adapters.NewReconcilerProbe(ingestQueries, s3adapter.NewObjectRouter(deps.Registry)).WithLogger(l.Named("ingest.probe"))
 	handler := &eventingest.PromoteHandler{
 		Lookup:       ingestQueries,
 		Transitioner: ingestSM,
 		Events:       ingestEvents,
 		Logger:       l.Named("ingest.handler"),
 		Tenants:      tenantstate.NewReader(ingestPool),
-		// A delete event is believed only when a HEAD at the object's
-		// current placement finds nothing; the probe reads the placement
-		// through the same BYPASSRLS queries.
-		Probe:   adapters.NewReconcilerProbe(ingestQueries, s3adapter.NewObjectRouter(deps.Registry)).WithLogger(l.Named("ingest.probe")),
-		Deleter: ingestSM,
+		Probe:        ingestProbe,
+		Deleter:      ingestSM,
 		// The transitions are recorded as the data-plane RPCs that make the
 		// same ones are; the repository writes in the object's tenant.
 		Audit: adapters.NewAuditRepoV2(ingestQueries, ingestPool),
+		Late:  ingestSM,
+		Mover: ingestProbe,
 	}
 
 	// Build the configured driver.

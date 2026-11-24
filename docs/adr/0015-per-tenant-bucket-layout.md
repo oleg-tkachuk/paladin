@@ -529,6 +529,111 @@ Not covered, and recorded in BACKLOG: an overwrite reported only by a storage
 event that arrives after the rebind is dropped before it reaches the row; the
 rollback's own copy back still walks a cursor.
 
+## Addendum (2026-11-24): a source write whose event comes after the rebind is moved
+
+In an explicit-mode bucket an overwrite is recorded only when its storage
+event is. One written to the source behind the copy's cursor and delivered
+after the rebind named a bucket the collection was no longer bound to, and
+was skipped: the target kept the older bytes, and the cleanup deleted the
+newer ones with the source.
+
+The other option was to hold the cleanup while such events can still arrive.
+It cannot know when that is, and the target would still serve the older
+bytes meanwhile; the write is moved instead, as `CompleteObject` moves an
+upload.
+
+- **The event is matched to the migration.** An uploaded event from a bucket
+  the collection is not bound to — or one whose promote the fence refused
+  with `ErrBindingMoved` — is a late source write when the tenant's
+  migration rebound the collection from that bucket and still keeps its
+  source (`migstate.ReboundToTarget`, `rebound_at` set). Any other is skipped
+  as before.
+- **It is moved under the object's row.** `PromoteLateSourceWriteInTx` holds
+  the row (`FOR UPDATE`) and the migration's fence from the decision to the
+  promote: it copies the source's bytes into the collection's bucket, checks
+  the size, and promotes them there under the ETag that bucket reports.
+- **Only when nothing newer is recorded.** The object must be `AVAILABLE`, the
+  event's sequencer must follow the row's, and the row's last write must
+  predate the rebind. A write recorded since went to the target, later than
+  anything in the source; a sequencer cannot tell, since a bucket orders
+  only its own events. Such an event is skipped and logged.
+
+An event that arrives once the cleanup has deleted the source copy finds
+nothing to move; it is logged at Error and skipped (BACKLOG). The rollback's
+mirror — a target event delivered after the rebind back — is not moved
+either (BACKLOG).
+
+## Addendum (2026-11-24): a start waits for the promotes in flight
+
+A promote holds the migration row only if the row is in a fencing state when
+the promote reads it. One that read it before the migration existed, or
+while it was `failed`, held nothing: it could commit after the copy listed
+past its key, stamped before `copy_started_at`, and the catch-up skipped it.
+
+Starting the copy only after a grace longer than any promote would rest on
+a guess about how long a promote runs; a lock is chosen. The tenant's
+row lock was not usable: the rebind updates `tenants` while holding the
+migration row, and a promote holding the tenant row while waiting on the
+migration row would close a cycle.
+
+- **Every promote holds the tenant's start lock shared**
+  (`pg_advisory_xact_lock_shared`, space `migstate.LockSpaceStart`, key
+  `migstate.TenantLockKey`), in a statement before the one that reads the
+  migration row. Promotes do not wait on each other.
+- **A transition into a fencing state from a non-fencing one takes it
+  exclusively**: a new start, a retry of a `failed` migration, and a stuck
+  rollback. It waits for every promote in flight; a later promote waits for
+  it, then reads the row it left and holds it. Taken only once no migration
+  is active, so no promote holding the lock waits on a row a worker holds.
+
+## Addendum (2026-11-24): a collection created during a rebind moves with the others
+
+`CreateCollection` resolves its bucket — the tenant's default binding, most
+often — before its transaction. One that resolved the source before the
+rebind and inserted after it stayed in the source while the tenant was
+`dedicated`; the mirror held for a rebind back. Rolling the migration back
+when the verify finds such a collection was the alternative; a whole
+migration is too much to pay for one creation.
+
+- **The moves and the creation share a lock.** The rebind and the rebind
+  back hold the tenant's bindings lock exclusively
+  (`migstate.LockSpaceBindings`) before they list the collections; every
+  private collection's creation holds it shared until it commits. A creation
+  in flight is waited for and moved with the others.
+- **A creation after the move re-checks its bucket.** Under the lock, a
+  private collection bound to a bucket the tenant's latest migration moved
+  away from — the source once rebound (`migstate.SourceLeft`), the target
+  once rolled back — is refused with `ErrBucketMigratedAway` (`ABORTED`); a
+  retry resolves the binding again. It is refused, not redirected: the
+  caller's authorization and the resource name already named the bucket.
+
+## Addendum (2026-11-24): the rollback records what it copied back
+
+The rollback copied back, behind a `(written at, id)` cursor, the objects
+written since the rebind. A promote stamps its write before it commits, so
+one that committed after a batch had listed past its stamp fell behind the
+cursor; the rebind back checked past the cursor only, and its bytes stayed in
+the target alone. The catch-up before the rebind had already met the same
+shape, and is mirrored:
+
+- **No cursor.** The rollback lists the live and trashed private objects
+  written at or after `rebound_at` whose latest write it has not copied back
+  (`storage_migration_copied_back`, migration 118, one row per object,
+  cleared when a rollback starts and once it has rebound back). A promote
+  committed after a batch is listed by the next.
+- **Each copy holds what it acts on.** The object's row (`FOR KEY SHARE`),
+  then the migration row as read (`FOR SHARE`, the order a promote takes
+  them), before the copy: a worker resumed past its lease copies nothing, and
+  the rebind back waits for every copy in flight. The write is recorded on
+  the same transaction, copied or deliberately left (the target lacks it, or
+  holds another size).
+- **The rebind back counts.** Under the migration row's lock — which every
+  promote holds while the migration rolls back — any object still not copied
+  back is `ErrRollbackBehind`, and nothing changes.
+
+`rollback_cursor_at` and `rollback_cursor_id` are no longer read; they are
+dropped once no running binary selects them (BACKLOG).
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

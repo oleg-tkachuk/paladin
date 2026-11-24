@@ -132,11 +132,6 @@ type StorageMigration struct {
 	// start); zero before the rebind. A rollback copies back the objects
 	// written from then on.
 	ReboundAt time.Time
-	// RollbackCursorAt / RollbackCursorID are the rollback's resume cursor:
-	// the (written at, id) of the last object copied back; zero until the
-	// first batch.
-	RollbackCursorAt time.Time
-	RollbackCursorID uuid.UUID
 	// CopyStartedAt is when the copy started (copy_started_at, migration
 	// 116): an object written since may have reached the source only, so the
 	// catch-up copies it before the rebind. A migration from before 116 reads
@@ -192,8 +187,8 @@ type CaughtUp struct {
 	ETag      *string
 }
 
-// WrittenObject is an object written since a point in time, as the rollback
-// lists it: keyed by (WrittenAt, ID) for its cursor.
+// WrittenObject is an object written since a point in time, as the catch-up
+// and the rollback list it: the write (WrittenAt) each records it copied.
 type WrittenObject struct {
 	ObjectRef
 	ID uuid.UUID
@@ -257,20 +252,27 @@ type MigrationRepo interface {
 	// StartRollback moves verifying -> rolling_back, recording reason as the
 	// migration's error and counting the failure.
 	StartRollback(ctx context.Context, at MigrationRead, reason string) error
-	// ListWrittenSince lists the tenant's live and trashed private objects whose
-	// (bytes written at, id) is after (afterAt, afterID), in that order.
-	ListWrittenSince(ctx context.Context, tenantID uuid.UUID, afterAt time.Time, afterID uuid.UUID, limit int) ([]WrittenObject, error)
-	// AdvanceRollback records the rollback cursor; it only moves forward.
-	AdvanceRollback(ctx context.Context, at MigrationRead, cursorAt time.Time, cursorID uuid.UUID) error
+	// ListUncopiedBack lists the tenant's live and trashed private objects
+	// whose bytes were written since the rebind and whose latest write the
+	// rollback has not copied back, in (written at, id) order — while the
+	// migration is as read; none otherwise.
+	ListUncopiedBack(ctx context.Context, at MigrationRead, limit int) ([]WrittenObject, error)
+	// CopyBackObject holds o's row against a delete and a promote, then the
+	// migration row as read, shared — so a stale worker copies nothing
+	// (ErrMigrationMoved) and the rebind back waits for the copy — runs fn,
+	// and records, on the same transaction, the write fn took. No row
+	// (purged since it was listed) runs nothing and reports false.
+	CopyBackObject(ctx context.Context, at MigrationRead, o WrittenObject, fn func(context.Context) error) (bool, error)
 	// RebindBack is the rollback's last step, in ONE transaction under the
-	// migration row's lock: provided no object was written past the cursor
-	// (else ErrRollbackBehind, and nothing changes), it rebinds every private
+	// migration row's lock — which every promote holds while it runs —
+	// provided ListUncopiedBack would list nothing (else ErrRollbackBehind,
+	// and nothing changes): it rebinds every private
 	// collection to (sourceBackendID, sourceBucketName), flips storage_layout
 	// to 'shared', points the default binding at the source bucket and moves
 	// the migration rolling_back -> failed, keeping its error. All of it or
 	// none: a tenant is never left half rebound. A migration no longer as read
 	// is ErrMigrationMoved.
-	RebindBack(ctx context.Context, at MigrationRead, cursorAt time.Time, cursorID uuid.UUID, sourceBackendID, sourceBucketName string) error
+	RebindBack(ctx context.Context, at MigrationRead, sourceBackendID, sourceBucketName string) error
 	Complete(ctx context.Context, at MigrationRead) error
 	// MarkCleaned is the terminal transition after the old copies are deleted.
 	MarkCleaned(ctx context.Context, at MigrationRead) error
@@ -387,9 +389,10 @@ func verifyReason(err error) string {
 	return reasonVerifyPrefix + reasonVerifyUnlisted
 }
 
-// ErrRollbackBehind reports a rebind back refused because objects were
-// written to the target past the rollback cursor since the worker last
-// listed: they are copied first, on the next tick.
+// ErrRollbackBehind reports a rebind back refused because objects written
+// to the target since the rebind are not copied back yet — written since
+// the worker last listed, or committed after it: they are copied first, on
+// the next tick.
 var ErrRollbackBehind = errors.New("objects written since the rollback's last batch")
 
 // StorageMigrationWorker drives active migrations to completion.
@@ -1062,21 +1065,24 @@ func (w *StorageMigrationWorker) headSize(ctx context.Context, loc CopyLocation)
 // data again).
 //
 //  1. Copy back, one batch per tick, every live or trashed private object
-//     whose bytes were written at or after rebound_at, resumable by the
-//     (written at, id) cursor. Bytes, not the row: every write that puts
-//     bytes under an object's key is a promote — a new upload's first, a
-//     storage-event overwrite's later one — and the promote records it
-//     (objects.bytes_written_at). Anything else that changes a row after the
-//     rebind — a tag, a taint, a lock, a trash move, a restore from the trash
-//     or of a version, which repoint a row or a pointer only — leaves the
-//     bytes where they were. Such an object's source copy is the original
-//     and its target copy may be the broken one the verify failed on, so it
-//     is NOT copied, as no object older than the rebind is. rebound_at is
-//     the rebind transaction's start, no later than any write that could see
-//     the rebind. Same-key copies, so redoing one is harmless.
-//  2. With nothing left past the cursor, RebindBack: all or nothing, and
-//     refused if anything was written past the cursor meanwhile (that is
-//     copied first, next tick). The tenant is shared again and the
+//     whose bytes were written at or after rebound_at and whose latest write
+//     the rollback has not copied back (ListUncopiedBack). Bytes, not the
+//     row: every write that puts bytes under an object's key is a promote —
+//     a new upload's first, a storage-event overwrite's later one — and the
+//     promote records it (objects.bytes_written_at). Anything else that
+//     changes a row after the rebind — a tag, a taint, a lock, a trash move,
+//     a restore from the trash or of a version, which repoint a row or a
+//     pointer only — leaves the bytes where they were. Such an object's
+//     source copy is the original and its target copy may be the broken one
+//     the verify failed on, so it is NOT copied, as no object older than the
+//     rebind is. rebound_at is the rebind transaction's start, no later than
+//     any write that could see the rebind. Each copy records the write it
+//     took (CopyBackObject), not a cursor: a promote stamps its write before
+//     it commits, so one that commits after a batch listed past its stamp is
+//     listed by the next. Same-key copies, so redoing one is harmless.
+//  2. With nothing left to copy back, RebindBack: all or nothing, and
+//     refused if anything is still uncopied under the migration row's lock
+//     (that is copied first, next tick). The tenant is shared again and the
 //     migration 'failed' — retryable as any failure before a rebind.
 //
 // Trashed objects are copied back like live ones: an object uploaded after
@@ -1090,53 +1096,49 @@ func (w *StorageMigrationWorker) headSize(ctx context.Context, loc CopyLocation)
 // tenant keeps serving from the target meanwhile, never from a half-rebound
 // mix.
 func (w *StorageMigrationWorker) stepRollingBack(ctx context.Context, m StorageMigration) error {
-	afterAt, afterID := m.ReboundAt, uuid.Nil()
-	if !m.RollbackCursorAt.IsZero() {
-		afterAt, afterID = m.RollbackCursorAt, m.RollbackCursorID
-	}
-	objs, err := w.Repo.ListWrittenSince(ctx, m.TenantID, afterAt, afterID, w.batch())
+	objs, err := w.Repo.ListUncopiedBack(ctx, m.Read(), w.batch())
 	if err != nil {
 		return fmt.Errorf("rollback list objects: %w", err)
 	}
 	if len(objs) == 0 {
-		return w.rebindBack(ctx, m, afterAt, afterID)
+		return w.rebindBack(ctx, m)
 	}
-	// Claim the batch: a guarded write of the cursor as it stands, so a
-	// worker resumed past its lease finds out before it copies, not after.
-	// Once the rollback has finished and the tenant is shared again, objects
-	// written since go to the source; a stale batch copying the target over
-	// them would put old bytes back.
-	if err := w.Repo.AdvanceRollback(ctx, m.Read(), afterAt, afterID); err != nil {
-		return err
-	}
-	return w.copyBackBatch(ctx, m, objs, afterAt, afterID)
-}
-
-// copyBackBatch copies a claimed batch back to the source in cursor order,
-// starting past (afterAt, afterID), the cursor the batch was claimed at, and
-// records the cursor past the last object copied — on a failure too, so the
-// next tick resumes there. Recording the claimed cursor again, when nothing
-// was copied, changes nothing: the cursor only moves forward.
-func (w *StorageMigrationWorker) copyBackBatch(ctx context.Context, m StorageMigration, objs []WrittenObject, afterAt time.Time, afterID uuid.UUID) error {
-	curAt, curID := afterAt, afterID
+	var copied, purged int64
 	for _, o := range objs {
 		if ctx.Err() != nil {
 			break
 		}
-		if err := w.copyBackOne(ctx, m, o.ObjectRef); err != nil {
-			// Persist progress so far, then bubble — the batch retries from here.
-			_ = w.Repo.AdvanceRollback(ctx, m.Read(), curAt, curID)
+		held, err := w.Repo.CopyBackObject(ctx, m.Read(), o, func(ctx context.Context) error {
+			return w.copyBackOne(ctx, m, o.ObjectRef)
+		})
+		if errors.Is(err, ErrMigrationMoved) {
+			return err
+		}
+		if err != nil {
+			w.log().Error("rollback copy failed; the rebind back waits for it",
+				zap.String("tenant_id", m.TenantID.String()),
+				zap.String("collection", o.Collection), zap.String("key", o.Key), zap.Error(err))
 			return fmt.Errorf("rollback copy %s/%s: %w", o.Collection, o.Key, err)
 		}
-		curAt, curID = o.WrittenAt, o.ID
+		if held {
+			copied++
+			continue
+		}
+		purged++
+		w.log().Info("rollback: object purged since it was listed; nothing to copy back",
+			zap.String("tenant_id", m.TenantID.String()),
+			zap.String("collection", o.Collection), zap.String("key", o.Key))
 	}
-	return w.Repo.AdvanceRollback(ctx, m.Read(), curAt, curID)
+	w.log().Info("rollback pass: copied back objects written since the rebind",
+		zap.String("tenant_id", m.TenantID.String()),
+		zap.Int("listed", len(objs)), zap.Int64("copied", copied), zap.Int64("purged", purged))
+	return nil
 }
 
-// rebindBack is the rollback's last step, once nothing is left past the
-// cursor: the tenant goes back to its source bucket (RebindBack says how).
-func (w *StorageMigrationWorker) rebindBack(ctx context.Context, m StorageMigration, afterAt time.Time, afterID uuid.UUID) error {
-	if err := w.Repo.RebindBack(ctx, m.Read(), afterAt, afterID, m.SourceBackendID, m.SourceBucketName); err != nil {
+// rebindBack is the rollback's last step, once nothing is left to copy
+// back: the tenant goes back to its source bucket (RebindBack says how).
+func (w *StorageMigrationWorker) rebindBack(ctx context.Context, m StorageMigration) error {
+	if err := w.Repo.RebindBack(ctx, m.Read(), m.SourceBackendID, m.SourceBucketName); err != nil {
 		return err
 	}
 	w.log().Warn("migration rolled back; tenant is on its source bucket again",
@@ -1146,24 +1148,16 @@ func (w *StorageMigrationWorker) rebindBack(ctx context.Context, m StorageMigrat
 }
 
 // copyBackOne copies o from the target back to the source, when the target
-// holds it as its row records it (targetHolds). The row is held for the
-// copy, as the copy phase holds it: a purge either waits and then owes the
-// source copy too, or ran first and leaves nothing to copy back.
+// holds it as its row records it (targetHolds). It runs under the object's
+// row hold (CopyBackObject): a purge either waits and then owes the source
+// copy too, or ran first and leaves nothing to copy back.
 func (w *StorageMigrationWorker) copyBackOne(ctx context.Context, m StorageMigration, o ObjectRef) error {
 	src := m.targetLoc(o)
-	held, err := w.Repo.HoldObject(ctx, m.TenantID, o, nil, func(ctx context.Context) error {
-		copyIt, err := w.targetHolds(ctx, src, o.SizeBytes)
-		if err != nil || !copyIt {
-			return err
-		}
-		return w.Copier.CopyObject(ctx, src, m.sourceLoc(o))
-	})
-	if err == nil && !held {
-		w.log().Info("rollback: object purged since it was listed; nothing to copy back",
-			zap.String("tenant_id", m.TenantID.String()),
-			zap.String("collection", o.Collection), zap.String("key", o.Key))
+	copyIt, err := w.targetHolds(ctx, src, o.SizeBytes)
+	if err != nil || !copyIt {
+		return err
 	}
-	return err
+	return w.Copier.CopyObject(ctx, src, m.sourceLoc(o))
 }
 
 // targetHolds reports whether the target bucket holds the object as its row

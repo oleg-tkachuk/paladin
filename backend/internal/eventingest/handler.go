@@ -70,6 +70,20 @@ type StorageProbe interface {
 	HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, placed statemachine.Placement, found bool, err error)
 }
 
+// LatePromoter is the slice of *statemachine.Transitioner that promotes a
+// write reported in a storage migration's source after the migration
+// rebound the collection (statemachine.LateSourceWrite).
+type LatePromoter interface {
+	PromoteLateSourceWriteInTx(ctx context.Context, objectID uuid.UUID, w statemachine.LateSourceWrite, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
+}
+
+// SourceMover copies an object's bytes between two buckets under the same
+// key and reports what the second then holds; a first that holds nothing is
+// statemachine.ErrLateWriteGone. Satisfied by *adapters.ReconcilerProbe.
+type SourceMover interface {
+	MoveObjectBytes(ctx context.Context, objectID uuid.UUID, from, to statemachine.Placement) (statemachine.MovedBytes, error)
+}
+
 // SoftDeleter is the slice of *statemachine.Transitioner a delete event uses.
 type SoftDeleter interface {
 	SoftDeleteInTx(ctx context.Context, objectID uuid.UUID, resourceVersion int64, onDeleted func(ctx context.Context, tx pgx.Tx) error) error
@@ -89,6 +103,12 @@ type PromoteHandler struct {
 	Tenants auth.TenantStateReader
 	// Audit records the transitions events make. nil records none.
 	Audit AuditWriter
+	// Late and Mover promote a write a storage event reports in a storage
+	// migration's source after the migration rebound the collection to its
+	// target: the bytes are moved into the target and promoted there.
+	// Without both, such an event is skipped as from another bucket.
+	Late  LatePromoter
+	Mover SourceMover
 }
 
 func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
@@ -148,7 +168,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		return nil
 	}
 
-	placed, skip, err := h.fromAnotherBucket(ctx, logger, tenantPg, collection, ev.SubjectFields.Bucket)
+	placed, bound, skip, err := h.fromAnotherBucket(ctx, logger, tenantPg, collection, ev.SubjectFields.Bucket)
 	if skip || err != nil {
 		return err
 	}
@@ -170,6 +190,10 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 	}
 
 	objectID := uuid.UUID(row.Object.ID.Bytes)
+
+	if bound != nil {
+		return h.lateSourceWrite(ctx, logger, ev, tenantUUID, objectID, collection, key, *bound)
+	}
 
 	switch ev.Type {
 	case EventTypeUploaded:
@@ -208,6 +232,13 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 			logger.Warn("event does not match the object's registration; leaving it for the reconciler",
 				zap.String("object_id", objectID.String()), zap.Error(err))
 			return nil
+		}
+		if moved, ok := errors.AsType[*statemachine.BindingMovedError](err); ok && h.movesLateWrites() {
+			// A storage migration rebound the collection after the event's
+			// bucket was checked: the event is a late source write.
+			logger.Info("promote refused: the collection was rebound since the event's bucket was checked; moving the write",
+				zap.String("object_id", objectID.String()), zap.Error(err))
+			return h.lateSourceWrite(ctx, logger, ev, tenantUUID, objectID, collection, key, moved.Bound)
 		}
 		if errors.Is(err, statemachine.ErrBindingMoved) {
 			// A storage migration rebound the collection after the event's
@@ -359,27 +390,91 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 //
 // placed is the bucket the event's bytes are in, which the promote checks the
 // collection is still bound to; nil for an event that names no bucket.
-func (h *PromoteHandler) fromAnotherBucket(ctx context.Context, logger *zap.Logger, tenant pgtype.UUID, collection, bucket string) (placed *statemachine.Placement, skip bool, err error) {
+//
+// When the handler moves late source writes (Late, Mover), an event from
+// another bucket is not skipped here: bound is then the collection's bucket,
+// and lateSourceWrite decides whether a storage migration rebound the
+// collection from the event's bucket.
+func (h *PromoteHandler) fromAnotherBucket(ctx context.Context, logger *zap.Logger, tenant pgtype.UUID, collection, bucket string) (placed, bound *statemachine.Placement, skip bool, err error) {
 	if bucket == "" {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	binding, err := h.Lookup.GetCollection(ctx, tenant, collection)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.Debug("no such collection for event; skipping", zap.String("collection", collection))
-		return nil, true, nil
+		return nil, nil, true, nil
 	}
 	if err != nil {
-		return nil, false, fmt.Errorf("collection binding: %w", err)
+		return nil, nil, false, fmt.Errorf("collection binding: %w", err)
 	}
-	if binding.BucketName != bucket {
-		logger.Warn("event is from a bucket the collection is not bound to; skipping",
-			zap.String("collection", collection),
-			zap.String("event_bucket", bucket),
-			zap.String("collection_bucket", binding.BucketName),
-		)
-		return nil, true, nil
+	here := &statemachine.Placement{BackendID: binding.BackendName, Bucket: binding.BucketName}
+	if binding.BucketName == bucket {
+		return here, nil, false, nil
 	}
-	return &statemachine.Placement{BackendID: binding.BackendName, Bucket: binding.BucketName}, false, nil
+	if h.movesLateWrites() {
+		return nil, here, false, nil
+	}
+	logger.Warn("event is from a bucket the collection is not bound to; skipping",
+		zap.String("collection", collection),
+		zap.String("event_bucket", bucket),
+		zap.String("collection_bucket", binding.BucketName),
+	)
+	return nil, nil, true, nil
+}
+
+// movesLateWrites reports whether the handler moves late source writes.
+func (h *PromoteHandler) movesLateWrites() bool {
+	return h.Late != nil && h.Mover != nil
+}
+
+// lateSourceWrite handles an event from a bucket the collection is not bound
+// to; bound is the one it is. When a storage migration rebound the
+// collection from the event's bucket and keeps its source still, an uploaded
+// event reports a write that landed in the source while the migration copied
+// and whose event came after the rebind: its bytes are moved into bound and
+// promoted there (statemachine.LateSourceWrite), notifying subscribers as
+// any promote does. Otherwise — no such migration, a delete event, or a write
+// the target has since superseded — it is skipped, as from another bucket.
+func (h *PromoteHandler) lateSourceWrite(ctx context.Context, logger *zap.Logger, ev CloudEvent, tenant, objectID uuid.UUID, collection, key string, bound statemachine.Placement) error {
+	logger = logger.With(zap.String("object_id", objectID.String()), zap.String("collection", collection),
+		zap.String("event_bucket", ev.SubjectFields.Bucket), zap.String("collection_bucket", bound.Bucket))
+	if ev.Type != EventTypeUploaded {
+		logger.Warn("event is from a bucket the collection is not bound to; skipping")
+		return nil
+	}
+	resourceName := h.objectResourceName(ctx, ev.SubjectFields.TenantID, collection, key)
+	w := statemachine.LateSourceWrite{
+		FromBucket: ev.SubjectFields.Bucket, To: bound, Sequencer: ev.SubjectFields.Sequencer,
+		Move: func(ctx context.Context, from, to statemachine.Placement) (statemachine.MovedBytes, error) {
+			return h.Mover.MoveObjectBytes(ctx, objectID, from, to)
+		},
+	}
+	changed, err := h.Late.PromoteLateSourceWriteInTx(ctx, objectID, w, func(ctx context.Context, tx pgx.Tx) error {
+		return h.emitUploaded(ctx, tx, ev, resourceName, collection, key, objectID)
+	})
+	switch {
+	case errors.Is(err, statemachine.ErrNotMigratedFrom):
+		logger.Warn("event is from a bucket the collection is not bound to; skipping")
+		return nil
+	case errors.Is(err, statemachine.ErrLateWriteSkipped):
+		logger.Info("late source write not moved; skipping", zap.Error(err))
+		return nil
+	case errors.Is(err, statemachine.ErrLateWriteGone):
+		// The source copy is gone before the event came: retrying cannot
+		// bring it back.
+		logger.Error("late source write: the migration's source no longer holds the object; skipping", zap.Error(err))
+		return nil
+	case err != nil:
+		// A rebind back since the binding was read included: the retry
+		// decides against the binding it finds then.
+		logger.Warn("late source write failed; the event is retried", zap.Error(err))
+		return fmt.Errorf("late source write: %w", err)
+	}
+	logger.Info("late source write moved into the collection's bucket", zap.Bool("changed", changed))
+	if changed {
+		h.record(ctx, logger, ev, actionObjectUploaded, resourceName, tenant, objectID)
+	}
+	return nil
 }
 
 // objectResourceName builds the canonical (A-shape) object resource name

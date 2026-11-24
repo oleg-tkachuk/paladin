@@ -550,77 +550,47 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### A storage migration's rollback can miss a write that commits behind its cursor
+### The rollback cursor columns are no longer read
 
 - **Status:** Deferred.
-- **Reason:** the rollback copies back, in `(written at, id)` order behind a
-  cursor, the objects written since the rebind. A promote stamps its write
-  before it commits, so one that commits after a batch has listed past its
-  stamp falls behind the cursor and is never copied back; the rebind back
-  checks for writes past the cursor only. The promote's fence
-  (`migstate.FencingPromotes` includes `rolling_back`) makes the rebind back
-  wait for promotes in flight, but not the batches before it. The catch-up
-  before the rebind has the same shape and records each write it copied
-  (`storage_migration_caught_up`) instead of a cursor.
-- **Definition of Done:** the rollback lists what it has not copied back
-  rather than what is past a cursor — a record of the write each copy took,
-  as the catch-up keeps — and the rebind back counts those under the
-  migration row's lock; a test holds a promote open across a rollback batch
-  and finds its object in the source after the rebind back.
-- **Blockers:** none.
+- **Reason:** the rollback records each write it copied back
+  (`storage_migration_copied_back`, migration 118) instead of walking a
+  cursor, so `tenant_storage_migrations.rollback_cursor_at` and
+  `rollback_cursor_id` are dead. Dropping them in the same release would
+  break a binary still running during the rollout: sqlc expands
+  `sqlc.embed` into a column list that names them.
+- **Definition of Done:** a migration drops both columns, the queries that
+  reset them stop doing so, and sqlc is regenerated.
+- **Blockers:** a release that no longer reads them is deployed everywhere.
 
-### A promote in flight when a storage migration starts escapes its fence
+### A source write whose storage event outlives the migration's retention is lost
 
 - **Status:** Deferred.
-- **Reason:** a promote holds the migration row only if the row is in a
-  fencing state when the promote reads it. One that read it before the
-  migration was created (or while it was `failed`) and commits after the
-  copy's start is stamped before `copy_started_at`, so the catch-up skips it,
-  and the copy may have listed its key before it committed. A new object is
-  then missing from the target and the verify rolls back; an overwrite of
-  the same size keeps the older bytes in the target. The window is one
-  promote transaction long.
-- **Definition of Done:** the copy's start waits for promotes that began
-  before the migration existed — `StartStorageMigration` takes a lock every
-  promote takes, or the copy starts only after a grace longer than a promote
-  can run — and a test holds a promote open across the start and finds its
-  bytes in the target.
-- **Blockers:** none.
+- **Reason:** a late source write is moved into the target only while the
+  source still holds it (`PromoteLateSourceWriteInTx`). The cleanup deletes
+  the source once the retention window has passed, whatever events for it
+  are still queued; one delivered after that finds nothing to move and is
+  logged at Error. Nothing bounds how late an event source delivers.
+- **Definition of Done:** the cleanup waits until every event source that
+  reports on the migration's source bucket has delivered past the rebind
+  (a per-bucket high-water mark the ingest records), or the operator is told
+  which keys were lost; a test delivers an event after the cleanup.
+- **Blockers:** an event high-water mark per bucket, which the ingest does
+  not keep.
 
-### An overwrite whose storage event arrives after a storage migration's rebind is dropped
+### A target write whose storage event arrives after a rollback's rebind back is dropped
 
 - **Status:** Deferred.
-- **Reason:** the catch-up copies every write a promote recorded. An
-  overwrite in an explicit-mode bucket is recorded only when its storage
-  event is: one written to the source while the migration copied, whose
-  event is delivered after the rebind, is skipped as from a bucket the
-  collection is not bound to, so neither the catch-up nor the row ever sees
-  it. If the copy took the key before the overwrite landed, the target keeps
-  the older bytes and the newer ones go with the source at cleanup.
-- **Definition of Done:** an event from a migration's source bucket for a
-  collection the migration rebound is not dropped: its bytes are copied into
-  the binding (as `CompleteObject` moves an upload) and promoted there, or the
-  migration does not clean its source while such events can still arrive;
-  a test delivers the event after the rebind and finds the newer bytes in
-  the target after cleanup.
-- **Blockers:** none.
-
-### A collection created while a storage migration rebinds stays on the source
-
-- **Status:** Deferred.
-- **Reason:** the rebind lists the tenant's private collections and points
-  the default binding at the target in one transaction, but a
-  `CreateCollection` that read the default binding before that transaction
-  committed inserts its collection bound to the source after it. The tenant
-  is then `dedicated` with one collection still in the shared bucket. The
-  cleanup keeps that collection's source copies (it deletes a source copy
-  only of an object bound to the target), so nothing is lost, but nothing
-  moves it either.
-- **Definition of Done:** a collection cannot be created bound to a
-  migration's source between the copy's start and the end of the migration —
-  the rebind takes a lock `CreateCollection` takes too, or the verify finds
-  such a collection and rolls back — and a test creates one concurrently with
-  the rebind and finds it in the target.
+- **Reason:** the mirror of a late source write. An overwrite written to the
+  target while a migration rolled back, whose event is delivered after the
+  rebind back, names a bucket the collection is no longer bound to and is
+  skipped; the source keeps the older bytes. The forward move decides
+  staleness against `rebound_at`; the rebind back records no time of its
+  own to decide against.
+- **Definition of Done:** the rebind back records when it committed, and an
+  event from a rolled-back migration's target is moved into the source
+  under the same rules as a late source write; a test delivers one after
+  the rebind back and finds the newer bytes in the source.
 - **Blockers:** none.
 
 ## API error messages

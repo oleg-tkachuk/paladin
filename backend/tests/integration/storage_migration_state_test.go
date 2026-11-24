@@ -185,8 +185,8 @@ func TestStorageMigrationTransitionsApplyOnlyToTheAttemptRead(t *testing.T) {
 
 // The rollback's rebind back is RebindTenant's inverse and held to the same
 // guard: only the migration as read (rolling_back, same attempt) under its
-// row lock, all of it or none. It also refuses while an object written past
-// the rollback cursor has not been copied back, and leaves the public
+// row lock, all of it or none. It also refuses while an object written since
+// the rebind has not been copied back, and leaves the public
 // collections where they are.
 func TestStorageMigrationRebindBackAppliesOnlyToTheAttemptRead(t *testing.T) {
 	t.Parallel()
@@ -273,7 +273,7 @@ func TestStorageMigrationRebindBackAppliesOnlyToTheAttemptRead(t *testing.T) {
 		"an earlier attempt": stale,
 		"verifying":          {TenantID: tenant, State: worker.MigStateVerifying, Attempts: 2},
 	} {
-		err := repo.RebindBack(ctx, at, reboundAt, uuid.Nil(), backend, "rb-shared")
+		err := repo.RebindBack(ctx, at, backend, "rb-shared")
 		if !errors.Is(err, worker.ErrMigrationMoved) {
 			t.Errorf("RebindBack read as %s = %v, want ErrMigrationMoved", what, err)
 		}
@@ -283,32 +283,33 @@ func TestStorageMigrationRebindBackAppliesOnlyToTheAttemptRead(t *testing.T) {
 	}
 
 	// The current attempt, with 'post' not yet copied back.
-	if err := repo.RebindBack(ctx, current, reboundAt, uuid.Nil(), backend, "rb-shared"); !errors.Is(err, worker.ErrRollbackBehind) {
-		t.Fatalf("RebindBack with an object past the cursor = %v, want ErrRollbackBehind", err)
+	if err := repo.RebindBack(ctx, current, backend, "rb-shared"); !errors.Is(err, worker.ErrRollbackBehind) {
+		t.Fatalf("RebindBack with an object not copied back = %v, want ErrRollbackBehind", err)
 	}
 	if got := read(); got != untouched {
 		t.Errorf("a refused RebindBack changed things: %+v", got)
 	}
 
-	written, err := repo.ListWrittenSince(ctx, tenant, reboundAt, uuid.Nil(), 10)
+	written, err := repo.ListUncopiedBack(ctx, current, 10)
 	if err != nil || len(written) != 1 || written[0].Key != "post" || written[0].SizeBytes != 3 {
-		t.Fatalf("ListWrittenSince = %+v, %v; want just docs/post", written, err)
+		t.Fatalf("ListUncopiedBack = %+v, %v; want just docs/post", written, err)
 	}
-	cur := written[0]
-	if err := repo.AdvanceRollback(ctx, stale, cur.WrittenAt, cur.ID); !errors.Is(err, worker.ErrMigrationMoved) {
-		t.Errorf("stale AdvanceRollback = %v, want ErrMigrationMoved", err)
+	if stale, err := repo.ListUncopiedBack(ctx, stale, 10); err != nil || len(stale) != 0 {
+		t.Errorf("ListUncopiedBack read as an earlier attempt = %+v, %v; want nothing", stale, err)
 	}
-	if err := repo.AdvanceRollback(ctx, current, cur.WrittenAt, cur.ID); err != nil {
-		t.Fatalf("AdvanceRollback: %v", err)
+	copied := false
+	copyBack := func(context.Context) error { copied = true; return nil }
+	if _, err := repo.CopyBackObject(ctx, stale, written[0], copyBack); !errors.Is(err, worker.ErrMigrationMoved) || copied {
+		t.Errorf("stale CopyBackObject = %v (copied %v), want ErrMigrationMoved before any copy", err, copied)
 	}
-	if err := repo.AdvanceRollback(ctx, current, reboundAt, uuid.Nil()); !errors.Is(err, worker.ErrMigrationMoved) {
-		t.Errorf("AdvanceRollback backwards = %v, want ErrMigrationMoved", err)
+	if held, err := repo.CopyBackObject(ctx, current, written[0], copyBack); err != nil || !held || !copied {
+		t.Fatalf("CopyBackObject = %v, %v (copied %v); want it copied and recorded", held, err, copied)
 	}
-	if more, err := repo.ListWrittenSince(ctx, tenant, cur.WrittenAt, cur.ID, 10); err != nil || len(more) != 0 {
-		t.Errorf("ListWrittenSince past the cursor = %+v, %v; want nothing", more, err)
+	if more, err := repo.ListUncopiedBack(ctx, current, 10); err != nil || len(more) != 0 {
+		t.Errorf("ListUncopiedBack after the copy = %+v, %v; want nothing", more, err)
 	}
 
-	if err := repo.RebindBack(ctx, current, cur.WrittenAt, cur.ID, backend, "rb-shared"); err != nil {
+	if err := repo.RebindBack(ctx, current, backend, "rb-shared"); err != nil {
 		t.Fatalf("RebindBack: %v", err)
 	}
 	want := after{
@@ -318,7 +319,7 @@ func TestStorageMigrationRebindBackAppliesOnlyToTheAttemptRead(t *testing.T) {
 	if got := read(); got != want {
 		t.Errorf("after RebindBack: %+v, want %+v", got, want)
 	}
-	if err := repo.RebindBack(ctx, current, cur.WrittenAt, cur.ID, backend, "rb-shared"); !errors.Is(err, worker.ErrMigrationMoved) {
+	if err := repo.RebindBack(ctx, current, backend, "rb-shared"); !errors.Is(err, worker.ErrMigrationMoved) {
 		t.Errorf("a second RebindBack = %v, want ErrMigrationMoved", err)
 	}
 }

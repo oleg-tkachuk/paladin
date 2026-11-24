@@ -819,6 +819,13 @@ var ErrCollectionExists = errors.New("collection already exists in this tenant")
 // collections.bucket_id under CodeInternal.
 var ErrBucketNotFound = errors.New("bucket not found on this backend")
 
+// ErrBucketMigratedAway is returned when a Create binds a private collection
+// to a bucket a storage migration has just moved the tenant's collections
+// away from (ADR-0015): the bucket was resolved — from the tenant's default
+// binding, most often — before the move committed. Nothing moves such a
+// collection later, so it is refused; a retry resolves the binding again.
+var ErrBucketMigratedAway = errors.New("a storage migration moved the tenant's collections away from this bucket; retry")
+
 // ErrCollectionNotFound is returned when the tenant has no collection by the
 // name: on a read, and on a guarded write that finds none to change. A store
 // that fails is neither: that is the server's fault.
@@ -874,6 +881,9 @@ func init() {
 	apiutil.RegisterError(ErrCollectionExists, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_COLLECTION_EXISTS)
 	apiutil.RegisterError(ErrBucketNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_BUCKET_NOT_FOUND)
 	apiutil.RegisterError(ErrCollectionNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
+	// A concurrency conflict with a storage migration's rebind: a retry
+	// resolves the binding again.
+	apiutil.RegisterError(ErrBucketMigratedAway, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_CONFLICT)
 	// A stored Cedar policy that will not compile is a state of the data, not
 	// a fault of the server. Registered here rather than in the cedar package
 	// because apiutil's registry is the API layer's, and cedar sits below it.

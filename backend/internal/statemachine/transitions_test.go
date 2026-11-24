@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // The transition bodies take a dbExec rather than reaching for t.pool, which
@@ -34,6 +35,20 @@ func (r fakeRow) Scan(dest ...any) error {
 	return nil
 }
 
+// tenantRow answers the fence's read of the object's tenant.
+type tenantRow struct{ err error }
+
+func (r tenantRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	*dest[0].(*pgtype.UUID) = pgtype.UUID{Bytes: fenceTenant, Valid: true}
+	return nil
+}
+
+// fenceTenant is the tenant every fake object belongs to.
+var fenceTenant = uuid.MustParse("11111111-2222-3333-4444-555555555555")
+
 type fakeExec struct {
 	tag     pgconn.CommandTag
 	execErr error
@@ -44,19 +59,25 @@ type fakeExec struct {
 	// bindingRow answers the placement check's read of the collection's
 	// binding (checkPlacement).
 	bindingRow pgx.Row
+	// tenantErr fails the fence's read of the object's tenant.
+	tenantErr error
 
-	execSQL      string
+	execSQL string
+	// execs is every statement Exec ran, in order.
+	execs        []string
 	execArgs     []any
 	querySQL     string
 	queryArgs    []any
 	execCalls    int
 	lockCalls    int
 	bindingCalls int
+	tenantCalls  int
 }
 
 func (f *fakeExec) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	f.execCalls++
 	f.execSQL, f.execArgs = sql, args
+	f.execs = append(f.execs, sql)
 	return f.tag, f.execErr
 }
 
@@ -67,6 +88,10 @@ func (f *fakeExec) QueryRow(_ context.Context, sql string, args ...any) pgx.Row 
 			return f.lockRow
 		}
 		return f.row
+	}
+	if strings.Contains(sql, "SELECT tenant_id FROM objects") {
+		f.tenantCalls++
+		return tenantRow{err: f.tenantErr}
 	}
 	if strings.Contains(sql, "JOIN storage_backends") {
 		f.bindingCalls++
