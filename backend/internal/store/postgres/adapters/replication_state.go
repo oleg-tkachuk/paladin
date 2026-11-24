@@ -21,7 +21,19 @@ func NewReplicationWatermarkRepo(q *sqlc.Queries) *ReplicationWatermarkRepo {
 	return &ReplicationWatermarkRepo{q: q}
 }
 
-var _ worker.WatermarkStore = (*ReplicationWatermarkRepo)(nil)
+var (
+	_ worker.WatermarkStore   = (*ReplicationWatermarkRepo)(nil)
+	_ worker.ReplicationClock = (*ReplicationWatermarkRepo)(nil)
+)
+
+// Now reads the database's clock, the one that stamps objects.committed_at.
+func (r *ReplicationWatermarkRepo) Now(ctx context.Context) (time.Time, error) {
+	t, err := r.q.ReplicationClock(ctx)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("read the database clock: %w", err)
+	}
+	return timeFrom(t), nil
+}
 
 // Get returns the stored high-water mark for (backend, bucket). A missing
 // row returns zero time + nil error so the worker falls through to its

@@ -8,21 +8,70 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 )
 
 type fakeReplSource struct {
 	buckets  []admindomain.Bucket
 	bindings map[string][]CollectionBinding
 	listErr  error
+	// objStates answers ObjectReplicationState by object id; an id not in
+	// it reads as an unchanged AVAILABLE row at version 0.
+	objStates map[uuid.UUID]ReplicationObjectState
+	objErr    error
+	// gateStates is each bucket's gate state, by "backend/bucket"; a bucket
+	// not in it is enabled and ready. unknown lists destinations with no row.
+	gateStates map[string]bucketgate.State
+	unknown    map[string]bool
+	gateErr    error
 }
 
-func (f *fakeReplSource) ListBucketsWithReplication(_ context.Context) ([]admindomain.Bucket, error) {
-	return f.buckets, f.listErr
+// gateState is a bucket's state as the fake holds it.
+func (f *fakeReplSource) gateState(backend, bucket string) bucketgate.State {
+	if st, ok := f.gateStates[backend+"/"+bucket]; ok {
+		return st
+	}
+	return bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}
+}
+
+// fakeBucketID is a stable id per bucket name, for the gate's deferrals.
+func fakeBucketID(backend, bucket string) pgtype.UUID {
+	id := pgtype.UUID{Valid: true}
+	copy(id.Bytes[:], backend+"/"+bucket)
+	return id
+}
+
+func (f *fakeReplSource) BucketGateState(_ context.Context, backend, bucket string) (BucketGateState, error) {
+	if f.gateErr != nil {
+		return BucketGateState{}, f.gateErr
+	}
+	if f.unknown[backend+"/"+bucket] {
+		return BucketGateState{}, ErrReplicationDestinationUnknown
+	}
+	return BucketGateState{ID: fakeBucketID(backend, bucket), State: f.gateState(backend, bucket)}, nil
+}
+
+func (f *fakeReplSource) ObjectReplicationState(_ context.Context, _, id uuid.UUID) (ReplicationObjectState, error) {
+	if st, ok := f.objStates[id]; ok {
+		return st, f.objErr
+	}
+	return ReplicationObjectState{Found: true, State: "AVAILABLE"}, f.objErr
+}
+
+func (f *fakeReplSource) ListBucketsWithReplication(_ context.Context) ([]ReplicationBucket, error) {
+	out := make([]ReplicationBucket, 0, len(f.buckets))
+	for _, b := range f.buckets {
+		out = append(out, ReplicationBucket{
+			Bucket: b, ID: fakeBucketID(b.BackendID, b.BucketName), State: f.gateState(b.BackendID, b.BucketName),
+		})
+	}
+	return out, f.listErr
 }
 func (f *fakeReplSource) ListCollectionBindings(_ context.Context, backend, bucket string) ([]CollectionBinding, error) {
 	return f.bindings[backend+"/"+bucket], nil
@@ -34,7 +83,11 @@ type fakeReplicator struct {
 	fail   bool
 }
 
-func (f *fakeReplicator) Replicate(_ context.Context, _ ReplicationTarget, dst ReplicationTarget) error {
+func (f *fakeReplicator) SourceMissing(context.Context, ReplicationTarget) (bool, error) {
+	return false, nil
+}
+
+func (f *fakeReplicator) Replicate(_ context.Context, _ ReplicationTarget, dst ReplicationTarget, _ int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.fail {
@@ -267,7 +320,11 @@ type countingReplicator struct {
 	err      error
 }
 
-func (c *countingReplicator) Replicate(context.Context, ReplicationTarget, ReplicationTarget) error {
+func (c *countingReplicator) SourceMissing(context.Context, ReplicationTarget) (bool, error) {
+	return false, nil
+}
+
+func (c *countingReplicator) Replicate(context.Context, ReplicationTarget, ReplicationTarget, int64) error {
 	c.attempts++
 	return c.err
 }

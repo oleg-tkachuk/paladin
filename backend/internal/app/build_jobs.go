@@ -80,16 +80,20 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
-	// Replication worker — dry-run until the StorageReplicator implementation
-	// lands. Walks objects in replicated buckets and logs intent without
-	// actually copying. Operators flip to live mode by injecting a real
-	// replicator from internal/storage in the slice that lands replication.
+	// Replication worker — copies each replicated bucket's new objects to its
+	// destination bucket, on the same backend or another (ADR-0050). Routed:
+	// the router resolves both sides' backends per copy. The watermark store
+	// is also the clock the horizon is measured on: the database's, which
+	// stamps committed_at.
 	if cfg.Worker.Jobs.Replication.Enabled {
+		watermarks := adapters.NewReplicationWatermarkRepo(reaperQ)
 		out = append(out, &worker.ReplicationWorker{
 			Buckets:        adapters.NewLifecycleSource(reaperQ),
 			Objects:        adapters.NewLifecycleObjectIter(reaperQ),
-			Replicator:     nil, // dry-run
-			Watermarks:     adapters.NewReplicationWatermarkRepo(reaperQ),
+			Replicator:     NewStorageReplicator(deps.Registry),
+			Watermarks:     watermarks,
+			Clock:          watermarks,
+			CELEvaluator:   deps.CELEval,
 			Interval:       cfg.Worker.Jobs.Replication.Interval,
 			LookbackWindow: cfg.Worker.Jobs.Replication.LookbackWindow,
 			Logger:         l.Named("replication"),

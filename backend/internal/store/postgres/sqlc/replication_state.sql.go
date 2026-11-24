@@ -11,6 +11,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getObjectReplicationState = `-- name: GetObjectReplicationState :one
+SELECT state, resource_version
+FROM objects
+WHERE tenant_id = $1 AND id = $2
+`
+
+type GetObjectReplicationStateRow struct {
+	State           ObjectState `json:"state"`
+	ResourceVersion int64       `json:"resource_version"`
+}
+
+// One object's state and resource version, re-read by the replication worker
+// before it passes over an object whose bytes the source does not hold.
+func (q *Queries) GetObjectReplicationState(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectReplicationStateRow, error) {
+	row := q.db.QueryRow(ctx, getObjectReplicationState, tenantID, iD)
+	var i GetObjectReplicationStateRow
+	err := row.Scan(&i.State, &i.ResourceVersion)
+	return i, err
+}
+
 const getReplicationWatermark = `-- name: GetReplicationWatermark :one
 SELECT watermark
 FROM replication_state
@@ -24,6 +44,20 @@ func (q *Queries) GetReplicationWatermark(ctx context.Context, name string, name
 	var watermark pgtype.Timestamptz
 	err := row.Scan(&watermark)
 	return watermark, err
+}
+
+const replicationClock = `-- name: ReplicationClock :one
+SELECT now()::timestamptz AS now
+`
+
+// The database's clock, which stamps objects.committed_at: the replication
+// worker's horizon is measured on it, so no clock skew between a worker pod
+// and the database moves the watermark past rows not yet stamped.
+func (q *Queries) ReplicationClock(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, replicationClock)
+	var now pgtype.Timestamptz
+	err := row.Scan(&now)
+	return now, err
 }
 
 const upsertReplicationWatermark = `-- name: UpsertReplicationWatermark :exec

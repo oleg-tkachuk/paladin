@@ -866,9 +866,8 @@ type Lifecycle struct {
 	Interval time.Duration `yaml:"interval" json:"interval"`
 }
 
-// Replication copies objects between backends per BucketReplication.
-// Optional and currently dry-run unless a real StorageReplicator is wired
-// in — `enabled: false` skips even the planning loop.
+// Replication copies objects between backends per BucketReplication
+// (ADR-0050). Optional — `enabled: false` runs no replication at all.
 type Replication struct {
 	Enabled        bool          `yaml:"enabled" json:"enabled"`
 	Interval       time.Duration `yaml:"interval" json:"interval"`

@@ -387,26 +387,59 @@ the same commit. Treat this file like a runtime invariant.
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### Replication: real `StorageReplicator` implementation
+### Replication does not propagate deletes
 
-- **Status:** Aspirational
-- **Reason:** [internal/worker/replication.go](backend/internal/worker/replication.go)
-  walks replicated buckets and logs intent; [internal/app/build_jobs.go](backend/internal/app/build_jobs.go)
-  injects `Replicator: nil` so the worker is dry-run only, and every
-  AVAILABLE object is selected — the CEL `replication.filter` is not
-  evaluated yet.
-- **Definition of Done:**
-  - `StorageReplicator` impl that performs cross-backend `CopyObject`
-    via S3 SDK (AWS-native CRR for same-account, manual stream-copy
-    otherwise).
-  - Watermark advance + retry-with-exponential-backoff on transient
-    errors.
-  - Evaluate `replication.filter` (CEL) when selecting objects.
-  - Set `ReplicationTarget.Key` from the object row: the worker fills only
-    the collection today, which is harmless while dry-run.
-  - Integration test across two backends — the suites bring up two
-    SeaweedFS instances for exactly this.
-- **Blockers:** scope decision — same-cloud only vs. cross-cloud.
+- **Status:** Deferred.
+- **Reason:** the replication worker ([ADR-0050](docs/adr/0050-bucket-replication-copies-between-any-backends.md))
+  copies objects promoted after its watermark; an object deleted or purged
+  from the source stays in the destination bucket.
+- **Definition of Done:** a permanent delete or purge of a replicated object
+  removes its replica too (or a per-bucket setting says it is kept, on
+  purpose), through the purge outbox so a failed delete is retried, and a
+  test deletes a replicated object and finds its replica gone.
+- **Blockers:** whether a replica is a mirror or a retention copy — a product
+  decision.
+
+### Replication misses an object whose bytes change without a new commit
+
+- **Status:** Deferred.
+- **Reason:** the replication worker selects objects by `committed_at`, which
+  the promote stamps only on the move from `PENDING`. A later write that
+  changes an `AVAILABLE` object's bytes in place — an event-driven re-promote
+  with a newer sequencer, a version restore, a copy onto an existing key —
+  keeps the old stamp, so the replica keeps the old bytes.
+- **Definition of Done:** a change of an object's bytes is visible to the
+  worker — a stamp the worker selects on moves with every byte write, or the
+  per-object replication state records the version it copied — and a test
+  overwrites a replicated object and finds the replica updated.
+- **Blockers:** none.
+
+### A streamed replica carries only the content type
+
+- **Status:** Deferred.
+- **Reason:** across backends `ObjectRouter.Replicate` streams the source into
+  a multipart upload that sets the content type alone; a public collection's
+  `Cache-Control` and any other stored metadata are not copied. A server-side
+  copy on one backend keeps them.
+- **Definition of Done:** the streamed path copies the source's
+  `Cache-Control`, `Content-Disposition` and user metadata to the replica, and
+  a test compares a cross-backend replica's headers with its source's.
+- **Blockers:** none.
+
+### A held replication object makes every later pass copy again
+
+- **Status:** Deferred.
+- **Reason:** the replication watermark is one timestamp per bucket. While
+  one object fails to copy for good, the watermark stays below it and each
+  pass copies again every object after it, overwriting the replicas with the
+  same bytes; and each pass walks every object of every bound collection,
+  whatever the watermark.
+- **Definition of Done:** replication keeps per-object state — copied at
+  which version, or failed and why — so a pass copies only what is new or
+  changed, reads only rows after the watermark, and an operator can list and
+  redrive the failed ones; a test holds one object and counts one copy of
+  each other object across passes.
+- **Blockers:** none.
 
 ### `ResetPassword` — self-service email delivery
 
@@ -590,21 +623,36 @@ the same commit. Treat this file like a runtime invariant.
   the rebind and finds it in the target.
 - **Blockers:** none.
 
-### The replication worker will skip the bucket gate once it copies
+## API error messages
 
-- **Status:** Blocked.
-- **Reason:** the lifecycle expiry and the reconciler ask the gate
-  (`internal/worker/bucket_gate.go`), but the replication worker
-  (`replication.go`) runs dry: `build_jobs.go` wires no `StorageReplicator`,
-  so it reads nothing and writes nothing yet. Once it copies, it reads the
-  source bucket and writes bytes to `replication.destination_bucket`, a
-  bucket its listing does not return the state of.
-- **Definition of Done:** the replication worker asks `bucketgate.Check` as
-  `Read` on the source and `BytesWrite` on the destination — the
-  destination's state read with it, by backend and bucket name — and defers a
-  refused bucket's copies without advancing its watermark, logged once per
-  tick; a test disables and drains each side.
-- **Blockers:** the `StorageReplicator` implementation.
+### The handler fuzz targets do not reach UserService
+
+- **Status:** Deferred.
+- **Reason:** `userh.CreateUser` and the password paths hash with the
+  production cost on every call, which leaves a fuzz search a handful of
+  inputs a second; the user subject and display name go unfuzzed at the
+  handler.
+- **Definition of Done:** a fuzz target drives `CreateUser` and `UpdateUser`
+  with a hasher of test cost injected through the handler, asserting the
+  `fuzzassert` invariants.
+- **Blockers:** the handler takes no hasher today.
+
+### The handler fuzz targets see no CHECK constraint they do not mirror
+
+- **Status:** Deferred.
+- **Reason:** the targets run over fakes that store anything, so a column
+  CHECK the handler does not enforce first is invisible to them. The
+  collection-name and tenant display-name CHECKs are now mirrored and
+  asserted, and user settings already were; the answer a request gets when a
+  CHECK refuses it — `Internal` through the adapters' fallback, by reading —
+  was not confirmed against Postgres, and the other CHECKs of the schema
+  (`object_tag_slug_format`, `api_tokens_rate_limit_rpm_check`) were not
+  traced to a handler.
+- **Definition of Done:** an integration test per write RPC sends a value
+  each CHECK on its table refuses and asserts `InvalidArgument`; any that
+  answers otherwise gets a handler refusal and a fuzz post-condition.
+- **Blockers:** none.
+
 
 ## Database
 

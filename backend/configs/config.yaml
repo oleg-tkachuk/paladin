@@ -290,7 +290,7 @@ worker:
     lifecycle:                          # CEL-based per-bucket expiration
       enabled: true
       interval: 30m
-    replication:                        # cross-backend copy (dry-run until wired)
+    replication:                        # copies new objects to each bucket's replication destination
       enabled: false
       interval: 5m
       lookback_window: 1h

@@ -305,6 +305,6 @@ BACKLOG.md    deferred work, with reasons
 Read [BACKLOG.md](BACKLOG.md) before concluding something is missing by
 oversight. It is long because the reasons are written down: what was
 considered, why it was cut, and what would unblock it. A few of the
-larger ones — a real `StorageReplicator` implementation, semantic search
-over object metadata, cross-region database replication, self-service
-password reset — are there with their blockers named.
+larger ones — semantic search over object metadata, cross-region database
+replication, self-service password reset — are there with their blockers
+named.

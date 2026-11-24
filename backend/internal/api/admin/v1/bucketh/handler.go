@@ -767,6 +767,12 @@ func (h *Handler) SetReplication(ctx context.Context, backendID, bucketName stri
 	if _, err := h.authorizeStored(ctx, opSetReplication, cedar.ActionConfigureReplication, backendID, bucketName); err != nil {
 		return nil, err
 	}
+	// The worker refuses to replicate a bucket whose filter does not compile;
+	// refusing it here says so to the caller instead of in a worker's log.
+	if err := celpkg.Validate(celpkg.ObjectSchema, r.Filter); err != nil {
+		return nil, h.answer(opSetReplication, backendID, bucketName,
+			rpcerr.New(connect.CodeInvalidArgument, fmt.Errorf("replication filter: %w", err)))
+	}
 	if err := h.repo.SetReplication(ctx, backendID, bucketName, r, expectedVersion); err != nil {
 		return nil, h.answer(opSetReplication, backendID, bucketName, err)
 	}
