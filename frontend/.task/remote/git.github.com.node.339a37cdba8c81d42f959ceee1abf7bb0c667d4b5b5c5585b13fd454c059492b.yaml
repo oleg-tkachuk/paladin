@@ -236,8 +236,8 @@ tasks:
             fi
 
             # ─── the scripts the tasks run ──────────────────────────────────
-            # Read with node rather than jq: a node module has node, and jq is
-            # not something this library may assume.
+            # Read with node rather than jq: a node module has node, and
+            # nothing else here needs jq.
             #
             # A missing script is a warning, not a fault. Every task here is a
             # wrapper over one, and a consumer is free to use some and not

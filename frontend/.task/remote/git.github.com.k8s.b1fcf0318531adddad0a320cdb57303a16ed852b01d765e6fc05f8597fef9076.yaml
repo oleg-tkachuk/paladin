@@ -94,16 +94,67 @@ vars:
   # The pods `images` reads: the ones running or about to. A pod that has
   # finished — a Job's, a CronJob's last run — runs nothing now.
   _K8S_LIVE_PODS: status.phase!=Succeeded,status.phase!=Failed
-  # What `images` prints of each pod, as a kubectl go-template: one line per
-  # container, tab-separated — namespace, the controller that owns the pod
-  # (the pod itself where nothing does), container, image.
-  _K8S_POD_IMAGES_TEMPLATE: >-
-    {{`{{range .items}}{{$ns := .metadata.namespace}}{{$owner := printf "Pod/%s" .metadata.name}}{{range .metadata.ownerReferences}}{{if .controller}}{{$owner = printf "%s/%s" .kind .name}}{{end}}{{end}}{{range .spec.initContainers}}{{$ns}}{{"\t"}}{{$owner}}{{"\t"}}{{.name}} (init){{"\t"}}{{.image}}{{"\n"}}{{end}}{{range .spec.containers}}{{$ns}}{{"\t"}}{{$owner}}{{"\t"}}{{.name}}{{"\t"}}{{.image}}{{"\n"}}{{end}}{{end}}`}}
-  # The controllers a pod's own controller may belong to: a ReplicaSet to its
-  # Deployment, a Job to its CronJob. Tab-separated — namespace, kind/name,
-  # the owning controller's kind/name or nothing.
-  _K8S_OWNERS_TEMPLATE: >-
-    {{`{{range .items}}{{.metadata.namespace}}{{"\t"}}{{.kind}}/{{.metadata.name}}{{"\t"}}{{range .metadata.ownerReferences}}{{if .controller}}{{.kind}}/{{.name}}{{end}}{{end}}{{"\n"}}{{end}}`}}
+  # What `images` prints, as a jq program over the pods and then the
+  # ReplicaSets and Jobs. Written in images.jq; `task embed` copies it here,
+  # since a consumer fetches this file alone.
+  # jq-file: images.jq
+  _K8S_IMAGES_JQ: |-
+    # What `k8s:images` prints: one line per namespace, workload, container and
+    # image, sorted, under a header, in columns as wide as their widest value.
+    #
+    # Input (--slurp): `kubectl get pods -o json`, then `kubectl get
+    # replicasets,jobs -o json`.
+
+    def header: ["NAMESPACE", "WORKLOAD", "CONTAINER", "IMAGE"];
+    def column_gap: "  ";
+    def init_suffix: " (init)";
+
+    # The controller that owns an object, as "Kind/name"; null where nothing does.
+    def controller:
+      first(.metadata.ownerReferences[]? | select(.controller) | "\(.kind)/\(.name)") // null;
+
+    # What names an object within its namespace.
+    def within($namespace): "\($namespace)\t\(.)";
+
+    # Of a listing: each controller that is owned in turn, to its own controller.
+    def parents:
+      [ .items[]
+        | controller as $up
+        | select($up)
+        | .metadata.namespace as $namespace
+        | { key: ("\(.kind)/\(.metadata.name)" | within($namespace)), value: $up }
+      ] | from_entries;
+
+    # The workload a pod is shown under: its controller followed up one step —
+    # a ReplicaSet's Deployment, a Job's CronJob — or the pod itself.
+    def workload($parents):
+      .metadata.namespace as $namespace
+      | (controller // "Pod/\(.metadata.name)") as $own
+      | $parents[$own | within($namespace)] // $own;
+
+    # One row per container of every pod, init containers marked.
+    def rows($parents):
+      .items[]
+      | .metadata.namespace as $namespace
+      | workload($parents) as $workload
+      | (.spec.initContainers[]? | [$namespace, $workload, .name + init_suffix, .image]),
+        (.spec.containers[]? | [$namespace, $workload, .name, .image]);
+
+    def pad($width): . + ((" " * ($width - length)) // "");
+
+    # Rows as lines: every column but the last padded to its widest cell.
+    def table:
+      . as $rows
+      | [ range($rows[0] | length) | . as $column | $rows | map(.[$column] | length) | max ] as $widths
+      | $rows[]
+      | . as $row
+      | [ range(length) | . as $column
+          | if $column < ($row | length) - 1 then $row[$column] | pad($widths[$column]) else $row[$column] end
+        ]
+      | join(column_gap);
+
+    . as [$pods, $owners]
+    | [header] + ([$pods | rows($owners | parents)] | unique) | table
   # Where each kind of match is read from, as kubectl jsonpath.
   _K8S_IMAGES_PATH: '{range .spec.template.spec.containers[*]}{.image}{"\n"}{end}'
   _K8S_CHART_PATH: '{.metadata.labels.helm\.sh/chart}'
@@ -352,6 +403,8 @@ tasks:
       _K8S_NS: '{{or .K8S_NAMESPACE ._K8S_NS}}'
       _K8S_SCOPE: '{{.IMAGES_SCOPE | default ._K8S_SCOPE_NAMESPACE}}'
     preconditions:
+      - sh: command -v jq >/dev/null
+        msg: "jq is not installed — https://jqlang.org/download/"
       - sh: '{{if or (eq ._K8S_SCOPE ._K8S_SCOPE_NAMESPACE) (eq ._K8S_SCOPE ._K8S_SCOPE_CLUSTER)}}true{{else}}false{{end}}'
         msg: "IMAGES_SCOPE is {{.IMAGES_SCOPE}} — set it to {{._K8S_SCOPE_NAMESPACE}} (K8S_NAMESPACE alone, the default) or {{._K8S_SCOPE_CLUSTER}} (every namespace)"
     cmds:
@@ -365,40 +418,30 @@ tasks:
             set -- -n {{._K8S_NS | q}}
             where={{._K8S_NS | q}}
           fi
-          pods=$(mktemp)
-          owners=$(mktemp)
-          trap 'rm -f "$pods" "$owners"' EXIT
-          if ! {{._K8S_KUBECTL}} get pods "$@" --field-selector={{._K8S_LIVE_PODS | q}} -o go-template={{._K8S_POD_IMAGES_TEMPLATE | q}} > "$pods"; then
+          # Held in the shell and handed to jq on its input: a pod as JSON
+          # carries its env, which no file is to keep.
+          if ! pods=$({{._K8S_KUBECTL}} get pods "$@" --field-selector={{._K8S_LIVE_PODS | q}} -o json); then
             printf '%s %s · k8s · could not list the pods in %s — the output above says why\n' "{{._K8S_ERR}}" "$svc" "$where" >&2
             exit 1
           fi
-          if [ ! -s "$pods" ]; then
+          # Counted rather than tested for: an answer jq cannot read fails
+          # here, and does not pass for an empty one.
+          if ! running=$(printf '%s\n' "$pods" | jq '.items | length'); then
+            printf '%s %s · k8s · could not read the pods in %s as JSON — the output above says why\n' "{{._K8S_ERR}}" "$svc" "$where" >&2
+            exit 1
+          fi
+          if [ "$running" = 0 ]; then
             printf '%s %s · k8s · no running pod in %s, or no such namespace\n' "{{._K8S_SKIP}}" "$svc" "$where"
             exit 0
           fi
-          if ! {{._K8S_KUBECTL}} get replicasets,jobs "$@" -o go-template={{._K8S_OWNERS_TEMPLATE | q}} > "$owners"; then
+          if ! owners=$({{._K8S_KUBECTL}} get replicasets,jobs "$@" -o json); then
             printf '%s %s · k8s · could not look up what owns the pods in %s — the output above says why\n' "{{._K8S_ERR}}" "$svc" "$where" >&2
             exit 1
           fi
-          # Owners first: a controller with an owner of its own is shown as
-          # that owner. Then one line per namespace, workload, container and
-          # image, sorted, in columns as wide as their widest value.
-          awk -F '\t' '
-            FNR == NR { if ($3 != "") up[$1 FS $2] = $3; next }
-            {
-              if (($1 FS $2) in up) $2 = up[$1 FS $2]
-              key = $1 FS $2 FS $3 FS $4
-              if (!(key in seen)) { seen[key] = 1; print key }
-            }' OFS='\t' "$owners" "$pods" \
-            | LC_ALL=C sort \
-            | awk -F '\t' '
-                BEGIN { split("NAMESPACE WORKLOAD CONTAINER IMAGE", head, " "); for (i = 1; i <= 4; i++) w[i] = length(head[i]) }
-                { n++; for (i = 1; i <= 4; i++) { cell[n, i] = $i; if (length($i) > w[i]) w[i] = length($i) } }
-                END {
-                  fmt = "%-" w[1] "s  %-" w[2] "s  %-" w[3] "s  %s\n"
-                  printf fmt, head[1], head[2], head[3], head[4]
-                  for (r = 1; r <= n; r++) printf fmt, cell[r, 1], cell[r, 2], cell[r, 3], cell[r, 4]
-                }'
+          if ! printf '%s\n' "$pods" "$owners" | jq -rs {{._K8S_IMAGES_JQ | q}}; then
+            printf '%s %s · k8s · could not read what runs in %s as JSON — the output above says why\n' "{{._K8S_ERR}}" "$svc" "$where" >&2
+            exit 1
+          fi
 
   upgrade:
     desc: "helm upgrade --install the release from the local chart directory"
