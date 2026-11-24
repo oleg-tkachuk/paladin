@@ -9,11 +9,15 @@ import (
 	"uuid"
 
 	"connectrpc.com/connect/v2"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
+	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
@@ -769,9 +773,24 @@ func TestBindCollectionToBucket(t *testing.T) {
 		want connect.Code
 	}{
 		"unclassified failure → internal": {errors.New("connection reset by peer"), connect.CodeInternal},
+		"connection failure → internal": {
+			&pgconn.PgError{Code: pgerrcode.ConnectionFailure}, connect.CodeInternal,
+		},
+		// The handler acts as the target tenant; a row-level security refusal
+		// means it did not, which is the server's fault.
+		"row-level security → internal": {
+			&pgconn.PgError{Code: pgerrcode.InsufficientPrivilege}, connect.CodeInternal,
+		},
 		"unknown bucket → not found":      {fmt.Errorf("%w: b/gone", ErrBucketNotFound), connect.CodeNotFound},
 		"missing collection → not found":  {fmt.Errorf("%w: %q", ErrCollectionNotFound, "k"), connect.CodeNotFound},
 		"adapter's not-found → not found": {fmt.Errorf("collection %q %w", "k", apiutil.ErrNotFound), connect.CodeNotFound},
+		"stale version → aborted":         {ErrVersionMismatch, connect.CodeAborted},
+		"bucket not granted → permission denied": {
+			fmt.Errorf("%w: b/theirs", admindomain.ErrBucketNotGranted), connect.CodePermissionDenied,
+		},
+		"public collection rule → failed precondition": {
+			publicread.Rulef("a public collection never moves to another bucket"), connect.CodeFailedPrecondition,
+		},
 	} {
 		t.Run("rebind "+name, func(t *testing.T) {
 			fr := &fakeRepo{rebindFn: func(context.Context, uuid.UUID, string, string, string, int64) error {

@@ -166,14 +166,14 @@ func (h *Handler) SetLogger(l *zap.Logger) {
 
 // answer maps err for the caller of op on the tenant's collection and logs it
 // by what it is: a server fault at error, a refusal the caller can act on at
-// warn.
-func (h *Handler) answer(op string, tenantID uuid.UUID, collection string, err error) error {
+// warn. extra names anything else the operation acted on.
+func (h *Handler) answer(op string, tenantID uuid.UUID, collection string, err error, extra ...zap.Field) error {
 	mapped := apiutil.MapError(err)
 	code := connect.CodeOf(mapped)
-	fields := []zap.Field{
+	fields := append([]zap.Field{
 		zap.String("op", op), zap.String("tenant_id", tenantID.String()), zap.String("collection", collection),
 		zap.String("code", code.String()), zap.Error(err),
-	}
+	}, extra...)
 	if apiutil.ServerFault(code) {
 		h.log.Error("collection operation failed", fields...)
 	} else {
@@ -193,8 +193,8 @@ func (h *Handler) changed(ctx context.Context, op string, c Collection) {
 		zap.String("op", op),
 		zap.String("tenant_id", c.TenantID.String()),
 		zap.String("collection", c.Collection),
-		zap.String("backend_id", c.BackendID),
-		zap.String("bucket_name", c.BucketName),
+		zap.String(logBackendID, c.BackendID),
+		zap.String(logBucketName, c.BucketName),
 		zap.Int64("resource_version", c.ResourceVersion),
 		zap.String("actor", actor))
 }
@@ -695,7 +695,8 @@ func (h *Handler) BindCollectionToBucket(
 	// public-collection rule, a bucket not granted or not registered, a
 	// collection that is not there; what is left is the store failing.
 	if err := h.repo.Rebind(ctx, tenantID, collection, backendID, bucketName, expectedVersion); err != nil {
-		return nil, h.answer(opBind, tenantID, collection, fmt.Errorf("rebind: %w", err))
+		return nil, h.answer(opBind, tenantID, collection, fmt.Errorf("rebind: %w", err),
+			zap.String(logBackendID, backendID), zap.String(logBucketName, bucketName))
 	}
 	updated, err := h.repo.Get(ctx, tenantID, collection)
 	if err != nil {
@@ -856,6 +857,12 @@ const (
 	opUpdate = "update"
 	opDelete = "delete"
 	opBind   = "bind"
+)
+
+// The log fields that name the bucket a collection is bound, or being bound, to.
+const (
+	logBackendID  = "backend_id"
+	logBucketName = "bucket_name"
 )
 
 // Register this package's sentinels with the central error→Connect-code

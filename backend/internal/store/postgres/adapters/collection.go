@@ -233,8 +233,13 @@ func (r *CollectionRepo) Rebind(ctx context.Context, tenantID uuid.UUID, collect
 	rows, err := r.q.BindCollectionToBucket(ctx, pgUUID(tenantID), collection, backendID, bucketName, expectedVersion)
 	if err != nil {
 		// The bucket is resolved by name inside the UPDATE, as on create, so
-		// one that is not registered leaves bucket_id NULL.
-		if pgerr.Is(err, pgerr.NotNullViolation) && pgerr.Column(err) == schema.CollectionsBucketIDColumn {
+		// one that is not registered leaves bucket_id NULL, and one deleted
+		// after it resolved fails the foreign key. Either way it is not there.
+		// These and the two classifiers below are every rule the UPDATE can
+		// fire (TestEveryCollectionsRuleIsClassifiedForRebind); anything else
+		// is the store failing.
+		if pgerr.Is(err, pgerr.NotNullViolation) && pgerr.Column(err) == schema.CollectionsBucketIDColumn ||
+			pgerr.Is(err, pgerr.ForeignKeyViolation) && pgerr.ConstraintIs(err, schema.CollectionsBucketFK) {
 			return fmt.Errorf("%w: %s/%s", objectkey.ErrBucketNotFound, backendID, bucketName)
 		}
 		if rule := publicRuleError(err); rule != nil {
