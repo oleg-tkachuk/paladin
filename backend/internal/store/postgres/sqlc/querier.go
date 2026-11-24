@@ -142,7 +142,8 @@ type Querier interface {
 	// Object queries.
 	// collection_id is resolved by the caller via ResolveCollectionID, and
 	// upload_bucket_id, the bucket an upload's URL is signed for (migration 113),
-	// via ResolveUploadBucketID; NULL means the collection's binding.
+	// via ResolveUploadBucketID. A PENDING row anchored nowhere is refused
+	// (objects_pending_anchored, 132).
 	CreateObject(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, collectionID pgtype.UUID, path string, column5 ObjectState, contentType string, sizeBytes *int64, checksumAlgorithm int16, checksum *string, metadata []byte, tags []byte, externalRef *string, presignExpiresAt pgtype.Timestamptz, publicUrl string, createdByOperation pgtype.UUID, uploadBucketID pgtype.UUID) error
 	// Long-running operation queries.
 	CreateOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, type_ string, state OperationState, metadata []byte, initiatorSubject string) error
@@ -278,12 +279,11 @@ type Querier interface {
 	// and each inserted a row (they differ only in expires_at — see Put). The
 	// freshest live row wins; the loser ages out with its partition.
 	GetIdempotencyKey(ctx context.Context, tenantID pgtype.UUID, method string, key string) (GetIdempotencyKeyRow, error)
-	// The upload_* columns are the bucket a PENDING object's URL was signed for
-	// (migration 113) and the bucket gate's state there; NULL when it has none.
+	// The upload_* columns are the bucket an object's URL was signed for
+	// (migration 113) and the bucket gate's state there; NULL once settled.
 	// The placement_* columns are the bucket the object's bytes are in (123,
-	// ADR-0051) and the gate's state there; NULL on a PENDING row. A row promoted
-	// by a binary from before 123 has no placement yet: its bytes are in its
-	// collection's bucket, as every row's were then.
+	// ADR-0051) and the gate's state there; NULL on a PENDING row, and only there
+	// (objects_placed_past_pending, 132).
 	GetObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectRow, error)
 	GetObjectLockByVersion(ctx context.Context, versionID pgtype.UUID) (GetObjectLockByVersionRow, error)
 	// Lock state for one object, so the delete handler can return a clear
@@ -301,7 +301,8 @@ type Querier interface {
 	// Batch lookup for batch-operation executors: one round-trip for the
 	// whole id list instead of one GetObject per id (a 1000-object batch
 	// used to issue 1000 sequential SELECTs before any state mutation).
-	// The placement_* columns are as GetObject's.
+	// The upload_* and placement_* columns are as GetObject's: a batch's
+	// permanent delete of a PENDING object owes the bucket its URL is signed for.
 	GetObjectsByIDs(ctx context.Context, tenantID pgtype.UUID, column2 []pgtype.UUID) ([]GetObjectsByIDsRow, error)
 	GetOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (GetOperationRow, error)
 	// Tenant scope only. Under RLS the caller sees its own tenant's row; a
@@ -309,8 +310,8 @@ type Querier interface {
 	GetQuotaByID(ctx context.Context, id pgtype.UUID) (Quota, error)
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
 	// The claimed rows' objects as they are now, with the bucket each one's
-	// bytes are in (objects.placement_bucket_id, ADR-0051; a row a binary from
-	// before 123 promoted has them in its collection's bucket) and the byte
+	// bytes are in (objects.placement_bucket_id, ADR-0051; every row the queue
+	// names was AVAILABLE, so is placed) and the byte
 	// write a replica of it must match:
 	// bytes_written_at, which every promote sets, or for a row promoted before
 	// migration 111 its first commit. Every column cel.ObjectVars projects, so
@@ -531,8 +532,7 @@ type Querier interface {
 	// back the buckets it refused so the next claim leaves their rows out. One
 	// capped query both bounds the work and keeps a refused bucket's trash from
 	// heading every batch.
-	// The bucket the bytes are in (ADR-0051); a row a binary from before 123
-	// trashed has its bytes in its collection's bucket.
+	// The bucket the bytes are in (ADR-0051).
 	ListHardDeletable(ctx context.Context, terminatedAt pgtype.Timestamptz, deferredBucketIds []pgtype.UUID, batchSize int32) ([]ListHardDeletableRow, error)
 	// Every tenant this subject belongs to, for the tenant switcher. Ordered by
 	// creation so the list is stable across calls rather than whatever the
@@ -585,8 +585,7 @@ type Querier interface {
 	// still checked against every row.
 	//
 	// The placement_* columns are the bucket each object's bytes are in (123,
-	// ADR-0051), by primary key; NULL on a PENDING row. A row promoted by a
-	// binary from before 123 has its bytes in its collection's bucket.
+	// ADR-0051), by primary key; NULL on a PENDING row, and only there (132).
 	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string, level *string, delimiter *string) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)
@@ -688,8 +687,9 @@ type Querier interface {
 	// Reads an object by id alone. Used by background workers (reconciler,
 	// replicator) that don't carry a tenant context, with the bucket the
 	// object's bytes are in (placement_bucket_id, ADR-0051) so the caller can
-	// call S3 in one trip; a PENDING row, placed nowhere yet, comes with its
-	// collection's bucket, as does a row a binary from before 123 promoted.
+	// call S3 in one trip; a PENDING row, placed nowhere yet, comes with the
+	// bucket its URL is signed for (upload_bucket_id), where its bytes land.
+	// Every row has one of the two (132).
 	// checksum_algorithm tells a HEAD which stored checksum is the object's.
 	// enabled, read_only and provision_state are the bucket gate's state
 	// (bucketgate.State), for a worker that deletes the object's bytes.
@@ -699,9 +699,9 @@ type Querier interface {
 	// for, NULL once settled; the placement_* ones the bucket its bytes are in
 	// (ADR-0051): what a storage event from a bucket is matched against.
 	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, name string, path string) (LookupObjectByKeyRow, error)
-	// The bucket a PENDING object's upload URL was signed for (migration 113),
-	// with the state the bucket gate decides on there. No row when the object
-	// has no anchor: it uploads to its collection's binding.
+	// The bucket an object's upload URL was signed for (migration 113), with the
+	// state the bucket gate decides on there. No row once the anchor is settled:
+	// no URL of the object can write anywhere.
 	LookupUploadBucket(ctx context.Context, id pgtype.UUID) (LookupUploadBucketRow, error)
 	// Soft-flip into the deletion outbox. Resets attempts so the new
 	// operation gets a fresh retry budget; clears any old error message.

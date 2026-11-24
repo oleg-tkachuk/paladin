@@ -9,8 +9,8 @@ import (
 )
 
 // ErrNotAnchored is a PENDING object whose row names no bucket its upload URL
-// was signed for: nothing says where its bytes may be. Every row created
-// since migration 113 has one, and migration 126 gave one to the rest.
+// was signed for: nothing says where its bytes may be. The schema refuses
+// such a row (objects_pending_anchored, migration 132).
 var ErrNotAnchored = errors.New("the upload is anchored to no bucket")
 
 // uploadedBytes reads what the backend holds for obj's upload in the bucket

@@ -2122,7 +2122,7 @@ func (h *Handler) PermanentDelete(
 	// first means a failed/blocked delete never touches storage; the
 	// only residual failure mode is an orphaned object in S3 (a
 	// reclaimable cost leak), never a live row with missing bytes.
-	backendID, bucket, err := h.deletedBytesAt(ctx, tenantID, obj) // permanent delete (mutation)
+	backendID, bucket, err := deletedBytesAt(ctx, tenantID, obj) // permanent delete (mutation)
 	if err != nil {
 		return MapResolveErr(err)
 	}

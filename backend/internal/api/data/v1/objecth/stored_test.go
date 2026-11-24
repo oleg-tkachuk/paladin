@@ -74,39 +74,25 @@ func TestStoredAtAsksTheGateOfThePlacement(t *testing.T) {
 	}
 }
 
-// bindingRepo answers one binding and counts the lookups of it.
-type bindingRepo struct {
-	fakeObjectRepo
-	lookups int
-}
-
-func (r *bindingRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
-	r.lookups++
-	return "backend-bound", "bucket-bound", nil
-}
-
 // A permanent delete owes the bucket the bytes are in; a PENDING object, placed
-// nowhere, the one its URL was signed for; one with neither, its binding.
+// nowhere, the one its URL was signed for. One with neither (the schema
+// refuses such a row) owes nothing and is ErrNotStored, never its
+// collection's binding.
 func TestDeletedBytesAt(t *testing.T) {
 	cases := map[string]struct {
 		obj        Object
 		wantBucket string
-		wantLookup int
+		wantErr    error
 	}{
-		"placed":                {Object{Stored: storedIn("backend-old", "bucket-old"), Upload: storedIn("backend-up", "bucket-up")}, "bucket-old", 0},
-		"pending, anchored":     {Object{Upload: storedIn("backend-up", "bucket-up")}, "bucket-up", 0},
-		"pending, not anchored": {Object{}, "bucket-bound", 1},
+		"placed":            {Object{Stored: storedIn("backend-old", "bucket-old"), Upload: storedIn("backend-up", "bucket-up")}, "bucket-old", nil},
+		"pending, anchored": {Object{Upload: storedIn("backend-up", "bucket-up")}, "bucket-up", nil},
+		"neither":           {Object{}, "", ErrNotStored},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			repo := &bindingRepo{}
-			h := &Handler{repo: repo}
-			_, bucket, err := h.deletedBytesAt(context.Background(), uuid.New(), tc.obj)
-			if err != nil {
-				t.Fatalf("deletedBytesAt: %v", err)
-			}
-			if bucket != tc.wantBucket || repo.lookups != tc.wantLookup {
-				t.Fatalf("bucket %q after %d lookups, want %q after %d", bucket, repo.lookups, tc.wantBucket, tc.wantLookup)
+			_, bucket, err := deletedBytesAt(context.Background(), uuid.New(), tc.obj)
+			if !errors.Is(err, tc.wantErr) || bucket != tc.wantBucket {
+				t.Fatalf("deletedBytesAt = %q, %v; want %q, %v", bucket, err, tc.wantBucket, tc.wantErr)
 			}
 		})
 	}

@@ -41,8 +41,8 @@ func NewReconcilerProbe(q *sqlc.Queries, head HeadProber) *ReconcilerProbe {
 	return &ReconcilerProbe{q: q, head: head}
 }
 
-// ErrNoAnchor is an object whose upload is anchored to no bucket: settled,
-// or a row from before migration 113. No URL of it can write anywhere.
+// ErrNoAnchor is an object whose upload is anchored to no bucket: a promoted
+// object the reconciler has settled. No URL of it can write anywhere.
 var ErrNoAnchor = errors.New("the object's upload is anchored to no bucket")
 
 // HeadByObjectID HEADs the object's bytes in the bucket its upload is

@@ -134,12 +134,19 @@ func (r *ObjectRepo) CreateObject(ctx context.Context, args objecth.CreateObject
 	return r.getByID(ctx, args.TenantID, objectID)
 }
 
+// ErrNoUploadBucket is an upload whose URL names no bucket. Its PENDING row
+// would be anchored nowhere, which the schema refuses
+// (objects_pending_anchored, migration 132).
+var ErrNoUploadBucket = errors.New("the upload names no bucket its URL is signed for")
+
 // resolveUploadBucket is the id of the bucket an upload's URL is signed for,
 // by the names the URL carries: the PENDING row's anchor (migration 113).
-// No names, no anchor — NULL, which falls back to the collection's binding.
+// No names is ErrNoUploadBucket, logged: every caller signs for a bucket.
 func resolveUploadBucket(ctx context.Context, q *sqlc.Queries, backendID, bucket string) (pgtype.UUID, error) {
 	if backendID == "" || bucket == "" {
-		return pgtype.UUID{}, nil
+		logger.FromContext(ctx).Error("refusing an upload that names no bucket its URL is signed for",
+			zap.String("backend_id", backendID), zap.String("bucket", bucket))
+		return pgtype.UUID{}, ErrNoUploadBucket
 	}
 	id, err := q.ResolveUploadBucketID(ctx, backendID, bucket)
 	if err != nil {
@@ -207,6 +214,8 @@ func (r *ObjectRepo) FindByIDs(ctx context.Context, tenantID uuid.UUID, ids []uu
 	out := make([]objecth.Object, 0, len(rows))
 	for _, row := range rows {
 		obj := objectFromSQLC(row.Object, row.CollectionName)
+		obj.Upload = bucketRefFrom(row.UploadBackendName, row.UploadBucketName,
+			row.UploadEnabled, row.UploadReadOnly, row.UploadProvisionState)
 		obj.Stored = bucketRefFrom(row.PlacementBackendName, row.PlacementBucketName,
 			row.PlacementEnabled, row.PlacementReadOnly, row.PlacementProvisionState)
 		out = append(out, obj)

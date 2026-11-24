@@ -20,10 +20,7 @@ SELECT m.bucket_id, o.tenant_id, c.name, o.path, o.id, now()
   FROM marked m
   JOIN collections c ON TRUE
   JOIN objects o     ON o.tenant_id = c.tenant_id AND o.collection_id = c.id
- -- A row a binary from before 123 promoted has its bytes in its collection's
- -- bucket.
- WHERE (o.placement_bucket_id = m.bucket_id
-        OR (o.placement_bucket_id IS NULL AND c.bucket_id = m.bucket_id))
+ WHERE o.placement_bucket_id = m.bucket_id
    AND o.state = 'AVAILABLE'
 ON CONFLICT (source_bucket_id, tenant_id, collection_name, path) DO UPDATE
    SET object_id       = EXCLUDED.object_id,
@@ -63,17 +60,16 @@ RETURNING r.tenant_id, r.collection_name, r.path, r.object_id, r.generation, r.a
 
 -- name: GetReplicaObjects :many
 -- The claimed rows' objects as they are now, with the bucket each one's
--- bytes are in (objects.placement_bucket_id, ADR-0051; a row a binary from
--- before 123 promoted has them in its collection's bucket) and the byte
+-- bytes are in (objects.placement_bucket_id, ADR-0051; every row the queue
+-- names was AVAILABLE, so is placed) and the byte
 -- write a replica of it must match:
 -- bytes_written_at, which every promote sets, or for a row promoted before
 -- migration 111 its first commit. Every column cel.ObjectVars projects, so
 -- the bucket's filter sees what a ListObjects filter sees.
-SELECT o.id, o.state, COALESCE(o.placement_bucket_id, c.bucket_id)::uuid AS bucket_id, o.path, o.content_type, o.size_bytes, o.external_ref,
+SELECT o.id, o.state, o.placement_bucket_id AS bucket_id, o.path, o.content_type, o.size_bytes, o.external_ref,
        o.metadata, o.tags, o.created_at, o.updated_at, o.committed_at, o.resource_version,
        COALESCE(o.bytes_written_at, o.committed_at, o.created_at)::timestamptz AS written_at
   FROM objects o
-  JOIN collections c ON c.tenant_id = o.tenant_id AND c.id = o.collection_id
  WHERE o.id = ANY(sqlc.arg('ids')::uuid[]);
 
 -- name: RecordReplicaCopy :exec

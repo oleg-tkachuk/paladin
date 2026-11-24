@@ -47,7 +47,7 @@ func TestPermanentDeleteRefusesALockOnAnyVersion(t *testing.T) {
 			}
 			h := newPurgeHandler(t, repo, &failingDeleteStorage{})
 
-			err := h.PermanentDelete(purgeCtx(tenantID), tenantID, repo.obj, 0, tc.bypass)
+			err := h.PermanentDelete(purgeCtx(tenantID), tenantID, placedIn(repo.obj, purgeBackend, purgeBucket), 0, tc.bypass)
 			if !tc.refuse {
 				if err != nil {
 					t.Fatalf("PermanentDelete = %v, want success", err)

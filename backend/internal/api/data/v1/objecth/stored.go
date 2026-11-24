@@ -2,9 +2,13 @@ package objecth
 
 import (
 	"context"
+	"errors"
 	"uuid"
 
+	"go.uber.org/zap"
+
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
+	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
 )
 
 // StoredAt is where obj's bytes are — the bucket the object is placed in
@@ -17,18 +21,19 @@ func StoredAt(obj Object, access bucketgate.Access) (Location, error) {
 
 // deletedBytesAt is the bucket a permanent delete of obj removes bytes from
 // and owes them in, admitted by the gate as a write of bytes: the bucket the
-// object is placed in; for a PENDING object, placed nowhere, the one its
-// upload URL was signed for, where an upload not yet completed may be; and
-// for one with no anchor either (a row from before migration 113), its
-// collection's binding, as every write was then.
-func (h *Handler) deletedBytesAt(ctx context.Context, tenantID uuid.UUID, obj Object) (backendID, bucket string, err error) {
+// object is placed in, or for a PENDING object, placed nowhere, the one its
+// upload URL was signed for, where an upload not yet completed may be. The
+// schema gives every row one of the two (migration 132); a row with neither
+// is ErrNotStored, logged, and nothing is deleted.
+func deletedBytesAt(ctx context.Context, tenantID uuid.UUID, obj Object) (backendID, bucket string, err error) {
 	ref := obj.Stored
 	if ref == nil {
 		ref = obj.Upload
 	}
-	if ref == nil {
-		return h.repo.LookupBucket(ctx, tenantID, obj.Collection, bucketgate.BytesWrite)
-	}
 	at, err := ref.At(tenantID, obj.Collection, obj.Key, bucketgate.BytesWrite)
+	if errors.Is(err, ErrNotStored) {
+		logger.FromContext(ctx).Error("object is neither placed nor anchored; refusing its permanent delete",
+			append(objectFields(obj.Collection, obj.ObjectID.String()), zap.String(fieldState, string(obj.State)))...)
+	}
 	return at.BackendID, at.Bucket, err
 }

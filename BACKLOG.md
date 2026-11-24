@@ -523,21 +523,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### The schema does not require an object's placement and anchor
-
-- **Status:** Deferred.
-- **Reason:** every code path places a promoted object and anchors a pending
-  upload (ADR-0051), and migration 130 backfilled the rest, but nothing in
-  the schema refuses a row without them: about fifty test fixtures insert
-  object rows by hand without either, so the reads still fall back to the
-  collection's binding for a row placed nowhere.
-- **Definition of Done:** the fixtures set both, `CHECK (state = 'PENDING'
-  OR placement_bucket_id IS NOT NULL)` and `CHECK (state <> 'PENDING' OR
-  upload_bucket_id IS NOT NULL)` are added and validated, and the binding
-  fallbacks in the object reads, the hard delete and replication are
-  removed.
-- **Blockers:** none.
-
 ### The reconciler's promotes and settles announce nothing
 
 - **Status:** Deferred.
