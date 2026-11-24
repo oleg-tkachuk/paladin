@@ -13,6 +13,7 @@ import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { AuthGate } from "@/components/AuthGate";
 import { SettingsSync } from "@/components/SettingsSync";
 import { AdminPlaneGate } from "@/components/AdminPlaneGate";
+import { PageTransition } from "@/components/layout/PageTransition";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { ActionsProvider } from "@/context/ActionsContext";
 import { ScopeProvider } from "@/context/ScopeContext";
@@ -124,7 +125,9 @@ function Shell({ children }: { children: React.ReactNode }) {
                         <main className="flex-1">
                           <div className="mx-auto w-full max-w-400 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
                             <SettingsSync>
-                              <AdminPlaneGate>{children}</AdminPlaneGate>
+                              <PageTransition>
+                                <AdminPlaneGate>{children}</AdminPlaneGate>
+                              </PageTransition>
                             </SettingsSync>
                           </div>
                         </main>

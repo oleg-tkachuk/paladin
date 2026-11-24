@@ -21,7 +21,7 @@ export function StatusIcon({
     <Icon
       data-slot="status-icon"
       data-tone={tone}
-      className={cn("size-4 shrink-0", ink, className)}
+      className={cn("size-4 shrink-0 transition-state", ink, className)}
       // A heroicon hides itself unless told otherwise.
       {...(label
         ? {
@@ -52,7 +52,7 @@ export function StatusDot({
       data-slot="status-dot"
       data-tone={tone}
       className={cn(
-        "inline-block size-2 shrink-0 rounded-full",
+        "inline-block size-2 shrink-0 rounded-full transition-state",
         STATUS_TONE[tone].fill,
         className,
       )}
@@ -74,7 +74,7 @@ export function StatusLabel({
     <span
       data-slot="status-label"
       className={cn(
-        "inline-flex items-center gap-1.5 text-sm font-medium",
+        "inline-flex items-center gap-1.5 text-sm font-medium transition-state",
         STATUS_TONE[tone].ink,
         className,
       )}

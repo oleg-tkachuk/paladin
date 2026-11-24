@@ -561,3 +561,56 @@
       )
       border-box;
 }
+
+/* ─── Motion (lib/ui/motion.ts) ─────────────────────────────────────────
+ * Two kinds, both short: a page fading into the next on navigation
+ * (PageTransition), and a state's colour easing into the next
+ * (transition-state). The durations are these tokens and nowhere else. */
+:root {
+  /* A navigation: long enough to read as one page becoming the next. */
+  --motion-page: 160ms;
+  /* A state changing in place: a tone, a selection. */
+  --motion-state: 150ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* The page area animates; the shell around it (sidebar, top bar) stays put,
+ * so the document as a whole takes no crossfade of its own. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(.page-change),
+::view-transition-old(.page-change),
+::view-transition-new(.page-change) {
+  animation-duration: var(--motion-page);
+  animation-timing-function: var(--motion-ease);
+}
+
+/* A state that carries meaning — a status tone, a selection — eases into
+ * the next rather than changing in one frame. */
+@utility transition-state {
+  transition-property: color, background-color, border-color, fill, stroke;
+  transition-duration: var(--motion-state);
+  transition-timing-function: var(--motion-ease);
+}
+
+/* Asked for less motion: no page transition, no eased state, no element
+ * sliding or fading in or out. A spinner still turns: it says work is
+ * running, and stopping it would say it is not. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  *,
+  ::before,
+  ::after {
+    transition: none !important;
+  }
+  .animate-in,
+  .animate-out {
+    animation: none !important;
+  }
+}

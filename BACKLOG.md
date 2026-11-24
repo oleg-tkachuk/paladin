@@ -865,21 +865,3 @@ the same commit. Treat this file like a runtime invariant.
   with `savedFacets` to its toolbar; for objects, the rule between saved
   views and remembered choices is decided and tested.
 - **Blockers:** the objects rule.
-
-### Console UX programme (2026-10-19)
-
-The entries below are one programme, agreed on 2026-10-19, to make the console
-faster to work in and more finished to look at. Each lands as its own pull
-request with tests and is deleted here by the one that closes it. What is
-left waits on the owner: each entry says what was decided.
-
-#### Motion: view transitions and micro-animations
-
-- **Status:** Deferred (owner decision 2026-10-19: animations are not wanted).
-- **Reason:** pages swap without transition, and state changes happen in a
-  single frame; the owner chose to leave it so.
-- **Definition of Done:** View Transitions between pages and short
-  transitions on the state changes that carry meaning, all off under
-  `prefers-reduced-motion`.
-- **Blockers:** none — taken up only if asked for.
-
