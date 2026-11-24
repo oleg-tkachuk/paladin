@@ -26,7 +26,7 @@ import (
 // on the wrong side:
 //
 //	provisioning -> moving -> completed -> cleaned
-//	                   \-> rolling_back -> failed
+//	                   \-> rolling_back -> failed -> (settled)
 //
 //   - provisioning waits for the target bucket; a failed provisioning fails
 //     the migration with nothing changed.
@@ -55,6 +55,14 @@ import (
 //   - rolling_back is the same pass with the buckets swapped, entered when
 //     the target bucket leaves ready or moves keep failing their
 //     verification; it ends in failed, which a retry starts over.
+//   - failed after a rollback keeps passing, as completed does: a request
+//     that read the target binding before the switch back may anchor an
+//     upload to the target, or bind a collection to it, after the rollback
+//     ended. Its collection is pointed at the source again and its object
+//     moved back once settled. The passes stop — the migration settles — at
+//     the end of a pass past settle_after with nothing holding the target.
+//     A migration that failed in provisioning had nothing pointed at its
+//     target and is settled as it fails.
 //
 // Public collections (ADR-0027) are skipped throughout — the repository's
 // lists leave them out. A public collection only binds to a public bucket,
@@ -143,6 +151,9 @@ type StorageMigration struct {
 	// CleanupAfter is when the source copies may be deleted; zero until the
 	// migration is 'completed'.
 	CleanupAfter time.Time
+	// SettleAfter is the least time a rolled-back migration keeps passing
+	// after it failed; zero until the rollback ends.
+	SettleAfter time.Time
 	// Attempts counts the migration's failures; a retry keeps it, so it tells
 	// one attempt from the next.
 	Attempts int32
@@ -162,11 +173,23 @@ func (m StorageMigration) Read() MigrationRead {
 	return MigrationRead{TenantID: m.TenantID, State: m.State, Attempts: m.Attempts}
 }
 
+// Reverse reports whether m's state moves objects from the target back into
+// the source: rolling back, and failed while its passes go on.
+func (m StorageMigration) Reverse() bool {
+	return Reverses(m.State)
+}
+
+// Reverses reports whether a migration in state moves objects back into its
+// source.
+func Reverses(state string) bool {
+	return state == MigStateRollingBack || state == MigStateFailed
+}
+
 // direction is the bucket m's state empties, the one it fills and the layout
 // the tenant has meanwhile: the source into the target while moving, back
-// while rolling back.
+// while rolling back and after it.
 func (m StorageMigration) direction() (from, to MigrationBucket, layout string) {
-	if m.State == MigStateRollingBack {
+	if m.Reverse() {
 		return m.Target, m.Source, LayoutShared
 	}
 	return m.Source, m.Target, LayoutDedicated
@@ -273,8 +296,13 @@ type MigrationRepo interface {
 	// StartRollback moves moving -> rolling_back, recording reason as the
 	// migration's error and counting the failure.
 	StartRollback(ctx context.Context, at MigrationRead, reason string) error
-	// FinishRollback moves rolling_back -> failed, keeping the reason.
-	FinishRollback(ctx context.Context, at MigrationRead) error
+	// FinishRollback moves rolling_back -> failed, keeping the reason; the
+	// failed migration's passes go on until at least settleWindow from now.
+	FinishRollback(ctx context.Context, at MigrationRead, settleWindow time.Duration) error
+	// Settle stops a failed migration's passes.
+	Settle(ctx context.Context, at MigrationRead) error
+	// Fail moves provisioning -> failed, settled: nothing was pointed at the
+	// target.
 	Fail(ctx context.Context, at MigrationRead, reason string) error
 }
 
@@ -358,9 +386,15 @@ type StorageMigrationWorker struct {
 	// the GET URLs signed for them before their objects moved: GET URLs leave
 	// no row to wait for.
 	SourceCopyRetention time.Duration
-	Interval            time.Duration
-	CopyBatch           int
-	Logger              *zap.Logger
+	// RollbackSettleWindow is the least a rolled-back migration keeps passing
+	// after it failed, for a request that read the target binding before the
+	// switch back and anchors an upload or binds a collection to it after.
+	// Wired from source_copy_retention, the bound the forward direction gives
+	// the same request before its irreversible step (ADR-0051 amendment).
+	RollbackSettleWindow time.Duration
+	Interval             time.Duration
+	CopyBatch            int
+	Logger               *zap.Logger
 	// Now is injectable for tests; defaults to time.Now.
 	Now func() time.Time
 
@@ -425,7 +459,7 @@ func (w *StorageMigrationWorker) advance(ctx context.Context, m StorageMigration
 		return w.stepMoving(ctx, m)
 	case MigStateCompleted:
 		return w.stepCompleted(ctx, m)
-	case MigStateRollingBack:
+	case MigStateRollingBack, MigStateFailed:
 		return w.stepRollingBack(ctx, m)
 	default:
 		return nil
@@ -472,7 +506,8 @@ func (w *StorageMigrationWorker) stepMoving(ctx context.Context, m StorageMigrat
 }
 
 // stepRollingBack runs one tick of a pass from the target back into the
-// source. A source that cannot take them is waited for.
+// source, rolling back or failed and not yet settled. A source that cannot
+// take them is waited for.
 func (w *StorageMigrationWorker) stepRollingBack(ctx context.Context, m StorageMigration) error {
 	state, err := w.Repo.BucketProvisionState(ctx, m.Source.BackendID, m.Source.Bucket)
 	if err != nil {
@@ -573,17 +608,35 @@ func (w *StorageMigrationWorker) endPass(ctx context.Context, log *zap.Logger, m
 	case MigStateCompleted:
 		return w.clean(ctx, log, m)
 	case MigStateRollingBack:
-		if err := w.Repo.FinishRollback(ctx, m.Read()); err != nil {
+		if err := w.Repo.FinishRollback(ctx, m.Read(), w.RollbackSettleWindow); err != nil {
 			return fmt.Errorf("finish the rollback: %w", err)
 		}
-		log.Info("migration rolled back; the tenant is on its source bucket again")
+		log.Info("migration rolled back; the tenant is on its source bucket again",
+			zap.Duration("settle_window", w.RollbackSettleWindow))
 		return nil
+	case MigStateFailed:
+		return w.settle(ctx, log, m)
 	}
 	if err := w.Repo.Complete(ctx, m.Read(), w.SourceCopyRetention); err != nil {
 		return fmt.Errorf("complete: %w", err)
 	}
 	log.Info("migration completed; every object is in the target and no URL can write the source",
 		zap.Duration("source_copy_retention", w.SourceCopyRetention))
+	return nil
+}
+
+// settle stops a failed migration's passes once settle_after has passed;
+// endPass calls it only while nothing holds the target.
+func (w *StorageMigrationWorker) settle(ctx context.Context, log *zap.Logger, m StorageMigration) error {
+	if w.now().Before(m.SettleAfter) {
+		log.Debug("the rolled-back migration keeps passing for requests that read the target binding before the switch back",
+			zap.Time("settle_after", m.SettleAfter))
+		return nil
+	}
+	if err := w.Repo.Settle(ctx, m.Read()); err != nil {
+		return fmt.Errorf("settle the rolled-back migration: %w", err)
+	}
+	log.Info("rolled-back migration settled; nothing of the tenant is left in the target")
 	return nil
 }
 

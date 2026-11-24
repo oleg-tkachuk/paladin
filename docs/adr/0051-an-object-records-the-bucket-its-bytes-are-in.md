@@ -2,7 +2,8 @@
 
 - **Status:** Accepted 2026-11-24 — implemented in the three stages below.
   Amended 2026-11-24: the completion waits for the anchors, not for the
-  write deadline (see Amendment).
+  write deadline (see Amendment). Amended 2026-11-25: a rolled-back
+  migration keeps passing after it fails (see the second amendment).
   Supersedes the storage-migration parts of
   [ADR-0015](0015-per-tenant-bucket-layout.md): Phase 3 and the migration
   addenda of 2026-11-24.
@@ -355,12 +356,30 @@ and it now also applies while the migration is `completed`.
 
 What is left, and accepted:
 
-- A rollback ends in `failed`, which is terminal; a request that read the
-  target binding before the switch back may place an object in the target
-  after it. The object stays readable where it is placed, in the tenant's
-  own bucket, and a retry moves on from there.
 - The reconciler's discard of an expired `PENDING` row does not recheck
   `presign_expires_at`, so a `RegenerateUploadURL` that lands between its
   scan and the discard returns a URL whose row is gone. Its bytes belong to
   no row and are never promoted (as for any deleted row's URL); the client's
   `CompleteObject` then finds no object.
+
+## Amendment (2026-11-25): a rolled-back migration keeps passing after it fails
+
+`failed` was terminal, so an upload or a collection that read the target
+binding before the switch back and inserted its row after the rollback ended
+stayed in the tenant's dedicated bucket until a retry. A rolled-back migration
+now runs its passes in `failed` too, as a completed one does before its
+cleanup: each points whatever is bound to the target back at the source, moves
+what is placed there once its anchor settles, and the target's write deadline
+keeps bounding the regenerated and part URLs for it.
+
+- **Settled.** The rollback's end records `settle_after`, now plus
+  `worker.jobs.storage_migration.source_copy_retention` — the bound the
+  forward direction gives the same request before `cleaned`. The passes stop
+  (`settled_at`) at the end of a pass past it with nothing of the tenant
+  placed in, anchored to or bound to the target. The state stays `failed`
+  throughout, and a retry starts over as before.
+- **A provisioning failure is settled as it fails.** Nothing was pointed at
+  its target, and a reverse pass would write the tenant a default binding.- **What is left.** A request that read the target binding more than
+  `settle_after` before it inserts its row is left in the target, as one
+  that read the source binding more than `source_copy_retention` before the
+  completion is left in the source after `cleaned`.

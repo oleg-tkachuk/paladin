@@ -91,7 +91,7 @@ CROSS JOIN buckets tb
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE ssb.name = $2 AND sb.name = $3
   AND tsb.name = $4 AND tb.name = $5
-RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at, writes_close_at, failed_passes
+RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at, writes_close_at, failed_passes, settle_after, settled_at
 `
 
 // A tenant's storage migration (ADR-0015, ADR-0051): the tenant's objects
@@ -126,6 +126,8 @@ func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UU
 		&i.CompletedAt,
 		&i.WritesCloseAt,
 		&i.FailedPasses,
+		&i.SettleAfter,
+		&i.SettledAt,
 	)
 	return i, err
 }
@@ -151,11 +153,14 @@ func (q *Queries) EnsureStorageMigrationTargetBucket(ctx context.Context, bucket
 
 const failStorageMigration = `-- name: FailStorageMigration :execrows
 UPDATE tenant_storage_migrations
-SET state = $1, error = $2, attempts = attempts + 1, updated_at = now()
+SET state = $1, error = $2, attempts = attempts + 1,
+    settled_at = now(), updated_at = now()
 WHERE tenant_id = $3 AND state = $4
   AND attempts = $5
 `
 
+// A failure before anything was pointed at the target (its provisioning):
+// nothing of the tenant can be there, so it is settled at once.
 func (q *Queries) FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, failStorageMigration,
 		toState,
@@ -172,17 +177,21 @@ func (q *Queries) FailStorageMigration(ctx context.Context, toState string, erro
 
 const finishStorageMigrationRollback = `-- name: FinishStorageMigrationRollback :execrows
 UPDATE tenant_storage_migrations
-SET state = $1, updated_at = now()
-WHERE tenant_id = $2 AND state = $3
-  AND attempts = $4
+SET state = $1, settle_after = now() + $2::interval,
+    updated_at = now()
+WHERE tenant_id = $3 AND state = $4
+  AND attempts = $5
 `
 
 // rolling_back -> failed, once nothing of the tenant is left in the target
 // and no URL can write it. The reason the rollback started stays, and the
-// attempt too: the failure was counted when it started.
-func (q *Queries) FinishStorageMigrationRollback(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+// attempt too: the failure was counted when it started. The passes go on
+// until at least settle_after, for a request that read the target binding
+// before the switch back and anchors to it after this.
+func (q *Queries) FinishStorageMigrationRollback(ctx context.Context, toState string, settleWindow pgtype.Interval, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, finishStorageMigrationRollback,
 		toState,
+		settleWindow,
 		tenantID,
 		fromState,
 		attempts,
@@ -194,7 +203,7 @@ func (q *Queries) FinishStorageMigrationRollback(ctx context.Context, toState st
 }
 
 const getStorageMigration = `-- name: GetStorageMigration :one
-SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes,
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes, m.settle_after, m.settled_at,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
 FROM tenant_storage_migrations m
@@ -240,6 +249,8 @@ func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID)
 		&i.TenantStorageMigration.CompletedAt,
 		&i.TenantStorageMigration.WritesCloseAt,
 		&i.TenantStorageMigration.FailedPasses,
+		&i.TenantStorageMigration.SettleAfter,
+		&i.TenantStorageMigration.SettledAt,
 		&i.SourceBackendName,
 		&i.SourceBucketName,
 		&i.TargetBackendName,
@@ -286,7 +297,7 @@ func (q *Queries) LatestStorageMigration(ctx context.Context, tenantID pgtype.UU
 }
 
 const listActiveStorageMigrations = `-- name: ListActiveStorageMigrations :many
-SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes,
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes, m.settle_after, m.settled_at,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
 FROM tenant_storage_migrations m
@@ -294,7 +305,7 @@ JOIN buckets sb           ON sb.id = m.source_bucket_id
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
 JOIN buckets tb           ON tb.id = m.target_bucket_id
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
-WHERE m.state NOT IN ('cleaned', 'failed')
+WHERE (m.state NOT IN ('cleaned', 'failed') OR (m.state = 'failed' AND m.settled_at IS NULL))
   -- A tenant in the trash is frozen: its migration resumes on restore.
   AND NOT EXISTS (SELECT 1 FROM tenants t WHERE t.id = m.tenant_id AND t.deleted_at IS NOT NULL)
 ORDER BY m.updated_at
@@ -311,7 +322,8 @@ type ListActiveStorageMigrationsRow struct {
 
 // Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 // still active — the worker must clean the source on it — and so is
-// 'rolling_back', which the worker must finish rolling back.
+// 'rolling_back', which the worker must finish rolling back, and a 'failed'
+// one not yet settled, whose passes move a straggler back from the target.
 func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]ListActiveStorageMigrationsRow, error) {
 	rows, err := q.db.Query(ctx, listActiveStorageMigrations, limitCount)
 	if err != nil {
@@ -341,6 +353,8 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 			&i.TenantStorageMigration.CompletedAt,
 			&i.TenantStorageMigration.WritesCloseAt,
 			&i.TenantStorageMigration.FailedPasses,
+			&i.TenantStorageMigration.SettleAfter,
+			&i.TenantStorageMigration.SettledAt,
 			&i.SourceBackendName,
 			&i.SourceBucketName,
 			&i.TargetBackendName,
@@ -782,6 +796,8 @@ SET source_bucket_id          = sb.id,
     cleanup_after             = NULL,
     completed_at              = NULL,
     cleaned_at                = NULL,
+    settle_after              = NULL,
+    settled_at                = NULL,
     updated_at                = now()
 FROM buckets sb
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
@@ -790,7 +806,7 @@ JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.id = $2 AND m.state = 'failed'
   AND ssb.name = $3 AND sb.name = $4
   AND tsb.name = $5 AND tb.name = $6
-RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes
+RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes, m.settle_after, m.settled_at
 `
 
 // Starts a failed migration over from the beginning, in place: the row is the
@@ -828,6 +844,8 @@ func (q *Queries) RetryFailedStorageMigration(ctx context.Context, cleanupRetent
 		&i.CompletedAt,
 		&i.WritesCloseAt,
 		&i.FailedPasses,
+		&i.SettleAfter,
+		&i.SettledAt,
 	)
 	return i, err
 }
@@ -878,6 +896,23 @@ WHERE id = $1 AND storage_layout IS DISTINCT FROM $2
 // compare-and-set each time.
 func (q *Queries) SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error) {
 	result, err := q.db.Exec(ctx, setTenantStorageLayout, iD, storageLayout)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const settleStorageMigration = `-- name: SettleStorageMigration :execrows
+UPDATE tenant_storage_migrations
+SET settled_at = now(), updated_at = now()
+WHERE tenant_id = $1 AND state = $2
+  AND attempts = $3 AND settled_at IS NULL
+`
+
+// A failed migration's passes stop: nothing of the tenant held the target
+// past settle_after. Its state stays failed, retryable as before.
+func (q *Queries) SettleStorageMigration(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, settleStorageMigration, tenantID, fromState, attempts)
 	if err != nil {
 		return 0, err
 	}
@@ -991,20 +1026,21 @@ func (q *Queries) TenantCollectionBuckets(ctx context.Context, tenantID pgtype.U
 const uploadWritesCloseAt = `-- name: UploadWritesCloseAt :one
 SELECT m.writes_close_at::timestamptz AS writes_close_at
 FROM tenant_storage_migrations m
-JOIN buckets b           ON b.id = CASE WHEN m.state = 'rolling_back'
+JOIN buckets b           ON b.id = CASE WHEN m.state IN ('rolling_back', 'failed')
                                         THEN m.target_bucket_id ELSE m.source_bucket_id END
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE m.tenant_id = $1
-  AND m.state IN ('moving', 'completed', 'rolling_back')
+  AND (m.state IN ('moving', 'completed', 'rolling_back')
+       OR (m.state = 'failed' AND m.settled_at IS NULL))
   AND m.writes_close_at IS NOT NULL
   AND sb.name = $2 AND b.name = $3
 `
 
 // The deadline a URL signed for the bucket (backend_name, bucket_name) must
 // expire by: the bucket is being emptied by the tenant's migration — its
-// source while moving and until cleaned, its target while rolling back —
-// whose passes have set the deadline. No row: nothing bounds the URL but its
-// TTL.
+// source while moving and until cleaned, its target while rolling back and
+// until the failed migration settles — whose passes have set the deadline.
+// No row: nothing bounds the URL but its TTL.
 func (q *Queries) UploadWritesCloseAt(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (pgtype.Timestamptz, error) {
 	row := q.db.QueryRow(ctx, uploadWritesCloseAt, tenantID, backendName, bucketName)
 	var writes_close_at pgtype.Timestamptz

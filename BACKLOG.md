@@ -580,18 +580,6 @@ the same commit. Treat this file like a runtime invariant.
   regenerates between the scan and the discard and finds the row kept.
 - **Blockers:** none.
 
-### A rollback ends before a request that read the target binding inserts its row
-
-- **Status:** Deferred.
-- **Reason:** `failed` is terminal, so unlike a `completed` migration a
-  rolled-back one runs no further passes: an upload or collection that read
-  the target binding before the switch back and inserts after it stays in the
-  tenant's dedicated bucket (readable where placed) until a retry.
-- **Definition of Done:** a rolled-back migration keeps passing until nothing
-  holds its target, or the switch back is fenced against such inserts; a test
-  anchors an upload to the target after `failed` and finds it moved back.
-- **Blockers:** none.
-
 ### An operator cannot cancel a storage migration
 
 - **Status:** Deferred.

@@ -204,6 +204,8 @@ type Querier interface {
 	// a valid URL. GREATEST, so a shorter regenerated URL never pulls the
 	// deadline in under an earlier one that is still live.
 	ExtendPendingPresign(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, expiresAt pgtype.Timestamptz) (int64, error)
+	// A failure before anything was pointed at the target (its provisioning):
+	// nothing of the tenant can be there, so it is settled at once.
 	FailStorageMigration(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Cross-tenant subject lookup for AuthService.Login when the caller supplied
 	// no tenant hint. The handler checks the password against every row this
@@ -241,8 +243,10 @@ type Querier interface {
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
 	// rolling_back -> failed, once nothing of the tenant is left in the target
 	// and no URL can write it. The reason the rollback started stays, and the
-	// attempt too: the failure was counted when it started.
-	FinishStorageMigrationRollback(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	// attempt too: the failure was counted when it started. The passes go on
+	// until at least settle_after, for a request that read the target binding
+	// before the switch back and anchors to it after this.
+	FinishStorageMigrationRollback(ctx context.Context, toState string, settleWindow pgtype.Interval, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Drops the row of an object that is gone or left the bucket, unless a write
 	// took the location since the claim: the row is then the new object's.
 	ForgetReplica(ctx context.Context, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string, generation int64) (int64, error)
@@ -431,7 +435,8 @@ type Querier interface {
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
 	// still active — the worker must clean the source on it — and so is
-	// 'rolling_back', which the worker must finish rolling back.
+	// 'rolling_back', which the worker must finish rolling back, and a 'failed'
+	// one not yet settled, whose passes move a straggler back from the target.
 	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]ListActiveStorageMigrationsRow, error)
 	// One page of the log in the order the caller names: list_audit_entry_ids
 	// (086) applies the predicates, the order and the keyset on (field, id); this
@@ -1056,6 +1061,9 @@ type Querier interface {
 	// out, already current, its object trashed, its source confirmed missing —
 	// unless a write marked it due again since the claim.
 	SettleReplica(ctx context.Context, generation int64, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string) error
+	// A failed migration's passes stop: nothing of the tenant held the target
+	// past settle_after. Its state stays failed, retryable as before.
+	SettleStorageMigration(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Sets deleted_at on an active row. expected_version=0 means
 	// "no OCC guard" (legacy / scripted path); a non-zero value enforces
 	// the match. Updates resource_version + updated_at so audit reflects
@@ -1143,9 +1151,9 @@ type Querier interface {
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) (int64, error)
 	// The deadline a URL signed for the bucket (backend_name, bucket_name) must
 	// expire by: the bucket is being emptied by the tenant's migration — its
-	// source while moving and until cleaned, its target while rolling back —
-	// whose passes have set the deadline. No row: nothing bounds the URL but its
-	// TTL.
+	// source while moving and until cleaned, its target while rolling back and
+	// until the failed migration settles — whose passes have set the deadline.
+	// No row: nothing bounds the URL but its TTL.
 	UploadWritesCloseAt(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (pgtype.Timestamptz, error)
 	// Same OCC contract as UpsertTenantQuota. bucket_quotas has no RLS
 	// (044_bucket_quotas.sql): the handler's role and Cedar checks gate the write.

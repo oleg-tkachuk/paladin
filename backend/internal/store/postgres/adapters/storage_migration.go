@@ -51,6 +51,7 @@ func migFromSQLC(m sqlc.TenantStorageMigration,
 		CursorCollection: m.CursorCollection,
 		CursorKey:        m.CursorPath,
 		CleanupAfter:     m.CleanupAfter.Time, // zero when NULL (CleanupAfter.Valid == false)
+		SettleAfter:      m.SettleAfter.Time,  // zero when NULL
 		Attempts:         m.Attempts,
 	}
 }
@@ -117,7 +118,7 @@ func (r *StorageMigrationRepo) EnterMoving(ctx context.Context, at worker.Migrat
 // refuses to move comes back as a *worker.RebindRefusedError.
 func (r *StorageMigrationRepo) Repoint(ctx context.Context, at worker.MigrationRead, from, to worker.MigrationBucket, layout string, writeWindow time.Duration) error {
 	setBy := setByMigration
-	if at.State == worker.MigStateRollingBack {
+	if worker.Reverses(at.State) {
 		setBy = setByMigrationRollback
 	}
 	return r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
@@ -286,8 +287,12 @@ func (r *StorageMigrationRepo) StartRollback(ctx context.Context, at worker.Migr
 	return migrationMoved(r.q.StartStorageMigrationRollback(ctx, worker.MigStateRollingBack, &reason, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
-func (r *StorageMigrationRepo) FinishRollback(ctx context.Context, at worker.MigrationRead) error {
-	return migrationMoved(r.q.FinishStorageMigrationRollback(ctx, worker.MigStateFailed, pgUUID(at.TenantID), at.State, at.Attempts))
+func (r *StorageMigrationRepo) FinishRollback(ctx context.Context, at worker.MigrationRead, settleWindow time.Duration) error {
+	return migrationMoved(r.q.FinishStorageMigrationRollback(ctx, worker.MigStateFailed, intervalOf(settleWindow), pgUUID(at.TenantID), at.State, at.Attempts))
+}
+
+func (r *StorageMigrationRepo) Settle(ctx context.Context, at worker.MigrationRead) error {
+	return migrationMoved(r.q.SettleStorageMigration(ctx, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
 func (r *StorageMigrationRepo) Fail(ctx context.Context, at worker.MigrationRead, reason string) error {
