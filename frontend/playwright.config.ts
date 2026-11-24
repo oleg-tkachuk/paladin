@@ -85,6 +85,9 @@ export default defineConfig({
     baseURL: process.env.PALADIN_E2E_BASE_URL ?? UI_URL,
     // Failure artifacts per FR-006. Local-only — no upload hook
     // wired in v1.
+    // Page transitions and eased states off, as a user asking for less
+    // motion has them: a locator never meets a page mid-fade.
+    reducedMotion: "reduce",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     trace: "retain-on-failure",
