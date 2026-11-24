@@ -799,6 +799,14 @@ type StorageMigrationCopiedBack struct {
 	CopiedAt  pgtype.Timestamptz `json:"copied_at"`
 }
 
+type StorageMigrationSourceEtag struct {
+	TenantID     pgtype.UUID        `json:"tenant_id"`
+	CollectionID pgtype.UUID        `json:"collection_id"`
+	Path         string             `json:"path"`
+	Etag         string             `json:"etag"`
+	ReadAt       pgtype.Timestamptz `json:"read_at"`
+}
+
 type Tenant struct {
 	ID                   pgtype.UUID         `json:"id"`
 	Slug                 string              `json:"slug"`
@@ -843,6 +851,7 @@ type TenantStorageMigration struct {
 	RollbackCursorAt        pgtype.Timestamptz `json:"rollback_cursor_at"`
 	RollbackCursorID        pgtype.UUID        `json:"rollback_cursor_id"`
 	CopyStartedAt           pgtype.Timestamptz `json:"copy_started_at"`
+	ReboundBackAt           pgtype.Timestamptz `json:"rebound_back_at"`
 }
 
 type User struct {

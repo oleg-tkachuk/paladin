@@ -295,13 +295,13 @@ func TestCatchUpIsNotRecordedForAMigrationThatMoved(t *testing.T) {
 	}
 	stale := at
 	stale.Attempts++
-	if _, err := repo.CatchUpObject(ctx, stale, objs[0], func(context.Context) (*string, error) { return nil, nil }); !errors.Is(err, worker.ErrMigrationMoved) {
+	if _, err := repo.CatchUpObject(ctx, stale, objs[0], func(context.Context) (worker.CopyIdentity, error) { return worker.CopyIdentity{}, nil }); !errors.Is(err, worker.ErrMigrationMoved) {
 		t.Fatalf("CatchUpObject for another attempt = %v, want ErrMigrationMoved", err)
 	}
 	if objs, err := repo.ListUncaughtUp(ctx, at, 10); err != nil || len(objs) != 1 {
 		t.Fatalf("after a stale copy ListUncaughtUp = %v, %v; want the object still behind", objs, err)
 	}
-	if held, err := repo.CatchUpObject(ctx, at, objs[0], func(context.Context) (*string, error) { return nil, nil }); err != nil || !held {
+	if held, err := repo.CatchUpObject(ctx, at, objs[0], func(context.Context) (worker.CopyIdentity, error) { return worker.CopyIdentity{}, nil }); err != nil || !held {
 		t.Fatalf("CatchUpObject = %v, %v; want it recorded", held, err)
 	}
 	if objs, err := repo.ListUncaughtUp(ctx, at, 10); err != nil || len(objs) != 0 {

@@ -84,6 +84,16 @@ func ReboundToTarget() []string {
 	return []string{Rebinding, Verifying, RollingBack, Completed}
 }
 
+// ReboundBackToSource are the states in which the rollback's rebind back may
+// have moved the tenant's private collections from the target to the source
+// while the target still holds what it held — Failed once the rebind back
+// has committed (rebound_back_at is set, and a retry clears it): a write a
+// storage event reports in the target late, after the rebind back, can still
+// be moved into the source.
+func ReboundBackToSource() []string {
+	return []string{Failed}
+}
+
 // SourceLeft are the states in which a private collection newly bound to
 // the migration's source would stay there once the rebind has committed
 // (rebound_at is set): no later step of the migration moves it, and the

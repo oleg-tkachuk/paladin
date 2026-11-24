@@ -123,6 +123,9 @@ func (r *StorageMigrationRepo) SetCopying(ctx context.Context, at worker.Migrati
 		if err := q.ForgetStorageMigrationCaughtUp(ctx, pgUUID(at.TenantID)); err != nil {
 			return fmt.Errorf("forget the last attempt's catch-up: %w", err)
 		}
+		if err := q.ForgetStorageMigrationSourceETags(ctx, pgUUID(at.TenantID)); err != nil {
+			return fmt.Errorf("forget what the last attempt read of the source: %w", err)
+		}
 		n, err := q.MigrationCountTenantObjects(ctx, pgUUID(at.TenantID))
 		if err != nil {
 			return fmt.Errorf("count objects: %w", err)
@@ -144,7 +147,8 @@ func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UU
 		for _, o := range rows {
 			out = append(out, worker.ObjectRef{Collection: o.CollectionName, Key: o.Path, SizeBytes: o.SizeBytes, Trashed: o.Trashed,
 				BoundBackendID: o.BoundBackendName, BoundBucket: o.BoundBucketName,
-				WrittenAt: timeFrom(o.WrittenAt), CaughtUp: caughtUpFrom(o.CaughtUpWrittenAt, o.CaughtUpEtag)})
+				WrittenAt: timeFrom(o.WrittenAt), CaughtUp: caughtUpFrom(o.CaughtUpWrittenAt, o.CaughtUpEtag),
+				SourceETag: o.SourceEtag})
 		}
 		return nil
 	})
@@ -188,7 +192,7 @@ func (r *StorageMigrationRepo) ListUncaughtUp(ctx context.Context, at worker.Mig
 // under it is the one whose bytes fn copies, or an older one, which leaves
 // the object listed again. The transaction is idle while fn copies, so it
 // lifts the idle-in-transaction timeout for itself, as HoldObject does.
-func (r *StorageMigrationRepo) CatchUpObject(ctx context.Context, at worker.MigrationRead, o worker.WrittenObject, fn func(context.Context) (*string, error)) (bool, error) {
+func (r *StorageMigrationRepo) CatchUpObject(ctx context.Context, at worker.MigrationRead, o worker.WrittenObject, fn func(context.Context) (worker.CopyIdentity, error)) (bool, error) {
 	var held bool
 	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
 		if _, err := q.SetIdleInTransactionTimeout(ctx, idleInTransactionUnbounded); err != nil {
@@ -201,12 +205,15 @@ func (r *StorageMigrationRepo) CatchUpObject(ctx context.Context, at worker.Migr
 		if err != nil {
 			return fmt.Errorf("hold object: %w", err)
 		}
-		etag, err := fn(ctx)
+		copied, err := fn(ctx)
 		if err != nil {
 			return err
 		}
 		held = true
-		return migrationMoved(q.RecordStorageMigrationCaughtUp(ctx, pgUUID(at.TenantID), pgUUID(o.ID), writtenAt, etag,
+		if err := recordSourceETag(ctx, q, at.TenantID, o.ObjectRef, copied.Source); err != nil {
+			return err
+		}
+		return migrationMoved(q.RecordStorageMigrationCaughtUp(ctx, pgUUID(at.TenantID), pgUUID(o.ID), writtenAt, copied.Target,
 			at.State, at.Attempts))
 	})
 	if err != nil {
@@ -225,8 +232,9 @@ func (r *StorageMigrationRepo) AdvanceCopy(ctx context.Context, at worker.Migrat
 const idleInTransactionUnbounded = "0"
 
 // HoldObject holds o's rows against a delete (FOR KEY SHARE) on a
-// transaction scoped to the tenant, runs fn while they are held and, with
-// progress, records the copy past o on the same transaction (see
+// transaction scoped to the tenant, runs fn while they are held and records,
+// on the same transaction, the source ETag fn returns and, with progress,
+// the copy past o (see
 // worker.MigrationRepo). No row runs nothing and reports false.
 //
 // The transaction is idle while fn copies, for as long as the object takes
@@ -235,7 +243,7 @@ const idleInTransactionUnbounded = "0"
 // copy longer than the timeout could never commit, and the migration would
 // retry it forever. A purge waiting for the row is bounded by its own
 // lock_timeout and retried; a dead worker's session ends with its connection.
-func (r *StorageMigrationRepo) HoldObject(ctx context.Context, tenantID uuid.UUID, o worker.ObjectRef, progress *worker.CopyProgress, fn func(context.Context) error) (bool, error) {
+func (r *StorageMigrationRepo) HoldObject(ctx context.Context, tenantID uuid.UUID, o worker.ObjectRef, progress *worker.CopyProgress, fn func(context.Context) (*string, error)) (bool, error) {
 	var held bool
 	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
 		if _, err := q.SetIdleInTransactionTimeout(ctx, idleInTransactionUnbounded); err != nil {
@@ -248,10 +256,14 @@ func (r *StorageMigrationRepo) HoldObject(ctx context.Context, tenantID uuid.UUI
 		if len(ids) == 0 {
 			return nil
 		}
-		if err := fn(ctx); err != nil {
+		sourceETag, err := fn(ctx)
+		if err != nil {
 			return err
 		}
 		held = true
+		if err := recordSourceETag(ctx, q, tenantID, o, sourceETag); err != nil {
+			return err
+		}
 		if progress == nil {
 			return nil
 		}
@@ -262,6 +274,18 @@ func (r *StorageMigrationRepo) HoldObject(ctx context.Context, tenantID uuid.UUI
 		return false, err
 	}
 	return held, nil
+}
+
+// recordSourceETag records what a copy read of o's key in the source, on the
+// transaction that holds o's rows; nil records nothing.
+func recordSourceETag(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, o worker.ObjectRef, etag *string) error {
+	if etag == nil {
+		return nil
+	}
+	if err := q.RecordStorageMigrationSourceETag(ctx, o.Key, *etag, pgUUID(tenantID), o.Collection); err != nil {
+		return fmt.Errorf("record the source's etag: %w", err)
+	}
+	return nil
 }
 
 func (r *StorageMigrationRepo) SetState(ctx context.Context, at worker.MigrationRead, to string) error {
@@ -380,8 +404,15 @@ func (r *StorageMigrationRepo) Complete(ctx context.Context, at worker.Migration
 	})
 }
 
+// MarkCleaned moves completed -> cleaned and drops what the copies read of
+// the source, which only the cleanup reads.
 func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, at worker.MigrationRead) error {
-	return migrationMoved(r.q.MarkStorageMigrationCleaned(ctx, worker.MigStateCleaned, pgUUID(at.TenantID), at.State, at.Attempts))
+	return r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if err := migrationMoved(q.MarkStorageMigrationCleaned(ctx, worker.MigStateCleaned, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		return q.ForgetStorageMigrationSourceETags(ctx, pgUUID(at.TenantID))
+	})
 }
 
 // CountUploadsAnchoredTo counts the tenant's PENDING uploads whose URL names
@@ -538,6 +569,9 @@ func (r *StorageMigrationRepo) RebindBack(ctx context.Context, at worker.Migrati
 	}
 	if err := qtx.ForgetStorageMigrationCopiedBack(ctx, pgUUID(tenantID)); err != nil {
 		return fmt.Errorf("forget what the rollback copied back: %w", err)
+	}
+	if err := qtx.ForgetStorageMigrationSourceETags(ctx, pgUUID(tenantID)); err != nil {
+		return fmt.Errorf("forget what the copies read of the source: %w", err)
 	}
 	return tx.Commit(ctx)
 }

@@ -556,41 +556,61 @@ the same commit. Treat this file like a runtime invariant.
 - **Reason:** the rollback records each write it copied back
   (`storage_migration_copied_back`, migration 118) instead of walking a
   cursor, so `tenant_storage_migrations.rollback_cursor_at` and
-  `rollback_cursor_id` are dead. Dropping them in the same release would
-  break a binary still running during the rollout: sqlc expands
-  `sqlc.embed` into a column list that names them.
-- **Definition of Done:** a migration drops both columns, the queries that
-  reset them stop doing so, and sqlc is regenerated.
-- **Blockers:** a release that no longer reads them is deployed everywhere.
+  `rollback_cursor_id` are dead. Every binary so far still names them:
+  sqlc expands `sqlc.embed` and `RETURNING m.*` into column lists that do,
+  and three UPDATEs reset them. The migrate hook runs before the new pods,
+  so a drop would break every running pod's migration queries until they
+  were replaced. As of 2026-11-24 no release contains the change that
+  stopped reading them (`git tag --contains f08c401f4` is empty; latest
+  v42.1.0).
+- **Definition of Done:** first a release whose queries no longer name the
+  columns (explicit column lists for `tenant_storage_migrations`, the
+  resets removed) is deployed everywhere; then a migration drops both
+  columns and sqlc is regenerated.
+- **Blockers:** the first step, which no release has shipped yet.
 
-### A source write whose storage event outlives the migration's retention is lost
-
-- **Status:** Deferred.
-- **Reason:** a late source write is moved into the target only while the
-  source still holds it (`PromoteLateSourceWriteInTx`). The cleanup deletes
-  the source once the retention window has passed, whatever events for it
-  are still queued; one delivered after that finds nothing to move and is
-  logged at Error. Nothing bounds how late an event source delivers.
-- **Definition of Done:** the cleanup waits until every event source that
-  reports on the migration's source bucket has delivered past the rebind
-  (a per-bucket high-water mark the ingest records), or the operator is told
-  which keys were lost; a test delivers an event after the cleanup.
-- **Blockers:** an event high-water mark per bucket, which the ingest does
-  not keep.
-
-### A target write whose storage event arrives after a rollback's rebind back is dropped
+### A source write no late event moves holds the cleanup
 
 - **Status:** Deferred.
-- **Reason:** the mirror of a late source write. An overwrite written to the
-  target while a migration rolled back, whose event is delivered after the
-  rebind back, names a bucket the collection is no longer bound to and is
-  skipped; the source keeps the older bytes. The forward move decides
-  staleness against `rebound_at`; the rebind back records no time of its
-  own to decide against.
-- **Definition of Done:** the rebind back records when it committed, and an
-  event from a rolled-back migration's target is moved into the source
-  under the same rules as a late source write; a test delivers one after
-  the rebind back and finds the newer bytes in the source.
+- **Reason:** the cleanup keeps a source copy whose ETag no longer matches
+  the one the copy read (migration 120) until the late storage event moves
+  the write into the target. Some never will: an event the transport
+  dropped, and one the ingest skips — without a sequencer (the SeaweedFS
+  sources set none) or not newer than the row's. The migration then stays
+  `completed`, each pass logs the key at Warn and HEADs every object of the
+  tenant again. Nothing is lost, but nothing settles it either; the cleanup
+  does not move the write itself, as a target write whose own event is late
+  could be overwritten.
+- **Definition of Done:** an operator can settle such a key — move the
+  source's bytes or discard them — through an RPC that records the decision;
+  a test settles one and the migration is cleaned.
+- **Blockers:** none.
+
+### A late target write whose event arrives after a retry has started is dropped
+
+- **Status:** Deferred.
+- **Reason:** a late target write is moved into the source only while the
+  rolled-back migration stays `failed` (`rebound_back_at`, migration 119). A
+  retry clears it and copies over the target, so an event delivered after
+  the retry starts names a bucket the collection is not bound to and is
+  skipped; the source keeps the older bytes.
+- **Definition of Done:** a retry waits until the late target writes of the
+  attempt it replaces can no longer arrive, or moves them first; a test
+  delivers one after the retry starts.
+- **Blockers:** the same bound on event delivery that the forward case
+  lacks.
+
+### A late target write is ordered against a sequencer from another bucket
+
+- **Status:** Deferred.
+- **Reason:** a late target write is moved only when its sequencer follows
+  the row's, as the promote requires. A row whose last write was recorded
+  from the source holds the source's sequencer, which says nothing about the
+  target's order: when it sorts after the event's, the write is skipped as
+  not newer.
+- **Definition of Done:** the row records which bucket its sequencer came
+  from, and the promote compares sequencers only from the same bucket; a
+  test moves a target write whose sequencer sorts before the source's.
 - **Blockers:** none.
 
 ## API error messages

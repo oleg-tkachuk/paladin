@@ -259,11 +259,11 @@ func TestStorageMigrationHoldMakesAPurgeWaitForTheCopy(t *testing.T) {
 	held := make(chan error, 1)
 	go func() {
 		_, err := repo.HoldObject(ctx, f.tenant, worker.ObjectRef{Collection: "docs", Key: purgedKey}, nil,
-			func(ctx context.Context) error {
+			func(ctx context.Context) (*string, error) {
 				err := f.store.CopyObject(ctx, f.loc(f.private, "docs", purgedKey), f.loc(f.dedicated, "docs", purgedKey))
 				close(copying)
 				<-release
-				return err
+				return nil, err
 			})
 		held <- err
 	}()

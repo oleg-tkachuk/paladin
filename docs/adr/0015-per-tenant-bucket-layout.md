@@ -634,6 +634,71 @@ shape, and is mirrored:
 `rollback_cursor_at` and `rollback_cursor_id` are no longer read; they are
 dropped once no running binary selects them (BACKLOG).
 
+## Addendum (2026-11-24): a target write whose event comes after the rebind back is moved
+
+The mirror of a late source write. An overwrite written to the target while
+the migration rolled back, whose storage event was delivered after the
+rebind back, named a bucket the collection was no longer bound to and was
+skipped; the source kept the older bytes. The forward move decides against
+`rebound_at`, and the rebind back recorded no time of its own.
+
+- **The rebind back records when it committed.** `rebound_back_at`
+  (migration 119) is its transaction's start, set with the move to `failed`;
+  a retry, and a stuck rollback, clear it.
+- **The event is matched to the rollback.** An uploaded event from the
+  target of the tenant's migration, `failed` with `rebound_back_at` set, is
+  a late write to move into the source, under `PromoteLateSourceWriteInTx`'s
+  rules with the rebind back in place of the rebind.
+- **Only a write the tenant made.** The target also received the
+  migration's own copies, perhaps the one the verify failed on, and their
+  events are uploaded events like any other. The event's time must be at
+  least `statemachine.LateWriteClockMargin` past `rebound_at`: it is the
+  store's clock against the database's, and a catch-up copy made just
+  before the rebind cannot be told from a tenant's write just after it. A
+  time the ingest adapter took from its own clock, because the payload
+  carried none it could read (`CloudEvent.TimeReported`), says when the
+  event arrived and counts as none. Such events are skipped and logged; a
+  tenant write inside the margin is lost to this path.
+- **Only while the target is there.** The rollback's target must still be
+  a bucket that exists (`provision_state` `ready`); deleting it ends the
+  window, as a retry does by clearing both times.
+
+Not covered (BACKLOG): an event delivered after a retry has started, and a
+row whose sequencer came from the source, which the target's event cannot be
+ordered against.
+
+## Addendum (2026-11-24): the cleanup keeps a source write the copy did not take
+
+A late source write is moved only while the source holds it. The cleanup
+deleted the source once the retention window passed and the target held the
+object at its recorded size, whatever events were still on their way; one
+delivered after it found nothing to move, and the write was lost.
+
+Waiting for the event stream was the other option: a per-bucket mark of the
+latest event handled. It proves nothing on a transport that drops or
+reorders events, and never advances for a bucket nobody writes to. The
+cleanup checks the bytes instead.
+
+- **The copy records what it took.** Just before the copy, and the
+  catch-up, take an object's bytes, the source's ETag for its key is read
+  and recorded on the transaction that holds the object's rows
+  (`storage_migration_source_etags`, migration 120). It is read before the
+  copy, so a write racing the copy shows as one the target may lack.
+- **The cleanup compares the same bucket's ETags.** For a live object whose
+  last recorded write predates the rebind, a source ETag that differs from
+  the recorded one is a write no event has recorded yet. Its source copy is
+  kept, logged, and the migration stays `completed` (`ErrCleanupKept`);
+  `Completed` is a state the late event is moved in, and the next pass
+  deletes the source copy once it has been.
+- **Nothing to compare, nothing kept.** A trashed object (a late event does
+  not move one), a row written since the rebind, and a copy with no record
+  (no `Identity`, a migration copied before migration 120) are cleaned as
+  before.
+
+Not covered (BACKLOG): a write no late event will move — its event dropped,
+or skipped for want of a sequencer (the SeaweedFS sources set none) or as
+not newer — holds the cleanup until an operator settles it.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

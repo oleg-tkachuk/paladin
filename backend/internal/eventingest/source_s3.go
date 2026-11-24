@@ -158,7 +158,8 @@ func (s *S3EventSource) event(r s3Record, raw json.RawMessage) (CloudEvent, bool
 	subj.Sequencer = r.S3.Object.Sequencer
 
 	t, err := time.Parse(time.RFC3339Nano, r.EventTime)
-	if err != nil {
+	reported := err == nil
+	if !reported {
 		t = time.Now()
 	}
 
@@ -168,6 +169,7 @@ func (s *S3EventSource) event(r s3Record, raw json.RawMessage) (CloudEvent, bool
 		Source:          s.URI,
 		ID:              s3ID(r),
 		Time:            t,
+		TimeReported:    reported,
 		DataContentType: "application/json",
 		Subject: fmt.Sprintf(
 			"tenants/%s/collections/%s/objects-by-key/%s",

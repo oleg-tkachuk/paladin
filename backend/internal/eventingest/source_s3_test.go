@@ -49,8 +49,23 @@ func TestS3Source_AWSShape_CreatedPut(t *testing.T) {
 	if ev.SubjectFields.Etag != "etag-xyz" || ev.SubjectFields.SizeBytes != 2048 || ev.SubjectFields.Sequencer != "00SEQ01" {
 		t.Errorf("s3 metadata not propagated: %+v", ev.SubjectFields)
 	}
-	if ev.Time.IsZero() {
-		t.Error("event time not parsed")
+	if ev.Time.IsZero() || !ev.TimeReported {
+		t.Errorf("event time = %v, reported %v; want the record's", ev.Time, ev.TimeReported)
+	}
+}
+
+// A record whose eventTime does not parse falls back to the receipt clock,
+// and says so: that time is not when the write was made.
+func TestS3Source_UnreadableEventTimeIsNotReported(t *testing.T) {
+	src := &S3EventSource{URI: "s3://primary"}
+	body := strings.Replace(string(awsEvent("s3:ObjectCreated:Put", "paladin", "11111111-1111-4111-8111-111111111111/ok/a.bin", "req-1")),
+		"2026-01-02T03:04:05.678Z", "not-a-time", 1)
+	ev, err := parseOne(src, []byte(body), "")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if ev.TimeReported || ev.Time.IsZero() {
+		t.Errorf("time = %v, reported %v; want the receipt clock, not reported", ev.Time, ev.TimeReported)
 	}
 }
 
