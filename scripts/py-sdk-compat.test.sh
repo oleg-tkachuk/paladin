@@ -18,7 +18,7 @@ readonly SDK="$root/sdk/python"
 # The library that defines the requirement-specifier format; parsed with it,
 # not with a regular expression.
 # renovate: datasource=pypi depName=packaging
-readonly PACKAGING_VERSION=26.3
+readonly PACKAGING_VERSION=26.4
 
 uv run --quiet --no-project --with "packaging==${PACKAGING_VERSION}" python - "$SDK" <<'PY'
 import json
