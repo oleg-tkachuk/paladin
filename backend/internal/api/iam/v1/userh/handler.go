@@ -43,7 +43,9 @@ type Handler struct {
 	now          func() time.Time
 	// newPassword is what ResetPassword sets when the caller names none.
 	newPassword func() (string, error)
-	log         *zap.Logger
+	// hashPassword hashes what CreateUser and ResetPassword store.
+	hashPassword PasswordHasher
+	log          *zap.Logger
 }
 
 // The operations a log line names (its "op" field).
@@ -73,6 +75,20 @@ const (
 	logKeyScopes            = "scopes"
 	logKeyPasswordGenerated = "password_generated"
 )
+
+// PasswordHasher hashes a password for storage. It refuses an empty one, and
+// one too long to hash with bcrypt.ErrPasswordTooLong.
+type PasswordHasher func(plaintext string) ([]byte, error)
+
+// WithPasswordHasher replaces the hasher, auth.HashPassword unless set, with
+// hash: a test hashes at a low cost to try many passwords a second. Nil keeps
+// the hasher there is.
+func (h *Handler) WithPasswordHasher(hash PasswordHasher) *Handler {
+	if hash != nil {
+		h.hashPassword = hash
+	}
+	return h
+}
 
 // WithCapabilities lets the handler list the capabilities acting on users'
 // behalf.
@@ -108,7 +124,7 @@ func NewHandler(u authstore.UserRepository, policy cedar.Authorizer) *Handler {
 	}
 	return &Handler{
 		cel: celpkg.NewEvaluator(), users: u, policy: policy, now: time.Now,
-		newPassword: generatedPassword, log: zap.NewNop(),
+		newPassword: generatedPassword, hashPassword: auth.HashPassword, log: zap.NewNop(),
 	}
 }
 
@@ -243,7 +259,7 @@ func (h *Handler) CreateUser(ctx context.Context, in CreateUserInput) (*authstor
 		authstore.User{TenantID: in.TenantID, Subject: in.Subject}); err != nil {
 		return nil, err
 	}
-	hash, err := auth.HashPassword(in.InitialPassword)
+	hash, err := h.hashPassword(in.InitialPassword)
 	if err != nil {
 		return nil, h.answer(opCreate, UserRef{TenantID: in.TenantID}, hashAnswer(err))
 	}
@@ -557,7 +573,7 @@ func (h *Handler) ResetPassword(ctx context.Context, ref UserRef, newPassword st
 			return "", h.answer(opResetPassword, ref, rpcerr.New(connect.CodeInternal, fmt.Errorf("generate password: %w", err)))
 		}
 	}
-	hash, err := auth.HashPassword(newPassword)
+	hash, err := h.hashPassword(newPassword)
 	if err != nil {
 		return "", h.answer(opResetPassword, ref, hashAnswer(err))
 	}

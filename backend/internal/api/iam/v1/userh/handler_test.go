@@ -44,6 +44,7 @@ type fakeUserRepo struct {
 	deleteErr   error
 	deletes     int
 	pwdHashSets int
+	pwdHash     []byte
 }
 
 func (f *fakeUserRepo) Create(_ context.Context, u authstore.User) (authstore.User, error) {
@@ -84,8 +85,9 @@ func (f *fakeUserRepo) Delete(context.Context, uuid.UUID, int64) error {
 func (f *fakeUserRepo) List(context.Context, authstore.ListUsersArgs) ([]authstore.User, string, error) {
 	return nil, "", nil
 }
-func (f *fakeUserRepo) UpdatePasswordHash(context.Context, uuid.UUID, []byte) error {
+func (f *fakeUserRepo) UpdatePasswordHash(_ context.Context, _ uuid.UUID, hash []byte) error {
 	f.pwdHashSets++
+	f.pwdHash = hash
 	return nil
 }
 func (f *fakeUserRepo) TouchLogin(context.Context, uuid.UUID, time.Time) error { return nil }

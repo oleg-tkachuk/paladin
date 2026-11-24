@@ -608,18 +608,6 @@ the same commit. Treat this file like a runtime invariant.
 
 ## API error messages
 
-### The handler fuzz targets do not reach UserService
-
-- **Status:** Deferred.
-- **Reason:** `userh.CreateUser` and the password paths hash with the
-  production cost on every call, which leaves a fuzz search a handful of
-  inputs a second; the user subject and display name go unfuzzed at the
-  handler.
-- **Definition of Done:** a fuzz target drives `CreateUser` and `UpdateUser`
-  with a hasher of test cost injected through the handler, asserting the
-  `fuzzassert` invariants.
-- **Blockers:** the handler takes no hasher today.
-
 ### The handler fuzz targets see no CHECK constraint they do not mirror
 
 - **Status:** Deferred.

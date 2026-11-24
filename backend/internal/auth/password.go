@@ -8,13 +8,26 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// HashPassword returns a bcrypt hash with the default cost. Empty input is
+// PasswordHashCost is the bcrypt cost a stored password is hashed with.
+const PasswordHashCost = bcrypt.DefaultCost
+
+// errEmptyPassword refuses to hash an empty password.
+var errEmptyPassword = errors.New("auth: empty password")
+
+// HashPassword returns a bcrypt hash at PasswordHashCost. Empty input is
 // rejected — there is no legitimate reason to store an empty-password hash.
 func HashPassword(plaintext string) ([]byte, error) {
+	return HashPasswordCost(plaintext, PasswordHashCost)
+}
+
+// HashPasswordCost is HashPassword at the bcrypt cost given. Production
+// hashes at PasswordHashCost; a lower cost is for a caller that hashes many
+// passwords it never stores, such as a fuzz search.
+func HashPasswordCost(plaintext string, cost int) ([]byte, error) {
 	if plaintext == "" {
-		return nil, errors.New("auth: empty password")
+		return nil, errEmptyPassword
 	}
-	return bcrypt.GenerateFromPassword([]byte(plaintext), bcrypt.DefaultCost)
+	return bcrypt.GenerateFromPassword([]byte(plaintext), cost)
 }
 
 // CheckPassword returns nil iff `plaintext` matches `hash`. Errors are
