@@ -435,6 +435,40 @@ func (t *Transitioner) DiscardFailed(ctx context.Context, objectID uuid.UUID, re
 	return nil
 }
 
+// DiscardExpired is DiscardFailed for an upload the reconciler scanned as
+// expired (ScanExpiredAnchors): the row is deleted only while what the scan
+// saw still holds — PENDING, anchored to anchor, and its presign_expires_at
+// past grace. A RegenerateUploadURL moves presign_expires_at on the row
+// (ExtendPendingPresign) under the same row lock the DELETE takes, so the two
+// serialize: a regenerate that committed first leaves the row past nothing
+// and it is kept for its new URL (false); one that comes after finds no row
+// and hands out no URL. A row that is gone is kept too, with nothing to do.
+func (t *Transitioner) DiscardExpired(ctx context.Context, objectID uuid.UUID, anchor pgtype.UUID, grace time.Duration, reason FailureReason) (bool, error) {
+	const q = `
+        DELETE FROM objects
+         WHERE id = $1 AND state = 'PENDING'
+           AND upload_bucket_id = $2
+           AND presign_expires_at < now() - $3::interval
+     RETURNING tenant_id, path
+    `
+	var tenantID uuid.UUID
+	var path string
+	err := t.pool.QueryRow(ctx, q, objectID, anchor, grace.String()).Scan(&tenantID, &path)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("sm: discard expired object: %w", err)
+	}
+	recordFailure(ctx, reason)
+	logger.FromContext(ctx).Warn("object failed and was discarded",
+		zap.String("object_id", objectID.String()),
+		zap.String("tenant_id", tenantID.String()),
+		zap.String("key", path),
+		zap.String("reason", string(reason)))
+	return true, nil
+}
+
 // SoftDelete moves AVAILABLE → DELETED with optimistic concurrency.
 //
 // resourceVersion is the row version the caller last saw; pass 0 to skip

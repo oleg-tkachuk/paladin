@@ -357,11 +357,12 @@ and it now also applies while the migration is `completed`.
 
 What is left, and accepted:
 
-- The reconciler's discard of an expired `PENDING` row does not recheck
-  `presign_expires_at`, so a `RegenerateUploadURL` that lands between its
-  scan and the discard returns a URL whose row is gone. Its bytes belong to
-  no row and are never promoted (as for any deleted row's URL); the client's
-  `CompleteObject` then finds no object.
+- The reconciler's discard of an expired `PENDING` row did not recheck
+  `presign_expires_at`, so a `RegenerateUploadURL` that landed between its
+  scan and the discard returned a URL whose row was gone. Since 2026-11-25
+  the discard rechecks the expiry, the anchor and the state in its `DELETE`,
+  which serializes with the regenerate's `UPDATE` on the row: the row is kept
+  for its new URL (`statemachine.DiscardExpired`).
 
 ## Amendment (2026-11-25): a rolled-back migration keeps passing after it fails
 
