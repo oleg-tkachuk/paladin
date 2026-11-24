@@ -334,6 +334,9 @@ tasks:
   verify-go-sdk:
     desc: "gofmt + lint + test the Go SDK, and fail when its stubs are stale"
     cmds:
+      # First: a module left behind by a bump fails the lint below as "no go
+      # files to analyze", which names nothing; this names the module.
+      - task: verify:go-mod-tidy
       - task: go-sdk:fmt:check
       - task: go-sdk:lint
       - task: go-sdk:test
@@ -712,6 +715,13 @@ tasks:
     cmds:
       - ./scripts/image-build-meta.test.sh
 
+  verify:go-mod-tidy:
+    desc: "Fail when a Go module is not tidy, naming the module"
+    # The modules replace the SDK with the working copy, so a bump that moves
+    # one go.mod leaves the others behind and fails elsewhere, unnamed.
+    cmds:
+      - ./scripts/go-mod-tidy.test.sh
+
   verify:go-module-paths:
     desc: "Fail when a Go module's path does not match its directory"
     # A mismatch builds inside the tree and cannot be fetched outside it.
@@ -811,6 +821,12 @@ tasks:
       - task: frontend:generate
 
   # ═══ dependency bumps ═══════════════════════════════════════════════════════
+
+  deps:tidy:
+    desc: "Tidy every Go module, the SDK first: finishes a bump made in one go.mod"
+    cmds:
+      - ./scripts/go-mod-tidy.sh
+      - ./scripts/go-mod-tidy.test.sh
 
   deps:update:
     desc: "Bump both halves and both SDKs to the latest minor/patch (no majors)"
