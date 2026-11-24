@@ -196,7 +196,7 @@ services:
         condition: service_started
 
   postgres:
-    image: postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60
+    image: postgres:19.0@sha256:4ae330eb888b3b769aa542424859059d8e37507e365d3d48024446dacd8c4d8d
     environment:
       POSTGRES_DB: paladin
       POSTGRES_USER: paladin
@@ -230,7 +230,7 @@ services:
   # image is already pinned here and carries openssl, whose default output
   # is the PKCS#8 PEM limes reads.
   capability-key:
-    image: postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60
+    image: postgres:19.0@sha256:4ae330eb888b3b769aa542424859059d8e37507e365d3d48024446dacd8c4d8d
     restart: "no"
     entrypoint:
       [
@@ -270,7 +270,7 @@ services:
   # no RLS policy at all, and why an RLS migration could pass the whole suite
   # and then refuse every login on the cluster.
   promote-app-role:
-    image: postgres:19.0@sha256:bb6e70add742cd868fb62cb3b2f67d1dd2bdd2b65a521e778420748753687c60
+    image: postgres:19.0@sha256:4ae330eb888b3b769aa542424859059d8e37507e365d3d48024446dacd8c4d8d
     restart: "no"
     environment:
       PGPASSWORD: paladin
