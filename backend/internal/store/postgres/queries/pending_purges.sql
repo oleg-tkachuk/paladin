@@ -12,16 +12,16 @@ INSERT INTO pending_purges (
           $6, $7);
 
 -- name: InsertMigrationPurgeDebts :execrows
--- The purge of an object while its tenant migrates (ADR-0015): one debt for
--- each bucket of the migration other than the one the collection is bound to,
+-- The purge of an object while its tenant migrates (ADR-0051): one debt for
+-- each bucket of the migration other than the one the object is placed in,
 -- which InsertPendingPurge recorded. Run on the transaction that deletes the
 -- row, after the delete, so the debts exist exactly when the row is gone.
 --
--- Until 'cleaned', the object may have a copy in either bucket: the copy
--- puts one in the target, the rebind leaves one in the source until cleanup,
--- a rollback copies the target back, and a failed attempt leaves its copies
--- in the target — through the retry's 'provisioning' too, until its copy
--- overwrites them. 'cleaned' has removed the source copies. Only a ready
+-- In the owing states (migstate.Owing) the object may have a copy in either
+-- bucket: a move leaves the source's copy until cleanup, a rollback's move
+-- leaves the target's, and a failed attempt leaves its copies in the target —
+-- through the retry's 'provisioning' too, until its moves overwrite them.
+-- 'cleaned' has removed the source copies. Only a ready
 -- bucket: a first attempt's target is still being provisioned and holds
 -- nothing, nor does one whose provisioning failed, and a debt there would
 -- stay pinned behind the bucket gate. Only while the bound bucket is one of
@@ -38,7 +38,7 @@ SELECT m.tenant_id, sqlc.arg('object_id'), x.bucket_id,
          WHERE sb.name = sqlc.arg('bound_backend_name') AND bb.name = sqlc.arg('bound_bucket_name')) bound
     ON bound.id IN (m.source_bucket_id, m.target_bucket_id)
  WHERE m.tenant_id = sqlc.arg('tenant_id')
-   AND m.state IN ('provisioning', 'copying', 'rebinding', 'verifying', 'completed', 'rolling_back', 'failed')
+   AND m.state = ANY(sqlc.arg('owing_states')::text[])
    AND b.provision_state = 'ready'
    AND x.bucket_id <> bound.id;
 

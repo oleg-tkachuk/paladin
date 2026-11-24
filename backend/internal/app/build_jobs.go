@@ -99,7 +99,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		// Reuse the SharedDeps S3 client; same default backend as listeners.
 		out = append(out, worker.NewReconcilerV2(
 			smReaper,
-			adapters.NewReconcilerProbe(reaperQ, s3adapter.NewObjectRouter(deps.Registry)).WithLogger(l.Named("reconciler")),
+			adapters.NewReconcilerProbe(reaperQ, s3adapter.NewObjectRouter(deps.Registry)),
 			worker.ReconcilerV2Config{
 				PollInterval:    cfg.Worker.Jobs.Reconciler.Interval,
 				PendingGraceTTL: cfg.Worker.Jobs.Reconciler.MinObjectAge,
@@ -443,19 +443,24 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		})
 	}
 
-	// ADR-0015 Phase 3: shared->dedicated storage migration copy job. Always
-	// registered — it is idle unless a tenant_storage_migrations row is active
-	// (the admin MigrateTenantStorageLayout RPC creates one), so it needs no
-	// config toggle. Slice 1 is same-backend server-side copy.
+	// The storage migration (ADR-0015, ADR-0051). Always registered — it is
+	// idle unless a tenant_storage_migrations row is active (the admin
+	// MigrateTenantStorageLayout RPC creates one), so it needs no config
+	// toggle.
 	migCopier := storageCopier{s: deps.Storage.Object}
 	out = append(out, &worker.StorageMigrationWorker{
 		Repo:    adapters.NewStorageMigrationRepo(reaperQ, reaperPool),
 		Copier:  migCopier,
-		Deleter: migCopier, // retention-gated source cleanup (slice 2)
-		Header:  migCopier, // physical (HEAD size) verify
-		// The catch-up records each copy's ETag; the verify compares it.
+		Deleter: migCopier, // the cleanup of the source copies
+		Header:  migCopier, // a move's size check
+		// A move compares the source's ETag with the row's, and the copy's
+		// digest with the source's.
 		Identity: migCopier,
-		Logger:   l.Named("storage-migration"),
+		// No URL outlives max_ttl, and a write through one lands within the
+		// reconciler's grace of its expiry.
+		WriteWindow: cfg.Limits.Presign.MaxTTL,
+		SettleGrace: cfg.Worker.Jobs.Reconciler.MinObjectAge,
+		Logger:      l.Named("storage-migration"),
 	})
 
 	return out

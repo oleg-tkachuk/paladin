@@ -236,7 +236,7 @@ func (w *LifecycleHardDeleter) deleteRowRecordingDebt(ctx context.Context, r sql
 	copies, err := purgedebt.RecordMigrationCopies(ctx, q, purgedebt.Purge{
 		TenantID: tenantID, ObjectID: uuid.UUID(r.ID.Bytes),
 		BackendID: r.BackendName, Bucket: r.BucketName,
-		Collection: r.CollectionName, Key: r.Path, State: string(sqlc.ObjectStateDELETED),
+		Collection: r.CollectionName, Key: r.Path,
 	})
 	if err != nil {
 		return false, err

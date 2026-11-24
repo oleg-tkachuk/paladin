@@ -869,6 +869,8 @@ type TenantStorageMigration struct {
 	RollbackCursorID        pgtype.UUID        `json:"rollback_cursor_id"`
 	CopyStartedAt           pgtype.Timestamptz `json:"copy_started_at"`
 	ReboundBackAt           pgtype.Timestamptz `json:"rebound_back_at"`
+	WritesCloseAt           pgtype.Timestamptz `json:"writes_close_at"`
+	FailedPasses            int32              `json:"failed_passes"`
 }
 
 type User struct {

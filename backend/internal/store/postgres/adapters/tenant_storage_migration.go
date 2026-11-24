@@ -10,7 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
-	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -74,10 +73,6 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenanth.Sta
 	case prev.State != tenanth.StorageMigrationFailed:
 		return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationExists
 	}
-	if err := lockStorageMigrationStart(ctx, qtx, args.TenantID); err != nil {
-		return tenanth.StorageMigration{}, err
-	}
-
 	targetID, err := ensureMigrationTargetBucket(ctx, tx, qtx, args)
 	if err != nil {
 		return tenanth.StorageMigration{}, err
@@ -109,20 +104,6 @@ func (r *TenantRepo) StartStorageMigration(ctx context.Context, args tenanth.Sta
 	}
 	return storageMigrationToDomain(m, args.SourceBackendName, args.SourceBucketName,
 		args.TargetBackendName, args.TargetBucketName), nil
-}
-
-// lockStorageMigrationStart waits for the tenant's promotes in flight and
-// holds back later ones until the transaction ends (migstate.LockSpaceStart).
-// A transition from 'failed' or from no migration into a fencing state takes
-// it: a promote that read no fencing row has committed before the
-// transition, and every later one holds the row the transition leaves. Taken
-// only once no migration is active, so no promote holding the lock waits on
-// a migration row a worker holds.
-func lockStorageMigrationStart(ctx context.Context, qtx *sqlc.Queries, tenantID uuid.UUID) error {
-	if err := qtx.LockStorageMigrationStart(ctx, migstate.LockSpaceStart, migstate.TenantLockKey(tenantID)); err != nil {
-		return fmt.Errorf("wait for the tenant's promotes in flight: %w", err)
-	}
-	return nil
 }
 
 // ensureMigrationTargetBucket creates the tenant's dedicated bucket row, or
@@ -241,9 +222,6 @@ func (r *TenantRepo) RollBackStuckStorageMigration(ctx context.Context, tenantID
 	}
 	if prev.State != tenanth.StorageMigrationFailed {
 		return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationNotRollbackable
-	}
-	if err := lockStorageMigrationStart(ctx, qtx, tenantID); err != nil {
-		return tenanth.StorageMigration{}, err
 	}
 	if _, err := qtx.RollBackStuckStorageMigration(ctx, prev.ID); errors.Is(err, pgx.ErrNoRows) {
 		// The default binding no longer names the target bucket.

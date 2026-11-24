@@ -22,7 +22,11 @@ type rowLookup struct {
 }
 
 func (r *rowLookup) LookupObjectByKey(context.Context, pgtype.UUID, string, string) (sqlc.LookupObjectByKeyRow, error) {
-	return sqlc.LookupObjectByKeyRow{Object: r.row}, nil
+	// Anchored to and placed in the bucket the tests' events name none of.
+	backend, bucket := foundBackend, foundBucket
+	return sqlc.LookupObjectByKeyRow{Object: r.row,
+		AnchorBackendName: &backend, AnchorBucketName: &bucket,
+		PlacementBackendName: &backend, PlacementBucketName: &bucket}, nil
 }
 
 type fakeProbe struct {
@@ -32,9 +36,9 @@ type fakeProbe struct {
 	gotID  uuid.UUID
 }
 
-func (p *fakeProbe) HeadByObjectID(_ context.Context, id uuid.UUID) (string, int64, string, string, statemachine.Placement, bool, error) {
+func (p *fakeProbe) HeadPlaced(_ context.Context, id uuid.UUID) (bool, error) {
 	p.called, p.gotID = true, id
-	return "", 0, "", "", statemachine.Placement{}, p.found, p.err
+	return p.found, p.err
 }
 
 type fakeDeleter struct {

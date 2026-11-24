@@ -97,9 +97,18 @@ WHERE o.id = $1;
 
 -- name: LookupObjectByKey :one
 -- Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
-SELECT sqlc.embed(o), c.name AS collection_name
+-- The anchor_* columns name the bucket the object's upload URL was signed
+-- for, NULL once settled; the placement_* ones the bucket its bytes are in
+-- (ADR-0051): what a storage event from a bucket is matched against.
+SELECT sqlc.embed(o), c.name AS collection_name,
+       asb.name AS anchor_backend_name, ab.name AS anchor_bucket_name,
+       psb.name AS placement_backend_name, pb.name AS placement_bucket_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
+LEFT JOIN buckets ab           ON ab.id = o.upload_bucket_id
+LEFT JOIN storage_backends asb ON asb.id = ab.backend_id
+LEFT JOIN buckets pb           ON pb.id = o.placement_bucket_id
+LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE o.tenant_id = $1
   AND c.name = $2
   AND o.path = $3

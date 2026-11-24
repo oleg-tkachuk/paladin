@@ -17,7 +17,6 @@ import (
 // mismatchProber reports a stored object of a size the test chooses and
 // records deletes.
 type mismatchProber struct {
-	noCopy
 	size      int64
 	checksum  string
 	deleteErr error
@@ -53,9 +52,9 @@ func TestReconcilerDiscardsBytesThatBreakTheRegistration(t *testing.T) {
 
 	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, checksum, presign_expires_at)
-		SELECT $1, $2, c.id, 'k-wrong', 'PENDING', 'text/plain', 10, 2,
+		SELECT $1, $2, c.id, c.bucket_id, 'k-wrong', 'PENDING', 'text/plain', 10, 2,
 		       '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=', now() - interval '48 hours'
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
@@ -87,9 +86,9 @@ func TestReconcilerDiscardsAChecksumMismatch(t *testing.T) {
 
 	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, checksum, presign_expires_at)
-		SELECT $1, $2, c.id, 'k-sum', 'PENDING', 'text/plain', 10, 2,
+		SELECT $1, $2, c.id, c.bucket_id, 'k-sum', 'PENDING', 'text/plain', 10, 2,
 		       '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=', now() - interval '48 hours'
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
@@ -112,9 +111,9 @@ func TestReconcilerKeepsAMismatchPendingWhileItsBytesRemain(t *testing.T) {
 
 	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, presign_expires_at)
-		SELECT $1, $2, c.id, 'k-stuck', 'PENDING', 'text/plain', 10, 2, now() - interval '48 hours'
+		SELECT $1, $2, c.id, c.bucket_id, 'k-stuck', 'PENDING', 'text/plain', 10, 2, now() - interval '48 hours'
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
 
@@ -136,9 +135,9 @@ func TestReconcilerPromotesBytesThatMatchTheRegistration(t *testing.T) {
 
 	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, checksum, presign_expires_at)
-		SELECT $1, $2, c.id, 'k-right', 'PENDING', 'text/plain', 10, 2,
+		SELECT $1, $2, c.id, c.bucket_id, 'k-right', 'PENDING', 'text/plain', 10, 2,
 		       '47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=', now() - interval '48 hours'
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)

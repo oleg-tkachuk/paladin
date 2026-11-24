@@ -19,11 +19,11 @@ import (
 )
 
 // A purge during a storage migration deletes the object's row once, and its
-// bytes from the bucket the collection is bound to — while the migration
-// keeps a copy in its other bucket. Nothing walked that copy again: the copy,
-// the verify and the cleanup walk rows. These purge a trashed object at each
-// point of the migration and find neither bucket holding it once the purge
-// drainer has run, and the migration through to cleaned.
+// bytes from the bucket it is placed in — while the migration keeps a copy in
+// its other bucket. Nothing walks that copy again: the moves and the cleanup
+// walk rows. These purge a trashed object at each point of the migration and
+// find neither bucket holding it once the purge drainer has run, and the
+// migration through to cleaned.
 
 // The trashed object the tests purge, past the hard delete's cooling-off.
 const (
@@ -119,9 +119,8 @@ func TestStorageMigrationPurgeLeavesNoBytesBehind(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	// The copy holds the row while it copies it: the purge waits, then owes
-	// the target's copy too. Before, it deleted the source's and the row,
-	// and the target's copy stayed with nothing to find it.
+	// A move holds the row while it copies it: the purge waits, then owes
+	// the source's copy too, the object being placed in the target by then.
 	t.Run("purged while its copy is being made", func(t *testing.T) {
 		t.Parallel()
 		f := seedPublicMigrationFixture(t, ctx)
@@ -144,8 +143,7 @@ func TestStorageMigrationPurgeLeavesNoBytesBehind(t *testing.T) {
 		f.assertPurged(t, ctx)
 	})
 
-	// Purged before the copy reached it: nothing to copy, and the copy's
-	// count no longer comes up short of it ("copy incomplete").
+	// Purged before a move reached it: nothing to move.
 	t.Run("purged before the copy reached it", func(t *testing.T) {
 		t.Parallel()
 		f := seedPublicMigrationFixture(t, ctx)
@@ -166,9 +164,9 @@ func TestStorageMigrationPurgeLeavesNoBytesBehind(t *testing.T) {
 		f.assertPurged(t, ctx)
 	})
 
-	// Purged between the rebind and the cleanup — by the lifecycle hard
-	// delete or a permanent delete: the purge removes the target's copy, and
-	// owes the source's, which the cleanup no longer lists.
+	// Purged between its move and the cleanup — by the lifecycle hard delete
+	// or a permanent delete: the purge removes the target's copy, and owes
+	// the source's, which the cleanup no longer lists.
 	for name, purge := range map[string]func(t *testing.T, f publicMigrationFixture){
 		"hard deleted after the rebind": func(t *testing.T, f publicMigrationFixture) {
 			t.Helper()
@@ -240,30 +238,29 @@ func (f publicMigrationFixture) completeWithinRetention(t *testing.T, ctx contex
 // a few milliseconds.
 const purgeHeldFor = 300 * time.Millisecond
 
-// The copy holds the object's row in Postgres while it copies: a purge
-// waits for it, and then owes the copy it made. Without the hold the purge
-// deletes the row mid-copy and the copy's bytes outlive it.
+// A move holds the object's row in Postgres while it copies: a purge waits
+// for it, and then owes the copy it made. Without the hold the purge deletes
+// the row mid-copy and the copy's bytes outlive it.
 func TestStorageMigrationHoldMakesAPurgeWaitForTheCopy(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	f := seedPublicMigrationFixture(t, ctx)
 	f.addCollection(t, ctx, "docs", f.private, false)
 	f.trashedLongAgo(t, ctx, "docs", purgedKey, purgedSize)
-	if err := f.start(t, ctx); err != nil {
-		t.Fatalf("start: %v", err)
-	}
 	id := f.objectID(t, ctx, "docs", purgedKey)
 	repo := adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool)
+	m := f.enterMoving(t, ctx)
+	from, to, _ := m.Source, m.Target, m.State
 
 	copying, release := make(chan struct{}), make(chan struct{})
 	held := make(chan error, 1)
 	go func() {
-		_, err := repo.HoldObject(ctx, f.tenant, worker.ObjectRef{Collection: "docs", Key: purgedKey}, nil,
-			func(ctx context.Context) (*string, error) {
+		_, err := repo.MoveObject(ctx, m.Read(), from, to, worker.MoveCandidate{ID: id, Collection: "docs", Key: purgedKey},
+			func(ctx context.Context, _ worker.MoveCandidate) (string, error) {
 				err := f.store.CopyObject(ctx, f.loc(f.private, "docs", purgedKey), f.loc(f.dedicated, "docs", purgedKey))
 				close(copying)
 				<-release
-				return nil, err
+				return "", err
 			})
 		held <- err
 	}()
@@ -286,6 +283,8 @@ func TestStorageMigrationHoldMakesAPurgeWaitForTheCopy(t *testing.T) {
 	if err := <-purged; err != nil {
 		t.Fatalf("purge: %v", err)
 	}
+	// The purge read the object placed in the source, which it deletes from;
+	// the move it waited for left a copy in the target, which it owes.
 	var owed int
 	if err := f.pool.QueryRow(ctx, `SELECT count(*) FROM pending_purges p JOIN buckets b ON b.id = p.bucket_id
 		WHERE p.object_id = $1 AND p.migration_copy AND b.name = $2`, id, f.dedicated).Scan(&owed); err != nil {

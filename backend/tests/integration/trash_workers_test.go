@@ -51,8 +51,9 @@ func setupTrashFixture(t *testing.T, pool *pgxpool.Pool) trashFixture {
 		exec(`INSERT INTO collections (tenant_id, name, bucket_id)
 		      SELECT $1, 'docs', b.id FROM buckets b WHERE b.name = $2`, tenant, trashBucket)
 		for _, state := range []string{"DELETED", "PENDING"} {
-			exec(`INSERT INTO objects (tenant_id, collection_id, path, state, content_type, terminated_at, presign_expires_at)
-			      SELECT $1, c.id, $2, $3::object_state, 'text/plain', now() - $4::interval, now() - $4::interval
+			exec(`INSERT INTO objects (tenant_id, collection_id, upload_bucket_id, path, state, content_type, terminated_at, presign_expires_at)
+			      SELECT $1, c.id, CASE WHEN $3 = 'PENDING' THEN c.bucket_id END, $2, $3::object_state, 'text/plain',
+			             now() - $4::interval, now() - $4::interval
 			        FROM collections c WHERE c.tenant_id = $1`, tenant, "a-"+state, state, oldEnough.String())
 		}
 		exec(`INSERT INTO operations (tenant_id, type) VALUES ($1, 'batch_delete')`, tenant)
@@ -112,7 +113,7 @@ func TestWorkersLeaveATrashedTenantAlone(t *testing.T) {
 	})
 
 	t.Run("pending uploads", func(t *testing.T) {
-		ids, err := statemachine.New(f.pool).ScanPendingExpired(ctx, time.Minute, 10, nil)
+		ids, err := statemachine.New(f.pool).ScanExpiredAnchors(ctx, time.Minute, 10, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -124,7 +125,7 @@ func TestWorkersLeaveATrashedTenantAlone(t *testing.T) {
 			}
 			got = append(got, tenant)
 		}
-		only(t, "ScanPendingExpired", got)
+		only(t, "ScanExpiredAnchors", got)
 	})
 
 	t.Run("storage migrations", func(t *testing.T) {

@@ -49,6 +49,8 @@ type fakeRepo struct {
 	lookupObjectFn func(ctx context.Context, tenantID uuid.UUID, collection string, objectID uuid.UUID) (ObjectRef, error)
 	lookupMetaFn   func(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error)
 	extendErr      error
+	// writesCloseAt is the bucket's write deadline; zero for none.
+	writesCloseAt time.Time
 
 	// captured args.
 	lastBucketAccess bucketgate.Access
@@ -63,7 +65,12 @@ func (f *fakeRepo) LookupObject(ctx context.Context, tenantID uuid.UUID, collect
 		return ObjectRef{Collection: collection, Key: "phys-key", State: "AVAILABLE", ContentType: "image/png", ETag: "etag-7",
 			Stored: &objecth.BucketRef{BackendID: "backend-1", Bucket: "bucket-1", State: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}}}, nil
 	}
-	return f.lookupObjectFn(ctx, tenantID, collection, objectID)
+	ref, err := f.lookupObjectFn(ctx, tenantID, collection, objectID)
+	if ref.Upload == nil {
+		// Every row is anchored to the bucket its first URL was signed for.
+		ref.Upload = &objecth.BucketRef{BackendID: "backend-1", Bucket: "bucket-1", State: bucketgate.State{Enabled: true, ProvisionState: bucketgate.ProvisionReady}}
+	}
+	return ref, err
 }
 
 func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, collection string, access bucketgate.Access) (objecth.BucketMeta, error) {
@@ -72,6 +79,11 @@ func (f *fakeRepo) LookupBucketMeta(ctx context.Context, tenantID uuid.UUID, col
 		return objecth.BucketMeta{BackendID: "backend-1", BucketName: "bucket-1"}, nil
 	}
 	return f.lookupMetaFn(ctx, tenantID, collection, access)
+}
+
+// UploadWritesCloseAt answers the deadline the test set, none by default.
+func (f *fakeRepo) UploadWritesCloseAt(context.Context, uuid.UUID, string, string) (time.Time, bool, error) {
+	return f.writesCloseAt, !f.writesCloseAt.IsZero(), nil
 }
 
 func (f *fakeRepo) ExtendPendingPresign(_ context.Context, tenantID, objectID uuid.UUID, expiresAt time.Time) error {

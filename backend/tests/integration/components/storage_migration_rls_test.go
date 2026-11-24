@@ -13,10 +13,18 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/apiutil"
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/policy/cedar"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
+
+// allowAll authorizes everything: the RPC's authorization is not under test.
+type allowAll struct{}
+
+func (allowAll) IsAuthorized(context.Context, *cedar.Principal, cedar.Action, *cedar.Resource, cedar.RequestContext) (cedar.Decision, error) {
+	return cedar.DecisionAllow, nil
+}
 
 // The storage-migration RPCs are a platform admin's, and a platform admin's
 // principal is bound to its own tenant, not the one it migrates. Through the
@@ -59,29 +67,5 @@ func TestStorageMigrationRPCActsOnTheNamedTenant(t *testing.T) {
 	}
 	if got.TenantID != f.tenant || got.State != m.State || got.TargetBucketName != m.TargetBucketName {
 		t.Errorf("read migration %+v, want the one just started (%+v)", got, m)
-	}
-}
-
-// The same for a tenant left dedicated by a verify failure before rollbacks
-// existed: the RPC has to find its failed migration to hand it to the worker.
-func TestStorageMigrationRPCRollsBackAnotherTenant(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	f := seedPublicMigrationFixture(t, ctx)
-	f.addCollection(t, ctx, "docs", f.private, false)
-	f.stuckAfterVerify(t, ctx)
-
-	pool := rlsPool(t, ctx, f.pool)
-	h := tenanth.NewHandler(adapters.NewTenantRepo(sqlc.New(pool), pool), allowAll{})
-	ctx = auth.WithPrincipal(ctx, &auth.Principal{
-		Subject: "operator", TenantID: uuid.New(), Roles: []string{apiutil.RolePlatformAdmin},
-	})
-
-	m, err := h.MigrateTenantStorageLayout(ctx, f.tenant, "", 0)
-	if err != nil {
-		t.Fatalf("roll back another tenant: %v", err)
-	}
-	if m.State != worker.MigStateRollingBack {
-		t.Errorf("migration = %s, want rolling_back", m.State)
 	}
 }

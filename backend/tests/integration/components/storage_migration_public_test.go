@@ -142,7 +142,8 @@ func seedPublicMigrationFixture(t *testing.T, ctx context.Context) publicMigrati
 }
 
 // addCollection creates a collection bound to bucket with one AVAILABLE
-// object, both as a row and as bytes in that bucket.
+// object placed there, its URL settled, both as a row and as bytes in that
+// bucket.
 func (f publicMigrationFixture) addCollection(t *testing.T, ctx context.Context, name, bucket string, public bool) {
 	t.Helper()
 	cacheControl := ""
@@ -155,8 +156,8 @@ func (f publicMigrationFixture) addCollection(t *testing.T, ctx context.Context,
 		 WHERE sb.name = $3 AND b.name = $4`,
 		f.tenant, name, f.backend, bucket, public, cacheControl)
 	const key, size = "obj-1", int64(42)
-	mustExec(t, ctx, f.pool, `INSERT INTO objects (tenant_id, collection_id, path, state, content_type, size_bytes)
-		SELECT $1, c.id, $3, 'AVAILABLE', 'image/png', $4 FROM collections c
+	mustExec(t, ctx, f.pool, `INSERT INTO objects (tenant_id, collection_id, path, state, content_type, size_bytes, placement_bucket_id)
+		SELECT $1, c.id, $3, 'AVAILABLE', 'image/png', $4, c.bucket_id FROM collections c
 		 WHERE c.tenant_id = $1 AND c.name = $2`,
 		f.tenant, name, key, size)
 	f.store.put(worker.CopyLocation{BackendID: f.backend, TenantID: f.tenant, Bucket: bucket, Collection: name, Key: key}, size)
@@ -327,31 +328,33 @@ func TestStorageMigrationLeavesPublicCollectionsInPlace(t *testing.T) {
 			t.Errorf("public collection bound to %s, want %s", got, f.public)
 		}
 	})
-	// A rebind the bucket rules refuse comes back as ErrRebindRefused, which
-	// the worker fails on rather than retrying forever; the transaction
-	// leaves the tenant as it was.
+	// A repoint the bucket rules refuse comes back as ErrRebindRefused,
+	// which the worker rolls back on rather than retrying forever; the
+	// transaction leaves the tenant as it was.
 	t.Run("refused rebind", func(t *testing.T) {
 		t.Parallel()
 		f := seedPublicMigrationFixture(t, ctx)
 		f.addCollection(t, ctx, "docs", f.private, false)
 		q := sqlc.New(f.pool)
 		repo := adapters.NewStorageMigrationRepo(q, f.pool)
-		// The rebind acts only on a migration in rebinding.
-		if _, err := q.CreateStorageMigration(ctx, pgtype.UUID{Bytes: f.tenant, Valid: true},
-			f.backend, f.private, f.backend, f.public, 0); err != nil {
+		m, err := q.CreateStorageMigration(ctx, pgtype.UUID{Bytes: f.tenant, Valid: true},
+			f.backend, f.private, f.backend, f.public, 0)
+		if err != nil {
 			t.Fatalf("create migration: %v", err)
 		}
 		mustExec(t, ctx, f.pool,
-			`UPDATE tenant_storage_migrations SET state = 'rebinding' WHERE tenant_id = $1`, f.tenant)
+			`UPDATE tenant_storage_migrations SET state = 'moving' WHERE tenant_id = $1`, f.tenant)
 		// A private collection may not bind to a public bucket.
-		err := repo.RebindTenant(ctx,
-			worker.MigrationRead{TenantID: f.tenant, State: worker.MigStateRebinding}, f.backend, f.public)
+		err = repo.Repoint(ctx, worker.MigrationRead{TenantID: f.tenant, State: worker.MigStateMoving},
+			worker.MigrationBucket{ID: m.SourceBucketID.Bytes, BackendID: f.backend, Bucket: f.private},
+			worker.MigrationBucket{ID: m.TargetBucketID.Bytes, BackendID: f.backend, Bucket: f.public},
+			worker.LayoutDedicated, time.Hour)
 		if !errors.Is(err, worker.ErrRebindRefused) {
-			t.Fatalf("RebindTenant = %v, want ErrRebindRefused", err)
+			t.Fatalf("Repoint = %v, want ErrRebindRefused", err)
 		}
 		// The collection is what the worker records as the reason.
 		if rr, ok := errors.AsType[*worker.RebindRefusedError](err); !ok || rr.Collection != "docs" {
-			t.Errorf("RebindTenant = %v, want the refusal to name collection docs", err)
+			t.Errorf("Repoint = %v, want the refusal to name collection docs", err)
 		}
 		if got := f.boundTo(t, ctx, "docs"); got != f.private {
 			t.Errorf("collection bound to %s after a refused rebind, want %s", got, f.private)

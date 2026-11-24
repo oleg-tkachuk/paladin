@@ -1,4 +1,5 @@
--- ADR-0015 Phase 3: shared->dedicated storage migration copy job.
+-- A tenant's storage migration (ADR-0015, ADR-0051): the tenant's objects
+-- move one by one from its shared bucket into a dedicated one.
 
 -- name: CreateStorageMigration :one
 INSERT INTO tenant_storage_migrations
@@ -30,8 +31,8 @@ LIMIT 1;
 
 -- name: ListActiveStorageMigrations :many
 -- Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
--- still active — the worker must run retention-gated cleanup on it — and so
--- is 'rolling_back', which the worker must finish rolling back.
+-- still active — the worker must clean the source on it — and so is
+-- 'rolling_back', which the worker must finish rolling back.
 SELECT sqlc.embed(m),
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
@@ -46,14 +47,27 @@ WHERE m.state NOT IN ('cleaned', 'failed')
 ORDER BY m.updated_at
 LIMIT sqlc.arg('limit_count')::int;
 
--- Every transition names the state the worker read the migration in
--- (from_state) and applies only while it still holds: a worker resumed after a
--- pause past its lease must not drag a migration its successor moved on.
-
 -- Every transition below applies only to the migration as the worker read
 -- it: the same state AND the same attempts. attempts grows on every failure
 -- and a retry keeps it, so a worker that read an earlier attempt and resumed
 -- after it failed and was retried matches nothing (ABA on state alone).
+
+-- name: LockStorageMigrationAsRead :execrows
+-- Holds the migration row for a transaction that changes where the tenant's
+-- uploads go, and only while it is still as the worker read it.
+SELECT 1 FROM tenant_storage_migrations
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts')
+FOR UPDATE;
+
+-- name: HoldStorageMigrationAsRead :execrows
+-- Holds the migration row shared for one object's move, while it is still as
+-- the worker read it: a stale worker moves nothing, and a transition waits
+-- for the moves in flight.
+SELECT 1 FROM tenant_storage_migrations
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts')
+FOR SHARE;
 
 -- name: SetStorageMigrationState :execrows
 UPDATE tenant_storage_migrations
@@ -61,181 +75,175 @@ SET state = sqlc.arg('to_state'), error = '', updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
--- name: SetStorageMigrationTotal :execrows
--- Records the object count, the copy's start and moves provisioning ->
--- copying. Run under the row's lock (LockStorageMigrationForCount), which
--- every promote holds while the migration provisions: the clock read here is
--- later than every promote that committed before, and earlier than the
--- stamp of every promote after (statemachine.checkPlacement).
+-- name: MigrationListBoundCollections :many
+-- The tenant's private collections bound to a bucket: what a pass points at
+-- the bucket the tenant's uploads go to. Public collections never move
+-- (collections_public_bucket_fixed, ADR-0027).
+SELECT name FROM collections
+WHERE tenant_id = sqlc.arg('tenant_id') AND bucket_id = sqlc.arg('bucket_id') AND NOT public_read
+ORDER BY name;
+
+-- name: MigrationRepointDefaultBinding :execrows
+-- Points the tenant's default binding at to_bucket_id when it names
+-- from_bucket_id or the tenant has none, so a bare-name collection created
+-- from here on lands there; an operator's choice of another bucket is left
+-- alone.
+INSERT INTO tenant_default_bindings (tenant_id, bucket_id, set_by)
+VALUES (sqlc.arg('tenant_id'), sqlc.arg('to_bucket_id'), sqlc.arg('set_by'))
+ON CONFLICT (tenant_id) DO UPDATE
+   SET bucket_id = EXCLUDED.bucket_id, set_at = now(), set_by = EXCLUDED.set_by
+ WHERE tenant_default_bindings.bucket_id = sqlc.arg('from_bucket_id');
+
+-- name: MigrationCloseWrites :execrows
+-- Records when the last URL that can write the bucket being emptied expires
+-- (writes_close_at, ADR-0051), once per direction: no URL for it is signed
+-- after this pass, and none signed before outlives limits.presign.max_ttl.
 UPDATE tenant_storage_migrations
-SET objects_total = sqlc.arg('objects_total'), state = sqlc.arg('to_state'),
-    copy_started_at = clock_timestamp(), updated_at = now()
+SET writes_close_at = COALESCE(writes_close_at, now() + sqlc.arg('window')::interval),
+    updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
--- name: LockStorageMigrationForCount :execrows
--- Holds the migration row while the copy's total is counted, and only while
--- it is still as the worker read it. A purge's transaction updates the row
--- (ForgetPurgedFromStorageMigrationCount), so the count runs after any purge
--- that touched it has committed, and a purge after it waits for 'copying'.
-SELECT 1 FROM tenant_storage_migrations
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
-  AND attempts = sqlc.arg('attempts')
-FOR UPDATE;
+-- name: SetTenantStorageLayout :execrows
+UPDATE tenants
+SET storage_layout   = $2,
+    resource_version = resource_version + 1,
+    updated_at       = now()
+WHERE id = $1;
 
--- name: ForgetPurgedFromStorageMigrationCount :exec
--- A purge's part in the copy's count, on its transaction, after the row is
--- deleted. The copy fails when it ends short of the total it counted, which
--- an object purged before the copy reached it would cause though nothing was
--- missed: such a purge takes it off the total. Counted means the copy's list
--- holds it — live or trashed, not in a public collection — and not reached
--- means past the cursor, which the copy advances on the transaction that
--- holds the object's row (CopyObjectHeld), so a purge either waited for that
--- copy and sees it counted, or ran first and the copy finds no row.
--- In 'provisioning' it only takes the row's lock: the count is taken under
--- it (LockStorageMigrationForCount), after this purge is visible.
-UPDATE tenant_storage_migrations
-SET objects_total = objects_total - CASE
-        WHEN state = 'copying'
-         AND sqlc.arg('object_state')::text IN ('AVAILABLE', 'DELETED')
-         AND NOT EXISTS (SELECT 1 FROM collections c
-                          WHERE c.tenant_id = sqlc.arg('tenant_id')
-                            AND c.name = sqlc.arg('collection_name')::text AND c.public_read)
-         AND ROW(cursor_collection, cursor_path)
-             < ROW(sqlc.arg('collection_name')::text, sqlc.arg('path')::text)
-        THEN 1 ELSE 0 END
-WHERE tenant_id = sqlc.arg('tenant_id') AND state IN ('provisioning', 'copying');
-
--- name: ForgetStorageMigrationCaughtUp :exec
--- Drops what an attempt's catch-up recorded (migration 116): at the start of
--- an attempt's copy, which copies everything again, and once it completes.
-DELETE FROM storage_migration_caught_up WHERE tenant_id = $1;
-
--- name: MigrationListUncaughtUp :many
--- The objects the catch-up copies before the rebind: live or trashed, in a
--- private collection, whose bytes were written since the copy started and
--- whose latest write the catch-up has not copied (migration 116). The copy
--- listed each object once, behind a moving cursor; a write after its start
--- may have reached only the source. Only while the migration is as the
--- worker read it, so a stale worker lists nothing. The set shrinks as the
--- catch-up copies, and grows by what is written meanwhile, in any order: it
--- has no cursor for a late commit to fall behind.
-SELECT o.id, o.bytes_written_at AS written_at,
-       c.name AS collection_name, o.path,
+-- name: MigrationListMovable :many
+-- One batch of a pass: the tenant's live and trashed objects in private
+-- collections placed in from_bucket_id whose upload anchor has settled — no
+-- URL can write their key there any more (ADR-0051) — after the pass's
+-- cursor, by id. A PENDING row is placed nowhere and is not listed; its
+-- promote places it, and a later pass moves it.
+SELECT o.id, c.name AS collection_name, o.path,
        COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
-       (o.state = 'DELETED')::bool AS trashed
+       COALESCE(o.etag, '')::text AS etag,
+       (o.state = 'DELETED')::bool AS trashed,
+       o.bytes_written_at
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
-JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
-LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
 WHERE o.tenant_id = sqlc.arg('tenant_id')
-  AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts')
+  AND o.placement_bucket_id = sqlc.arg('from_bucket_id')
+  AND o.upload_bucket_id IS NULL
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
-  AND o.bytes_written_at >= COALESCE(m.copy_started_at, m.created_at)
-  AND u.written_at IS DISTINCT FROM o.bytes_written_at
-ORDER BY o.bytes_written_at, o.id
+  -- No cursor (NULL) starts the pass at the first id.
+  AND (sqlc.narg('after_id')::uuid IS NULL OR o.id > sqlc.narg('after_id')::uuid)
+ORDER BY o.id
 LIMIT sqlc.arg('limit_count')::int;
-
--- name: MigrationCountUncaughtUp :one
--- How many objects MigrationListUncaughtUp would still return. The rebind
--- counts them under the migration row's lock, which every promote holds
--- while it runs, so no write commits unseen between the count and the
--- rebind: any is the rebind refused.
-SELECT count(*)
-FROM objects o
-JOIN collections c ON c.id = o.collection_id
-JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
-LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
-WHERE o.tenant_id = sqlc.arg('tenant_id')
-  AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts')
-  AND o.state IN ('AVAILABLE', 'DELETED')
-  AND NOT c.public_read
-  AND o.bytes_written_at >= COALESCE(m.copy_started_at, m.created_at)
-  AND u.written_at IS DISTINCT FROM o.bytes_written_at;
-
--- name: MigrationHoldObjectForCatchUp :one
--- Holds one object's row against a delete and a promote (FOR KEY SHARE, which
--- a promote's FOR UPDATE waits on) while the catch-up copies it, and reads
--- the write whose bytes the copy takes. No row: purged, or no longer live or
--- trashed; nothing to copy.
-SELECT o.bytes_written_at
-FROM objects o
-JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = sqlc.arg('tenant_id') AND o.id = sqlc.arg('object_id')
-  AND o.state IN ('AVAILABLE', 'DELETED')
-  AND NOT c.public_read
-FOR KEY SHARE OF o;
-
--- name: RecordStorageMigrationCaughtUp :execrows
--- Records the catch-up's copy of an object: the write it took and the ETag
--- the target reported for it. Only while the migration is as the worker read
--- it: a stale worker's copy is not taken for the current attempt's.
-INSERT INTO storage_migration_caught_up (tenant_id, object_id, written_at, etag)
-SELECT sqlc.arg('tenant_id'), sqlc.arg('object_id'), sqlc.arg('written_at'), sqlc.narg('etag')
-WHERE EXISTS (SELECT 1 FROM tenant_storage_migrations m
-               WHERE m.tenant_id = sqlc.arg('tenant_id')
-                 AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts'))
-ON CONFLICT (tenant_id, object_id) DO UPDATE
-SET written_at = EXCLUDED.written_at, etag = EXCLUDED.etag, copied_at = now();
-
--- name: RecordStorageMigrationSourceETag :exec
--- Records the ETag the source reported for an object's key just before a
--- copy or the catch-up took its bytes (migration 120), on the transaction
--- that holds the object's rows. The cleanup compares the source against it.
-INSERT INTO storage_migration_source_etags (tenant_id, collection_id, path, etag)
-SELECT c.tenant_id, c.id, sqlc.arg('path')::text, sqlc.arg('etag')::text
-FROM collections c
-WHERE c.tenant_id = sqlc.arg('tenant_id') AND c.name = sqlc.arg('collection_name')::text
-ON CONFLICT (tenant_id, collection_id, path) DO UPDATE
-SET etag = EXCLUDED.etag, read_at = now();
-
--- name: ForgetStorageMigrationSourceETags :exec
--- Drops what the copies recorded of the source (migration 120): when an
--- attempt's copy starts, once the source is cleaned, and once a rollback has
--- rebound the tenant back.
-DELETE FROM storage_migration_source_etags WHERE tenant_id = $1;
 
 -- name: SetIdleInTransactionTimeout :one
 -- Sets idle_in_transaction_session_timeout for the rest of the transaction
--- (set_config's is_local), for one held open across a copy (HoldObject).
+-- (set_config's is_local), for one held open across a copy (MoveObject).
 SELECT set_config('idle_in_transaction_session_timeout', sqlc.arg('timeout')::text, true);
 
--- name: MigrationHoldObject :many
--- Holds the object's rows at (collection, path) against a delete for the
--- transaction (FOR KEY SHARE: a tag or a taint still goes through), so a
--- purge cannot remove the row while its bytes are copied: it waits, and then
--- records a debt for the copy. No row: the object was purged since it was
--- listed, and there is nothing to copy.
-SELECT o.id
+-- name: MigrationHoldMovable :one
+-- Holds one object's row against a delete for its move (FOR KEY SHARE: a tag
+-- or a taint still goes through), and reads what the move is decided on. No
+-- row: purged since it was listed, or no longer placed in from_bucket_id, or
+-- anchored again — nothing to move.
+SELECT COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
+       COALESCE(o.etag, '')::text AS etag,
+       (o.state = 'DELETED')::bool AS trashed,
+       o.bytes_written_at
 FROM objects o
-JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = $1
-  AND c.name = sqlc.arg('collection_name')::text AND o.path = sqlc.arg('path')::text
+WHERE o.id = sqlc.arg('id') AND o.tenant_id = sqlc.arg('tenant_id')
+  AND o.placement_bucket_id = sqlc.arg('from_bucket_id')
+  AND o.upload_bucket_id IS NULL
   AND o.state IN ('AVAILABLE', 'DELETED')
-  AND NOT c.public_read
 FOR KEY SHARE OF o;
 
--- name: AdvanceStorageMigrationCopy :execrows
--- Records copy progress + the resume cursor after a batch. Progress only moves
--- forward: a stale batch reporting less than is recorded changes nothing.
+-- name: MigrationPlaceMoved :execrows
+-- The move's compare-and-set: the object is read from to_bucket_id from here
+-- on, with the ETag that bucket reported, only while it is still placed in
+-- from_bucket_id, settled, and its bytes are the ones the copy read — its
+-- content version (bytes_written_at) unchanged.
+UPDATE objects
+SET placement_bucket_id = sqlc.arg('to_bucket_id'),
+    etag = COALESCE(NULLIF(sqlc.arg('etag')::text, ''), etag)
+WHERE id = sqlc.arg('id') AND tenant_id = sqlc.arg('tenant_id')
+  AND placement_bucket_id = sqlc.arg('from_bucket_id')
+  AND upload_bucket_id IS NULL
+  AND bytes_written_at IS NOT DISTINCT FROM sqlc.narg('bytes_written_at');
+
+-- name: CountStorageMigrationMove :execrows
 UPDATE tenant_storage_migrations
-SET objects_copied    = sqlc.arg('objects_copied'),
-    cursor_collection = sqlc.arg('cursor_collection'),
-    cursor_path       = sqlc.arg('cursor_path'),
-    updated_at        = now()
+SET objects_copied = objects_copied + 1, updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
+
+-- name: MigrationHolds :one
+-- What keeps the bucket being emptied (from_bucket_id) in use, for the
+-- migration's completion (ADR-0051): the tenant's objects placed there, its
+-- rows anchored there (a URL signed for it may still write), its multipart
+-- sessions there, its private collections and default binding still bound
+-- there — and whether the last URL signed for it has expired by the grace.
+SELECT
+    (SELECT count(*) FROM objects o JOIN collections c ON c.id = o.collection_id
+      WHERE o.tenant_id = sqlc.arg('tenant_id') AND o.placement_bucket_id = sqlc.arg('from_bucket_id')
+        AND NOT c.public_read)::bigint AS placed,
+    (SELECT count(*) FROM objects o
+      WHERE o.tenant_id = sqlc.arg('tenant_id') AND o.upload_bucket_id = sqlc.arg('from_bucket_id'))::bigint AS anchored,
+    (SELECT count(*) FROM multipart_uploads mu
+      WHERE mu.tenant_id = sqlc.arg('tenant_id') AND mu.bucket_id = sqlc.arg('from_bucket_id'))::bigint AS sessions,
+    ((SELECT count(*) FROM collections c
+       WHERE c.tenant_id = sqlc.arg('tenant_id') AND c.bucket_id = sqlc.arg('from_bucket_id') AND NOT c.public_read)
+     + (SELECT count(*) FROM tenant_default_bindings d
+         WHERE d.tenant_id = sqlc.arg('tenant_id') AND d.bucket_id = sqlc.arg('from_bucket_id')))::bigint AS bound,
+    (m.writes_close_at IS NOT NULL
+     AND now() >= m.writes_close_at + sqlc.arg('grace')::interval)::bool AS writes_closed
+FROM tenant_storage_migrations m
+WHERE m.tenant_id = sqlc.arg('tenant_id') AND m.state = sqlc.arg('from_state')
+  AND m.attempts = sqlc.arg('attempts');
+
+-- name: RecordStorageMigrationPass :one
+-- A pass ended: counts the passes in a row whose moves failed their
+-- verification (none resets it), and the objects the migration covers —
+-- moved, and still placed in the bucket being emptied.
+UPDATE tenant_storage_migrations
+SET failed_passes = CASE WHEN sqlc.arg('failed')::bool THEN failed_passes + 1 ELSE 0 END,
+    objects_total = objects_copied + sqlc.arg('remaining')::bigint,
+    updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts')
-  AND objects_copied <= sqlc.arg('objects_copied');
+RETURNING failed_passes;
 
 -- name: CompleteStorageMigration :execrows
--- Rebind verified: serve from the dedicated bucket. The old copies are kept
--- until cleanup_after (now + the row's retention) so a bad migration is still
--- rollback-able within the window.
+-- Every object moved and no URL left that can write the source: the source
+-- copies are kept until cleanup_after — the retention the operator asked for,
+-- and at least the longest a GET URL signed for the source before its object
+-- moved can live (get_window).
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), error = '', completed_at = now(),
-    cleanup_after = now() + make_interval(secs => cleanup_retention_seconds),
+    cleanup_after = now() + GREATEST(make_interval(secs => cleanup_retention_seconds),
+                                     sqlc.arg('get_window')::interval),
+    cursor_collection = '', cursor_path = '',
     updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
+
+-- name: MigrationListCleanable :many
+-- The cleanup's walk: the tenant's live and trashed objects in private
+-- collections placed in the target, after the cursor by (collection, path).
+-- Each one's source copy is deleted; an object that never had one costs a
+-- delete of an absent key, which succeeds.
+SELECT c.name AS collection_name, o.path
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = sqlc.arg('tenant_id')
+  AND o.placement_bucket_id = sqlc.arg('target_bucket_id')
+  AND NOT c.public_read
+  AND ROW(c.name, o.path) > ROW(sqlc.arg('after_collection')::text, sqlc.arg('after_path')::text)
+ORDER BY c.name, o.path
+LIMIT sqlc.arg('limit_count')::int;
+
+-- name: AdvanceStorageMigrationCleanup :execrows
+UPDATE tenant_storage_migrations
+SET cursor_collection = sqlc.arg('cursor_collection'),
+    cursor_path       = sqlc.arg('cursor_path'),
+    updated_at        = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
@@ -251,93 +259,46 @@ SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
--- name: LockStorageMigrationForRebind :execrows
--- Holds the migration row for the rebind transaction, and only while it is
--- still in the state and attempt the worker read: a stale worker must not
--- repoint the tenant's collections at a bucket a newer attempt is still
--- filling.
-SELECT 1 FROM tenant_storage_migrations
+-- name: StartStorageMigrationRollback :execrows
+-- moving -> rolling_back, recording the reason and counting the failure. The
+-- moves start over in the other direction: their count, the failed passes
+-- and the write deadline, which the rollback's first pass sets for the
+-- target.
+UPDATE tenant_storage_migrations
+SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1,
+    objects_copied = 0, failed_passes = 0, writes_close_at = NULL,
+    updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
-  AND attempts = sqlc.arg('attempts')
-FOR UPDATE;
+  AND attempts = sqlc.arg('attempts');
 
--- name: MigrationListTenantObjects :many
--- Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
--- worker restart resumes mid-prefix instead of rescanning from the top.
--- size_bytes feeds the physical (HEAD size) verify after copy. A public
--- collection's objects stay in their bucket (ADR-0027), so the copy, verify
--- and cleanup never see them.
---
--- Live and trashed objects: a trashed object keeps its bytes until the purge,
--- and RestoreObject reads them from the bucket its collection is bound to, so
--- they move with the collection. PENDING rows do not: no bytes are confirmed
--- under them, and the upload URL they were handed names the source bucket,
--- which the row records (upload_bucket_id): their completion moves the bytes.
--- Versions and delete markers are rows only, all under the object's one key,
--- so they need nothing copied.
---
--- bound_* is the bucket the collection is bound to now: cleanup deletes a
--- source copy only of an object read from the target. written_at and
--- caught_up_* are when its bytes were last written and what the catch-up
--- copied of them (migration 116), for the verify. source_etag is what the
--- source reported for the key when it was last copied (migration 120), for
--- the cleanup.
-SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
-       (o.state = 'DELETED')::bool AS trashed,
-       sb.name AS bound_backend_name, b.name AS bound_bucket_name,
-       o.bytes_written_at AS written_at,
-       u.written_at AS caught_up_written_at, u.etag AS caught_up_etag,
-       s.etag AS source_etag
-FROM objects o
-JOIN collections c       ON c.id = o.collection_id
-JOIN buckets b           ON b.id = c.bucket_id
-JOIN storage_backends sb ON sb.id = b.backend_id
-LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
-LEFT JOIN storage_migration_source_etags s
-       ON s.tenant_id = o.tenant_id AND s.collection_id = o.collection_id AND s.path = o.path
-WHERE o.tenant_id = $1
-  AND o.state IN ('AVAILABLE', 'DELETED')
-  AND NOT c.public_read
-  AND ROW(c.name, o.path) > ROW(sqlc.arg('after_collection')::text,
-                                sqlc.arg('after_path')::text)
-ORDER BY c.name, o.path
-LIMIT sqlc.arg('limit_count')::int;
+-- name: FinishStorageMigrationRollback :execrows
+-- rolling_back -> failed, once nothing of the tenant is left in the target
+-- and no URL can write it. The reason the rollback started stays, and the
+-- attempt too: the failure was counted when it started.
+UPDATE tenant_storage_migrations
+SET state = sqlc.arg('to_state'), updated_at = now()
+WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
+  AND attempts = sqlc.arg('attempts');
 
--- name: MigrationCountUploadsAnchoredTo :one
--- The tenant's uploads whose URL names the bucket (migration 113) and that
--- are still PENDING: their bytes may yet land there, and CompleteObject or
--- the reconciler move them from it. Cleanup of the source waits for none.
-SELECT count(*)
-FROM objects o
-JOIN buckets b           ON b.id = o.upload_bucket_id
+-- name: UploadWritesCloseAt :one
+-- The deadline a URL signed for the bucket (backend_name, bucket_name) must
+-- expire by: the bucket is being emptied by the tenant's migration — its
+-- source while moving, its target while rolling back — whose passes have set
+-- the deadline. No row: nothing bounds the URL but its TTL.
+SELECT m.writes_close_at::timestamptz AS writes_close_at
+FROM tenant_storage_migrations m
+JOIN buckets b           ON b.id = CASE WHEN m.state = 'rolling_back'
+                                        THEN m.target_bucket_id ELSE m.source_bucket_id END
 JOIN storage_backends sb ON sb.id = b.backend_id
-WHERE o.tenant_id = $1 AND o.state = 'PENDING'
+WHERE m.tenant_id = sqlc.arg('tenant_id')
+  AND m.state IN ('moving', 'rolling_back')
+  AND m.writes_close_at IS NOT NULL
   AND sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name');
-
--- name: MigrationCountTenantObjects :one
--- The objects MigrationListTenantObjects walks: live and trashed, public
--- collections' excluded.
-SELECT count(*)
-FROM objects o
-JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = $1 AND o.state IN ('AVAILABLE', 'DELETED') AND NOT c.public_read;
-
--- name: SetTenantStorageLayout :execrows
-UPDATE tenants
-SET storage_layout   = $2,
-    resource_version = resource_version + 1,
-    updated_at       = now()
-WHERE id = $1;
-
--- name: MigrationListTenantCollections :many
--- The collections the transactional rebind moves: all but the public ones,
--- which never rebind (collections_public_bucket_fixed, ADR-0027).
-SELECT name FROM collections WHERE tenant_id = $1 AND NOT public_read ORDER BY name;
 
 -- name: TenantCollectionBuckets :many
 -- Distinct buckets the tenant's collections currently bind to. The migration
--- copies FROM this — a shared tenant's collections normally share one bucket;
--- more than one row means the tenant spans buckets (not supported in slice 1).
+-- moves objects FROM this — a shared tenant's collections normally share one
+-- bucket; more than one row means the tenant spans buckets (not supported).
 -- Public collections are left out: they bind to a public bucket of their own
 -- and the migration leaves them there (ADR-0027).
 SELECT DISTINCT sb.name AS backend_name, b.name AS bucket_name
@@ -358,48 +319,6 @@ WHERE c.tenant_id = $1 AND NOT c.public_read;
 SELECT storage_layout FROM tenants
 WHERE id = $1 AND deleted_at IS NULL
 FOR NO KEY UPDATE;
-
--- name: LockStorageMigrationStart :exec
--- Waits for every promote of the tenant in flight, and holds back every
--- later one, until the transaction ends: each promote holds this lock shared
--- before it reads the migration's row (migstate.LockSpaceStart). Taken by a
--- transition into a fencing state from a non-fencing one, so every promote
--- either committed before it or reads the row it leaves.
-SELECT pg_advisory_xact_lock(sqlc.arg('lock_space')::int, sqlc.arg('lock_key')::int);
-
--- name: LockTenantBindings :exec
--- Held by the rebind and the rebind back before they list the tenant's
--- collections (migstate.LockSpaceBindings): they wait for every collection
--- being created, list it, and hold back every later creation until they
--- commit.
-SELECT pg_advisory_xact_lock(sqlc.arg('lock_space')::int, sqlc.arg('lock_key')::int);
-
--- name: LockTenantBindingsShared :exec
--- Held by a collection's creation: creations do not wait on each other, and
--- a rebind waits for them (LockTenantBindings).
-SELECT pg_advisory_xact_lock_shared(sqlc.arg('lock_space')::int, sqlc.arg('lock_key')::int);
-
--- name: BucketMigratedAway :one
--- Whether the tenant's latest storage migration moved its private
--- collections away from the bucket and nothing will move a collection bound
--- there back: rebound to the target, the source left behind
--- (migstate.SourceLeft); or rolled back, the target left behind. Asked under
--- LockTenantBindingsShared, so a rebind either committed before it or waits
--- for the creation asking.
-SELECT EXISTS (
-    SELECT 1
-    FROM (SELECT * FROM tenant_storage_migrations
-           WHERE tenant_id = sqlc.arg('tenant_id')
-           ORDER BY created_at DESC
-           LIMIT 1) m
-    JOIN buckets b           ON b.id = CASE WHEN m.state = sqlc.arg('rolled_back_state')::text
-                                            THEN m.target_bucket_id ELSE m.source_bucket_id END
-    JOIN storage_backends sb ON sb.id = b.backend_id
-    WHERE sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name')
-      AND m.rebound_at IS NOT NULL
-      AND (m.state = ANY(sqlc.arg('source_left_states')::text[])
-           OR m.state = sqlc.arg('rolled_back_state')::text)
-)::bool;
 
 -- name: LatestStorageMigration :one
 SELECT id, state FROM tenant_storage_migrations
@@ -458,6 +377,8 @@ SET source_bucket_id          = sb.id,
     state                     = 'provisioning',
     objects_total             = 0,
     objects_copied            = 0,
+    failed_passes             = 0,
+    writes_close_at           = NULL,
     cursor_collection         = '',
     cursor_path               = '',
     error                     = '',
@@ -478,151 +399,6 @@ WHERE m.id = sqlc.arg('id') AND m.state = 'failed'
   AND tsb.name = sqlc.arg('target_backend_name') AND tb.name = sqlc.arg('target_bucket_name')
 RETURNING m.*;
 
--- Rolling a migration back (ADR-0015): a physical verify that fails after the
--- rebind moves the migration to 'rolling_back'; the worker copies the objects
--- written since the rebind back to the source bucket, then rebinds the tenant
--- to it and leaves the migration 'failed', retryable like any other failure.
-
--- name: MarkStorageMigrationRebound :execrows
--- Run in the rebind transaction: rebound_at is that transaction's now(), its
--- START time, so it is no later than any moment a writer could have seen the
--- tenant rebound. Every object written into the dedicated bucket has a
--- bytes_written_at at or after it.
-UPDATE tenant_storage_migrations
-SET rebound_at = now(), updated_at = now()
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
-  AND attempts = sqlc.arg('attempts');
-
--- name: MigrationPlaceObjectsInTarget :execrows
--- Run in the rebind transaction, after the collections moved: every object
--- of the tenant placed in the source is read from the target from here on
--- (objects.placement_bucket_id, ADR-0051), which the copy and the catch-up
--- filled before the rebind could commit.
-UPDATE objects o
-   SET placement_bucket_id = m.target_bucket_id
-  FROM tenant_storage_migrations m
- WHERE m.tenant_id = sqlc.arg('tenant_id')
-   AND o.tenant_id = m.tenant_id
-   AND o.placement_bucket_id = m.source_bucket_id;
-
--- name: MigrationPlaceObjectsInSource :execrows
--- The mirror, in the rebind back's transaction: every object placed in the
--- target is read from the source again, which the rollback's copy back
--- filled before the rebind back could commit.
-UPDATE objects o
-   SET placement_bucket_id = m.source_bucket_id
-  FROM tenant_storage_migrations m
- WHERE m.tenant_id = sqlc.arg('tenant_id')
-   AND o.tenant_id = m.tenant_id
-   AND o.placement_bucket_id = m.target_bucket_id;
-
--- name: StartStorageMigrationRollback :execrows
--- verifying -> rolling_back. The verify failure is recorded and counted here,
--- where it happened; the rollback that follows keeps both. The cursor starts
--- empty: the worker begins at rebound_at.
-UPDATE tenant_storage_migrations
-SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1,
-    rollback_cursor_at = NULL, rollback_cursor_id = NULL, updated_at = now()
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
-  AND attempts = sqlc.arg('attempts');
-
--- name: ForgetStorageMigrationCopiedBack :exec
--- Drops what a rollback recorded (migration 118): when a rollback starts,
--- and once it has rebound the tenant back.
-DELETE FROM storage_migration_copied_back WHERE tenant_id = $1;
-
--- name: MigrationListUncopiedBack :many
--- The objects the rollback copies back: live or trashed (a trashed object's
--- bytes are what a later RestoreObject reads), in a private collection
--- (public ones never moved, ADR-0027), whose bytes were written at or after
--- the rebind and whose latest write the rollback has not copied back
--- (migration 118). written_at is when the object's bytes were last written
--- (bytes_written_at, which every promote sets), not when its row last
--- changed: a tag, a taint, a lock or a trash move after the rebind leaves
--- its bytes where they were, and its only target copy may be the broken one
--- the verify failed on. A row promoted before the column existed has none;
--- its updated_at stands in, at or after its last write. Only while the
--- migration is as the worker read it. The set has no cursor for a late
--- commit to fall behind: a promote stamped before a batch and committed
--- after it is listed by the next.
-SELECT o.id, COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at,
-       c.name AS collection_name, o.path,
-       COALESCE(o.size_bytes, 0)::bigint AS size_bytes
-FROM objects o
-JOIN collections c ON c.id = o.collection_id
-JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
-LEFT JOIN storage_migration_copied_back r ON r.tenant_id = o.tenant_id AND r.object_id = o.id
-WHERE o.tenant_id = sqlc.arg('tenant_id')
-  AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts')
-  AND o.state IN ('AVAILABLE', 'DELETED')
-  AND NOT c.public_read
-  AND COALESCE(o.bytes_written_at, o.updated_at) >= m.rebound_at
-  AND r.written_at IS DISTINCT FROM COALESCE(o.bytes_written_at, o.updated_at)
-ORDER BY COALESCE(o.bytes_written_at, o.updated_at), o.id
-LIMIT sqlc.arg('limit_count')::int;
-
--- name: MigrationCountUncopiedBack :one
--- How many objects MigrationListUncopiedBack would still return. The rebind
--- back counts them under the migration row's lock, which every promote holds
--- while the migration rolls back, so no write commits unseen between the
--- count and the rebind back: any is the rebind back refused.
-SELECT count(*)
-FROM objects o
-JOIN collections c ON c.id = o.collection_id
-JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
-LEFT JOIN storage_migration_copied_back r ON r.tenant_id = o.tenant_id AND r.object_id = o.id
-WHERE o.tenant_id = sqlc.arg('tenant_id')
-  AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts')
-  AND o.state IN ('AVAILABLE', 'DELETED')
-  AND NOT c.public_read
-  AND COALESCE(o.bytes_written_at, o.updated_at) >= m.rebound_at
-  AND r.written_at IS DISTINCT FROM COALESCE(o.bytes_written_at, o.updated_at);
-
--- name: MigrationHoldObjectForCopyBack :one
--- Holds one object's row against a delete and a promote (FOR KEY SHARE,
--- which a promote's FOR UPDATE waits on) while the rollback copies it back,
--- and reads the write whose bytes the copy takes. No row: purged, or no
--- longer live or trashed; nothing to copy.
-SELECT COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at
-FROM objects o
-JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = sqlc.arg('tenant_id') AND o.id = sqlc.arg('object_id')
-  AND o.state IN ('AVAILABLE', 'DELETED')
-  AND NOT c.public_read
-FOR KEY SHARE OF o;
-
--- name: HoldStorageMigrationForCopyBack :execrows
--- Holds the migration row shared for a copy back, and only while it is
--- still as the worker read it: taken before the copy, after the object's
--- row, so a worker resumed past its lease finds out before it copies, and
--- the rebind back (FOR UPDATE) waits for every copy back in flight. Once the
--- tenant is on its source again, a stale copy from the target would put
--- older bytes over what was written there since.
-SELECT 1 FROM tenant_storage_migrations
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
-  AND attempts = sqlc.arg('attempts')
-FOR SHARE;
-
--- name: RecordStorageMigrationCopiedBack :exec
--- Records the write a copy back took, or decided to leave, on the
--- transaction that holds the migration row as read.
-INSERT INTO storage_migration_copied_back (tenant_id, object_id, written_at)
-VALUES (sqlc.arg('tenant_id'), sqlc.arg('object_id'), sqlc.arg('written_at'))
-ON CONFLICT (tenant_id, object_id) DO UPDATE
-SET written_at = EXCLUDED.written_at, copied_at = now();
-
--- name: FinishStorageMigrationRollback :execrows
--- rolling_back -> failed, in the transaction that rebinds the tenant back.
--- The verify error stays, and attempts too: the failure was counted when the
--- rollback started. rebound_back_at is that transaction's now(), its START
--- time (migration 119): no later than any moment a writer could have seen
--- the tenant on its source again, so a write to the target that a late
--- storage event reports is older than any the row records from then on.
-UPDATE tenant_storage_migrations
-SET state = sqlc.arg('to_state'), rebound_back_at = now(), updated_at = now()
-WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
-  AND attempts = sqlc.arg('attempts');
-
 -- name: RollBackStuckStorageMigration :one
 -- A migration that failed its verify before rollbacks existed: 'failed', with
 -- the tenant still on the dedicated bucket. Moves it to 'rolling_back' for
@@ -640,6 +416,8 @@ SET state              = 'rolling_back',
     rebound_back_at    = NULL,
     rollback_cursor_at = NULL,
     rollback_cursor_id = NULL,
+    writes_close_at    = NULL,
+    failed_passes      = 0,
     updated_at         = now()
 FROM tenant_default_bindings d
 WHERE m.id = sqlc.arg('id') AND m.state = 'failed'

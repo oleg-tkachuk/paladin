@@ -814,9 +814,15 @@ func (q *Queries) LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupO
 }
 
 const lookupObjectByKey = `-- name: LookupObjectByKey :one
-SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, o.upload_bucket_id, o.placement_bucket_id, c.name AS collection_name
+SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.size_bytes, o.etag, o.checksum_algorithm, o.checksum, o.sequencer, o.metadata, o.tags, o.external_ref, o.current_version_id, o.resource_version, o.created_at, o.updated_at, o.committed_at, o.terminated_at, o.presign_expires_at, o.taint, o.checksum_part_size_bytes, o.public_url, o.created_by_operation, o.bytes_written_at, o.upload_bucket_id, o.placement_bucket_id, c.name AS collection_name,
+       asb.name AS anchor_backend_name, ab.name AS anchor_bucket_name,
+       psb.name AS placement_backend_name, pb.name AS placement_bucket_name
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
+LEFT JOIN buckets ab           ON ab.id = o.upload_bucket_id
+LEFT JOIN storage_backends asb ON asb.id = ab.backend_id
+LEFT JOIN buckets pb           ON pb.id = o.placement_bucket_id
+LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE o.tenant_id = $1
   AND c.name = $2
   AND o.path = $3
@@ -824,11 +830,18 @@ WHERE o.tenant_id = $1
 `
 
 type LookupObjectByKeyRow struct {
-	Object         Object `json:"object"`
-	CollectionName string `json:"collection_name"`
+	Object               Object  `json:"object"`
+	CollectionName       string  `json:"collection_name"`
+	AnchorBackendName    *string `json:"anchor_backend_name"`
+	AnchorBucketName     *string `json:"anchor_bucket_name"`
+	PlacementBackendName *string `json:"placement_backend_name"`
+	PlacementBucketName  *string `json:"placement_bucket_name"`
 }
 
 // Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
+// The anchor_* columns name the bucket the object's upload URL was signed
+// for, NULL once settled; the placement_* ones the bucket its bytes are in
+// (ADR-0051): what a storage event from a bucket is matched against.
 func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, name string, path string) (LookupObjectByKeyRow, error) {
 	row := q.db.QueryRow(ctx, lookupObjectByKey, tenantID, name, path)
 	var i LookupObjectByKeyRow
@@ -862,6 +875,10 @@ func (q *Queries) LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, n
 		&i.Object.UploadBucketID,
 		&i.Object.PlacementBucketID,
 		&i.CollectionName,
+		&i.AnchorBackendName,
+		&i.AnchorBucketName,
+		&i.PlacementBackendName,
+		&i.PlacementBucketName,
 	)
 	return i, err
 }

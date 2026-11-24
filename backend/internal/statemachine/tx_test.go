@@ -477,18 +477,18 @@ func TestNewStoresThePool(t *testing.T) {
 	}
 }
 
-// ─── ScanPendingExpired ────────────────────────────────────────────────────
+// ─── ScanExpiredAnchors ────────────────────────────────────────────────────
 
-func TestScanPendingExpiredCollectsIDs(t *testing.T) {
+func TestScanExpiredAnchorsCollectsIDs(t *testing.T) {
 	want := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
 	rows := &fakeRows{ids: want}
 	pool := &fakePool{rows: rows}
 	sm := &Transitioner{pool: pool}
 
 	deferred := []pgtype.UUID{{Bytes: uuid.New(), Valid: true}}
-	got, err := sm.ScanPendingExpired(smCtx, 90*time.Second, 50, deferred)
+	got, err := sm.ScanExpiredAnchors(smCtx, 90*time.Second, 50, deferred)
 	if err != nil {
-		t.Fatalf("ScanPendingExpired: %v", err)
+		t.Fatalf("ScanExpiredAnchors: %v", err)
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d ids, want %d", len(got), len(want))
@@ -517,12 +517,12 @@ func TestScanPendingExpiredCollectsIDs(t *testing.T) {
 	}
 }
 
-func TestScanPendingExpiredEmpty(t *testing.T) {
+func TestScanExpiredAnchorsEmpty(t *testing.T) {
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{}}}
 
-	got, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil)
+	got, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil)
 	if err != nil {
-		t.Fatalf("ScanPendingExpired: %v", err)
+		t.Fatalf("ScanExpiredAnchors: %v", err)
 	}
 	if len(got) != 0 {
 		t.Errorf("want no ids, got %v", got)
@@ -531,42 +531,42 @@ func TestScanPendingExpiredEmpty(t *testing.T) {
 
 // No bucket deferred still binds an empty array, never a NULL the query would
 // have to tell apart.
-func TestScanPendingExpiredBindsNoDeferredBucketsAsAnEmptyArray(t *testing.T) {
+func TestScanExpiredAnchorsBindsNoDeferredBucketsAsAnEmptyArray(t *testing.T) {
 	pool := &fakePool{rows: &fakeRows{}}
 	sm := &Transitioner{pool: pool}
-	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil); err != nil {
-		t.Fatalf("ScanPendingExpired: %v", err)
+	if _, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil); err != nil {
+		t.Fatalf("ScanExpiredAnchors: %v", err)
 	}
 	if got, ok := pool.queryArgsP[2].([]pgtype.UUID); !ok || got == nil || len(got) != 0 {
 		t.Errorf("deferred arg = %#v, want an empty []pgtype.UUID", pool.queryArgsP[2])
 	}
 }
 
-func TestScanPendingExpiredQueryError(t *testing.T) {
+func TestScanExpiredAnchorsQueryError(t *testing.T) {
 	boom := errors.New("query failed")
 	sm := &Transitioner{pool: &fakePool{queryErr: boom}}
 
-	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
+	if _, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("cause must be wrapped, got %v", err)
 	}
 }
 
-func TestScanPendingExpiredScanError(t *testing.T) {
+func TestScanExpiredAnchorsScanError(t *testing.T) {
 	boom := errors.New("bad scan")
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{ids: []uuid.UUID{uuid.New()}, scanErr: boom}}}
 
-	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
+	if _, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("want the scan error, got %v", err)
 	}
 }
 
 // A mid-iteration failure surfaces only via rows.Err(); dropping it would
 // silently truncate the reaper's work list.
-func TestScanPendingExpiredSurfacesRowsErr(t *testing.T) {
+func TestScanExpiredAnchorsSurfacesRowsErr(t *testing.T) {
 	boom := errors.New("connection lost mid-iteration")
 	sm := &Transitioner{pool: &fakePool{rows: &fakeRows{ids: []uuid.UUID{uuid.New()}, finalErr: boom}}}
 
-	if _, err := sm.ScanPendingExpired(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
+	if _, err := sm.ScanExpiredAnchors(smCtx, time.Minute, 10, nil); !errors.Is(err, boom) {
 		t.Fatalf("want the rows error, got %v", err)
 	}
 }

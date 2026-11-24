@@ -21,7 +21,17 @@ import (
 type fakeRow struct {
 	state string
 	err   error
+	// unanchored answers the registration read with no anchor: the row's
+	// URL has expired and settled. Otherwise it is anchored to
+	// anchorPlacement.
+	unanchored bool
 }
+
+// anchorPlacement is the bucket every fake object's upload is anchored to.
+var anchorPlacement = Placement{BackendID: "be-1", Bucket: "shared"}
+
+// registrationColumns is how many columns the registration read scans.
+const registrationColumns = 5
 
 func (r fakeRow) Scan(dest ...any) error {
 	if r.err != nil {
@@ -32,7 +42,18 @@ func (r fakeRow) Scan(dest ...any) error {
 			*p = r.state
 		}
 	}
+	if len(dest) == registrationColumns && !r.unanchored {
+		scanAnchor(dest)
+	}
 	return nil
+}
+
+// scanAnchor answers the registration read's anchor columns with
+// anchorPlacement.
+func scanAnchor(dest []any) {
+	backend, bucket := anchorPlacement.BackendID, anchorPlacement.Bucket
+	*dest[3].(**string) = &backend
+	*dest[4].(**string) = &bucket
 }
 
 // tenantRow answers the fence's read of the object's tenant.
@@ -121,11 +142,11 @@ func TestPromoteReportsChangedOnUpdate(t *testing.T) {
 	if !changed {
 		t.Error("a row that came back must report changed=true")
 	}
-	// The guarded UPDATE's parameters are the whole contract: $1..$5 in order.
-	if len(ex.queryArgs) != 5 {
-		t.Fatalf("want 5 query args, got %d: %v", len(ex.queryArgs), ex.queryArgs)
+	// The guarded UPDATE's parameters are the whole contract: $1..$6 in order.
+	if len(ex.queryArgs) != 6 {
+		t.Fatalf("want 6 query args, got %d: %v", len(ex.queryArgs), ex.queryArgs)
 	}
-	for i, want := range []any{objID, "etag-1", int64(42), "chk-1", "seq-9"} {
+	for i, want := range []any{objID, "etag-1", int64(42), "chk-1", "seq-9", false} {
 		if ex.queryArgs[i] != want {
 			t.Errorf("arg $%d = %v, want %v", i+1, ex.queryArgs[i], want)
 		}

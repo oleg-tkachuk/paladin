@@ -436,13 +436,12 @@ type Object struct {
 	// copy), or uuid.Nil.
 	CreatedByOperation uuid.UUID
 
-	// Upload is the bucket a PENDING object's upload URL was signed for
-	// (objects.upload_bucket_id, migration 113). A storage migration may
-	// rebind the collection between the presign and the PUT, and the bytes
-	// land where the URL says: CompleteObject looks for them here, and moves
-	// them to the collection's bucket. Read by the single-object read the
-	// completion makes; nil when the row has none, and once the object is
-	// promoted.
+	// Upload is the bucket the object's upload URL was signed for
+	// (objects.upload_bucket_id, its anchor): the one bucket a URL of the row
+	// can write, where CompleteObject looks for the bytes and the promote
+	// places the object (ADR-0051). Kept after the promote until the URL has
+	// expired and the reconciler has settled it; nil from then on. Read by
+	// the single-object read.
 	Upload *BucketRef
 
 	// Stored is the bucket the object's bytes are in
@@ -1072,7 +1071,7 @@ func (h *Handler) CompleteObject(ctx context.Context, in CompleteObjectInput) (_
 		return nil, connect.Errorf(connect.CodeFailedPrecondition,
 			"cannot complete in state %s", obj.State)
 	}
-	return h.completeUpload(ctx, tenantID, in, obj, backendID, bucket)
+	return h.completeUpload(ctx, tenantID, in, obj)
 }
 
 // msgObjectNameRequired refuses a request that does not name its object.
@@ -1110,18 +1109,20 @@ type storedBytes struct {
 // completeUpload promotes a PENDING upload to what the backend holds for it,
 // once the caller's claims about those bytes check out. backendID and bucket
 // are the binding the write gate resolved for it.
-func (h *Handler) completeUpload(ctx context.Context, tenantID uuid.UUID, in CompleteObjectInput, obj Object, backendID, bucket string) (*Object, error) {
-	// Materialize authoritative values via HEAD against the object's bucket,
-	// once the bytes are there (uploadedBytes).
-	bound := Location{BackendID: backendID, TenantID: tenantID, Bucket: bucket, Collection: obj.Collection, Key: obj.Key}
-	b, uploadedETag, err := h.uploadedBytes(ctx, obj, bound)
+func (h *Handler) completeUpload(ctx context.Context, tenantID uuid.UUID, in CompleteObjectInput, obj Object) (*Object, error) {
+	// Materialize authoritative values via HEAD in the bucket the upload's
+	// URL was signed for, where the bytes landed (uploadedBytes).
+	at, b, err := h.uploadedBytes(ctx, obj)
+	if errors.Is(err, ErrNotAnchored) {
+		return nil, rpcerr.New(connect.CodeInternal, err)
+	}
 	if err != nil {
 		return nil, headFailure(err)
 	}
-	if err := checkUploadClaims(in, obj, uploadedETag); err != nil {
+	if err := checkUploadClaims(in, obj, b.etag); err != nil {
 		return nil, err
 	}
-	changed, err := h.promoteUploaded(ctx, opComplete, obj.ObjectID, bound, b, map[string]any{
+	changed, err := h.promoteUploaded(ctx, opComplete, obj.ObjectID, at, false, b, map[string]any{
 		payloadSizeBytes:   b.size,
 		payloadETag:        b.etag,
 		payloadContentType: obj.ContentType,
@@ -1156,12 +1157,13 @@ func checkUploadClaims(in CompleteObjectInput, obj Object, storedETag string) er
 // the promote back so the client's at-least-once retry re-promotes and
 // re-emits — consistent, never half-done. The payload is the object plus
 // extra, built from what the caller already knows, so no in-tx re-read is
-// needed. Bytes that break the object's registration are discarded, and a
-// promote refused because the collection moved since loc was resolved is
-// answered by bindingMoved. It reports whether the promotion was this call's.
-func (h *Handler) promoteUploaded(ctx context.Context, op string, objectID uuid.UUID, loc Location, b storedBytes, extra map[string]any) (bool, error) {
+// needed. Bytes that break the object's registration are discarded. loc is
+// where the bytes are, the object's anchor; settled says Paladin wrote them
+// itself (a copy), so no URL of the row can write the key again. It reports
+// whether the promotion was this call's.
+func (h *Handler) promoteUploaded(ctx context.Context, op string, objectID uuid.UUID, loc Location, settled bool, b storedBytes, extra map[string]any) (bool, error) {
 	okPrefix := h.canonicalObjectPrefix(ctx, op, loc.TenantID, loc.Collection)
-	placed := &statemachine.Placement{BackendID: loc.BackendID, Bucket: loc.Bucket}
+	placed := &statemachine.Placement{BackendID: loc.BackendID, Bucket: loc.Bucket, Settled: settled}
 	changed, err := h.sm.PromoteToAvailableInTx(ctx, objectID, placed, b.etag, b.size, b.checksum, b.sequencer, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, loc.TenantID, eventtype.ObjectUploaded,
@@ -1171,44 +1173,10 @@ func (h *Handler) promoteUploaded(ctx context.Context, op string, objectID uuid.
 	if errors.Is(err, statemachine.ErrContentMismatch) {
 		return false, h.discardMismatched(ctx, objectID, loc, err)
 	}
-	if errors.Is(err, statemachine.ErrBindingMoved) {
-		return false, h.bindingMoved(ctx, op, objectID, loc, err)
-	}
 	if err != nil {
 		return false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return changed, nil
-}
-
-// bindingMoved answers a promote refused because a storage migration rebound
-// the collection after loc was resolved: the bytes are in a bucket the object
-// would not be read from. The answer is UNAVAILABLE, and a retry resolves the
-// new binding.
-//
-// A completion's row stays PENDING, anchored to the bucket its URL names, so
-// the retry, or the reconciler, moves its bytes into the new binding. A
-// copy's row anchors nothing, and its bytes are under the new object's own
-// key, which no other row holds: they are deleted and the row discarded, as a
-// failed copy's is, and the retry copies again.
-func (h *Handler) bindingMoved(ctx context.Context, op string, objectID uuid.UUID, loc Location, cause error) error {
-	log := logger.FromContext(ctx).With(zap.String(LogFieldObjectID, objectID.String()),
-		zap.String(LogFieldTenantID, loc.TenantID.String()), zap.String(LogFieldCollection, loc.Collection),
-		zap.String(LogFieldFromBucket, loc.Bucket), zap.Error(cause))
-	refused := connect.NewError(connect.CodeUnavailable, msgBindingMoved).WithCause(cause)
-	if op != opCopy {
-		log.Warn("promote refused: the collection was rebound since its bucket was resolved; the object stays pending")
-		return refused
-	}
-	log.Warn("promote refused: the collection was rebound since the copy's destination was resolved; discarding the copy")
-	if err := h.storage.DeleteObject(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key); err != nil {
-		log.Error("deleting the copy from the bucket the collection left failed", zap.NamedError("delete", err))
-		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; deleting the copy failed: %w", cause, err))
-	}
-	if err := h.sm.DiscardFailed(ctx, objectID, statemachine.FailedStorageCopy); err != nil {
-		log.Error("discarding the copy's object failed", zap.NamedError("discard", err))
-		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; discarding the object failed: %w", cause, err))
-	}
-	return refused
 }
 
 // promotedObject reads back an object just promoted. Version history, quota
@@ -2552,6 +2520,10 @@ func (h *Handler) copyBytes(ctx context.Context, tenantID uuid.UUID, in CopyObje
 		ExternalRef:      src.ExternalRef,
 		PresignExpiresAt: time.Now().Add(h.presign.TTL.Default(presignttl.OpPut)),
 		PublicURL:        publicURL,
+		// The copy writes the destination's bucket, which anchors the row
+		// until it is promoted there (ADR-0051).
+		UploadBackendID: dstBackendID,
+		UploadBucket:    dstBucket,
 	})
 	if err != nil {
 		return nil, mapCreateErr(err)
@@ -2569,7 +2541,7 @@ func (h *Handler) copyBytes(ctx context.Context, tenantID uuid.UUID, in CopyObje
 	// about origin route copies vs direct uploads.
 	changed, err := h.promoteUploaded(ctx, opCopy, dst.ObjectID, Location{
 		BackendID: dstBackendID, TenantID: tenantID, Bucket: dstBucket, Collection: in.DestCollection, Key: destKey,
-	}, storedBytes{etag: src.ETag, size: src.SizeBytes, checksum: src.Checksum}, map[string]any{
+	}, true, storedBytes{etag: src.ETag, size: src.SizeBytes, checksum: src.Checksum}, map[string]any{
 		payloadSizeBytes:        src.SizeBytes,
 		payloadETag:             src.ETag,
 		payloadContentType:      src.ContentType,
@@ -2689,10 +2661,7 @@ func headFailure(err error) error {
 // the cause, which the RPC log line carries.
 const (
 	msgUploadUnchecked = "the uploaded bytes could not be checked; retry"
-	// msgBindingMoved: a storage migration moved the collection to another
-	// bucket while the object was written.
-	msgBindingMoved   = "the collection moved to another bucket while the object was written; retry"
-	msgBytesUnchecked = "the object's bytes could not be checked; retry"
+	msgBytesUnchecked  = "the object's bytes could not be checked; retry"
 )
 
 // assertBytesPresent HEADs a trashed object before it is restored. Its bytes

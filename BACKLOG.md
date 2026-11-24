@@ -542,49 +542,48 @@ the same commit. Treat this file like a runtime invariant.
   columns and sqlc is regenerated.
 - **Blockers:** the first step, which no release has shipped yet.
 
-### A source write no late event moves holds the cleanup
+### The reconciler's promotes and settles announce nothing
 
 - **Status:** Deferred.
-- **Reason:** the cleanup keeps a source copy whose ETag no longer matches
-  the one the copy read (migration 120) until the late storage event moves
-  the write into the target. Some never will: an event the transport
-  dropped, and one the ingest skips — without a sequencer (the SeaweedFS
-  sources set none) or not newer than the row's. The migration then stays
-  `completed`, each pass logs the key at Warn and HEADs every object of the
-  tenant again. Nothing is lost, but nothing settles it either; the cleanup
-  does not move the write itself, as a target write whose own event is late
-  could be overwritten.
-- **Definition of Done:** an operator can settle such a key — move the
-  source's bytes or discard them — through an RPC that records the decision;
-  a test settles one and the migration is cleaned.
+- **Reason:** `CompleteObject` and a storage event enqueue
+  `paladin.object.uploaded` with the promote; the reconciler promotes a
+  pending upload whose completion never came, and its settle of an expired
+  URL records a write no event reported (ADR-0051), on transactions that
+  enqueue no event, for it is wired with no event producer. A webhook
+  subscriber misses exactly the writes the reconciler finds.
+- **Definition of Done:** the reconciler is wired with the producer-only
+  dispatcher the ingest uses, its promote and its recorded settle enqueue
+  `paladin.object.uploaded` on their transaction, and a test settles a lost
+  write and finds the event.
 - **Blockers:** none.
 
-### A late target write whose event arrives after a retry has started is dropped
+### A URL of a deleted row can write bytes no row owns
 
 - **Status:** Deferred.
-- **Reason:** a late target write is moved into the source only while the
-  rolled-back migration stays `failed` (`rebound_back_at`, migration 119). A
-  retry clears it and copies over the target, so an event delivered after
-  the retry starts names a bucket the collection is not bound to and is
-  skipped; the source keeps the older bytes.
-- **Definition of Done:** a retry waits until the late target writes of the
-  attempt it replaces can no longer arrive, or moves them first; a test
-  delivers one after the retry starts.
-- **Blockers:** the same bound on event delivery that the forward case
-  lacks.
-
-### A late target write is ordered against a sequencer from another bucket
-
-- **Status:** Deferred.
-- **Reason:** a late target write is moved only when its sequencer follows
-  the row's, as the promote requires. A row whose last write was recorded
-  from the source holds the source's sequencer, which says nothing about the
-  target's order: when it sorts after the event's, the write is skipped as
-  not newer.
-- **Definition of Done:** the row records which bucket its sequencer came
-  from, and the promote compares sequencers only from the same bucket; a
-  test moves a target write whose sequencer sorts before the source's.
+- **Reason:** a permanent delete, or a discarded upload, removes a row whose
+  URL may still be valid for up to `limits.presign.max_ttl`. A PUT through it
+  puts bytes under the key that no row records: never promoted, never read,
+  never purged (ADR-0051 consequences). A storage migration's cleanup removes
+  them from its source only when a row of the same key was moved.
+- **Definition of Done:** a deleted row's live URL is recorded (its bucket,
+  key and expiry) with its purge debt, and the purge drainer deletes the key
+  again once the URL has expired; a test writes through a deleted row's URL
+  and finds the bytes gone after the drain.
 - **Blockers:** none.
+
+### An operator cannot cancel a storage migration
+
+- **Status:** Deferred.
+- **Reason:** a migration rolls back on its own only when its target leaves
+  `ready`, the schema refuses a collection, or moves keep failing their
+  verification (ADR-0051). An operator who wants a tenant back on its
+  source while the migration is healthy has no RPC for it.
+- **Definition of Done:** an admin RPC moves a `moving` or `completed`
+  migration to `rolling_back`, records who asked, and the worker moves the
+  objects back; a test cancels a migration midway and finds the tenant
+  `shared` with every object in the source.
+- **Blockers:** whether cancelling a `completed` migration within its
+  retention is wanted.
 
 ## API error messages
 

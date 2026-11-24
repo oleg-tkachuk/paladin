@@ -133,9 +133,8 @@ func runIngest(
 
 	// A delete event is believed only when a HEAD at the object's current
 	// placement finds nothing; the probe reads the placement through the
-	// same BYPASSRLS queries. It also moves a write a storage migration's
-	// source reports after the rebind into the collection's bucket.
-	ingestProbe := adapters.NewReconcilerProbe(ingestQueries, s3adapter.NewObjectRouter(deps.Registry)).WithLogger(l.Named("ingest.probe"))
+	// same BYPASSRLS queries.
+	ingestProbe := adapters.NewReconcilerProbe(ingestQueries, s3adapter.NewObjectRouter(deps.Registry))
 	handler := &eventingest.PromoteHandler{
 		Lookup:       ingestQueries,
 		Transitioner: ingestSM,
@@ -147,8 +146,6 @@ func runIngest(
 		// The transitions are recorded as the data-plane RPCs that make the
 		// same ones are; the repository writes in the object's tenant.
 		Audit: adapters.NewAuditRepoV2(ingestQueries, ingestPool),
-		Late:  ingestSM,
-		Mover: ingestProbe,
 	}
 
 	// Build the configured driver.
