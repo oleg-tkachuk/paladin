@@ -139,7 +139,7 @@ export default function BucketsPage() {
   // be dead code that quietly disagreed with the API the day the two
   // definitions of "matches" drifted apart.
   const tenantNames = useMemo(() => tenantLabelMap(tenants), [tenants]);
-  const facets = useTableFacets(buckets, BUCKET_FACETS, PAGE_TABLE);
+  const facets = useTableFacets(buckets, BUCKET_FACETS, PAGE_TABLE, TABLE_ID);
 
   const filtered = useMemo(() => {
     let list = facets.rows;
@@ -185,6 +185,7 @@ export default function BucketsPage() {
           searchLabel="Search buckets"
           placeholder="Search by name or display label…"
           facets={facets.controls}
+          savedFacets={facets.saved}
           csv={csvExport(
             TABLE_ID,
             exportColumns(bucketColumns(tenantNames)),

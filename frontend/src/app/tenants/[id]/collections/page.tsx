@@ -188,7 +188,12 @@ export default function TenantCollectionsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Collection | null>(null);
 
   // Counted over the tenant's every collection, which the list loads whole.
-  const facets = useTableFacets(list, TENANT_COLLECTION_FACETS, PAGE_TABLE);
+  const facets = useTableFacets(
+    list,
+    TENANT_COLLECTION_FACETS,
+    PAGE_TABLE,
+    TABLE_ID,
+  );
   const sorted = useMemo(
     () => sortCollections(facets.rows, sort.column, sort.direction),
     [facets.rows, sort],
@@ -252,6 +257,7 @@ export default function TenantCollectionsPage() {
             searchLabel="Search collections"
             placeholder="Search by name or display label…"
             facets={facets.controls}
+            savedFacets={facets.saved}
             csv={csvExport(
               scopedListName(tenant.slug || tenant.tenantId, LIST_NAME),
               EXPORTED,

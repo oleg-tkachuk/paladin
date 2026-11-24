@@ -137,7 +137,7 @@ export default function UsersPage() {
     [tenants],
   );
 
-  const facets = useTableFacets(users, USER_FACETS, PAGE_TABLE);
+  const facets = useTableFacets(users, USER_FACETS, PAGE_TABLE, TABLE_ID);
   // A user's tenant sorts and is searched by its slug, which only the tenant
   // list knows.
   const sortBy = useMemo<SortAccessors<User, UserColumn>>(
@@ -208,6 +208,7 @@ export default function UsersPage() {
             searchLabel="Search users"
             placeholder="Search subject, display name, role, tenant slug…"
             facets={facets.controls}
+            savedFacets={facets.saved}
             csv={csvExport(TABLE_ID, exportColumns(columns), filtered)}
             count={
               usersQuery.data

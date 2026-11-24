@@ -26,8 +26,17 @@ describe("readTablePrefs", () => {
       view: "tiles",
     });
   });
+  it("reads the facet choices saved beside the page size", () => {
+    expect(
+      readTablePrefs(
+        { users: { pageSize: 25, facets: { state: ["disabled"] } } },
+        "users",
+      ),
+    ).toEqual({ pageSize: 25, facets: { state: ["disabled"] } });
+  });
   it.each([
     ["no map", undefined],
+    ["facet choices of the wrong shape", { users: { facets: { state: "x" } } }],
     ["a map of the wrong kind", "x"],
     ["an entry of the wrong shape", { users: { density: "huge" } }],
     ["a page size the picker does not offer", { users: { pageSize: 7 } }],

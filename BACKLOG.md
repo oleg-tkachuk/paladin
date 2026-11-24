@@ -849,6 +849,23 @@ the same commit. Treat this file like a runtime invariant.
   test each.
 - **Blockers:** the server-paged rule.
 
+### Remembered facet choices on the remaining lists
+
+- **Status:** Deferred.
+- **Reason:** facet choices are remembered (useTableFacets and
+  useServerFacets given a table id) on the lists that have one: users,
+  tenants, trash, storage backends, buckets, collections (platform and
+  tenant), M2M tokens and both audit logs. The others have no table id in
+  console.tables: operations, capabilities, a tenant's and a backend's
+  buckets, MCP authorizations, connected applications and a user's
+  capabilities. The objects list has an id but also saved views, which set
+  every facet at once; whether a remembered choice or a saved view wins
+  there is undecided.
+- **Definition of Done:** each of those lists takes a table id and passes it
+  with `savedFacets` to its toolbar; for objects, the rule between saved
+  views and remembered choices is decided and tested.
+- **Blockers:** the objects rule.
+
 ### Console UX programme (2026-10-19)
 
 The entries below are one programme, agreed on 2026-10-19, to make the console
@@ -865,18 +882,4 @@ left waits on the owner: each entry says what was decided.
   transitions on the state changes that carry meaning, all off under
   `prefers-reduced-motion`.
 - **Blockers:** none — taken up only if asked for.
-
-#### Facet choices remembered between visits
-
-- **Status:** Deferred (needs an owner decision).
-- **Reason:** Argo CD keeps a list's filters across visits. Here they live
-  in the URL alone: a reload or a shared link keeps them, but a visit from
-  the sidebar opens the list on its initial choice. Remembering them would
-  open a list narrowed by a choice made weeks ago, which reads as rows gone
-  missing, so it was left out until it is asked for.
-- **Definition of Done:** if wanted, a table's choices saved per table in
-  console.tables beside its page size, applied only when the URL names no
-  facet, with the toolbar showing they are on and Clear filters clearing the
-  saved ones too.
-- **Blockers:** the owner's decision.
 

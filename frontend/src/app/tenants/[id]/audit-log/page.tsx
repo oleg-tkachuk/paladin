@@ -57,7 +57,7 @@ export default function TenantAuditLogPage() {
   });
   // The facets narrow the trail on the server, which counts them with its
   // first page.
-  const facets = useServerFacets(AUDIT_FACETS, PAGE_TABLE);
+  const facets = useServerFacets(AUDIT_FACETS, PAGE_TABLE, TABLE_ID);
   const {
     entries,
     facetCounts,
@@ -144,6 +144,7 @@ export default function TenantAuditLogPage() {
               searchLabel="Filter the audit log"
               placeholder="Filter by action, actor, resource, client, request id…"
               facets={facetControls}
+              savedFacets={facets.saved}
             >
               <span className={T.hint}>
                 {entries.length} loaded

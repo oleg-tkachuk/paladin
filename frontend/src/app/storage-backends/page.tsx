@@ -227,7 +227,7 @@ export default function StorageBackendsPage() {
     error: listError,
   } = useBackends({ filter: searchFilter(debouncedSearch) });
   const { showNotification } = useNotification();
-  const facets = useTableFacets(backends, BACKEND_FACETS, PAGE_TABLE);
+  const facets = useTableFacets(backends, BACKEND_FACETS, PAGE_TABLE, TABLE_ID);
   const { sort, toggleSort } = useTableSort<BackendColumn>(undefined, {
     url: PAGE_TABLE,
     tableId: TABLE_ID,
@@ -441,6 +441,7 @@ export default function StorageBackendsPage() {
             searchLabel="Search storage backends"
             placeholder="Search by ID, name, region, endpoint…"
             facets={facets.controls}
+            savedFacets={facets.saved}
             csv={csvExport(TABLE_ID, exportColumns(COLUMNS), sorted)}
             count={{ shown: sorted.length, total: backends.length }}
             actions={
