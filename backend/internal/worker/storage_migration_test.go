@@ -111,7 +111,10 @@ func (f *fakeMigRepo) ListCleanable(_ context.Context, _ MigrationRead, _ Migrat
 	return out, nil
 }
 
-func (f *fakeMigRepo) AdvanceCleanup(_ context.Context, _ MigrationRead, collection, key string) error {
+func (f *fakeMigRepo) AdvanceCleanup(ctx context.Context, _ MigrationRead, collection, key string, del func(context.Context) error) error {
+	if err := del(ctx); err != nil {
+		return err
+	}
 	f.cleanedPast = append(f.cleanedPast, collection+"/"+key)
 	f.m.CursorCollection, f.m.CursorKey = collection, key
 	return nil

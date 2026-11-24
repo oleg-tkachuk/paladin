@@ -275,8 +275,23 @@ func (r *StorageMigrationRepo) ListCleanable(ctx context.Context, at worker.Migr
 	return out, err
 }
 
-func (r *StorageMigrationRepo) AdvanceCleanup(ctx context.Context, at worker.MigrationRead, collection, key string) error {
-	return migrationMoved(r.q.AdvanceStorageMigrationCleanup(ctx, collection, key, pgUUID(at.TenantID), at.State, at.Attempts))
+// AdvanceCleanup deletes one source copy and records the cursor past it, on
+// a transaction holding the migration row as read (see worker.MigrationRepo).
+// The transaction is idle while del deletes, so the idle-in-transaction
+// timeout is lifted for it, as for a move.
+func (r *StorageMigrationRepo) AdvanceCleanup(ctx context.Context, at worker.MigrationRead, collection, key string, del func(context.Context) error) error {
+	return r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if _, err := q.SetIdleInTransactionTimeout(ctx, idleInTransactionUnbounded); err != nil {
+			return fmt.Errorf("lift the idle-in-transaction timeout: %w", err)
+		}
+		if err := migrationMoved(q.HoldStorageMigrationAsRead(ctx, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		if err := del(ctx); err != nil {
+			return err
+		}
+		return migrationMoved(q.AdvanceStorageMigrationCleanup(ctx, collection, key, pgUUID(at.TenantID), at.State, at.Attempts))
+	})
 }
 
 func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, at worker.MigrationRead) error {

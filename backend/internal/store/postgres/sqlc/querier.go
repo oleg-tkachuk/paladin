@@ -671,11 +671,17 @@ type Querier interface {
 	// The bucket reconciler holds this row lock across the backend delete, so the
 	// state it checks is the state the delete runs under.
 	LockBucketForDeletion(ctx context.Context, name string, name_2 string) (LockBucketForDeletionRow, error)
+	// The tenant's migration, held for an operator's change of it
+	// (CancelTenantStorageMigration): the change is decided on the state read
+	// here, and a worker's transition waits for it, as it waits for a move.
+	LockLatestStorageMigration(ctx context.Context, tenantID pgtype.UUID) (LockLatestStorageMigrationRow, error)
 	// Waits for the object-path lock (see package objectpath); held until the
 	// transaction ends.
 	LockObjectPath(ctx context.Context, lockKey int64) error
 	// Every transition below applies only to the migration as the worker read
-	// it: the same state AND the same attempts. attempts grows on every failure
+	// it: the same state AND the same attempts. Each change of state moves
+	// resource_version, the operator's compare-and-set; a pass's progress does
+	// not. attempts grows on every failure
 	// and a retry keeps it, so a worker that read an earlier attempt and resumed
 	// after it failed and was retried matches nothing (ABA on state alone).
 	// Holds the migration row for a transaction that changes where the tenant's
@@ -1076,10 +1082,11 @@ type Querier interface {
 	// the match. Updates resource_version + updated_at so audit reflects
 	// the soft-delete time independently of any subsequent restore.
 	SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
-	// moving -> rolling_back, recording the reason and counting the failure. The
-	// moves start over in the other direction: their count, the failed passes
-	// and the write deadline, which the rollback's first pass sets for the
-	// target.
+	// moving (or, cancelled, completed) -> rolling_back, recording the reason and
+	// counting the failure. The moves start over in the other direction: their
+	// count, the failed passes and the write deadline, which the rollback's first
+	// pass sets for the target. A completed migration's completion and cleanup
+	// are forgotten: there is nothing to clean once its objects are back.
 	StartStorageMigrationRollback(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// What a start must know before it uses the target bucket: its owner, whether
 	// it is public, its provisioning state, and whether any OTHER tenant reaches

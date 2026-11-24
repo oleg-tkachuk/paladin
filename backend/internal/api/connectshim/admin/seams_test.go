@@ -288,6 +288,9 @@ func (failingTenant) GetTenantBySlug(context.Context, string) (*tenanth.Tenant, 
 func (failingTenant) GetTenantStorageMigration(context.Context, uuid.UUID) (*tenanth.StorageMigration, error) {
 	return nil, errBoom
 }
+func (failingTenant) CancelTenantStorageMigration(context.Context, uuid.UUID, int64) (*tenanth.StorageMigration, error) {
+	return nil, errBoom
+}
 func (failingTenant) ListTenants(context.Context, tenanth.ListTenantsArgs, string) ([]tenanth.Tenant, string, error) {
 	return nil, "", errBoom
 }
@@ -750,6 +753,12 @@ func TestEveryAdminShimPropagatesHandlerErrors(t *testing.T) {
 		}},
 		{"Tenant.GetTenantStorageMigration", func() error {
 			_, err := tenantSrv.GetTenantStorageMigration(ctx, &pb.GetTenantStorageMigrationRequest{Name: tenantName})
+			return err
+		}},
+		{"Tenant.CancelTenantStorageMigration", func() error {
+			_, err := tenantSrv.CancelTenantStorageMigration(ctx, &pb.CancelTenantStorageMigrationRequest{
+				Name: tenantName, ResourceVersion: "1",
+			})
 			return err
 		}},
 	}

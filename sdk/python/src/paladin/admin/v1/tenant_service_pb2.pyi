@@ -168,8 +168,16 @@ class GetTenantStorageMigrationRequest(_message.Message):
     name: str
     def __init__(self, name: _Optional[str] = ...) -> None: ...
 
+class CancelTenantStorageMigrationRequest(_message.Message):
+    __slots__ = ("name", "resource_version")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    resource_version: str
+    def __init__(self, name: _Optional[str] = ..., resource_version: _Optional[str] = ...) -> None: ...
+
 class StorageMigrationStatus(_message.Message):
-    __slots__ = ("tenant", "state", "objects_total", "objects_copied", "source_bucket", "target_bucket", "error")
+    __slots__ = ("tenant", "state", "objects_total", "objects_copied", "source_bucket", "target_bucket", "error", "resource_version")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     STATE_FIELD_NUMBER: _ClassVar[int]
     OBJECTS_TOTAL_FIELD_NUMBER: _ClassVar[int]
@@ -177,6 +185,7 @@ class StorageMigrationStatus(_message.Message):
     SOURCE_BUCKET_FIELD_NUMBER: _ClassVar[int]
     TARGET_BUCKET_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
+    RESOURCE_VERSION_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     state: str
     objects_total: int
@@ -184,7 +193,8 @@ class StorageMigrationStatus(_message.Message):
     source_bucket: str
     target_bucket: str
     error: str
-    def __init__(self, tenant: _Optional[str] = ..., state: _Optional[str] = ..., objects_total: _Optional[int] = ..., objects_copied: _Optional[int] = ..., source_bucket: _Optional[str] = ..., target_bucket: _Optional[str] = ..., error: _Optional[str] = ...) -> None: ...
+    resource_version: str
+    def __init__(self, tenant: _Optional[str] = ..., state: _Optional[str] = ..., objects_total: _Optional[int] = ..., objects_copied: _Optional[int] = ..., source_bucket: _Optional[str] = ..., target_bucket: _Optional[str] = ..., error: _Optional[str] = ..., resource_version: _Optional[str] = ...) -> None: ...
 
 class TenantDefaultBinding(_message.Message):
     __slots__ = ("name", "bucket", "set_at", "set_by")

@@ -42,3 +42,24 @@ const MaxFailedPasses = 5
 func Owing() []string {
 	return []string{Provisioning, Moving, Completed, RollingBack, Failed}
 }
+
+// CancelTo is the state an operator's cancel moves a migration in state to,
+// and whether a cancel applies at all (ADR-0051, CancelTenantStorageMigration):
+//
+//   - Provisioning fails at once: nothing was pointed at the target.
+//   - Moving and Completed roll back: the objects already in the target move
+//     back, as a rollback the worker starts does. The moves copy the target's
+//     bytes, so a completed migration's source copies are not needed for it,
+//     and a cancel applies until the migration is cleaned.
+//   - RollingBack is already on its way back, Failed has nothing to cancel,
+//     and Cleaned is done: none of them is cancelled.
+func CancelTo(state string) (string, bool) {
+	switch state {
+	case Provisioning:
+		return Failed, true
+	case Moving, Completed:
+		return RollingBack, true
+	default:
+		return "", false
+	}
+}

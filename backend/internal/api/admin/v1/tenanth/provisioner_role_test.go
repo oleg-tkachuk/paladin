@@ -123,6 +123,12 @@ func TestTenantLifecycle_StaysPlatformAdminOnly(t *testing.T) {
 		wantCode(t, err, connect.CodePermissionDenied)
 	})
 
+	t.Run("CancelTenantStorageMigration", func(t *testing.T) {
+		h := NewHandler(&fakeRepo{}, allow())
+		_, err := h.CancelTenantStorageMigration(ctx, tid, 1)
+		wantCode(t, err, connect.CodePermissionDenied)
+	})
+
 	t.Run("ListTenants", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{}, allow())
 		_, _, err := h.ListTenants(ctx, ListTenantsArgs{}, "")

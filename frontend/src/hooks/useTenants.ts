@@ -251,6 +251,22 @@ export function useTenants(set: TenantSet = "active") {
     [],
   );
 
+  // cancelTenantStorageMigration cancels the tenant's migration at the
+  // resource_version the status was read at (ADR-0051): a provisioning one
+  // fails, a moving or completed one rolls back. Returns the cancelled status.
+  const cancelTenantStorageMigration = useCallback(
+    async (
+      tenantId: string,
+      resourceVersion: string,
+    ): Promise<StorageMigrationStatus> => {
+      return await tenantClient.cancelTenantStorageMigration({
+        name: `tenants/${tenantId}`,
+        resourceVersion,
+      });
+    },
+    [],
+  );
+
   return {
     tenants,
     loading: query.isFetching,
@@ -265,5 +281,6 @@ export function useTenants(set: TenantSet = "active") {
     purgeTenant,
     getTenantStorageMigration,
     migrateTenantStorageLayout,
+    cancelTenantStorageMigration,
   };
 }

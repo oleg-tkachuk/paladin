@@ -52,6 +52,9 @@ const (
 	// TenantServiceGetTenantStorageMigrationProcedure is the procedure name of the TenantService's
 	// GetTenantStorageMigration RPC.
 	TenantServiceGetTenantStorageMigrationProcedure = "/paladin.admin.v1.TenantService/GetTenantStorageMigration"
+	// TenantServiceCancelTenantStorageMigrationProcedure is the procedure name of the TenantService's
+	// CancelTenantStorageMigration RPC.
+	TenantServiceCancelTenantStorageMigrationProcedure = "/paladin.admin.v1.TenantService/CancelTenantStorageMigration"
 	// TenantServiceGetTenantDefaultBindingProcedure is the procedure name of the TenantService's
 	// GetTenantDefaultBinding RPC.
 	TenantServiceGetTenantDefaultBindingProcedure = "/paladin.admin.v1.TenantService/GetTenantDefaultBinding"
@@ -155,6 +158,13 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	tenantServiceCancelTenantStorageMigrationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_paladin_admin_v1_tenant_service_proto.Services().ByName("TenantService").Methods().ByName("CancelTenantStorageMigration"),
+			Procedure:  TenantServiceCancelTenantStorageMigrationProcedure,
+		}
+	})
 	tenantServiceGetTenantDefaultBindingSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType:       connect.StreamTypeUnary,
@@ -255,6 +265,15 @@ type TenantServiceClient interface {
 	// GetTenantStorageMigration returns the current migration status for a
 	// tenant, or NOT_FOUND if none was ever started.
 	GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error)
+	// CancelTenantStorageMigration cancels a tenant's storage migration
+	// (ADR-0051) at the resource_version read. A `provisioning` migration fails
+	// at once; a `moving` or `completed` one rolls back: the worker moves every
+	// object back into the source and points the tenant's uploads there, and
+	// the migration ends `failed`, retryable with MigrateTenantStorageLayout.
+	// The error records who cancelled it. FAILED_PRECONDITION for a migration
+	// `rolling_back`, `failed` or `cleaned`; ABORTED for a stale
+	// resource_version; NOT_FOUND when none was ever started.
+	CancelTenantStorageMigration(context.Context, *v1.CancelTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
 	// route used to complete the bare collection name shape (ADR-0014 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
@@ -340,6 +359,15 @@ type TenantServiceHandler interface {
 	// GetTenantStorageMigration returns the current migration status for a
 	// tenant, or NOT_FOUND if none was ever started.
 	GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error)
+	// CancelTenantStorageMigration cancels a tenant's storage migration
+	// (ADR-0051) at the resource_version read. A `provisioning` migration fails
+	// at once; a `moving` or `completed` one rolls back: the worker moves every
+	// object back into the source and points the tenant's uploads there, and
+	// the migration ends `failed`, retryable with MigrateTenantStorageLayout.
+	// The error records who cancelled it. FAILED_PRECONDITION for a migration
+	// `rolling_back`, `failed` or `cleaned`; ABORTED for a stale
+	// resource_version; NOT_FOUND when none was ever started.
+	CancelTenantStorageMigration(context.Context, *v1.CancelTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error)
 	// GetTenantDefaultBinding returns the tenant's default (backend, bucket)
 	// route used to complete the bare collection name shape (ADR-0014 Phase 3).
 	// NOT_FOUND when the tenant has no binding set.
@@ -377,6 +405,7 @@ func RegisterTenantServiceHandler(server *connect.Server, svc TenantServiceHandl
 		connect.Method{Spec: tenantServicePreviewPurgeTenantSpec(), Handler: adapter.previewPurgeTenant},
 		connect.Method{Spec: tenantServiceMigrateTenantStorageLayoutSpec(), Handler: adapter.migrateTenantStorageLayout},
 		connect.Method{Spec: tenantServiceGetTenantStorageMigrationSpec(), Handler: adapter.getTenantStorageMigration},
+		connect.Method{Spec: tenantServiceCancelTenantStorageMigrationSpec(), Handler: adapter.cancelTenantStorageMigration},
 		connect.Method{Spec: tenantServiceGetTenantDefaultBindingSpec(), Handler: adapter.getTenantDefaultBinding},
 		connect.Method{Spec: tenantServiceSetTenantDefaultBindingSpec(), Handler: adapter.setTenantDefaultBinding},
 		connect.Method{Spec: tenantServiceListRetiredTenantSlugsSpec(), Handler: adapter.listRetiredTenantSlugs},
@@ -430,6 +459,10 @@ func (UnimplementedTenantServiceHandler) MigrateTenantStorageLayout(context.Cont
 
 func (UnimplementedTenantServiceHandler) GetTenantStorageMigration(context.Context, *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.GetTenantStorageMigration is not implemented")
+}
+
+func (UnimplementedTenantServiceHandler) CancelTenantStorageMigration(context.Context, *v1.CancelTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "paladin.admin.v1.TenantService.CancelTenantStorageMigration is not implemented")
 }
 
 func (UnimplementedTenantServiceHandler) GetTenantDefaultBinding(context.Context, *v1.GetTenantDefaultBindingRequest) (*v1.TenantDefaultBinding, error) {
@@ -539,6 +572,14 @@ func (c *tenantServiceClient) MigrateTenantStorageLayout(ctx context.Context, re
 func (c *tenantServiceClient) GetTenantStorageMigration(ctx context.Context, req *v1.GetTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error) {
 	var res v1.StorageMigrationStatus
 	if err := c.client.CallUnary(ctx, tenantServiceGetTenantStorageMigrationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *tenantServiceClient) CancelTenantStorageMigration(ctx context.Context, req *v1.CancelTenantStorageMigrationRequest) (*v1.StorageMigrationStatus, error) {
+	var res v1.StorageMigrationStatus
+	if err := c.client.CallUnary(ctx, tenantServiceCancelTenantStorageMigrationSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -712,6 +753,18 @@ func (h tenantServiceHandler) getTenantStorageMigration(ctx context.Context, _ c
 		return err
 	}
 	res, err := h.svc.GetTenantStorageMigration(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h tenantServiceHandler) cancelTenantStorageMigration(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CancelTenantStorageMigrationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelTenantStorageMigration(ctx, &req)
 	if err != nil {
 		return err
 	}

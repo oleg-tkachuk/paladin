@@ -107,14 +107,31 @@ func (s *TenantServer) GetTenant(ctx context.Context, req *pb.GetTenantRequest) 
 
 func storageMigrationToProto(m *tenanth.StorageMigration) *pb.StorageMigrationStatus {
 	return &pb.StorageMigrationStatus{
-		Tenant:        "tenants/" + m.TenantID.String(),
-		State:         m.State,
-		ObjectsTotal:  m.ObjectsTotal,
-		ObjectsCopied: m.ObjectsCopied,
-		SourceBucket:  "storageBackends/" + m.SourceBackendName + "/buckets/" + m.SourceBucketName,
-		TargetBucket:  "storageBackends/" + m.TargetBackendName + "/buckets/" + m.TargetBucketName,
-		Error:         m.Error,
+		Tenant:          "tenants/" + m.TenantID.String(),
+		State:           m.State,
+		ObjectsTotal:    m.ObjectsTotal,
+		ObjectsCopied:   m.ObjectsCopied,
+		SourceBucket:    "storageBackends/" + m.SourceBackendName + "/buckets/" + m.SourceBucketName,
+		TargetBucket:    "storageBackends/" + m.TargetBackendName + "/buckets/" + m.TargetBucketName,
+		Error:           m.Error,
+		ResourceVersion: convx.ResourceVersion(m.ResourceVersion),
 	}
+}
+
+func (s *TenantServer) CancelTenantStorageMigration(ctx context.Context, req *pb.CancelTenantStorageMigrationRequest) (*pb.StorageMigrationStatus, error) {
+	id, err := s.resolveTenantID(ctx, req.GetName())
+	if err != nil {
+		return nil, err
+	}
+	rv, err := convx.ParseRV(req.GetResourceVersion())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err.Error()).WithCause(err)
+	}
+	m, err := s.H.CancelTenantStorageMigration(ctx, id, rv)
+	if err != nil {
+		return nil, err
+	}
+	return storageMigrationToProto(m), nil
 }
 
 func (s *TenantServer) MigrateTenantStorageLayout(ctx context.Context, req *pb.MigrateTenantStorageLayoutRequest) (*pb.StorageMigrationStatus, error) {
