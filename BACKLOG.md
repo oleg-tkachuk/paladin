@@ -387,26 +387,45 @@ the same commit. Treat this file like a runtime invariant.
   for it and an integration test against Garage.
 - **Blockers:** whether any deployment publishes from Garage.
 
-### Replication: real `StorageReplicator` implementation
+### Replication does not propagate deletes
 
-- **Status:** Aspirational
-- **Reason:** [internal/worker/replication.go](backend/internal/worker/replication.go)
-  walks replicated buckets and logs intent; [internal/app/build_jobs.go](backend/internal/app/build_jobs.go)
-  injects `Replicator: nil` so the worker is dry-run only, and every
-  AVAILABLE object is selected — the CEL `replication.filter` is not
-  evaluated yet.
-- **Definition of Done:**
-  - `StorageReplicator` impl that performs cross-backend `CopyObject`
-    via S3 SDK (AWS-native CRR for same-account, manual stream-copy
-    otherwise).
-  - Watermark advance + retry-with-exponential-backoff on transient
-    errors.
-  - Evaluate `replication.filter` (CEL) when selecting objects.
-  - Set `ReplicationTarget.Key` from the object row: the worker fills only
-    the collection today, which is harmless while dry-run.
-  - Integration test across two backends — the suites bring up two
-    SeaweedFS instances for exactly this.
-- **Blockers:** scope decision — same-cloud only vs. cross-cloud.
+- **Status:** Deferred.
+- **Reason:** the replication worker ([ADR-0050](docs/adr/0050-bucket-replication-copies-between-any-backends.md))
+  copies objects promoted after its watermark; an object deleted or purged
+  from the source stays in the destination bucket.
+- **Definition of Done:** a permanent delete or purge of a replicated object
+  removes its replica too (or a per-bucket setting says it is kept, on
+  purpose), through the purge outbox so a failed delete is retried, and a
+  test deletes a replicated object and finds its replica gone.
+- **Blockers:** whether a replica is a mirror or a retention copy — a product
+  decision.
+
+### A streamed replica carries only the content type
+
+- **Status:** Deferred.
+- **Reason:** across backends `ObjectRouter.Replicate` streams the source into
+  a multipart upload that sets the content type alone; a public collection's
+  `Cache-Control` and any other stored metadata are not copied. A server-side
+  copy on one backend keeps them.
+- **Definition of Done:** the streamed path copies the source's
+  `Cache-Control`, `Content-Disposition` and user metadata to the replica, and
+  a test compares a cross-backend replica's headers with its source's.
+- **Blockers:** none.
+
+### A held replication object makes every later pass copy again
+
+- **Status:** Deferred.
+- **Reason:** the replication watermark is one timestamp per bucket. While
+  one object fails to copy for good, the watermark stays below it and each
+  pass copies again every object after it, overwriting the replicas with the
+  same bytes; and each pass walks every object of every bound collection,
+  whatever the watermark.
+- **Definition of Done:** replication keeps per-object state — copied at
+  which version, or failed and why — so a pass copies only what is new or
+  changed, reads only rows after the watermark, and an operator can list and
+  redrive the failed ones; a test holds one object and counts one copy of
+  each other object across passes.
+- **Blockers:** none.
 
 ### `ResetPassword` — self-service email delivery
 
