@@ -529,6 +529,40 @@ Not covered, and recorded in BACKLOG: an overwrite reported only by a storage
 event that arrives after the rebind is dropped before it reaches the row; the
 rollback's own copy back still walks a cursor.
 
+## Addendum (2026-11-24): a source write whose event comes after the rebind is moved
+
+In an explicit-mode bucket an overwrite is recorded only when its storage
+event is. One written to the source behind the copy's cursor and delivered
+after the rebind named a bucket the collection was no longer bound to, and
+was skipped: the target kept the older bytes, and the cleanup deleted the
+newer ones with the source.
+
+The other option was to hold the cleanup while such events can still arrive.
+It cannot know when that is, and the target would still serve the older
+bytes meanwhile; the write is moved instead, as `CompleteObject` moves an
+upload.
+
+- **The event is matched to the migration.** An uploaded event from a bucket
+  the collection is not bound to — or one whose promote the fence refused
+  with `ErrBindingMoved` — is a late source write when the tenant's
+  migration rebound the collection from that bucket and still keeps its
+  source (`migstate.ReboundToTarget`, `rebound_at` set). Any other is skipped
+  as before.
+- **It is moved under the object's row.** `PromoteLateSourceWriteInTx` holds
+  the row (`FOR UPDATE`) and the migration's fence from the decision to the
+  promote: it copies the source's bytes into the collection's bucket, checks
+  the size, and promotes them there under the ETag that bucket reports.
+- **Only when nothing newer is recorded.** The object must be `AVAILABLE`, the
+  event's sequencer must follow the row's, and the row's last write must
+  predate the rebind. A write recorded since went to the target, later than
+  anything in the source; a sequencer cannot tell, since a bucket orders
+  only its own events. Such an event is skipped and logged.
+
+An event that arrives once the cleanup has deleted the source copy finds
+nothing to move; it is logged at Error and skipped (BACKLOG). The rollback's
+mirror — a target event delivered after the rebind back — is not moved
+either (BACKLOG).
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

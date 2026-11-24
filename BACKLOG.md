@@ -554,22 +554,34 @@ the same commit. Treat this file like a runtime invariant.
   bytes in the target.
 - **Blockers:** none.
 
-### An overwrite whose storage event arrives after a storage migration's rebind is dropped
+### A source write whose storage event outlives the migration's retention is lost
 
 - **Status:** Deferred.
-- **Reason:** the catch-up copies every write a promote recorded. An
-  overwrite in an explicit-mode bucket is recorded only when its storage
-  event is: one written to the source while the migration copied, whose
-  event is delivered after the rebind, is skipped as from a bucket the
-  collection is not bound to, so neither the catch-up nor the row ever sees
-  it. If the copy took the key before the overwrite landed, the target keeps
-  the older bytes and the newer ones go with the source at cleanup.
-- **Definition of Done:** an event from a migration's source bucket for a
-  collection the migration rebound is not dropped: its bytes are copied into
-  the binding (as `CompleteObject` moves an upload) and promoted there, or the
-  migration does not clean its source while such events can still arrive;
-  a test delivers the event after the rebind and finds the newer bytes in
-  the target after cleanup.
+- **Reason:** a late source write is moved into the target only while the
+  source still holds it (`PromoteLateSourceWriteInTx`). The cleanup deletes
+  the source once the retention window has passed, whatever events for it
+  are still queued; one delivered after that finds nothing to move and is
+  logged at Error. Nothing bounds how late an event source delivers.
+- **Definition of Done:** the cleanup waits until every event source that
+  reports on the migration's source bucket has delivered past the rebind
+  (a per-bucket high-water mark the ingest records), or the operator is told
+  which keys were lost; a test delivers an event after the cleanup.
+- **Blockers:** an event high-water mark per bucket, which the ingest does
+  not keep.
+
+### A target write whose storage event arrives after a rollback's rebind back is dropped
+
+- **Status:** Deferred.
+- **Reason:** the mirror of a late source write. An overwrite written to the
+  target while a migration rolled back, whose event is delivered after the
+  rebind back, names a bucket the collection is no longer bound to and is
+  skipped; the source keeps the older bytes. The forward move decides
+  staleness against `rebound_at`; the rebind back records no time of its
+  own to decide against.
+- **Definition of Done:** the rebind back records when it committed, and an
+  event from a rolled-back migration's target is moved into the source
+  under the same rules as a late source write; a test delivers one after
+  the rebind back and finds the newer bytes in the source.
 - **Blockers:** none.
 
 ### A collection created while a storage migration rebinds stays on the source

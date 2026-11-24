@@ -38,3 +38,14 @@ const (
 func FencingPromotes() []string {
 	return []string{Provisioning, Copying, Rebinding, Verifying, RollingBack}
 }
+
+// ReboundToTarget are the states in which the rebind may have moved the
+// tenant's private collections to the target while the source still holds
+// what it held — Rebinding once the rebind has committed (rebound_at is set),
+// the later ones always: a write a storage event reports in the source late,
+// after the rebind, can still be moved into the target. Cleaned has emptied
+// the source, and Failed is either before any rebind or after the rebind
+// back.
+func ReboundToTarget() []string {
+	return []string{Rebinding, Verifying, RollingBack, Completed}
+}
