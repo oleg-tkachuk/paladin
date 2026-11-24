@@ -569,15 +569,18 @@ the same commit. Treat this file like a runtime invariant.
   columns and sqlc is regenerated.
 - **Blockers:** the first step, which no release has shipped yet.
 
-### A source write whose storage event never arrives holds the cleanup
+### A source write no late event moves holds the cleanup
 
 - **Status:** Deferred.
 - **Reason:** the cleanup keeps a source copy whose ETag no longer matches
   the one the copy read (migration 120) until the late storage event moves
-  the write into the target. An event the transport dropped never comes: the
-  migration stays `completed`, and each pass logs the key at Warn. Nothing is
-  lost, but nothing settles it either; the cleanup does not move the write
-  itself, as a target write whose own event is late could be overwritten.
+  the write into the target. Some never will: an event the transport
+  dropped, and one the ingest skips — without a sequencer (the SeaweedFS
+  sources set none) or not newer than the row's. The migration then stays
+  `completed`, each pass logs the key at Warn and HEADs every object of the
+  tenant again. Nothing is lost, but nothing settles it either; the cleanup
+  does not move the write itself, as a target write whose own event is late
+  could be overwritten.
 - **Definition of Done:** an operator can settle such a key — move the
   source's bytes or discard them — through an RPC that records the decision;
   a test settles one and the migration is cleaned.

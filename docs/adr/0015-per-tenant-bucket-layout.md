@@ -695,8 +695,9 @@ cleanup checks the bytes instead.
   (no `Identity`, a migration copied before migration 120) are cleaned as
   before.
 
-Not covered (BACKLOG): an event the transport dropped never arrives, and the
-cleanup waits for it.
+Not covered (BACKLOG): a write no late event will move — its event dropped,
+or skipped for want of a sequencer (the SeaweedFS sources set none) or as
+not newer — holds the cleanup until an operator settles it.
 
 ## Consequences
 

@@ -11,7 +11,10 @@
   the source holds a write the copy did not take …"), and the migration
   stays `completed` until the event moves the write into the dedicated
   bucket; the next pass then deletes the source copy.
-- If the event was dropped, the migration stays `completed` and the line
-  repeats on every pass, naming the key.
+- If no event will move the write — it was dropped, or the ingest skipped
+  it ("late source write not moved"), as it does for every SeaweedFS event,
+  which carries no sequencer — the migration stays `completed` and the line
+  repeats on every pass, naming the key, with a HEAD of each of the
+  tenant's objects. The source keeps the bytes; nothing is lost.
 - A migration that copied before this release has no recorded ETags. Its
   cleanup behaves as before.
