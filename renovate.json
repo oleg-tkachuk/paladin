@@ -76,9 +76,16 @@
     },
     {
       "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["indirect"],
+      "enabled": true,
+      "description": "Renovate skips `// indirect` requirements by default. The Go modules here replace the SDK with this tree, so a module that holds a dependency only indirectly (backend for genproto/googleapis/api, sdk/go/internal/oteltest for all of genproto) has to move with the ones that hold it directly; left behind, it fails CI elsewhere as \"updates to go.mod needed\". scripts/go-mod-tidy.test.sh names such a module."
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
       "groupName": "go dependencies",
-      "schedule": ["before 6am on the first day of the month"]
+      "schedule": ["before 6am on the first day of the month"],
+      "description": "Digest updates included: a pseudo-version module (genproto and its googleapis/api and googleapis/rpc, cut from one commit) proposed on its own moves one of a set that has to move together."
     },
     {
       "matchManagers": ["gomod"],
