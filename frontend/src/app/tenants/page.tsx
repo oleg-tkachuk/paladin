@@ -158,7 +158,7 @@ export default function TenantsPage() {
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Tenant | null>(null);
 
-  const facets = useTableFacets(tenants, TENANT_FACETS, PAGE_TABLE);
+  const facets = useTableFacets(tenants, TENANT_FACETS, PAGE_TABLE, TABLE_ID);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let list = facets.rows;
@@ -246,6 +246,7 @@ export default function TenantsPage() {
             searchLabel="Search tenants"
             placeholder="Search tenants by ID or name…"
             facets={facets.controls}
+            savedFacets={facets.saved}
             csv={csvExport(TABLE_ID, exportColumns(COLUMNS), filtered)}
             count={
               tenants.length > 0

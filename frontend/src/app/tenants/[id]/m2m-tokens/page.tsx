@@ -276,7 +276,7 @@ export default function M2MTokensPage() {
   const detail = useDetailPanel();
   const opened = tokens.find((t) => t.id === detail.openId) ?? null;
 
-  const facets = useTableFacets(tokens, TOKEN_FACETS, PAGE_TABLE);
+  const facets = useTableFacets(tokens, TOKEN_FACETS, PAGE_TABLE, TABLE_ID);
   const view = useTableView(facets.rows, {
     text: TOKEN_SEARCH,
     accessors: TOKEN_SORT,
@@ -336,6 +336,7 @@ export default function M2MTokensPage() {
             searchLabel="Search M2M tokens"
             placeholder="Search by name, prefix, audience, role or scope…"
             facets={facets.controls}
+            savedFacets={facets.saved}
             csv={csvExport(
               scopedListName(tenant.slug || tenantId, TABLE_ID),
               exportColumns(COLUMNS),

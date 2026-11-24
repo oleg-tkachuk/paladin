@@ -156,7 +156,7 @@ export default function CollectionsPage() {
 
   // Counted over every collection in scope, which the list loads whole.
   const facetDefs = useMemo(() => collectionFacets(tenantNames), [tenantNames]);
-  const facets = useTableFacets(collections, facetDefs, PAGE_TABLE);
+  const facets = useTableFacets(collections, facetDefs, PAGE_TABLE, TABLE_ID);
   const columns = useMemo(() => collectionColumns(tenantNames), [tenantNames]);
   const sorted = useMemo(
     () => sortCollections(facets.rows, sort.column, sort.direction),
@@ -213,6 +213,7 @@ export default function CollectionsPage() {
             searchLabel="Search collections"
             placeholder="Search by name or display label…"
             facets={facets.controls}
+            savedFacets={facets.saved}
             csv={csvExport(TABLE_ID, exportColumns(columns), sorted)}
             count={{ shown: sorted.length, total: collections.length }}
             actions={

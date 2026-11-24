@@ -51,3 +51,46 @@ test("a list opens on the facet choice a link names", async ({ page }) => {
   await page.getByRole("menuitemcheckbox", { name: /^Failed, / }).click();
   await expect(page).not.toHaveURL(/[?&]state=/);
 });
+
+/** The RPC that saves the user's console preferences. */
+const UPDATE_MINE = "/UpdateMine";
+
+// The choices are the signed-in user's preferences, shared by every spec
+// that signs in as this admin: the test ends with them cleared, and clears
+// them first in case a failed run left some behind.
+test("a list remembers its facet choice until it is cleared", async ({
+  page,
+}) => {
+  await loginAsAdmin(page);
+  const saved = page.getByText("Saved filters");
+  const clear = page.getByRole("button", { name: "Clear filters" });
+  await gotoSettled(page, "/users");
+  if (await saved.isVisible()) await clear.first().click();
+
+  await page.getByRole("button", { name: "Filter by state" }).click();
+  // Saved before the next visit reloads the page under the write.
+  const written = page.waitForResponse((r) => r.url().endsWith(UPDATE_MINE));
+  await page.getByRole("menuitemcheckbox", { name: /^Active, / }).click();
+  await written;
+  await page.keyboard.press("Escape");
+  await expect(saved).toBeVisible();
+
+  // A visit naming no facet opens on the saved choice, and writes it back.
+  await gotoSettled(page, "/users");
+  await expect(
+    page.getByRole("button", { name: "Filter by state, 1 chosen" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/[?&]state=active(&|$)/);
+
+  // A link naming a facet wins over it.
+  await gotoSettled(page, "/users?state=disabled");
+  await expect(page).toHaveURL(/[?&]state=disabled(&|$)/);
+
+  await clear.first().click();
+  await expect(saved).toBeHidden();
+  await gotoSettled(page, "/users");
+  await expect(
+    page.getByRole("button", { name: "Filter by state" }),
+  ).toBeVisible();
+  await expect(saved).toBeHidden();
+});

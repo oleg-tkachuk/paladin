@@ -210,7 +210,7 @@ export default function TrashPage() {
     const info = first && trashAge(first.deletedAt, first.purgeEligibleAt, now);
     return info ? retentionDays(info) : null;
   }, [trashed, now]);
-  const facets = useTableFacets(rows, TRASH_FACETS, PAGE_TABLE);
+  const facets = useTableFacets(rows, TRASH_FACETS, PAGE_TABLE, TABLE_ID);
   const inWindow = useMemo(
     () => facets.rows.map((r) => r.tenant),
     [facets.rows],
@@ -328,6 +328,7 @@ export default function TrashPage() {
               searchLabel="Search the trash"
               placeholder="Search by name, slug or id…"
               facets={facets.controls}
+              savedFacets={facets.saved}
               csv={csvExport(TABLE_ID, exportColumns(COLUMNS), view.rows)}
               count={{ shown: view.rows.length, total: trashed.length }}
             />
