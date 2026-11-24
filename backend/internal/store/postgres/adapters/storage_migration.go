@@ -7,6 +7,7 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
 
 	"github.com/jackc/pgx/v5"
@@ -323,6 +324,9 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, at worker.Migra
 	if err := migrationMoved(qtx.MarkStorageMigrationRebound(ctx, pgUUID(tenantID), at.State, at.Attempts)); err != nil {
 		return fmt.Errorf("record rebound_at: %w", err)
 	}
+	if err := lockTenantBindings(ctx, qtx, tenantID); err != nil {
+		return err
+	}
 	keys, err := qtx.MigrationListTenantCollections(ctx, pgUUID(tenantID))
 	if err != nil {
 		return fmt.Errorf("list collections: %w", err)
@@ -353,6 +357,18 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, at worker.Migra
 			targetBackendID, targetBucketName)
 	}
 	return tx.Commit(ctx)
+}
+
+// lockTenantBindings holds the tenant's bindings lock for the rest of the
+// move's transaction (migstate.LockSpaceBindings), before the move lists the
+// tenant's collections: it waits for every collection being created, so the
+// list holds it, and a creation after it sees the binding the move left
+// (CollectionRepo.CreateTx).
+func lockTenantBindings(ctx context.Context, qtx *sqlc.Queries, tenantID uuid.UUID) error {
+	if err := qtx.LockTenantBindings(ctx, migstate.LockSpaceBindings, migstate.TenantLockKey(tenantID)); err != nil {
+		return fmt.Errorf("wait for the collections being created: %w", err)
+	}
+	return nil
 }
 
 // Complete moves verifying -> completed and drops what the catch-up
@@ -457,6 +473,9 @@ func (r *StorageMigrationRepo) RebindBack(ctx context.Context, at worker.Migrati
 	}
 	if behind {
 		return worker.ErrRollbackBehind
+	}
+	if err := lockTenantBindings(ctx, qtx, tenantID); err != nil {
+		return err
 	}
 	keys, err := qtx.MigrationListTenantCollections(ctx, pgUUID(tenantID))
 	if err != nil {

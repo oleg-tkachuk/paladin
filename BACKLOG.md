@@ -566,24 +566,6 @@ the same commit. Treat this file like a runtime invariant.
   the rebind back and finds the newer bytes in the source.
 - **Blockers:** none.
 
-### A collection created while a storage migration rebinds stays on the source
-
-- **Status:** Deferred.
-- **Reason:** the rebind lists the tenant's private collections and points
-  the default binding at the target in one transaction, but a
-  `CreateCollection` that read the default binding before that transaction
-  committed inserts its collection bound to the source after it. The tenant
-  is then `dedicated` with one collection still in the shared bucket. The
-  cleanup keeps that collection's source copies (it deletes a source copy
-  only of an object bound to the target), so nothing is lost, but nothing
-  moves it either.
-- **Definition of Done:** a collection cannot be created bound to a
-  migration's source between the copy's start and the end of the migration —
-  the rebind takes a lock `CreateCollection` takes too, or the verify finds
-  such a collection and rolls back — and a test creates one concurrently with
-  the rebind and finds it in the target.
-- **Blockers:** none.
-
 ### The replication worker will skip the bucket gate once it copies
 
 - **Status:** Blocked.

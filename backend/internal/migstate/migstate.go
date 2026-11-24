@@ -25,6 +25,11 @@ const (
 	// fencing row has committed before the transition, and every later one
 	// sees the row and holds it (FencingPromotes).
 	LockSpaceStart int32 = 1501
+	// LockSpaceBindings serialises the moves of all the tenant's private
+	// collections — the rebind and the rebind back, exclusively — against
+	// the creation of one, shared: a collection created before a move is
+	// listed by it, and one created after it sees what it left.
+	LockSpaceBindings int32 = 1502
 )
 
 // TenantLockKey is a tenant's key in every lock space. Two tenants may share
@@ -77,4 +82,13 @@ func FencingPromotes() []string {
 // back.
 func ReboundToTarget() []string {
 	return []string{Rebinding, Verifying, RollingBack, Completed}
+}
+
+// SourceLeft are the states in which a private collection newly bound to
+// the migration's source would stay there once the rebind has committed
+// (rebound_at is set): no later step of the migration moves it, and the
+// cleanup keeps its source copies. RollingBack is not one: the rebind back
+// moves every private collection to the source anyway.
+func SourceLeft() []string {
+	return []string{Rebinding, Verifying, Completed}
 }

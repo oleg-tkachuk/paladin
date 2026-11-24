@@ -13,3 +13,10 @@
   shared; starting or retrying a storage migration, and handing a stuck one
   to the rollback, takes it exclusively, so the start waits for the
   tenant's promotes in flight.
+- `CreateCollection` for a private collection answers `ABORTED` ("a storage
+  migration moved the tenant's collections away from this bucket; retry")
+  when it names the bucket the tenant's storage migration has just moved its
+  collections away from: the source between the rebind and the cleanup, or
+  the dedicated bucket after a rollback. A retry that names no bucket
+  resolves the tenant's new default binding. A creation racing the rebind
+  is now moved with the tenant's other collections.

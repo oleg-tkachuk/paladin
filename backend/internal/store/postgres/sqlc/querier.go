@@ -45,6 +45,13 @@ type Querier interface {
 	// The bucket whose policy layer storageBackends/{backend}/buckets/{name}
 	// addresses, its backend by name.
 	BucketIDForPolicy(ctx context.Context, backend string, bucket string) (pgtype.UUID, error)
+	// Whether the tenant's latest storage migration moved its private
+	// collections away from the bucket and nothing will move a collection bound
+	// there back: rebound to the target, the source left behind
+	// (migstate.SourceLeft); or rolled back, the target left behind. Asked under
+	// LockTenantBindingsShared, so a rebind either committed before it or waits
+	// for the creation asking.
+	BucketMigratedAway(ctx context.Context, tenantID pgtype.UUID, rolledBackState string, backendName string, bucketName string, sourceLeftStates []string) (bool, error)
 	CancelOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (int64, error)
 	// True when a non-DELETED row already exists at (tenant, collection_id, path).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
@@ -654,6 +661,14 @@ type Querier interface {
 	// transition into a fencing state from a non-fencing one, so every promote
 	// either committed before it or reads the row it leaves.
 	LockStorageMigrationStart(ctx context.Context, lockSpace int32, lockKey int32) error
+	// Held by the rebind and the rebind back before they list the tenant's
+	// collections (migstate.LockSpaceBindings): they wait for every collection
+	// being created, list it, and hold back every later creation until they
+	// commit.
+	LockTenantBindings(ctx context.Context, lockSpace int32, lockKey int32) error
+	// Held by a collection's creation: creations do not wait on each other, and
+	// a rebind waits for them (LockTenantBindings).
+	LockTenantBindingsShared(ctx context.Context, lockSpace int32, lockKey int32) error
 	// Starting (or retrying) a migration: StartStorageMigration runs these in one
 	// transaction, in this order, and says why each step is there.
 	// Serialises starts for one tenant. tenant_storage_migrations has no unique

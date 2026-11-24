@@ -345,6 +345,40 @@ FOR NO KEY UPDATE;
 -- either committed before it or reads the row it leaves.
 SELECT pg_advisory_xact_lock(sqlc.arg('lock_space')::int, sqlc.arg('lock_key')::int);
 
+-- name: LockTenantBindings :exec
+-- Held by the rebind and the rebind back before they list the tenant's
+-- collections (migstate.LockSpaceBindings): they wait for every collection
+-- being created, list it, and hold back every later creation until they
+-- commit.
+SELECT pg_advisory_xact_lock(sqlc.arg('lock_space')::int, sqlc.arg('lock_key')::int);
+
+-- name: LockTenantBindingsShared :exec
+-- Held by a collection's creation: creations do not wait on each other, and
+-- a rebind waits for them (LockTenantBindings).
+SELECT pg_advisory_xact_lock_shared(sqlc.arg('lock_space')::int, sqlc.arg('lock_key')::int);
+
+-- name: BucketMigratedAway :one
+-- Whether the tenant's latest storage migration moved its private
+-- collections away from the bucket and nothing will move a collection bound
+-- there back: rebound to the target, the source left behind
+-- (migstate.SourceLeft); or rolled back, the target left behind. Asked under
+-- LockTenantBindingsShared, so a rebind either committed before it or waits
+-- for the creation asking.
+SELECT EXISTS (
+    SELECT 1
+    FROM (SELECT * FROM tenant_storage_migrations
+           WHERE tenant_id = sqlc.arg('tenant_id')
+           ORDER BY created_at DESC
+           LIMIT 1) m
+    JOIN buckets b           ON b.id = CASE WHEN m.state = sqlc.arg('rolled_back_state')::text
+                                            THEN m.target_bucket_id ELSE m.source_bucket_id END
+    JOIN storage_backends sb ON sb.id = b.backend_id
+    WHERE sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name')
+      AND m.rebound_at IS NOT NULL
+      AND (m.state = ANY(sqlc.arg('source_left_states')::text[])
+           OR m.state = sqlc.arg('rolled_back_state')::text)
+)::bool;
+
 -- name: LatestStorageMigration :one
 SELECT id, state FROM tenant_storage_migrations
 WHERE tenant_id = $1

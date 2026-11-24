@@ -586,6 +586,27 @@ migration row would close a cycle.
   it, then reads the row it left and holds it. Taken only once no migration
   is active, so no promote holding the lock waits on a row a worker holds.
 
+## Addendum (2026-11-24): a collection created during a rebind moves with the others
+
+`CreateCollection` resolves its bucket — the tenant's default binding, most
+often — before its transaction. One that resolved the source before the
+rebind and inserted after it stayed in the source while the tenant was
+`dedicated`; the mirror held for a rebind back. Rolling the migration back
+when the verify finds such a collection was the alternative; a whole
+migration is too much to pay for one creation.
+
+- **The moves and the creation share a lock.** The rebind and the rebind
+  back hold the tenant's bindings lock exclusively
+  (`migstate.LockSpaceBindings`) before they list the collections; every
+  private collection's creation holds it shared until it commits. A creation
+  in flight is waited for and moved with the others.
+- **A creation after the move re-checks its bucket.** Under the lock, a
+  private collection bound to a bucket the tenant's latest migration moved
+  away from — the source once rebound (`migstate.SourceLeft`), the target
+  once rolled back — is refused with `ErrBucketMigratedAway` (`ABORTED`); a
+  retry resolves the binding again. It is refused, not redirected: the
+  caller's authorization and the resource name already named the bucket.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

@@ -20,6 +20,23 @@ func TestTenantLockKeyIsStablePerTenant(t *testing.T) {
 	}
 }
 
+// A collection is refused the source only once nothing will move it: after
+// the rebind and before the cleanup, but not while rolling back, which
+// moves every collection to the source.
+func TestSourceLeftIsAfterTheRebindAndBeforeTheCleanup(t *testing.T) {
+	got := SourceLeft()
+	for _, want := range []string{Rebinding, Verifying, Completed} {
+		if !slices.Contains(got, want) {
+			t.Errorf("%s does not leave the source", want)
+		}
+	}
+	for _, not := range []string{Provisioning, Copying, RollingBack, Cleaned, Failed} {
+		if slices.Contains(got, not) {
+			t.Errorf("%s counts as leaving the source", not)
+		}
+	}
+}
+
 // A late source write can be moved only while the migration has rebound the
 // tenant and keeps its source: never before the copy, nor once cleaned or
 // failed.

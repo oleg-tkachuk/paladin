@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/publicread"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/schema"
@@ -58,8 +59,16 @@ func (r *CollectionRepo) RunInTx(ctx context.Context, fn func(ctx context.Contex
 	return nil
 }
 
+// Create runs CreateTx on a transaction of its own: the check against a
+// storage migration's rebind holds a lock until the insert commits.
 func (r *CollectionRepo) Create(ctx context.Context, args objectkey.CreateCollectionArgs) (objectkey.Collection, error) {
-	return r.createWith(ctx, r.q, args)
+	var c objectkey.Collection
+	err := r.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
+		var e error
+		c, e = r.CreateTx(ctx, tx, args)
+		return e
+	})
+	return c, err
 }
 
 // CreateTx runs Create on the caller's tx (ADR-0003).
@@ -74,6 +83,11 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 	rules := args.LifecycleRules
 	if len(rules) == 0 {
 		rules = []byte("[]")
+	}
+	if !args.PublicRead {
+		if err := admitAgainstMigration(ctx, q, args); err != nil {
+			return objectkey.Collection{}, err
+		}
 	}
 	if err := q.CreateCollection(ctx,
 		pgUUID(args.TenantID),
@@ -115,6 +129,30 @@ func (r *CollectionRepo) createWith(ctx context.Context, q *sqlc.Queries, args o
 		return objectkey.Collection{}, fmt.Errorf("create collection: %w", err)
 	}
 	return r.getWith(ctx, q, args.TenantID, args.Collection)
+}
+
+// admitAgainstMigration holds the tenant's bindings lock shared for the rest
+// of q's transaction (migstate.LockSpaceBindings) and refuses a private
+// collection bound to a bucket a storage migration has moved the tenant's
+// collections away from (objectkey.ErrBucketMigratedAway).
+//
+// The bucket was resolved before this transaction — from the tenant's default
+// binding, most often — and a rebind may have committed since. Under the
+// lock, a rebind in flight waits for this creation and then lists the new
+// collection with the others; one that committed first is seen here. Public
+// collections never move (ADR-0027) and are not asked about.
+func admitAgainstMigration(ctx context.Context, q *sqlc.Queries, args objectkey.CreateCollectionArgs) error {
+	if err := q.LockTenantBindingsShared(ctx, migstate.LockSpaceBindings, migstate.TenantLockKey(args.TenantID)); err != nil {
+		return fmt.Errorf("create collection: hold the tenant's bindings: %w", err)
+	}
+	moved, err := q.BucketMigratedAway(ctx, pgUUID(args.TenantID), migstate.Failed, args.BackendID, args.BucketName, migstate.SourceLeft())
+	if err != nil {
+		return fmt.Errorf("create collection: read the tenant's storage migration: %w", err)
+	}
+	if moved {
+		return fmt.Errorf("%w: %s/%s", objectkey.ErrBucketMigratedAway, args.BackendID, args.BucketName)
+	}
+	return nil
 }
 
 func (r *CollectionRepo) Get(ctx context.Context, tenantID uuid.UUID, collection string) (objectkey.Collection, error) {

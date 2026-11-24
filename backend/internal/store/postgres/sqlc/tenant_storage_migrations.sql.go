@@ -67,6 +67,42 @@ func (q *Queries) AdvanceStorageMigrationRollback(ctx context.Context, cursorAt 
 	return result.RowsAffected(), nil
 }
 
+const bucketMigratedAway = `-- name: BucketMigratedAway :one
+SELECT EXISTS (
+    SELECT 1
+    FROM (SELECT id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at, rebound_at, rollback_cursor_at, rollback_cursor_id, copy_started_at FROM tenant_storage_migrations
+           WHERE tenant_id = $1
+           ORDER BY created_at DESC
+           LIMIT 1) m
+    JOIN buckets b           ON b.id = CASE WHEN m.state = $2::text
+                                            THEN m.target_bucket_id ELSE m.source_bucket_id END
+    JOIN storage_backends sb ON sb.id = b.backend_id
+    WHERE sb.name = $3 AND b.name = $4
+      AND m.rebound_at IS NOT NULL
+      AND (m.state = ANY($5::text[])
+           OR m.state = $2::text)
+)::bool
+`
+
+// Whether the tenant's latest storage migration moved its private
+// collections away from the bucket and nothing will move a collection bound
+// there back: rebound to the target, the source left behind
+// (migstate.SourceLeft); or rolled back, the target left behind. Asked under
+// LockTenantBindingsShared, so a rebind either committed before it or waits
+// for the creation asking.
+func (q *Queries) BucketMigratedAway(ctx context.Context, tenantID pgtype.UUID, rolledBackState string, backendName string, bucketName string, sourceLeftStates []string) (bool, error) {
+	row := q.db.QueryRow(ctx, bucketMigratedAway,
+		tenantID,
+		rolledBackState,
+		backendName,
+		bucketName,
+		sourceLeftStates,
+	)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const completeStorageMigration = `-- name: CompleteStorageMigration :execrows
 UPDATE tenant_storage_migrations
 SET state = $1, error = '', completed_at = now(),
@@ -450,6 +486,30 @@ SELECT pg_advisory_xact_lock($1::int, $2::int)
 // either committed before it or reads the row it leaves.
 func (q *Queries) LockStorageMigrationStart(ctx context.Context, lockSpace int32, lockKey int32) error {
 	_, err := q.db.Exec(ctx, lockStorageMigrationStart, lockSpace, lockKey)
+	return err
+}
+
+const lockTenantBindings = `-- name: LockTenantBindings :exec
+SELECT pg_advisory_xact_lock($1::int, $2::int)
+`
+
+// Held by the rebind and the rebind back before they list the tenant's
+// collections (migstate.LockSpaceBindings): they wait for every collection
+// being created, list it, and hold back every later creation until they
+// commit.
+func (q *Queries) LockTenantBindings(ctx context.Context, lockSpace int32, lockKey int32) error {
+	_, err := q.db.Exec(ctx, lockTenantBindings, lockSpace, lockKey)
+	return err
+}
+
+const lockTenantBindingsShared = `-- name: LockTenantBindingsShared :exec
+SELECT pg_advisory_xact_lock_shared($1::int, $2::int)
+`
+
+// Held by a collection's creation: creations do not wait on each other, and
+// a rebind waits for them (LockTenantBindings).
+func (q *Queries) LockTenantBindingsShared(ctx context.Context, lockSpace int32, lockKey int32) error {
+	_, err := q.db.Exec(ctx, lockTenantBindingsShared, lockSpace, lockKey)
 	return err
 }
 
