@@ -634,6 +634,30 @@ shape, and is mirrored:
 `rollback_cursor_at` and `rollback_cursor_id` are no longer read; they are
 dropped once no running binary selects them (BACKLOG).
 
+## Addendum (2026-11-24): a target write whose event comes after the rebind back is moved
+
+The mirror of a late source write. An overwrite written to the target while
+the migration rolled back, whose storage event was delivered after the
+rebind back, named a bucket the collection was no longer bound to and was
+skipped; the source kept the older bytes. The forward move decides against
+`rebound_at`, and the rebind back recorded no time of its own.
+
+- **The rebind back records when it committed.** `rebound_back_at`
+  (migration 119) is its transaction's start, set with the move to `failed`;
+  a retry, and a stuck rollback, clear it.
+- **The event is matched to the rollback.** An uploaded event from the
+  target of the tenant's migration, `failed` with `rebound_back_at` set, is
+  a late write to move into the source, under `PromoteLateSourceWriteInTx`'s
+  rules with the rebind back in place of the rebind.
+- **Only a write the tenant made.** The target also received the
+  migration's own copies, perhaps the one the verify failed on, and their
+  events are uploaded events like any other. The event's time must be at or
+  after `rebound_at`; one without a time is skipped and logged.
+
+Not covered (BACKLOG): an event delivered after a retry has started, and a
+row whose sequencer came from the source, which the target's event cannot be
+ordered against.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

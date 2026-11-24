@@ -578,19 +578,31 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** an event high-water mark per bucket, which the ingest does
   not keep.
 
-### A target write whose storage event arrives after a rollback's rebind back is dropped
+### A late target write whose event arrives after a retry has started is dropped
 
 - **Status:** Deferred.
-- **Reason:** the mirror of a late source write. An overwrite written to the
-  target while a migration rolled back, whose event is delivered after the
-  rebind back, names a bucket the collection is no longer bound to and is
-  skipped; the source keeps the older bytes. The forward move decides
-  staleness against `rebound_at`; the rebind back records no time of its
-  own to decide against.
-- **Definition of Done:** the rebind back records when it committed, and an
-  event from a rolled-back migration's target is moved into the source
-  under the same rules as a late source write; a test delivers one after
-  the rebind back and finds the newer bytes in the source.
+- **Reason:** a late target write is moved into the source only while the
+  rolled-back migration stays `failed` (`rebound_back_at`, migration 119). A
+  retry clears it and copies over the target, so an event delivered after
+  the retry starts names a bucket the collection is not bound to and is
+  skipped; the source keeps the older bytes.
+- **Definition of Done:** a retry waits until the late target writes of the
+  attempt it replaces can no longer arrive, or moves them first; a test
+  delivers one after the retry starts.
+- **Blockers:** the same bound on event delivery that the forward case
+  lacks.
+
+### A late target write is ordered against a sequencer from another bucket
+
+- **Status:** Deferred.
+- **Reason:** a late target write is moved only when its sequencer follows
+  the row's, as the promote requires. A row whose last write was recorded
+  from the source holds the source's sequencer, which says nothing about the
+  target's order: when it sorts after the event's, the write is skipped as
+  not newer.
+- **Definition of Done:** the row records which bucket its sequencer came
+  from, and the promote compares sequencers only from the same bucket; a
+  test moves a target write whose sequencer sorts before the source's.
 - **Blockers:** none.
 
 ## API error messages

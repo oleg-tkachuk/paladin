@@ -53,3 +53,18 @@ func TestReboundToTargetKeepsTheSource(t *testing.T) {
 		}
 	}
 }
+
+// A late target write can be moved only once the rollback has rebound the
+// tenant back, which ends the migration failed: never while a migration is
+// still moving collections, nor once it completed.
+func TestReboundBackToSourceIsTheRolledBackFailure(t *testing.T) {
+	got := ReboundBackToSource()
+	if !slices.Contains(got, Failed) {
+		t.Errorf("%s is not rebound back to the source", Failed)
+	}
+	for _, not := range []string{Provisioning, Copying, Rebinding, Verifying, RollingBack, Completed, Cleaned} {
+		if slices.Contains(got, not) {
+			t.Errorf("%s counts as rebound back to the source", not)
+		}
+	}
+}

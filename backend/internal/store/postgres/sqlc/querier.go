@@ -240,7 +240,10 @@ type Querier interface {
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
 	// rolling_back -> failed, in the transaction that rebinds the tenant back.
 	// The verify error stays, and attempts too: the failure was counted when the
-	// rollback started.
+	// rollback started. rebound_back_at is that transaction's now(), its START
+	// time (migration 119): no later than any moment a writer could have seen
+	// the tenant on its source again, so a write to the target that a late
+	// storage event reports is older than any the row records from then on.
 	FinishStorageMigrationRollback(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// A purge's part in the copy's count, on its transaction, after the row is
 	// deleted. The copy fails when it ends short of the total it counted, which

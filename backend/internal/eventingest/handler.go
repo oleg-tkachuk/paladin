@@ -433,7 +433,9 @@ func (h *PromoteHandler) movesLateWrites() bool {
 // event reports a write that landed in the source while the migration copied
 // and whose event came after the rebind: its bytes are moved into bound and
 // promoted there (statemachine.LateSourceWrite), notifying subscribers as
-// any promote does. Otherwise — no such migration, a delete event, or a write
+// any promote does. The mirror holds for an event from the target of a
+// migration whose rollback rebound the collection back, when the event's
+// time says the write followed the rebind. Otherwise — no such migration, a delete event, or a write
 // the target has since superseded — it is skipped, as from another bucket.
 func (h *PromoteHandler) lateSourceWrite(ctx context.Context, logger *zap.Logger, ev CloudEvent, tenant, objectID uuid.UUID, collection, key string, bound statemachine.Placement) error {
 	logger = logger.With(zap.String("object_id", objectID.String()), zap.String("collection", collection),
@@ -445,6 +447,7 @@ func (h *PromoteHandler) lateSourceWrite(ctx context.Context, logger *zap.Logger
 	resourceName := h.objectResourceName(ctx, ev.SubjectFields.TenantID, collection, key)
 	w := statemachine.LateSourceWrite{
 		FromBucket: ev.SubjectFields.Bucket, To: bound, Sequencer: ev.SubjectFields.Sequencer,
+		WrittenAt: ev.Time,
 		Move: func(ctx context.Context, from, to statemachine.Placement) (statemachine.MovedBytes, error) {
 			return h.Mover.MoveObjectBytes(ctx, objectID, from, to)
 		},

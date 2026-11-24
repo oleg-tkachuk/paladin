@@ -443,6 +443,7 @@ SET source_bucket_id          = sb.id,
     completed_at              = NULL,
     cleaned_at                = NULL,
     rebound_at                = NULL,
+    rebound_back_at           = NULL,
     rollback_cursor_at        = NULL,
     rollback_cursor_id        = NULL,
     updated_at                = now()
@@ -568,9 +569,12 @@ SET written_at = EXCLUDED.written_at, copied_at = now();
 -- name: FinishStorageMigrationRollback :execrows
 -- rolling_back -> failed, in the transaction that rebinds the tenant back.
 -- The verify error stays, and attempts too: the failure was counted when the
--- rollback started.
+-- rollback started. rebound_back_at is that transaction's now(), its START
+-- time (migration 119): no later than any moment a writer could have seen
+-- the tenant on its source again, so a write to the target that a late
+-- storage event reports is older than any the row records from then on.
 UPDATE tenant_storage_migrations
-SET state = sqlc.arg('to_state'), updated_at = now()
+SET state = sqlc.arg('to_state'), rebound_back_at = now(), updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
@@ -588,6 +592,7 @@ SET state              = 'rolling_back',
     rebound_at         = COALESCE(m.rebound_at,
                                   CASE WHEN d.set_by = 'storage-migration' THEN d.set_at
                                        ELSE m.created_at END),
+    rebound_back_at    = NULL,
     rollback_cursor_at = NULL,
     rollback_cursor_id = NULL,
     updated_at         = now()
