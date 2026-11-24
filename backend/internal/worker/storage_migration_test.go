@@ -82,11 +82,11 @@ func (f *fakeMigRepo) SetCopying(_ context.Context, at MigrationRead) (int64, er
 
 // HoldObject runs fn when o is still among the objects, as the row lock
 // does, and records progress past it.
-func (f *fakeMigRepo) HoldObject(_ context.Context, _ uuid.UUID, o ObjectRef, progress *CopyProgress, fn func(context.Context) error) (bool, error) {
+func (f *fakeMigRepo) HoldObject(_ context.Context, _ uuid.UUID, o ObjectRef, progress *CopyProgress, fn func(context.Context) (*string, error)) (bool, error) {
 	if !f.has(o) {
 		return false, nil
 	}
-	if err := fn(context.Background()); err != nil {
+	if _, err := fn(context.Background()); err != nil {
 		return false, err
 	}
 	if progress != nil {
@@ -147,21 +147,21 @@ func (f *fakeMigRepo) ListUncaughtUp(_ context.Context, at MigrationRead, limit 
 
 // CatchUpObject runs fn and records the write it copied, or answers
 // catchUpErr.
-func (f *fakeMigRepo) CatchUpObject(ctx context.Context, at MigrationRead, o WrittenObject, fn func(context.Context) (*string, error)) (bool, error) {
+func (f *fakeMigRepo) CatchUpObject(ctx context.Context, at MigrationRead, o WrittenObject, fn func(context.Context) (CopyIdentity, error)) (bool, error) {
 	if f.catchUpErr != nil {
 		return false, f.catchUpErr
 	}
 	if !f.holds(at) {
 		return false, ErrMigrationMoved
 	}
-	etag, err := fn(ctx)
+	copied, err := fn(ctx)
 	if err != nil {
 		return false, err
 	}
 	if f.caughtUp == nil {
 		f.caughtUp = map[uuid.UUID]*CaughtUp{}
 	}
-	f.caughtUp[o.ID] = &CaughtUp{WrittenAt: o.WrittenAt, ETag: etag}
+	f.caughtUp[o.ID] = &CaughtUp{WrittenAt: o.WrittenAt, ETag: copied.Target}
 	return true, nil
 }
 

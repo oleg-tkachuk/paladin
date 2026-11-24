@@ -177,6 +177,19 @@ type ObjectRef struct {
 	// CaughtUp is what the catch-up copied of the object, nil when it copied
 	// nothing. Set by the list the verify walks.
 	CaughtUp *CaughtUp
+	// SourceETag is the ETag the source reported for the object's key just
+	// before the copy, or the catch-up, last took its bytes (migration 120);
+	// nil when none was read. Set by the list the cleanup walks.
+	SourceETag *string
+}
+
+// CopyIdentity is what one copy read and wrote of an object: the ETag the
+// source reported just before the copy, and the one the target reports for
+// it. Either is nil without an Identity, or for a trashed object with no
+// bytes to move.
+type CopyIdentity struct {
+	Source *string
+	Target *string
 }
 
 // CaughtUp is the catch-up's copy of an object (migration 116): the write
@@ -224,9 +237,10 @@ type MigrationRepo interface {
 	// reports whether there were any: none — the object was purged since it
 	// was listed — runs nothing. A purge of o waits for fn, and then owes
 	// what fn copied (package purgedebt); one that ran first left nothing to
-	// copy. With progress, it also records, on the same transaction, the copy
-	// having got past o with progress.Copied objects copied.
-	HoldObject(ctx context.Context, tenantID uuid.UUID, o ObjectRef, progress *CopyProgress, fn func(context.Context) error) (bool, error)
+	// copy. It records, on the same transaction, the source ETag fn returns
+	// (none for nil) and, with progress, the copy having got past o with
+	// progress.Copied objects copied.
+	HoldObject(ctx context.Context, tenantID uuid.UUID, o ObjectRef, progress *CopyProgress, fn func(context.Context) (*string, error)) (bool, error)
 	SetState(ctx context.Context, at MigrationRead, to string) error
 	// RebindTenant, in ONE transaction, rebinds every private collection of
 	// the tenant to (targetBackendID, targetBucketName), flips storage_layout
@@ -245,10 +259,10 @@ type MigrationRepo interface {
 	ListUncaughtUp(ctx context.Context, at MigrationRead, limit int) ([]WrittenObject, error)
 	// CatchUpObject holds o's row against a delete and a promote, runs fn —
 	// the copy — and records, on the same transaction, the write fn copied
-	// and the ETag it returns. No row (purged since it was listed) runs
+	// and the ETags it returns. No row (purged since it was listed) runs
 	// nothing and reports false. A migration no longer as read records
 	// nothing: ErrMigrationMoved.
-	CatchUpObject(ctx context.Context, at MigrationRead, o WrittenObject, fn func(context.Context) (*string, error)) (bool, error)
+	CatchUpObject(ctx context.Context, at MigrationRead, o WrittenObject, fn func(context.Context) (CopyIdentity, error)) (bool, error)
 	// StartRollback moves verifying -> rolling_back, recording reason as the
 	// migration's error and counting the failure.
 	StartRollback(ctx context.Context, at MigrationRead, reason string) error
@@ -543,7 +557,7 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 			return nil
 		}
 		held, err := w.Repo.HoldObject(ctx, m.TenantID, o, &CopyProgress{At: m.Read(), Copied: copied + 1},
-			func(ctx context.Context) error { return w.copyOne(ctx, m, o) })
+			func(ctx context.Context) (*string, error) { return w.copyOne(ctx, m, o) })
 		if err != nil {
 			// Progress up to o is recorded — the batch retries from here.
 			return fmt.Errorf("copy %s/%s: %w", o.Collection, o.Key, err)
@@ -564,24 +578,40 @@ func (w *StorageMigrationWorker) stepCopying(ctx context.Context, m StorageMigra
 }
 
 // copyOne copies o's bytes from the source to the target bucket, under the
-// same key. A trashed object whose bytes are already gone from the source is
-// skipped: there is nothing to move, and RestoreObject refuses it wherever
-// the collection is bound.
-func (w *StorageMigrationWorker) copyOne(ctx context.Context, m StorageMigration, o ObjectRef) error {
+// same key, and reports the ETag the source held just before the copy: nil
+// without an Identity. A trashed object whose bytes are already gone from the
+// source is skipped: there is nothing to move, and RestoreObject refuses it
+// wherever the collection is bound.
+//
+// The ETag is read before the copy, so a write racing the copy shows to the
+// cleanup as one the source holds and the target may lack, never the other
+// way round (sourceWrittenSinceCopy).
+func (w *StorageMigrationWorker) copyOne(ctx context.Context, m StorageMigration, o ObjectRef) (*string, error) {
 	src := m.sourceLoc(o)
 	if o.Trashed {
 		gone, err := w.bytesGone(ctx, src)
 		if err != nil {
-			return fmt.Errorf("head source: %w", err)
+			return nil, fmt.Errorf("head source: %w", err)
 		}
 		if gone {
 			w.log().Warn("trashed object has no bytes in the source; nothing to copy",
 				zap.String("tenant_id", m.TenantID.String()),
 				zap.String("collection", o.Collection), zap.String("key", o.Key))
-			return nil
+			return nil, nil
 		}
 	}
-	return w.Copier.CopyObject(ctx, src, m.targetLoc(o))
+	var sourceETag *string
+	if w.Identity != nil {
+		etag, err := w.Identity.ObjectETag(ctx, src)
+		if err != nil {
+			return nil, fmt.Errorf("read the source's ETag: %w", err)
+		}
+		sourceETag = &etag
+	}
+	if err := w.Copier.CopyObject(ctx, src, m.targetLoc(o)); err != nil {
+		return nil, err
+	}
+	return sourceETag, nil
 }
 
 // bytesGone reports whether the backend confirms there is no object at loc.
@@ -661,7 +691,7 @@ func (w *StorageMigrationWorker) catchUp(ctx context.Context, m StorageMigration
 		if ctx.Err() != nil {
 			break
 		}
-		held, err := w.Repo.CatchUpObject(ctx, m.Read(), o, func(ctx context.Context) (*string, error) {
+		held, err := w.Repo.CatchUpObject(ctx, m.Read(), o, func(ctx context.Context) (CopyIdentity, error) {
 			return w.catchUpOne(ctx, m, o.ObjectRef)
 		})
 		if errors.Is(err, ErrMigrationMoved) {
@@ -685,24 +715,25 @@ func (w *StorageMigrationWorker) catchUp(ctx context.Context, m StorageMigration
 	return false, nil
 }
 
-// catchUpOne copies o to the target as the copy does, and reports the ETag
-// the target holds for the copy: nil without an Identity, or for a trashed
-// object with no bytes to move.
-func (w *StorageMigrationWorker) catchUpOne(ctx context.Context, m StorageMigration, o ObjectRef) (*string, error) {
-	if err := w.copyOne(ctx, m, o); err != nil {
-		return nil, err
+// catchUpOne copies o to the target as the copy does, and reports the ETags
+// the source held before the copy and the target holds for it: nil without
+// an Identity, or for a trashed object with no bytes to move.
+func (w *StorageMigrationWorker) catchUpOne(ctx context.Context, m StorageMigration, o ObjectRef) (CopyIdentity, error) {
+	source, err := w.copyOne(ctx, m, o)
+	if err != nil {
+		return CopyIdentity{}, err
 	}
 	if w.Identity == nil {
-		return nil, nil
+		return CopyIdentity{}, nil
 	}
 	etag, err := w.Identity.ObjectETag(ctx, m.targetLoc(o))
 	if errors.Is(err, ErrObjectMissing) && o.Trashed {
-		return nil, nil
+		return CopyIdentity{}, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("read the copy's ETag: %w", err)
+		return CopyIdentity{}, fmt.Errorf("read the copy's ETag: %w", err)
 	}
-	return &etag, nil
+	return CopyIdentity{Source: source, Target: &etag}, nil
 }
 
 // stepVerifying confirms the migration is sound before serving from the
@@ -827,7 +858,7 @@ func (w *StorageMigrationWorker) verifyIdentity(ctx context.Context, m StorageMi
 // verify listed it, which took the target's copy with it (package
 // purgedebt). That is no fault of the copy.
 func (w *StorageMigrationWorker) purgedSinceListed(ctx context.Context, m StorageMigration, o ObjectRef) (bool, error) {
-	held, err := w.Repo.HoldObject(ctx, m.TenantID, o, nil, func(context.Context) error { return nil })
+	held, err := w.Repo.HoldObject(ctx, m.TenantID, o, nil, func(context.Context) (*string, error) { return nil, nil })
 	if err != nil {
 		return false, &verifyFailure{object: o.Collection + "/" + o.Key, problem: verifyProblemUnreadable, cause: err}
 	}
@@ -936,9 +967,10 @@ func (w *StorageMigrationWorker) cleanSource(ctx context.Context, m StorageMigra
 	w.log().Info("migration cleanup pass",
 		zap.String("tenant_id", m.TenantID.String()),
 		zap.Int64("deleted", tally[cleanDeleted]), zap.Int64("carried", tally[cleanCarried]),
-		zap.Int64("bound_elsewhere", tally[cleanBoundElsewhere]), zap.Int64("kept", tally[cleanKept]))
-	if tally[cleanKept] > 0 {
-		return false, fmt.Errorf("%w: %d objects", ErrCleanupKept, tally[cleanKept])
+		zap.Int64("bound_elsewhere", tally[cleanBoundElsewhere]), zap.Int64("kept", tally[cleanKept]),
+		zap.Int64("awaiting_event", tally[cleanAwaitingEvent]))
+	if kept := tally[cleanKept] + tally[cleanAwaitingEvent]; kept > 0 {
+		return false, fmt.Errorf("%w: %d objects", ErrCleanupKept, kept)
 	}
 	return true, nil
 }
@@ -963,6 +995,10 @@ const (
 	// cleanKept: neither bucket holds the object as its row records it;
 	// the source copy is kept.
 	cleanKept
+	// cleanAwaitingEvent: the source holds a write the copy did not take
+	// and no storage event has recorded yet; the source copy is kept for
+	// the late event to move (sourceWrittenSinceCopy).
+	cleanAwaitingEvent
 	// cleanOutcomes is the number of outcomes, for a tally.
 	cleanOutcomes
 )
@@ -1003,6 +1039,10 @@ func (w *StorageMigrationWorker) cleanOne(ctx context.Context, m StorageMigratio
 		return 0, fmt.Errorf("head target: %w", err)
 	}
 	if inTarget && targetSize == o.SizeBytes {
+		written, err := w.sourceWrittenSinceCopy(ctx, log, m, o, src)
+		if err != nil || written {
+			return cleanAwaitingEvent, err
+		}
 		return cleanDeleted, w.Deleter.DeleteObject(ctx, src)
 	}
 	sourceSize, inSource, err := w.headSize(ctx, src)
@@ -1018,6 +1058,40 @@ func (w *StorageMigrationWorker) cleanOne(ctx context.Context, m StorageMigratio
 		return cleanKept, nil
 	}
 	return w.carry(ctx, log, m, o, src, dst)
+}
+
+// sourceWrittenSinceCopy reports whether the source holds a write of o that
+// the copy did not take and the object's row does not record: an overwrite
+// made behind the copy's cursor whose storage event has not arrived. In an
+// explicit-mode bucket that event is what records it, and the ingest moves
+// it into the target (statemachine.LateSourceWrite) only while the source
+// still holds it, so the cleanup keeps the source copy until then.
+//
+// It compares the source's ETag with the one the source reported when the
+// copy last took the object (ObjectRef.SourceETag): the same bucket's ETags
+// for the same key, never one bucket's against another's. It looks only at a
+// live object whose last recorded write predates the rebind: one written
+// since was written in the target, later than anything in the source, and a
+// late event does not move a trashed object. Without a record (no Identity,
+// or a copy made before migration 120) there is nothing to compare with.
+func (w *StorageMigrationWorker) sourceWrittenSinceCopy(ctx context.Context, log *zap.Logger, m StorageMigration, o ObjectRef, src CopyLocation) (bool, error) {
+	if w.Identity == nil || o.SourceETag == nil || o.Trashed || m.ReboundAt.IsZero() || !o.WrittenAt.Before(m.ReboundAt) {
+		return false, nil
+	}
+	etag, err := w.Identity.ObjectETag(ctx, src)
+	if errors.Is(err, ErrObjectMissing) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read the source's ETag: %w", err)
+	}
+	if etag == *o.SourceETag {
+		return false, nil
+	}
+	log.Warn("cleanup: the source holds a write the copy did not take and no storage event has recorded; keeping its source copy for the late event",
+		zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName),
+		zap.String("copied_etag", *o.SourceETag), zap.String("source_etag", etag))
+	return true, nil
 }
 
 // carry copies o from the source to the target, where cleanup found it

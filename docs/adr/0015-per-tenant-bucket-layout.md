@@ -658,6 +658,37 @@ Not covered (BACKLOG): an event delivered after a retry has started, and a
 row whose sequencer came from the source, which the target's event cannot be
 ordered against.
 
+## Addendum (2026-11-24): the cleanup keeps a source write the copy did not take
+
+A late source write is moved only while the source holds it. The cleanup
+deleted the source once the retention window passed and the target held the
+object at its recorded size, whatever events were still on their way; one
+delivered after it found nothing to move, and the write was lost.
+
+Waiting for the event stream was the other option: a per-bucket mark of the
+latest event handled. It proves nothing on a transport that drops or
+reorders events, and never advances for a bucket nobody writes to. The
+cleanup checks the bytes instead.
+
+- **The copy records what it took.** Just before the copy, and the
+  catch-up, take an object's bytes, the source's ETag for its key is read
+  and recorded on the transaction that holds the object's rows
+  (`storage_migration_source_etags`, migration 120). It is read before the
+  copy, so a write racing the copy shows as one the target may lack.
+- **The cleanup compares the same bucket's ETags.** For a live object whose
+  last recorded write predates the rebind, a source ETag that differs from
+  the recorded one is a write no event has recorded yet. Its source copy is
+  kept, logged, and the migration stays `completed` (`ErrCleanupKept`);
+  `Completed` is a state the late event is moved in, and the next pass
+  deletes the source copy once it has been.
+- **Nothing to compare, nothing kept.** A trashed object (a late event does
+  not move one), a row written since the rebind, and a copy with no record
+  (no `Identity`, a migration copied before migration 120) are cleaned as
+  before.
+
+Not covered (BACKLOG): an event the transport dropped never arrives, and the
+cleanup waits for it.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

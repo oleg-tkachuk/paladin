@@ -563,20 +563,19 @@ the same commit. Treat this file like a runtime invariant.
   reset them stop doing so, and sqlc is regenerated.
 - **Blockers:** a release that no longer reads them is deployed everywhere.
 
-### A source write whose storage event outlives the migration's retention is lost
+### A source write whose storage event never arrives holds the cleanup
 
 - **Status:** Deferred.
-- **Reason:** a late source write is moved into the target only while the
-  source still holds it (`PromoteLateSourceWriteInTx`). The cleanup deletes
-  the source once the retention window has passed, whatever events for it
-  are still queued; one delivered after that finds nothing to move and is
-  logged at Error. Nothing bounds how late an event source delivers.
-- **Definition of Done:** the cleanup waits until every event source that
-  reports on the migration's source bucket has delivered past the rebind
-  (a per-bucket high-water mark the ingest records), or the operator is told
-  which keys were lost; a test delivers an event after the cleanup.
-- **Blockers:** an event high-water mark per bucket, which the ingest does
-  not keep.
+- **Reason:** the cleanup keeps a source copy whose ETag no longer matches
+  the one the copy read (migration 120) until the late storage event moves
+  the write into the target. An event the transport dropped never comes: the
+  migration stays `completed`, and each pass logs the key at Warn. Nothing is
+  lost, but nothing settles it either; the cleanup does not move the write
+  itself, as a target write whose own event is late could be overwritten.
+- **Definition of Done:** an operator can settle such a key — move the
+  source's bytes or discard them — through an RPC that records the decision;
+  a test settles one and the migration is cleaned.
+- **Blockers:** none.
 
 ### A late target write whose event arrives after a retry has started is dropped
 

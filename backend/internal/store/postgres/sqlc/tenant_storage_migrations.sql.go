@@ -275,6 +275,18 @@ func (q *Queries) ForgetStorageMigrationCopiedBack(ctx context.Context, tenantID
 	return err
 }
 
+const forgetStorageMigrationSourceETags = `-- name: ForgetStorageMigrationSourceETags :exec
+DELETE FROM storage_migration_source_etags WHERE tenant_id = $1
+`
+
+// Drops what the copies recorded of the source (migration 120): when an
+// attempt's copy starts, once the source is cleaned, and once a rollback has
+// rebound the tenant back.
+func (q *Queries) ForgetStorageMigrationSourceETags(ctx context.Context, tenantID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, forgetStorageMigrationSourceETags, tenantID)
+	return err
+}
+
 const getStorageMigration = `-- name: GetStorageMigration :one
 SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at, m.rebound_back_at,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
@@ -782,12 +794,15 @@ SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS s
        (o.state = 'DELETED')::bool AS trashed,
        sb.name AS bound_backend_name, b.name AS bound_bucket_name,
        o.bytes_written_at AS written_at,
-       u.written_at AS caught_up_written_at, u.etag AS caught_up_etag
+       u.written_at AS caught_up_written_at, u.etag AS caught_up_etag,
+       s.etag AS source_etag
 FROM objects o
 JOIN collections c       ON c.id = o.collection_id
 JOIN buckets b           ON b.id = c.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
 LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
+LEFT JOIN storage_migration_source_etags s
+       ON s.tenant_id = o.tenant_id AND s.collection_id = o.collection_id AND s.path = o.path
 WHERE o.tenant_id = $1
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
@@ -807,6 +822,7 @@ type MigrationListTenantObjectsRow struct {
 	WrittenAt         pgtype.Timestamptz `json:"written_at"`
 	CaughtUpWrittenAt pgtype.Timestamptz `json:"caught_up_written_at"`
 	CaughtUpEtag      *string            `json:"caught_up_etag"`
+	SourceEtag        *string            `json:"source_etag"`
 }
 
 // Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
@@ -826,7 +842,9 @@ type MigrationListTenantObjectsRow struct {
 // bound_* is the bucket the collection is bound to now: cleanup deletes a
 // source copy only of an object read from the target. written_at and
 // caught_up_* are when its bytes were last written and what the catch-up
-// copied of them (migration 116), for the verify.
+// copied of them (migration 116), for the verify. source_etag is what the
+// source reported for the key when it was last copied (migration 120), for
+// the cleanup.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
 	rows, err := q.db.Query(ctx, migrationListTenantObjects,
 		tenantID,
@@ -851,6 +869,7 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 			&i.WrittenAt,
 			&i.CaughtUpWrittenAt,
 			&i.CaughtUpEtag,
+			&i.SourceEtag,
 		); err != nil {
 			return nil, err
 		}
@@ -1039,6 +1058,28 @@ SET written_at = EXCLUDED.written_at, copied_at = now()
 // transaction that holds the migration row as read.
 func (q *Queries) RecordStorageMigrationCopiedBack(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, writtenAt pgtype.Timestamptz) error {
 	_, err := q.db.Exec(ctx, recordStorageMigrationCopiedBack, tenantID, objectID, writtenAt)
+	return err
+}
+
+const recordStorageMigrationSourceETag = `-- name: RecordStorageMigrationSourceETag :exec
+INSERT INTO storage_migration_source_etags (tenant_id, collection_id, path, etag)
+SELECT c.tenant_id, c.id, $1::text, $2::text
+FROM collections c
+WHERE c.tenant_id = $3 AND c.name = $4::text
+ON CONFLICT (tenant_id, collection_id, path) DO UPDATE
+SET etag = EXCLUDED.etag, read_at = now()
+`
+
+// Records the ETag the source reported for an object's key just before a
+// copy or the catch-up took its bytes (migration 120), on the transaction
+// that holds the object's rows. The cleanup compares the source against it.
+func (q *Queries) RecordStorageMigrationSourceETag(ctx context.Context, path string, etag string, tenantID pgtype.UUID, collectionName string) error {
+	_, err := q.db.Exec(ctx, recordStorageMigrationSourceETag,
+		path,
+		etag,
+		tenantID,
+		collectionName,
+	)
 	return err
 }
 

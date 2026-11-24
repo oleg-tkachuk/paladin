@@ -179,6 +179,23 @@ WHERE EXISTS (SELECT 1 FROM tenant_storage_migrations m
 ON CONFLICT (tenant_id, object_id) DO UPDATE
 SET written_at = EXCLUDED.written_at, etag = EXCLUDED.etag, copied_at = now();
 
+-- name: RecordStorageMigrationSourceETag :exec
+-- Records the ETag the source reported for an object's key just before a
+-- copy or the catch-up took its bytes (migration 120), on the transaction
+-- that holds the object's rows. The cleanup compares the source against it.
+INSERT INTO storage_migration_source_etags (tenant_id, collection_id, path, etag)
+SELECT c.tenant_id, c.id, sqlc.arg('path')::text, sqlc.arg('etag')::text
+FROM collections c
+WHERE c.tenant_id = sqlc.arg('tenant_id') AND c.name = sqlc.arg('collection_name')::text
+ON CONFLICT (tenant_id, collection_id, path) DO UPDATE
+SET etag = EXCLUDED.etag, read_at = now();
+
+-- name: ForgetStorageMigrationSourceETags :exec
+-- Drops what the copies recorded of the source (migration 120): when an
+-- attempt's copy starts, once the source is cleaned, and once a rollback has
+-- rebound the tenant back.
+DELETE FROM storage_migration_source_etags WHERE tenant_id = $1;
+
 -- name: SetIdleInTransactionTimeout :one
 -- Sets idle_in_transaction_session_timeout for the rest of the transaction
 -- (set_config's is_local), for one held open across a copy (HoldObject).
@@ -262,17 +279,22 @@ FOR UPDATE;
 -- bound_* is the bucket the collection is bound to now: cleanup deletes a
 -- source copy only of an object read from the target. written_at and
 -- caught_up_* are when its bytes were last written and what the catch-up
--- copied of them (migration 116), for the verify.
+-- copied of them (migration 116), for the verify. source_etag is what the
+-- source reported for the key when it was last copied (migration 120), for
+-- the cleanup.
 SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
        (o.state = 'DELETED')::bool AS trashed,
        sb.name AS bound_backend_name, b.name AS bound_bucket_name,
        o.bytes_written_at AS written_at,
-       u.written_at AS caught_up_written_at, u.etag AS caught_up_etag
+       u.written_at AS caught_up_written_at, u.etag AS caught_up_etag,
+       s.etag AS source_etag
 FROM objects o
 JOIN collections c       ON c.id = o.collection_id
 JOIN buckets b           ON b.id = c.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
 LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
+LEFT JOIN storage_migration_source_etags s
+       ON s.tenant_id = o.tenant_id AND s.collection_id = o.collection_id AND s.path = o.path
 WHERE o.tenant_id = $1
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read

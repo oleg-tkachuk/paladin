@@ -262,6 +262,10 @@ type Querier interface {
 	// Drops what a rollback recorded (migration 118): when a rollback starts,
 	// and once it has rebound the tenant back.
 	ForgetStorageMigrationCopiedBack(ctx context.Context, tenantID pgtype.UUID) error
+	// Drops what the copies recorded of the source (migration 120): when an
+	// attempt's copy starts, once the source is cleaned, and once a rollback has
+	// rebound the tenant back.
+	ForgetStorageMigrationSourceETags(ctx context.Context, tenantID pgtype.UUID) error
 	GetAPIToken(ctx context.Context, id pgtype.UUID) (GetAPITokenRow, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
@@ -792,7 +796,9 @@ type Querier interface {
 	// bound_* is the bucket the collection is bound to now: cleanup deletes a
 	// source copy only of an object read from the target. written_at and
 	// caught_up_* are when its bytes were last written and what the catch-up
-	// copied of them (migration 116), for the verify.
+	// copied of them (migration 116), for the verify. source_etag is what the
+	// source reported for the key when it was last copied (migration 120), for
+	// the cleanup.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// The objects the catch-up copies before the rebind: live or trashed, in a
 	// private collection, whose bytes were written since the copy started and
@@ -916,6 +922,10 @@ type Querier interface {
 	// Records the write a copy back took, or decided to leave, on the
 	// transaction that holds the migration row as read.
 	RecordStorageMigrationCopiedBack(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, writtenAt pgtype.Timestamptz) error
+	// Records the ETag the source reported for an object's key just before a
+	// copy or the catch-up took its bytes (migration 120), on the transaction
+	// that holds the object's rows. The cleanup compares the source against it.
+	RecordStorageMigrationSourceETag(ctx context.Context, path string, etag string, tenantID pgtype.UUID, collectionName string) error
 	// Undoes a claim whose handling failed, so the broker's redelivery is
 	// handled rather than skipped as a duplicate.
 	ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error
