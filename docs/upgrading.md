@@ -89,6 +89,162 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## Unreleased — a storage migration's cleanup keeps a source write no event has recorded
+
+- Migration 120 adds the `storage_migration_source_etags` table: the ETag
+  the source bucket reported for each object key just before the migration
+  copied it. The copy and the catch-up now read it with one extra HEAD per
+  object.
+- The cleanup of a completed migration no longer deletes a source copy
+  whose ETag differs from the one the copy read, for a live object whose
+  last recorded write predates the rebind: that is an overwrite whose
+  storage event has not arrived. It is kept and logged at Warn ("cleanup:
+  the source holds a write the copy did not take …"), and the migration
+  stays `completed` until the event moves the write into the dedicated
+  bucket; the next pass then deletes the source copy.
+- If no event will move the write — it was dropped, or the ingest skipped
+  it ("late source write not moved"), as it does for every SeaweedFS event,
+  which carries no sequencer — the migration stays `completed` and the line
+  repeats on every pass, naming the key, with a HEAD of each of the
+  tenant's objects. The source keeps the bytes; nothing is lost.
+- A migration that copied before this release has no recorded ETags. Its
+  cleanup behaves as before.
+
+## Unreleased — a late target write after a storage migration's rollback is moved
+
+- Migration 119 adds `tenant_storage_migrations.rebound_back_at`: when a
+  rolled-back migration rebound the tenant's collections back to the source.
+  The rebind back sets it; a retry clears it.
+- A storage event for an overwrite in a rolled-back migration's dedicated
+  bucket that is delivered after the rebind back is no longer skipped: the
+  ingest copies the object's bytes into the source bucket and promotes them
+  there, logged as "late source write moved into the collection's bucket".
+  It is skipped, logged at Info, when the event's time is missing, earlier
+  than a minute after the migration's rebind (the migration's own copies
+  raise such events, and the store's clock is not the database's), or taken
+  from the ingest's own clock because the payload carried none; when the
+  object was written since the rebind back; or once the dedicated bucket is
+  being deleted or the migration is retried.
+
+## Unreleased — bucket replication copies objects
+
+- With `worker.jobs.replication.enabled: true`, the replication worker now
+  copies each replicated bucket's objects to its
+  `replication.destination_bucket`, on the same backend or another. It used to
+  log what it would copy and copy nothing. Check each bucket with
+  `replication.enabled` before deploying: its destination must be a
+  registered bucket, ready, on an enabled backend that is not draining, or
+  the bucket is deferred every tick.
+- The first pass over a replicated bucket copies every `AVAILABLE` object in
+  it, however old; so does the first pass after its destination or filter
+  changes. Expect that traffic on the first deploy.
+- An object rewritten in place is copied again.
+- A purged object's replica is deleted from the destination — a permanent
+  delete, the trash's expiry, or its tenant's purge. A move to the trash
+  keeps the replica.
+- A replica keeps its source's `Cache-Control`, `Content-Disposition`,
+  `Content-Encoding`, `Content-Language`, content type and user metadata,
+  across backends as well as within one.
+- `worker.jobs.replication.lookback_window` is removed; delete it from any
+  values or config that set it, since the strict loader refuses an unknown
+  key.
+- `SetReplication` refuses a `filter` that does not compile as CEL, with
+  `INVALID_ARGUMENT`. A stored filter that does not compile stops its
+  bucket's replication, logged at ERROR, until it is fixed.
+- Migrations 121 and 122 add triggers on `objects` and `buckets` and drop
+  `replication_state`. See ADR-0050.
+
+## Unreleased — the remaining storage migration windows are closed
+
+- A storage event for an overwrite in a migration's source bucket that is
+  delivered after the migration rebound the collection is no longer skipped:
+  the ingest copies the object's bytes into the collection's new bucket and
+  promotes them there, logged as "late source write moved into the
+  collection's bucket". It is skipped, logged at Info, when the object was
+  written in the new bucket since the rebind. An event delivered after the
+  migration's cleanup deleted the source copy is logged at Error: those bytes
+  are gone. The `serve ingest` role now copies objects between buckets, with
+  the storage credentials it already uses for its HEADs.
+- Every promote now holds a transaction-scoped advisory lock for its tenant,
+  shared; starting or retrying a storage migration, and handing a stuck one
+  to the rollback, takes it exclusively, so the start waits for the
+  tenant's promotes in flight.
+- `CreateCollection` for a private collection answers `ABORTED` ("a storage
+  migration moved the tenant's collections away from this bucket; retry")
+  when it names the bucket the tenant's storage migration has just moved its
+  collections away from: the source between the rebind and the cleanup, or
+  the dedicated bucket after a rollback. A retry that names no bucket
+  resolves the tenant's new default binding. A creation racing the rebind
+  is now moved with the tenant's other collections.
+- A rolling-back migration records each object it copies back (migration
+  118 adds the `storage_migration_copied_back` table) instead of walking a
+  cursor, and logs each pass with its counts. An object whose upload
+  committed while a batch ran is no longer left in the dedicated bucket
+  alone. A migration that is rolling back when this ships copies back
+  everything written since its rebind again; the copies are same-key and
+  harmless. `tenant_storage_migrations.rollback_cursor_at` and
+  `rollback_cursor_id` are no longer read.
+
+## Unreleased — writes that race a storage migration's rebind are not lost
+
+- A completion, a copy or a storage event that promotes an object now
+  checks, on the promote's own transaction, that the object's collection is
+  still bound to the bucket its bytes were found in. When a storage
+  migration rebound the collection in between, the promote is refused:
+  `CompleteObject` and `CopyObject` answer `UNAVAILABLE` ("the collection
+  moved to another bucket while the object was written; retry"), and a
+  retry moves the upload into the new bucket. A batch copy item fails the
+  same way and can be retried. A storage event the rebind overtook is
+  skipped with a warning, and the reconciler settles its upload.
+- A multipart upload initiated before a storage migration's rebind and
+  completed after it is moved into the collection's new bucket before it is
+  promoted; it was lost at the migration's cleanup. Its `etag` is the one the
+  new bucket reports for the moved copy. A move that fails answers
+  `UNAVAILABLE`; the object stays pending and the reconciler settles it once
+  the session's deadline passes.
+- A migration's cleanup deletes an object's copy in the source bucket only
+  once the target holds it at its recorded size, carrying it to the target
+  first when only the source does. A copy neither bucket holds as recorded
+  is kept and logged at Error, and the migration stays `completed` until it
+  is resolved.
+- Before a migration rebinds a tenant it copies again every object written
+  since its copy started (migration 116 adds
+  `tenant_storage_migrations.copy_started_at` and the
+  `storage_migration_caught_up` table; 117 builds an index on
+  `objects (tenant_id, bytes_written_at)` concurrently). The migration stays
+  in `rebinding` while it catches up, logging each pass with its counts, and
+  a rebind refused by writes since the last pass is logged at Warn. Objects
+  uploaded or overwritten behind the copy's cursor no longer roll the
+  migration back or leave the tenant reading older bytes. The verify also
+  checks such an object's write time and its ETag against the catch-up's
+  copy, not its size alone. A migration already past its copy when this
+  ships has no `copy_started_at` and counts from its creation: one in
+  `rebinding` catches up on every write since, and one in `verifying` rolls
+  back if anything was written during its copy, and can be retried.
+- While a migration is provisioning, copying, rebinding, verifying or
+  rolling back, every promote of one of the tenant's objects holds the
+  migration's row for its transaction (`FOR SHARE`). Promotes do not wait on
+  each other; the migration's rebind waits for the promotes in flight.
+
+## Unreleased — an upload presigned before a storage migration's rebind completes
+
+- An upload records the bucket its URL is signed for. When a storage
+  migration rebinds the collection between `UploadObject` and the PUT, the
+  bytes land in that bucket, and `CompleteObject` now finds them there and
+  moves them into the collection's new bucket before promoting the object.
+  It used to answer `FAILED_PRECONDITION` ("object not uploaded yet"), and the
+  object was discarded once its URL expired. The reconciler settles an
+  upload left without a `CompleteObject` the same way.
+- The object's `etag` is the one the collection's bucket reports for the
+  moved copy, which can differ from the ETag the PUT returned. A
+  `CompleteObject` that passes the PUT's ETag is still accepted.
+- A disabled backend behind the bucket the URL named refuses the completion
+  (`FAILED_PRECONDITION`, `ERROR_REASON_BACKEND_DISABLED`); a failed move
+  answers `UNAVAILABLE`, and a retry repeats it.
+- A migration's cleanup of the source bucket waits while an upload whose URL
+  names it is still pending, at most until its URL expires and the
+  reconciler settles it.
+
 ## Unreleased — batches ask the bucket gate again when they run
 
 - The tag, restore and trash batches fail when their collection's backend was
