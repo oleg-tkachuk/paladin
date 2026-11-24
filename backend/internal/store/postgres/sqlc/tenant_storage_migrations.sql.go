@@ -90,7 +90,7 @@ CROSS JOIN buckets tb
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE ssb.name = $2 AND sb.name = $3
   AND tsb.name = $4 AND tb.name = $5
-RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at, rebound_at, rollback_cursor_at, rollback_cursor_id, copy_started_at, rebound_back_at, writes_close_at, failed_passes
+RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at, writes_close_at, failed_passes
 `
 
 // A tenant's storage migration (ADR-0015, ADR-0051): the tenant's objects
@@ -123,11 +123,6 @@ func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UU
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
-		&i.ReboundAt,
-		&i.RollbackCursorAt,
-		&i.RollbackCursorID,
-		&i.CopyStartedAt,
-		&i.ReboundBackAt,
 		&i.WritesCloseAt,
 		&i.FailedPasses,
 	)
@@ -198,7 +193,7 @@ func (q *Queries) FinishStorageMigrationRollback(ctx context.Context, toState st
 }
 
 const getStorageMigration = `-- name: GetStorageMigration :one
-SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at, m.rebound_back_at, m.writes_close_at, m.failed_passes,
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
 FROM tenant_storage_migrations m
@@ -242,11 +237,6 @@ func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID)
 		&i.TenantStorageMigration.CreatedAt,
 		&i.TenantStorageMigration.UpdatedAt,
 		&i.TenantStorageMigration.CompletedAt,
-		&i.TenantStorageMigration.ReboundAt,
-		&i.TenantStorageMigration.RollbackCursorAt,
-		&i.TenantStorageMigration.RollbackCursorID,
-		&i.TenantStorageMigration.CopyStartedAt,
-		&i.TenantStorageMigration.ReboundBackAt,
 		&i.TenantStorageMigration.WritesCloseAt,
 		&i.TenantStorageMigration.FailedPasses,
 		&i.SourceBackendName,
@@ -295,7 +285,7 @@ func (q *Queries) LatestStorageMigration(ctx context.Context, tenantID pgtype.UU
 }
 
 const listActiveStorageMigrations = `-- name: ListActiveStorageMigrations :many
-SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at, m.rebound_back_at, m.writes_close_at, m.failed_passes,
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
 FROM tenant_storage_migrations m
@@ -348,11 +338,6 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 			&i.TenantStorageMigration.CreatedAt,
 			&i.TenantStorageMigration.UpdatedAt,
 			&i.TenantStorageMigration.CompletedAt,
-			&i.TenantStorageMigration.ReboundAt,
-			&i.TenantStorageMigration.RollbackCursorAt,
-			&i.TenantStorageMigration.RollbackCursorID,
-			&i.TenantStorageMigration.CopyStartedAt,
-			&i.TenantStorageMigration.ReboundBackAt,
 			&i.TenantStorageMigration.WritesCloseAt,
 			&i.TenantStorageMigration.FailedPasses,
 			&i.SourceBackendName,
@@ -798,10 +783,6 @@ SET source_bucket_id          = sb.id,
     cleanup_after             = NULL,
     completed_at              = NULL,
     cleaned_at                = NULL,
-    rebound_at                = NULL,
-    rebound_back_at           = NULL,
-    rollback_cursor_at        = NULL,
-    rollback_cursor_id        = NULL,
     updated_at                = now()
 FROM buckets sb
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
@@ -810,7 +791,7 @@ JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.id = $2 AND m.state = 'failed'
   AND ssb.name = $3 AND sb.name = $4
   AND tsb.name = $5 AND tb.name = $6
-RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at, m.rebound_back_at, m.writes_close_at, m.failed_passes
+RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes
 `
 
 // Starts a failed migration over from the beginning, in place: the row is the
@@ -846,69 +827,6 @@ func (q *Queries) RetryFailedStorageMigration(ctx context.Context, cleanupRetent
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.CompletedAt,
-		&i.ReboundAt,
-		&i.RollbackCursorAt,
-		&i.RollbackCursorID,
-		&i.CopyStartedAt,
-		&i.ReboundBackAt,
-		&i.WritesCloseAt,
-		&i.FailedPasses,
-	)
-	return i, err
-}
-
-const rollBackStuckStorageMigration = `-- name: RollBackStuckStorageMigration :one
-UPDATE tenant_storage_migrations m
-SET state              = 'rolling_back',
-    rebound_at         = COALESCE(m.rebound_at,
-                                  CASE WHEN d.set_by = 'storage-migration' THEN d.set_at
-                                       ELSE m.created_at END),
-    rebound_back_at    = NULL,
-    rollback_cursor_at = NULL,
-    rollback_cursor_id = NULL,
-    writes_close_at    = NULL,
-    failed_passes      = 0,
-    updated_at         = now()
-FROM tenant_default_bindings d
-WHERE m.id = $1 AND m.state = 'failed'
-  AND d.tenant_id = m.tenant_id AND d.bucket_id = m.target_bucket_id
-RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at, m.rebound_back_at, m.writes_close_at, m.failed_passes
-`
-
-// A migration that failed its verify before rollbacks existed: 'failed', with
-// the tenant still on the dedicated bucket. Moves it to 'rolling_back' for
-// the worker, only while it is still 'failed' and the tenant's default
-// binding still names its target bucket — the tenant serves from where this
-// migration put it. Such a row has no rebound_at: the default binding's
-// set_at is the rebind transaction's now() when the migration set it (which
-// set_by records), and the migration's own creation is the fallback, earlier
-// than any rebind of it.
-func (q *Queries) RollBackStuckStorageMigration(ctx context.Context, id pgtype.UUID) (TenantStorageMigration, error) {
-	row := q.db.QueryRow(ctx, rollBackStuckStorageMigration, id)
-	var i TenantStorageMigration
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.SourceBucketID,
-		&i.TargetBucketID,
-		&i.State,
-		&i.ObjectsTotal,
-		&i.ObjectsCopied,
-		&i.CursorCollection,
-		&i.CursorPath,
-		&i.Error,
-		&i.Attempts,
-		&i.CleanupRetentionSeconds,
-		&i.CleanupAfter,
-		&i.CleanedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.CompletedAt,
-		&i.ReboundAt,
-		&i.RollbackCursorAt,
-		&i.RollbackCursorID,
-		&i.CopyStartedAt,
-		&i.ReboundBackAt,
 		&i.WritesCloseAt,
 		&i.FailedPasses,
 	)

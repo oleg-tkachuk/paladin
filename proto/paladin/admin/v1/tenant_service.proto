@@ -78,11 +78,12 @@ service TenantService {
   }
 
   // MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-  // (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
-  // async copy job that server-side-copies every object into it, then rebinds
-  // the collections and flips the layout. Returns the initial migration status;
-  // poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
-  // tenant is not currently `shared` or a migration is already in flight.
+  // (ADR-0015, ADR-0051). It provisions the tenant's own bucket and starts an
+  // async migration that points new uploads at it, flips the layout, and
+  // moves the tenant's objects into it one by one. Returns the initial
+  // migration status; poll GetTenantStorageMigration for progress.
+  // FAILED_PRECONDITION if the tenant is not currently `shared` or a migration
+  // is already in flight; a `failed` one is retried.
   rpc MigrateTenantStorageLayout(MigrateTenantStorageLayoutRequest) returns (StorageMigrationStatus);
 
   // GetTenantStorageMigration returns the current migration status for a
@@ -296,7 +297,8 @@ message MigrateTenantStorageLayoutRequest {
   string target_backend_id = 2;
   // cleanup_retention_seconds — how long the old (shared) copies are kept after
   // the migration completes before they are deleted. Optional; 0 uses the
-  // server default (24h). A rollback is only possible within this window.
+  // server default (24h). Never less than limits.presign.max_ttl, so a GET
+  // URL signed before an object moved keeps working until it expires.
   int64 cleanup_retention_seconds = 3;
 }
 
@@ -310,16 +312,20 @@ message GetTenantStorageMigrationRequest {
 message StorageMigrationStatus {
   // tenant — "tenants/{tenant_id}".
   string tenant = 1;
-  // state — provisioning | copying | rebinding | verifying | completed | failed.
+  // state — provisioning | moving | completed | cleaned | rolling_back | failed.
   string state = 2;
+  // objects_total — the objects moved plus those still to move, as of the
+  // last pass.
   int64 objects_total = 3;
+  // objects_copied — the objects moved in the current direction (back to the
+  // source while rolling_back).
   int64 objects_copied = 4;
   // Bucket references as resource names, consistent with
   // TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
   string source_bucket = 5;
   string target_bucket = 6;
   reserved 7, 8;
-  // error — non-empty only in the `failed` state.
+  // error — why the migration is rolling back or failed; empty otherwise.
   string error = 9;
 }
 

@@ -1,7 +1,7 @@
 # ADR-0051: An object records the bucket its bytes are in, and a storage migration moves objects one by one
 
-- **Status:** Proposed 2026-11-24 — implementation in three stages (see
-  *Stages*). Supersedes the storage-migration parts of
+- **Status:** Accepted 2026-11-24 — implemented in the three stages below.
+  Supersedes the storage-migration parts of
   [ADR-0015](0015-per-tenant-bucket-layout.md): Phase 3 and the migration
   addenda of 2026-11-24.
 - **Related:** [ADR-0015](0015-per-tenant-bucket-layout.md) (the layouts, the
@@ -117,8 +117,9 @@ started before its URL expired), it HEADs the anchor.
 - A different ETag: the URL wrote again after the last promote, and no event
   recorded it (a store that did not enforce the URL's binding, or an event
   lost). The bytes found are recorded as a promote would record them, the
-  content version moves, `paladin.object.uploaded` is enqueued on the same
-  transaction, and the anchor is cleared; logged at Warn.
+  content version moves, and the anchor is cleared; logged at Warn. The
+  reconciler enqueues no `paladin.object.uploaded` for it, as it enqueues
+  none for its promotes (BACKLOG).
 - No bytes: logged at Error and the anchor cleared; the row is left as it is
   (a storage delete event is what trashes a row whose bytes went).
 
@@ -241,7 +242,9 @@ first and leaves nothing to move.
   event — for a first upload or a later write through the same URL — is
   found within the grace, in either completion mode.
 - A move holds its object's row for the length of one copy, as the current
-  copy does.
+  copy does. A move and a settle change only bookkeeping columns, which no
+  longer bump the row's `resource_version` (migration 129), so a client's
+  compare-and-set is not refused because Paladin moved the bytes.
 - A presigned GET binds `If-Match` to the row's ETag; after a cross-backend
   move the ETag is the target's, so a URL signed after the move binds the new
   one.

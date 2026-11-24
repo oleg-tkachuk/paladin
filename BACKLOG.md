@@ -523,24 +523,20 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### The rollback cursor columns are no longer read
+### The schema does not require an object's placement and anchor
 
 - **Status:** Deferred.
-- **Reason:** the rollback records each write it copied back
-  (`storage_migration_copied_back`, migration 118) instead of walking a
-  cursor, so `tenant_storage_migrations.rollback_cursor_at` and
-  `rollback_cursor_id` are dead. Every binary so far still names them:
-  sqlc expands `sqlc.embed` and `RETURNING m.*` into column lists that do,
-  and three UPDATEs reset them. The migrate hook runs before the new pods,
-  so a drop would break every running pod's migration queries until they
-  were replaced. As of 2026-11-24 no release contains the change that
-  stopped reading them (`git tag --contains f08c401f4` is empty; latest
-  v42.1.0).
-- **Definition of Done:** first a release whose queries no longer name the
-  columns (explicit column lists for `tenant_storage_migrations`, the
-  resets removed) is deployed everywhere; then a migration drops both
-  columns and sqlc is regenerated.
-- **Blockers:** the first step, which no release has shipped yet.
+- **Reason:** every code path places a promoted object and anchors a pending
+  upload (ADR-0051), and migration 130 backfilled the rest, but nothing in
+  the schema refuses a row without them: about fifty test fixtures insert
+  object rows by hand without either, so the reads still fall back to the
+  collection's binding for a row placed nowhere.
+- **Definition of Done:** the fixtures set both, `CHECK (state = 'PENDING'
+  OR placement_bucket_id IS NOT NULL)` and `CHECK (state <> 'PENDING' OR
+  upload_bucket_id IS NOT NULL)` are added and validated, and the binding
+  fallbacks in the object reads, the hard delete and replication are
+  removed.
+- **Blockers:** none.
 
 ### The reconciler's promotes and settles announce nothing
 

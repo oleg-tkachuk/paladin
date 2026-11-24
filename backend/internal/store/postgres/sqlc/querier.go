@@ -949,15 +949,6 @@ type Querier interface {
 	// rather than sessions ended.
 	RevokeRefreshTokenFamily(ctx context.Context, id pgtype.UUID) (int64, error)
 	RevokeRefreshTokensForUser(ctx context.Context, userID pgtype.UUID) (int64, error)
-	// A migration that failed its verify before rollbacks existed: 'failed', with
-	// the tenant still on the dedicated bucket. Moves it to 'rolling_back' for
-	// the worker, only while it is still 'failed' and the tenant's default
-	// binding still names its target bucket — the tenant serves from where this
-	// migration put it. Such a row has no rebound_at: the default binding's
-	// set_at is the rebind transaction's now() when the migration set it (which
-	// set_by records), and the migration's own creation is the fallback, earlier
-	// than any rebind of it.
-	RollBackStuckStorageMigration(ctx context.Context, id pgtype.UUID) (TenantStorageMigration, error)
 	// Dual-write rotation: stash the current ref as the previous one with a
 	// validity horizon of now()+grace, then swap in the new ref. $3 is the grace
 	// window in seconds; 0 clears the previous window (instant rotation).

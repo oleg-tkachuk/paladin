@@ -60,7 +60,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0048](0048-the-console-holds-no-token.md) | The console renders the UI, and a Go session role holds the session | Accepted |
 | [0049](0049-the-console-ships-as-a-static-export.md) | The console ships as a static export behind a small Go server | Accepted |
 | [0050](0050-bucket-replication-copies-between-any-backends.md) | Bucket replication copies between any two backends, keeping state per object | Accepted |
-| [0051](0051-an-object-records-the-bucket-its-bytes-are-in.md) | An object records the bucket its bytes are in, and a storage migration moves objects one by one | Proposed |
+| [0051](0051-an-object-records-the-bucket-its-bytes-are-in.md) | An object records the bucket its bytes are in, and a storage migration moves objects one by one | Accepted |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
