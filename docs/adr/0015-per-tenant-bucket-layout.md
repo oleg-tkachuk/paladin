@@ -607,6 +607,33 @@ migration is too much to pay for one creation.
   retry resolves the binding again. It is refused, not redirected: the
   caller's authorization and the resource name already named the bucket.
 
+## Addendum (2026-11-24): the rollback records what it copied back
+
+The rollback copied back, behind a `(written at, id)` cursor, the objects
+written since the rebind. A promote stamps its write before it commits, so
+one that committed after a batch had listed past its stamp fell behind the
+cursor; the rebind back checked past the cursor only, and its bytes stayed in
+the target alone. The catch-up before the rebind had already met the same
+shape, and is mirrored:
+
+- **No cursor.** The rollback lists the live and trashed private objects
+  written at or after `rebound_at` whose latest write it has not copied back
+  (`storage_migration_copied_back`, migration 118, one row per object,
+  cleared when a rollback starts and once it has rebound back). A promote
+  committed after a batch is listed by the next.
+- **Each copy holds what it acts on.** The object's row (`FOR KEY SHARE`),
+  then the migration row as read (`FOR SHARE`, the order a promote takes
+  them), before the copy: a worker resumed past its lease copies nothing, and
+  the rebind back waits for every copy in flight. The write is recorded on
+  the same transaction, copied or deliberately left (the target lacks it, or
+  holds another size).
+- **The rebind back counts.** Under the migration row's lock — which every
+  promote holds while the migration rolls back — any object still not copied
+  back is `ErrRollbackBehind`, and nothing changes.
+
+`rollback_cursor_at` and `rollback_cursor_id` are no longer read; they are
+dropped once no running binary selects them (BACKLOG).
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

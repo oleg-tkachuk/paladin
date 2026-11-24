@@ -20,3 +20,11 @@
   the dedicated bucket after a rollback. A retry that names no bucket
   resolves the tenant's new default binding. A creation racing the rebind
   is now moved with the tenant's other collections.
+- A rolling-back migration records each object it copies back (migration
+  118 adds the `storage_migration_copied_back` table) instead of walking a
+  cursor, and logs each pass with its counts. An object whose upload
+  committed while a batch ran is no longer left in the dedicated bucket
+  alone. A migration that is rolling back when this ships copies back
+  everything written since its rebind again; the copies are same-key and
+  harmless. `tenant_storage_migrations.rollback_cursor_at` and
+  `rollback_cursor_id` are no longer read.

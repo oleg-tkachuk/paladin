@@ -517,24 +517,18 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### A storage migration's rollback can miss a write that commits behind its cursor
+### The rollback cursor columns are no longer read
 
 - **Status:** Deferred.
-- **Reason:** the rollback copies back, in `(written at, id)` order behind a
-  cursor, the objects written since the rebind. A promote stamps its write
-  before it commits, so one that commits after a batch has listed past its
-  stamp falls behind the cursor and is never copied back; the rebind back
-  checks for writes past the cursor only. The promote's fence
-  (`migstate.FencingPromotes` includes `rolling_back`) makes the rebind back
-  wait for promotes in flight, but not the batches before it. The catch-up
-  before the rebind has the same shape and records each write it copied
-  (`storage_migration_caught_up`) instead of a cursor.
-- **Definition of Done:** the rollback lists what it has not copied back
-  rather than what is past a cursor — a record of the write each copy took,
-  as the catch-up keeps — and the rebind back counts those under the
-  migration row's lock; a test holds a promote open across a rollback batch
-  and finds its object in the source after the rebind back.
-- **Blockers:** none.
+- **Reason:** the rollback records each write it copied back
+  (`storage_migration_copied_back`, migration 118) instead of walking a
+  cursor, so `tenant_storage_migrations.rollback_cursor_at` and
+  `rollback_cursor_id` are dead. Dropping them in the same release would
+  break a binary still running during the rollout: sqlc expands
+  `sqlc.embed` into a column list that names them.
+- **Definition of Done:** a migration drops both columns, the queries that
+  reset them stop doing so, and sqlc is regenerated.
+- **Blockers:** a release that no longer reads them is deployed everywhere.
 
 ### A source write whose storage event outlives the migration's retention is lost
 

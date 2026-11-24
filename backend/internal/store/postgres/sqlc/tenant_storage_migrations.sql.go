@@ -39,34 +39,6 @@ func (q *Queries) AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied
 	return result.RowsAffected(), nil
 }
 
-const advanceStorageMigrationRollback = `-- name: AdvanceStorageMigrationRollback :execrows
-UPDATE tenant_storage_migrations
-SET rollback_cursor_at = $1,
-    rollback_cursor_id = $2,
-    updated_at         = now()
-WHERE tenant_id = $3 AND state = $4
-  AND attempts = $5
-  AND (rollback_cursor_at IS NULL
-       OR ROW(rollback_cursor_at, rollback_cursor_id)
-          <= ROW($1::timestamptz, $2::uuid))
-`
-
-// Records the rollback's resume cursor after a batch. It only moves forward:
-// a stale batch reporting an earlier cursor changes nothing.
-func (q *Queries) AdvanceStorageMigrationRollback(ctx context.Context, cursorAt pgtype.Timestamptz, cursorID pgtype.UUID, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
-	result, err := q.db.Exec(ctx, advanceStorageMigrationRollback,
-		cursorAt,
-		cursorID,
-		tenantID,
-		fromState,
-		attempts,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const bucketMigratedAway = `-- name: BucketMigratedAway :one
 SELECT EXISTS (
     SELECT 1
@@ -288,6 +260,17 @@ func (q *Queries) ForgetStorageMigrationCaughtUp(ctx context.Context, tenantID p
 	return err
 }
 
+const forgetStorageMigrationCopiedBack = `-- name: ForgetStorageMigrationCopiedBack :exec
+DELETE FROM storage_migration_copied_back WHERE tenant_id = $1
+`
+
+// Drops what a rollback recorded (migration 118): when a rollback starts,
+// and once it has rebound the tenant back.
+func (q *Queries) ForgetStorageMigrationCopiedBack(ctx context.Context, tenantID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, forgetStorageMigrationCopiedBack, tenantID)
+	return err
+}
+
 const getStorageMigration = `-- name: GetStorageMigration :one
 SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
@@ -343,6 +326,27 @@ func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID)
 		&i.TargetBucketName,
 	)
 	return i, err
+}
+
+const holdStorageMigrationForCopyBack = `-- name: HoldStorageMigrationForCopyBack :execrows
+SELECT 1 FROM tenant_storage_migrations
+WHERE tenant_id = $1 AND state = $2
+  AND attempts = $3
+FOR SHARE
+`
+
+// Holds the migration row shared for a copy back, and only while it is
+// still as the worker read it: taken before the copy, after the object's
+// row, so a worker resumed past its lease finds out before it copies, and
+// the rebind back (FOR UPDATE) waits for every copy back in flight. Once the
+// tenant is on its source again, a stale copy from the target would put
+// older bytes over what was written there since.
+func (q *Queries) HoldStorageMigrationForCopyBack(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, holdStorageMigrationForCopyBack, tenantID, fromState, attempts)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const latestStorageMigration = `-- name: LatestStorageMigration :one
@@ -619,6 +623,31 @@ func (q *Queries) MigrationCountUncaughtUp(ctx context.Context, tenantID pgtype.
 	return count, err
 }
 
+const migrationCountUncopiedBack = `-- name: MigrationCountUncopiedBack :one
+SELECT count(*)
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
+LEFT JOIN storage_migration_copied_back r ON r.tenant_id = o.tenant_id AND r.object_id = o.id
+WHERE o.tenant_id = $1
+  AND m.state = $2 AND m.attempts = $3
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+  AND COALESCE(o.bytes_written_at, o.updated_at) >= m.rebound_at
+  AND r.written_at IS DISTINCT FROM COALESCE(o.bytes_written_at, o.updated_at)
+`
+
+// How many objects MigrationListUncopiedBack would still return. The rebind
+// back counts them under the migration row's lock, which every promote holds
+// while the migration rolls back, so no write commits unseen between the
+// count and the rebind back: any is the rebind back refused.
+func (q *Queries) MigrationCountUncopiedBack(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	row := q.db.QueryRow(ctx, migrationCountUncopiedBack, tenantID, fromState, attempts)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const migrationCountUploadsAnchoredTo = `-- name: MigrationCountUploadsAnchoredTo :one
 SELECT count(*)
 FROM objects o
@@ -695,71 +724,25 @@ func (q *Queries) MigrationHoldObjectForCatchUp(ctx context.Context, tenantID pg
 	return bytes_written_at, err
 }
 
-const migrationListObjectsWrittenSince = `-- name: MigrationListObjectsWrittenSince :many
-SELECT o.id, COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at,
-       c.name AS collection_name, o.path,
-       COALESCE(o.size_bytes, 0)::bigint AS size_bytes
+const migrationHoldObjectForCopyBack = `-- name: MigrationHoldObjectForCopyBack :one
+SELECT COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
-WHERE o.tenant_id = $1
+WHERE o.tenant_id = $1 AND o.id = $2
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
-  AND ROW(COALESCE(o.bytes_written_at, o.updated_at), o.id)
-      > ROW($2::timestamptz, $3::uuid)
-ORDER BY COALESCE(o.bytes_written_at, o.updated_at), o.id
-LIMIT $4::int
+FOR KEY SHARE OF o
 `
 
-type MigrationListObjectsWrittenSinceRow struct {
-	ID             pgtype.UUID        `json:"id"`
-	WrittenAt      pgtype.Timestamptz `json:"written_at"`
-	CollectionName string             `json:"collection_name"`
-	Path           string             `json:"path"`
-	SizeBytes      int64              `json:"size_bytes"`
-}
-
-// The objects the rollback copies back: live or trashed (a trashed object's
-// bytes are what a later RestoreObject reads), in a private collection
-// (public ones never moved, ADR-0027), and written at or after the cursor —
-// keyset on (written_at, id), which the worker starts at (rebound_at, the
-// nil uuid). written_at is when the object's bytes were last written
-// (bytes_written_at, which every promote sets: a new upload's and a
-// storage-event overwrite's), not when its row last changed: a tag, a taint,
-// a lock or a trash move after the rebind leaves its bytes where they were,
-// and its only target copy may be the broken one the verify failed on. A row
-// promoted before the column existed has none; its updated_at stands in, at
-// or after its last write, so it is copied back if it might have to be. An
-// object written again after the cursor passed it moves back ahead of the
-// cursor and is copied again.
-func (q *Queries) MigrationListObjectsWrittenSince(ctx context.Context, tenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID, limitCount int32) ([]MigrationListObjectsWrittenSinceRow, error) {
-	rows, err := q.db.Query(ctx, migrationListObjectsWrittenSince,
-		tenantID,
-		afterAt,
-		afterID,
-		limitCount,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []MigrationListObjectsWrittenSinceRow
-	for rows.Next() {
-		var i MigrationListObjectsWrittenSinceRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.WrittenAt,
-			&i.CollectionName,
-			&i.Path,
-			&i.SizeBytes,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+// Holds one object's row against a delete and a promote (FOR KEY SHARE,
+// which a promote's FOR UPDATE waits on) while the rollback copies it back,
+// and reads the write whose bytes the copy takes. No row: purged, or no
+// longer live or trashed; nothing to copy.
+func (q *Queries) MigrationHoldObjectForCopyBack(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, migrationHoldObjectForCopyBack, tenantID, objectID)
+	var written_at pgtype.Timestamptz
+	err := row.Scan(&written_at)
+	return written_at, err
 }
 
 const migrationListTenantCollections = `-- name: MigrationListTenantCollections :many
@@ -941,28 +924,74 @@ func (q *Queries) MigrationListUncaughtUp(ctx context.Context, tenantID pgtype.U
 	return items, nil
 }
 
-const migrationObjectsWrittenSinceExist = `-- name: MigrationObjectsWrittenSinceExist :one
-SELECT EXISTS (
-    SELECT 1
-    FROM objects o
-    JOIN collections c ON c.id = o.collection_id
-    WHERE o.tenant_id = $1
-      AND o.state IN ('AVAILABLE', 'DELETED')
-      AND NOT c.public_read
-      AND ROW(COALESCE(o.bytes_written_at, o.updated_at), o.id)
-          > ROW($2::timestamptz, $3::uuid)
-)::bool
+const migrationListUncopiedBack = `-- name: MigrationListUncopiedBack :many
+SELECT o.id, COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at,
+       c.name AS collection_name, o.path,
+       COALESCE(o.size_bytes, 0)::bigint AS size_bytes
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
+LEFT JOIN storage_migration_copied_back r ON r.tenant_id = o.tenant_id AND r.object_id = o.id
+WHERE o.tenant_id = $1
+  AND m.state = $2 AND m.attempts = $3
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+  AND COALESCE(o.bytes_written_at, o.updated_at) >= m.rebound_at
+  AND r.written_at IS DISTINCT FROM COALESCE(o.bytes_written_at, o.updated_at)
+ORDER BY COALESCE(o.bytes_written_at, o.updated_at), o.id
+LIMIT $4::int
 `
 
-// Whether any object MigrationListObjectsWrittenSince would still return past
-// the cursor. The rebind back asks it under its lock: an object written since
-// the worker's last batch is still only in the dedicated bucket, and
-// rebinding before it is copied would lose it.
-func (q *Queries) MigrationObjectsWrittenSinceExist(ctx context.Context, tenantID pgtype.UUID, afterAt pgtype.Timestamptz, afterID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, migrationObjectsWrittenSinceExist, tenantID, afterAt, afterID)
-	var column_1 bool
-	err := row.Scan(&column_1)
-	return column_1, err
+type MigrationListUncopiedBackRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	WrittenAt      pgtype.Timestamptz `json:"written_at"`
+	CollectionName string             `json:"collection_name"`
+	Path           string             `json:"path"`
+	SizeBytes      int64              `json:"size_bytes"`
+}
+
+// The objects the rollback copies back: live or trashed (a trashed object's
+// bytes are what a later RestoreObject reads), in a private collection
+// (public ones never moved, ADR-0027), whose bytes were written at or after
+// the rebind and whose latest write the rollback has not copied back
+// (migration 118). written_at is when the object's bytes were last written
+// (bytes_written_at, which every promote sets), not when its row last
+// changed: a tag, a taint, a lock or a trash move after the rebind leaves
+// its bytes where they were, and its only target copy may be the broken one
+// the verify failed on. A row promoted before the column existed has none;
+// its updated_at stands in, at or after its last write. Only while the
+// migration is as the worker read it. The set has no cursor for a late
+// commit to fall behind: a promote stamped before a batch and committed
+// after it is listed by the next.
+func (q *Queries) MigrationListUncopiedBack(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32, limitCount int32) ([]MigrationListUncopiedBackRow, error) {
+	rows, err := q.db.Query(ctx, migrationListUncopiedBack,
+		tenantID,
+		fromState,
+		attempts,
+		limitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MigrationListUncopiedBackRow
+	for rows.Next() {
+		var i MigrationListUncopiedBackRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WrittenAt,
+			&i.CollectionName,
+			&i.Path,
+			&i.SizeBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const recordStorageMigrationCaughtUp = `-- name: RecordStorageMigrationCaughtUp :execrows
@@ -991,6 +1020,20 @@ func (q *Queries) RecordStorageMigrationCaughtUp(ctx context.Context, tenantID p
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recordStorageMigrationCopiedBack = `-- name: RecordStorageMigrationCopiedBack :exec
+INSERT INTO storage_migration_copied_back (tenant_id, object_id, written_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (tenant_id, object_id) DO UPDATE
+SET written_at = EXCLUDED.written_at, copied_at = now()
+`
+
+// Records the write a copy back took, or decided to leave, on the
+// transaction that holds the migration row as read.
+func (q *Queries) RecordStorageMigrationCopiedBack(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, writtenAt pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, recordStorageMigrationCopiedBack, tenantID, objectID, writtenAt)
+	return err
 }
 
 const resetFailedTargetBucketProvision = `-- name: ResetFailedTargetBucketProvision :exec

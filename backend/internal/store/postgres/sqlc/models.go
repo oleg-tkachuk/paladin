@@ -792,6 +792,13 @@ type StorageMigrationCaughtUp struct {
 	CopiedAt  pgtype.Timestamptz `json:"copied_at"`
 }
 
+type StorageMigrationCopiedBack struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	ObjectID  pgtype.UUID        `json:"object_id"`
+	WrittenAt pgtype.Timestamptz `json:"written_at"`
+	CopiedAt  pgtype.Timestamptz `json:"copied_at"`
+}
+
 type Tenant struct {
 	ID                   pgtype.UUID         `json:"id"`
 	Slug                 string              `json:"slug"`

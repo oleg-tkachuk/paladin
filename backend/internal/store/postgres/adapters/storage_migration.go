@@ -53,8 +53,6 @@ func migFromSQLC(m sqlc.TenantStorageMigration,
 		CleanupAfter:     m.CleanupAfter.Time, // zero when NULL (CleanupAfter.Valid == false)
 		Attempts:         m.Attempts,
 		ReboundAt:        timeFrom(m.ReboundAt),
-		RollbackCursorAt: timeFrom(m.RollbackCursorAt),
-		RollbackCursorID: uuidFrom(m.RollbackCursorID),
 		CopyStartedAt:    copyStartedAt(m),
 	}
 }
@@ -402,22 +400,25 @@ func (r *StorageMigrationRepo) Fail(ctx context.Context, at worker.MigrationRead
 	return migrationMoved(r.q.FailStorageMigration(ctx, worker.MigStateFailed, &reason, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
+// StartRollback moves verifying -> rolling_back and drops what an earlier
+// rollback of the tenant recorded it copied back: this one copies from
+// rebound_at again.
 func (r *StorageMigrationRepo) StartRollback(ctx context.Context, at worker.MigrationRead, reason string) error {
-	return migrationMoved(r.q.StartStorageMigrationRollback(ctx, worker.MigStateRollingBack, &reason,
-		pgUUID(at.TenantID), at.State, at.Attempts))
+	return r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if err := migrationMoved(q.StartStorageMigrationRollback(ctx, worker.MigStateRollingBack, &reason,
+			pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		return q.ForgetStorageMigrationCopiedBack(ctx, pgUUID(at.TenantID))
+	})
 }
 
-// cursorTS and cursorID pass a rollback cursor as a value, never NULL: the
-// cursor starts at (rebound_at, the nil uuid), and pgTS / pgUUID map a zero
-// time and the nil uuid to NULL, against which every row comparison is NULL —
-// an empty list, and a rollback that rebinds back without copying anything.
-func cursorTS(t time.Time) pgtype.Timestamptz { return pgtype.Timestamptz{Time: t, Valid: true} }
-func cursorID(u uuid.UUID) pgtype.UUID        { return pgtype.UUID{Bytes: u, Valid: true} }
-
-func (r *StorageMigrationRepo) ListWrittenSince(ctx context.Context, tenantID uuid.UUID, afterAt time.Time, afterID uuid.UUID, limit int) ([]worker.WrittenObject, error) {
+// ListUncopiedBack lists the objects the rollback still has to copy back
+// (see worker.MigrationRepo).
+func (r *StorageMigrationRepo) ListUncopiedBack(ctx context.Context, at worker.MigrationRead, limit int) ([]worker.WrittenObject, error) {
 	var out []worker.WrittenObject
-	err := r.withTenantTx(ctx, tenantID, func(q *sqlc.Queries) error {
-		rows, e := q.MigrationListObjectsWrittenSince(ctx, pgUUID(tenantID), cursorTS(afterAt), cursorID(afterID), safecast.Int32(limit))
+	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		rows, e := q.MigrationListUncopiedBack(ctx, pgUUID(at.TenantID), at.State, at.Attempts, safecast.Int32(limit))
 		if e != nil {
 			return e
 		}
@@ -434,9 +435,41 @@ func (r *StorageMigrationRepo) ListWrittenSince(ctx context.Context, tenantID uu
 	return out, err
 }
 
-func (r *StorageMigrationRepo) AdvanceRollback(ctx context.Context, at worker.MigrationRead, cursorAt time.Time, id uuid.UUID) error {
-	return migrationMoved(r.q.AdvanceStorageMigrationRollback(ctx, cursorTS(cursorAt), cursorID(id),
-		pgUUID(at.TenantID), at.State, at.Attempts))
+// CopyBackObject holds o's row (FOR KEY SHARE, which a promote's FOR UPDATE
+// waits on) and then the migration row as read (FOR SHARE, the order a
+// promote takes them in), runs fn — the copy back — and records on the same
+// transaction the write it took (see worker.MigrationRepo). The migration
+// row is held before the copy, not checked after it: once the tenant is on
+// its source again, a stale worker's copy from the target would put older
+// bytes over what was written there since. The transaction is idle while fn
+// copies, so it lifts the idle-in-transaction timeout for itself, as
+// HoldObject does.
+func (r *StorageMigrationRepo) CopyBackObject(ctx context.Context, at worker.MigrationRead, o worker.WrittenObject, fn func(context.Context) error) (bool, error) {
+	var held bool
+	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if _, err := q.SetIdleInTransactionTimeout(ctx, idleInTransactionUnbounded); err != nil {
+			return fmt.Errorf("lift the idle-in-transaction timeout: %w", err)
+		}
+		writtenAt, err := q.MigrationHoldObjectForCopyBack(ctx, pgUUID(at.TenantID), pgUUID(o.ID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("hold object: %w", err)
+		}
+		if err := migrationMoved(q.HoldStorageMigrationForCopyBack(ctx, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		if err := fn(ctx); err != nil {
+			return err
+		}
+		held = true
+		return q.RecordStorageMigrationCopiedBack(ctx, pgUUID(at.TenantID), pgUUID(o.ID), writtenAt)
+	})
+	if err != nil {
+		return false, err
+	}
+	return held, nil
 }
 
 // RebindBack is RebindTenant's inverse, and the end of a rollback: in ONE
@@ -448,11 +481,13 @@ func (r *StorageMigrationRepo) AdvanceRollback(ctx context.Context, at worker.Mi
 // (ADR-0027) and are left alone. Any error rolls all of it back, so the
 // tenant is never half rebound; the worker retries next tick.
 //
-// Before any of that it asks whether an object was written past the cursor
-// since the worker's last batch: such an object is only in the target, and
-// rebinding now would lose it. The answer is then worker.ErrRollbackBehind
-// and nothing changes; the worker copies it first.
-func (r *StorageMigrationRepo) RebindBack(ctx context.Context, at worker.MigrationRead, cursorAt time.Time, afterID uuid.UUID, sourceBackendID, sourceBucketName string) error {
+// Before any of that, under the migration row's lock — which every promote
+// and every copy back holds while it runs — it counts the objects
+// ListUncopiedBack would still list: such an object is only in the target,
+// and rebinding now would lose it. Any is worker.ErrRollbackBehind, and
+// nothing changes; the worker copies it first. What the rollback recorded is
+// dropped once the tenant is back.
+func (r *StorageMigrationRepo) RebindBack(ctx context.Context, at worker.MigrationRead, sourceBackendID, sourceBucketName string) error {
 	tenantID := at.TenantID
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -467,12 +502,12 @@ func (r *StorageMigrationRepo) RebindBack(ctx context.Context, at worker.Migrati
 	if err := migrationMoved(qtx.LockStorageMigrationForRebind(ctx, pgUUID(tenantID), at.State, at.Attempts)); err != nil {
 		return err
 	}
-	behind, err := qtx.MigrationObjectsWrittenSinceExist(ctx, pgUUID(tenantID), cursorTS(cursorAt), cursorID(afterID))
+	behind, err := qtx.MigrationCountUncopiedBack(ctx, pgUUID(tenantID), at.State, at.Attempts)
 	if err != nil {
-		return fmt.Errorf("check for objects past the rollback cursor: %w", err)
+		return fmt.Errorf("count objects not copied back: %w", err)
 	}
-	if behind {
-		return worker.ErrRollbackBehind
+	if behind > 0 {
+		return fmt.Errorf("%w: %d objects", worker.ErrRollbackBehind, behind)
 	}
 	if err := lockTenantBindings(ctx, qtx, tenantID); err != nil {
 		return err
@@ -500,6 +535,9 @@ func (r *StorageMigrationRepo) RebindBack(ctx context.Context, at worker.Migrati
 	}
 	if err := migrationMoved(qtx.FinishStorageMigrationRollback(ctx, worker.MigStateFailed, pgUUID(tenantID), at.State, at.Attempts)); err != nil {
 		return err
+	}
+	if err := qtx.ForgetStorageMigrationCopiedBack(ctx, pgUUID(tenantID)); err != nil {
+		return fmt.Errorf("forget what the rollback copied back: %w", err)
 	}
 	return tx.Commit(ctx)
 }

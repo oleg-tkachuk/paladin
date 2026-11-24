@@ -480,61 +480,90 @@ SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
--- name: MigrationListObjectsWrittenSince :many
+-- name: ForgetStorageMigrationCopiedBack :exec
+-- Drops what a rollback recorded (migration 118): when a rollback starts,
+-- and once it has rebound the tenant back.
+DELETE FROM storage_migration_copied_back WHERE tenant_id = $1;
+
+-- name: MigrationListUncopiedBack :many
 -- The objects the rollback copies back: live or trashed (a trashed object's
 -- bytes are what a later RestoreObject reads), in a private collection
--- (public ones never moved, ADR-0027), and written at or after the cursor —
--- keyset on (written_at, id), which the worker starts at (rebound_at, the
--- nil uuid). written_at is when the object's bytes were last written
--- (bytes_written_at, which every promote sets: a new upload's and a
--- storage-event overwrite's), not when its row last changed: a tag, a taint,
--- a lock or a trash move after the rebind leaves its bytes where they were,
--- and its only target copy may be the broken one the verify failed on. A row
--- promoted before the column existed has none; its updated_at stands in, at
--- or after its last write, so it is copied back if it might have to be. An
--- object written again after the cursor passed it moves back ahead of the
--- cursor and is copied again.
+-- (public ones never moved, ADR-0027), whose bytes were written at or after
+-- the rebind and whose latest write the rollback has not copied back
+-- (migration 118). written_at is when the object's bytes were last written
+-- (bytes_written_at, which every promote sets), not when its row last
+-- changed: a tag, a taint, a lock or a trash move after the rebind leaves
+-- its bytes where they were, and its only target copy may be the broken one
+-- the verify failed on. A row promoted before the column existed has none;
+-- its updated_at stands in, at or after its last write. Only while the
+-- migration is as the worker read it. The set has no cursor for a late
+-- commit to fall behind: a promote stamped before a batch and committed
+-- after it is listed by the next.
 SELECT o.id, COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at,
        c.name AS collection_name, o.path,
        COALESCE(o.size_bytes, 0)::bigint AS size_bytes
 FROM objects o
 JOIN collections c ON c.id = o.collection_id
+JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
+LEFT JOIN storage_migration_copied_back r ON r.tenant_id = o.tenant_id AND r.object_id = o.id
 WHERE o.tenant_id = sqlc.arg('tenant_id')
+  AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts')
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
-  AND ROW(COALESCE(o.bytes_written_at, o.updated_at), o.id)
-      > ROW(sqlc.arg('after_at')::timestamptz, sqlc.arg('after_id')::uuid)
+  AND COALESCE(o.bytes_written_at, o.updated_at) >= m.rebound_at
+  AND r.written_at IS DISTINCT FROM COALESCE(o.bytes_written_at, o.updated_at)
 ORDER BY COALESCE(o.bytes_written_at, o.updated_at), o.id
 LIMIT sqlc.arg('limit_count')::int;
 
--- name: MigrationObjectsWrittenSinceExist :one
--- Whether any object MigrationListObjectsWrittenSince would still return past
--- the cursor. The rebind back asks it under its lock: an object written since
--- the worker's last batch is still only in the dedicated bucket, and
--- rebinding before it is copied would lose it.
-SELECT EXISTS (
-    SELECT 1
-    FROM objects o
-    JOIN collections c ON c.id = o.collection_id
-    WHERE o.tenant_id = sqlc.arg('tenant_id')
-      AND o.state IN ('AVAILABLE', 'DELETED')
-      AND NOT c.public_read
-      AND ROW(COALESCE(o.bytes_written_at, o.updated_at), o.id)
-          > ROW(sqlc.arg('after_at')::timestamptz, sqlc.arg('after_id')::uuid)
-)::bool;
+-- name: MigrationCountUncopiedBack :one
+-- How many objects MigrationListUncopiedBack would still return. The rebind
+-- back counts them under the migration row's lock, which every promote holds
+-- while the migration rolls back, so no write commits unseen between the
+-- count and the rebind back: any is the rebind back refused.
+SELECT count(*)
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
+LEFT JOIN storage_migration_copied_back r ON r.tenant_id = o.tenant_id AND r.object_id = o.id
+WHERE o.tenant_id = sqlc.arg('tenant_id')
+  AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts')
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+  AND COALESCE(o.bytes_written_at, o.updated_at) >= m.rebound_at
+  AND r.written_at IS DISTINCT FROM COALESCE(o.bytes_written_at, o.updated_at);
 
--- name: AdvanceStorageMigrationRollback :execrows
--- Records the rollback's resume cursor after a batch. It only moves forward:
--- a stale batch reporting an earlier cursor changes nothing.
-UPDATE tenant_storage_migrations
-SET rollback_cursor_at = sqlc.arg('cursor_at'),
-    rollback_cursor_id = sqlc.arg('cursor_id'),
-    updated_at         = now()
+-- name: MigrationHoldObjectForCopyBack :one
+-- Holds one object's row against a delete and a promote (FOR KEY SHARE,
+-- which a promote's FOR UPDATE waits on) while the rollback copies it back,
+-- and reads the write whose bytes the copy takes. No row: purged, or no
+-- longer live or trashed; nothing to copy.
+SELECT COALESCE(o.bytes_written_at, o.updated_at)::timestamptz AS written_at
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = sqlc.arg('tenant_id') AND o.id = sqlc.arg('object_id')
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+FOR KEY SHARE OF o;
+
+-- name: HoldStorageMigrationForCopyBack :execrows
+-- Holds the migration row shared for a copy back, and only while it is
+-- still as the worker read it: taken before the copy, after the object's
+-- row, so a worker resumed past its lease finds out before it copies, and
+-- the rebind back (FOR UPDATE) waits for every copy back in flight. Once the
+-- tenant is on its source again, a stale copy from the target would put
+-- older bytes over what was written there since.
+SELECT 1 FROM tenant_storage_migrations
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts')
-  AND (rollback_cursor_at IS NULL
-       OR ROW(rollback_cursor_at, rollback_cursor_id)
-          <= ROW(sqlc.arg('cursor_at')::timestamptz, sqlc.arg('cursor_id')::uuid));
+FOR SHARE;
+
+-- name: RecordStorageMigrationCopiedBack :exec
+-- Records the write a copy back took, or decided to leave, on the
+-- transaction that holds the migration row as read.
+INSERT INTO storage_migration_copied_back (tenant_id, object_id, written_at)
+VALUES (sqlc.arg('tenant_id'), sqlc.arg('object_id'), sqlc.arg('written_at'))
+ON CONFLICT (tenant_id, object_id) DO UPDATE
+SET written_at = EXCLUDED.written_at, copied_at = now();
 
 -- name: FinishStorageMigrationRollback :execrows
 -- rolling_back -> failed, in the transaction that rebinds the tenant back.
