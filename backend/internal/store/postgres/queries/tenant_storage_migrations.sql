@@ -385,10 +385,6 @@ SET source_bucket_id          = sb.id,
     cleanup_after             = NULL,
     completed_at              = NULL,
     cleaned_at                = NULL,
-    rebound_at                = NULL,
-    rebound_back_at           = NULL,
-    rollback_cursor_at        = NULL,
-    rollback_cursor_id        = NULL,
     updated_at                = now()
 FROM buckets sb
 JOIN storage_backends ssb ON ssb.id = sb.backend_id
@@ -397,29 +393,4 @@ JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.id = sqlc.arg('id') AND m.state = 'failed'
   AND ssb.name = sqlc.arg('source_backend_name') AND sb.name = sqlc.arg('source_bucket_name')
   AND tsb.name = sqlc.arg('target_backend_name') AND tb.name = sqlc.arg('target_bucket_name')
-RETURNING m.*;
-
--- name: RollBackStuckStorageMigration :one
--- A migration that failed its verify before rollbacks existed: 'failed', with
--- the tenant still on the dedicated bucket. Moves it to 'rolling_back' for
--- the worker, only while it is still 'failed' and the tenant's default
--- binding still names its target bucket — the tenant serves from where this
--- migration put it. Such a row has no rebound_at: the default binding's
--- set_at is the rebind transaction's now() when the migration set it (which
--- set_by records), and the migration's own creation is the fallback, earlier
--- than any rebind of it.
-UPDATE tenant_storage_migrations m
-SET state              = 'rolling_back',
-    rebound_at         = COALESCE(m.rebound_at,
-                                  CASE WHEN d.set_by = 'storage-migration' THEN d.set_at
-                                       ELSE m.created_at END),
-    rebound_back_at    = NULL,
-    rollback_cursor_at = NULL,
-    rollback_cursor_id = NULL,
-    writes_close_at    = NULL,
-    failed_passes      = 0,
-    updated_at         = now()
-FROM tenant_default_bindings d
-WHERE m.id = sqlc.arg('id') AND m.state = 'failed'
-  AND d.tenant_id = m.tenant_id AND d.bucket_id = m.target_bucket_id
 RETURNING m.*;
