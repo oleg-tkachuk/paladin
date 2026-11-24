@@ -47,8 +47,9 @@ WHERE tenant_id = $3 AND state = $4
 
 // Every object moved and no URL left that can write the source: the source
 // copies are kept until cleanup_after — the retention the operator asked for,
-// and at least the longest a GET URL signed for the source before its object
-// moved can live (get_window).
+// and at least get_window (worker.jobs.storage_migration.source_copy_retention),
+// by default the longest a GET URL signed for the source before its object
+// moved can live.
 func (q *Queries) CompleteStorageMigration(ctx context.Context, toState string, getWindow pgtype.Interval, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, completeStorageMigration,
 		toState,
@@ -426,9 +427,11 @@ WHERE tenant_id = $2 AND state = $3
   AND attempts = $4
 `
 
-// Records when the last URL that can write the bucket being emptied expires
-// (writes_close_at, ADR-0051), once per direction: no URL for it is signed
-// after this pass, and none signed before outlives limits.presign.max_ttl.
+// Records the write deadline of the bucket being emptied (writes_close_at,
+// ADR-0051), once per direction: a regenerated or part URL for a row or
+// session anchored there expires by it, and is refused past it, so a client
+// that keeps asking for one cannot hold the migration open. The completion
+// does not wait for it: it waits for the anchors those URLs leave.
 func (q *Queries) MigrationCloseWrites(ctx context.Context, window pgtype.Interval, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, migrationCloseWrites,
 		window,
@@ -490,32 +493,29 @@ SELECT
     ((SELECT count(*) FROM collections c
        WHERE c.tenant_id = $1 AND c.bucket_id = $2 AND NOT c.public_read)
      + (SELECT count(*) FROM tenant_default_bindings d
-         WHERE d.tenant_id = $1 AND d.bucket_id = $2))::bigint AS bound,
-    (m.writes_close_at IS NOT NULL
-     AND now() >= m.writes_close_at + $3::interval)::bool AS writes_closed
+         WHERE d.tenant_id = $1 AND d.bucket_id = $2))::bigint AS bound
 FROM tenant_storage_migrations m
-WHERE m.tenant_id = $1 AND m.state = $4
-  AND m.attempts = $5
+WHERE m.tenant_id = $1 AND m.state = $3
+  AND m.attempts = $4
 `
 
 type MigrationHoldsRow struct {
-	Placed       int64 `json:"placed"`
-	Anchored     int64 `json:"anchored"`
-	Sessions     int64 `json:"sessions"`
-	Bound        int64 `json:"bound"`
-	WritesClosed bool  `json:"writes_closed"`
+	Placed   int64 `json:"placed"`
+	Anchored int64 `json:"anchored"`
+	Sessions int64 `json:"sessions"`
+	Bound    int64 `json:"bound"`
 }
 
 // What keeps the bucket being emptied (from_bucket_id) in use, for the
-// migration's completion (ADR-0051): the tenant's objects placed there, its
-// rows anchored there (a URL signed for it may still write), its multipart
-// sessions there, its private collections and default binding still bound
-// there — and whether the last URL signed for it has expired by the grace.
-func (q *Queries) MigrationHolds(ctx context.Context, tenantID pgtype.UUID, fromBucketID pgtype.UUID, grace pgtype.Interval, fromState string, attempts int32) (MigrationHoldsRow, error) {
+// migration's completion and its cleanup (ADR-0051): the tenant's objects
+// placed there, its rows anchored there (a URL signed for it may still write
+// until the reconciler settles the row), its multipart sessions there, its
+// private collections and default binding still bound there. Nothing else:
+// every URL that can write the bucket is one of these rows.
+func (q *Queries) MigrationHolds(ctx context.Context, tenantID pgtype.UUID, fromBucketID pgtype.UUID, fromState string, attempts int32) (MigrationHoldsRow, error) {
 	row := q.db.QueryRow(ctx, migrationHolds,
 		tenantID,
 		fromBucketID,
-		grace,
 		fromState,
 		attempts,
 	)
@@ -525,7 +525,6 @@ func (q *Queries) MigrationHolds(ctx context.Context, tenantID pgtype.UUID, from
 		&i.Anchored,
 		&i.Sessions,
 		&i.Bound,
-		&i.WritesClosed,
 	)
 	return i, err
 }
@@ -871,9 +870,12 @@ UPDATE tenants
 SET storage_layout   = $2,
     resource_version = resource_version + 1,
     updated_at       = now()
-WHERE id = $1
+WHERE id = $1 AND storage_layout IS DISTINCT FROM $2
 `
 
+// A no-op when the tenant already has the layout: every pass of a migration
+// sets it, and must not move the tenant's resource_version under a client's
+// compare-and-set each time.
 func (q *Queries) SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error) {
 	result, err := q.db.Exec(ctx, setTenantStorageLayout, iD, storageLayout)
 	if err != nil {
@@ -993,15 +995,16 @@ JOIN buckets b           ON b.id = CASE WHEN m.state = 'rolling_back'
                                         THEN m.target_bucket_id ELSE m.source_bucket_id END
 JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE m.tenant_id = $1
-  AND m.state IN ('moving', 'rolling_back')
+  AND m.state IN ('moving', 'completed', 'rolling_back')
   AND m.writes_close_at IS NOT NULL
   AND sb.name = $2 AND b.name = $3
 `
 
 // The deadline a URL signed for the bucket (backend_name, bucket_name) must
 // expire by: the bucket is being emptied by the tenant's migration — its
-// source while moving, its target while rolling back — whose passes have set
-// the deadline. No row: nothing bounds the URL but its TTL.
+// source while moving and until cleaned, its target while rolling back —
+// whose passes have set the deadline. No row: nothing bounds the URL but its
+// TTL.
 func (q *Queries) UploadWritesCloseAt(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (pgtype.Timestamptz, error) {
 	row := q.db.QueryRow(ctx, uploadWritesCloseAt, tenantID, backendName, bucketName)
 	var writes_close_at pgtype.Timestamptz

@@ -229,10 +229,10 @@ func (r *StorageMigrationRepo) MoveObject(ctx context.Context, at worker.Migrati
 	return moved, nil
 }
 
-func (r *StorageMigrationRepo) Holds(ctx context.Context, at worker.MigrationRead, from worker.MigrationBucket, grace time.Duration) (worker.MigrationHolds, error) {
+func (r *StorageMigrationRepo) Holds(ctx context.Context, at worker.MigrationRead, from worker.MigrationBucket) (worker.MigrationHolds, error) {
 	var h worker.MigrationHolds
 	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
-		row, err := q.MigrationHolds(ctx, pgUUID(at.TenantID), pgUUID(from.ID), intervalOf(grace), at.State, at.Attempts)
+		row, err := q.MigrationHolds(ctx, pgUUID(at.TenantID), pgUUID(from.ID), at.State, at.Attempts)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return worker.ErrMigrationMoved
 		}
@@ -240,7 +240,7 @@ func (r *StorageMigrationRepo) Holds(ctx context.Context, at worker.MigrationRea
 			return err
 		}
 		h = worker.MigrationHolds{Placed: row.Placed, Anchored: row.Anchored, Sessions: row.Sessions,
-			Bound: row.Bound, WritesClosed: row.WritesClosed}
+			Bound: row.Bound}
 		return nil
 	})
 	return h, err

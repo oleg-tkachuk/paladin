@@ -655,6 +655,18 @@ type WorkerJobs struct {
 	Operations       OperationsWorker `yaml:"operations" json:"operations"`
 	QuotaReconcile   QuotaReconcile   `yaml:"quota_reconcile" json:"quota_reconcile"`
 	PurgeDrain       PurgeDrain       `yaml:"purge_drain" json:"purge_drain"`
+	StorageMigration StorageMigration `yaml:"storage_migration" json:"storage_migration"`
+}
+
+// StorageMigration tunes the worker that moves a tenant's objects into its
+// dedicated bucket (ADR-0015, ADR-0051).
+type StorageMigration struct {
+	// SourceCopyRetention is the least the source copies are kept after a
+	// migration completes: a presigned GET URL signed for the source before
+	// its object moved leaves no row to wait for, so a fixed delay keeps it
+	// working. Defaults to limits.presign.max_ttl, the longest a GET URL
+	// lives; an operator's cleanup_retention_seconds can only lengthen it.
+	SourceCopyRetention time.Duration `yaml:"source_copy_retention" json:"source_copy_retention"`
 }
 
 // PurgeDrain reclaims bytes owed by permanent deletes whose synchronous
@@ -1122,6 +1134,10 @@ type Reconciler struct {
 	// reconciliation — protects against racing the upload path before the
 	// client has called Complete.
 	MinObjectAge time.Duration `yaml:"min_object_age" json:"min_object_age"`
+	// WriteSettleGrace: how long past its URL's expiry a promoted object's
+	// upload anchor is settled — the time a PUT the store accepted before the
+	// URL expired may still take to land (ADR-0051).
+	WriteSettleGrace time.Duration `yaml:"write_settle_grace" json:"write_settle_grace"`
 	// BatchSize caps how many stuck-PENDING rows are reconciled per tick.
 	BatchSize int `yaml:"batch_size" json:"batch_size"`
 }

@@ -32,17 +32,24 @@ import (
 //     the migration with nothing changed.
 //   - moving points the tenant's private collections and default binding at
 //     the target — each pass again, for a collection created from a binding
-//     read before — and records when the last URL signed for the source
-//     expires. Each pass then moves the objects placed in the source whose
-//     upload anchor has settled: no URL can write their key there any more.
-//     A move copies the bytes, verifies the copy and sets the placement,
-//     compare-and-set on the object's row. A write through a URL signed
-//     before the switch places its object in the source, and a later pass
-//     moves it again.
+//     read before — and records the source's write deadline, which a
+//     regenerated or part URL for it expires by. Each pass then moves the
+//     objects placed in the source whose upload anchor has settled: no URL
+//     can write their key there any more. A move copies the bytes, verifies
+//     the copy and sets the placement, compare-and-set on the object's row.
+//     A write through a URL signed before the switch places its object in
+//     the source, and a later pass moves it again.
 //   - completed is a data condition, checked at each pass's end: nothing of
 //     the tenant placed in or anchored to the source, no multipart session
-//     there, nothing bound to it, and its last URL expired by the grace. The
-//     source copies are kept until cleanup_after.
+//     there, nothing bound to it. Every URL that can write the source is one
+//     of those anchors or sessions until the reconciler settles it, so no
+//     clock is waited for. The source copies are kept until cleanup_after,
+//     for the GET URLs signed for them (SourceCopyRetention).
+//   - completed keeps passing: a request that read a binding before the
+//     switch may still anchor an upload to the source, or create a
+//     collection bound to it, after the completion. Its object is moved and
+//     its collection pointed at the target like any other, and the cleanup
+//     waits for nothing to hold the source.
 //   - cleaned: the source copy of every object placed in the target is
 //     deleted.
 //   - rolling_back is the same pass with the buckets swapped, entered when
@@ -204,13 +211,13 @@ type MigrationHolds struct {
 	// Bound: the tenant's private collections and default binding still
 	// bound to it.
 	Bound int64
-	// WritesClosed: the last URL signed for it has expired by the grace.
-	WritesClosed bool
 }
 
-// Clear reports whether nothing keeps the bucket in use.
+// Clear reports whether nothing keeps the bucket in use. It is decided on
+// the rows alone: a URL that can still write the bucket keeps its row
+// anchored there, or its multipart session open, until it cannot.
 func (h MigrationHolds) Clear() bool {
-	return h.Placed == 0 && h.Anchored == 0 && h.Sessions == 0 && h.Bound == 0 && h.WritesClosed
+	return h.Placed == 0 && h.Anchored == 0 && h.Sessions == 0 && h.Bound == 0
 }
 
 // MigrationRepo is the persistence seam for the migration.
@@ -246,16 +253,15 @@ type MigrationRepo interface {
 	// changed, is false. A migration no longer as read is ErrMigrationMoved.
 	MoveObject(ctx context.Context, at MigrationRead, from, to MigrationBucket, c MoveCandidate,
 		fn func(context.Context, MoveCandidate) (string, error)) (bool, error)
-	// Holds reads what keeps from in use, the grace given to a URL
-	// expiring included.
-	Holds(ctx context.Context, at MigrationRead, from MigrationBucket, grace time.Duration) (MigrationHolds, error)
+	// Holds reads what keeps from in use.
+	Holds(ctx context.Context, at MigrationRead, from MigrationBucket) (MigrationHolds, error)
 	// RecordPass records a pass's end — whether a move failed its
 	// verification, and how many objects remain in the bucket being
 	// emptied — and returns the passes in a row that failed.
 	RecordPass(ctx context.Context, at MigrationRead, failed bool, remaining int64) (int32, error)
 	// Complete moves moving -> completed, keeping the source copies until
-	// the later of the operator's retention and getWindow from now.
-	Complete(ctx context.Context, at MigrationRead, getWindow time.Duration) error
+	// the later of the operator's retention and sourceRetention from now.
+	Complete(ctx context.Context, at MigrationRead, sourceRetention time.Duration) error
 	// ListCleanable lists the tenant's private objects placed in target
 	// after the cursor, by (collection, key).
 	ListCleanable(ctx context.Context, at MigrationRead, target MigrationBucket, afterCollection, afterKey string, limit int) ([]ObjectRef, error)
@@ -343,16 +349,18 @@ type StorageMigrationWorker struct {
 	// Identity reads ETags, which a move compares; nil compares none.
 	Identity ObjectIdentity
 	// WriteWindow is the longest a presigned URL lives
-	// (limits.presign.max_ttl): the source's writes close that long after
-	// the migration starts moving, and its copies are kept at least that
-	// long after it completes, for the GET URLs signed for them.
+	// (limits.presign.max_ttl): the bucket being emptied gets its write
+	// deadline that long after its first pass, and a regenerated or part URL
+	// for it expires by then. The completion does not wait for it.
 	WriteWindow time.Duration
-	// SettleGrace is how long past a URL's expiry a write through it may
-	// still land (worker.jobs.reconciler.min_object_age).
-	SettleGrace time.Duration
-	Interval    time.Duration
-	CopyBatch   int
-	Logger      *zap.Logger
+	// SourceCopyRetention is the least the source copies are kept after the
+	// completion (worker.jobs.storage_migration.source_copy_retention), for
+	// the GET URLs signed for them before their objects moved: GET URLs leave
+	// no row to wait for.
+	SourceCopyRetention time.Duration
+	Interval            time.Duration
+	CopyBatch           int
+	Logger              *zap.Logger
 	// Now is injectable for tests; defaults to time.Now.
 	Now func() time.Time
 
@@ -537,10 +545,11 @@ func (w *StorageMigrationWorker) move(ctx context.Context, log *zap.Logger, m St
 }
 
 // endPass records the pass, rolls back a migration whose moves keep failing,
-// and finishes the direction when nothing holds the bucket being emptied.
+// and finishes the direction when nothing holds the bucket being emptied —
+// on a completed migration, cleans the source then.
 func (w *StorageMigrationWorker) endPass(ctx context.Context, log *zap.Logger, m StorageMigration, from MigrationBucket, p *movePass) error {
 	w.forgetPass(m.TenantID)
-	holds, err := w.Repo.Holds(ctx, m.Read(), from, w.SettleGrace)
+	holds, err := w.Repo.Holds(ctx, m.Read(), from)
 	if err != nil {
 		return fmt.Errorf("read what holds %s: %w", from.Bucket, err)
 	}
@@ -557,20 +566,24 @@ func (w *StorageMigrationWorker) endPass(ctx context.Context, log *zap.Logger, m
 		log.Info("pass done; the bucket being emptied is still in use",
 			zap.Int64("placed", holds.Placed), zap.Int64("anchored", holds.Anchored),
 			zap.Int64("sessions", holds.Sessions), zap.Int64("bound", holds.Bound),
-			zap.Bool("writes_closed", holds.WritesClosed), zap.Bool("failed", p.failed))
+			zap.Bool("failed", p.failed))
 		return nil
 	}
-	if m.State == MigStateRollingBack {
+	switch m.State {
+	case MigStateCompleted:
+		return w.clean(ctx, log, m)
+	case MigStateRollingBack:
 		if err := w.Repo.FinishRollback(ctx, m.Read()); err != nil {
 			return fmt.Errorf("finish the rollback: %w", err)
 		}
 		log.Info("migration rolled back; the tenant is on its source bucket again")
 		return nil
 	}
-	if err := w.Repo.Complete(ctx, m.Read(), w.WriteWindow); err != nil {
+	if err := w.Repo.Complete(ctx, m.Read(), w.SourceCopyRetention); err != nil {
 		return fmt.Errorf("complete: %w", err)
 	}
-	log.Info("migration completed; every object is in the target and no URL can write the source")
+	log.Info("migration completed; every object is in the target and no URL can write the source",
+		zap.Duration("source_copy_retention", w.SourceCopyRetention))
 	return nil
 }
 
@@ -672,13 +685,36 @@ func (w *StorageMigrationWorker) bytesGone(ctx context.Context, loc CopyLocation
 	return false, err
 }
 
-// stepCompleted deletes, once cleanup_after has passed, the source copy of
-// every object placed in the target, one batch a tick, and marks the
-// migration cleaned when the walk ends. Deleting an absent key succeeds, so
-// an object that never had a source copy costs one request, and a walk
-// resumed after a crash repeats nothing harmful.
+// stepCompleted runs one tick of a pass, as moving does: a request that read
+// a binding before the switch may have anchored an upload to the source or
+// bound a collection to it after the completion, and the pass moves it like
+// any other. At the pass's end, with nothing holding the source, endPass
+// cleans it (clean). A target that left ready is waited for: the objects
+// are in it already, and nothing is rolled back from here.
 func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMigration) error {
+	state, err := w.Repo.BucketProvisionState(ctx, m.Target.BackendID, m.Target.Bucket)
+	if err != nil {
+		return fmt.Errorf("read target bucket state: %w", err)
+	}
+	if state != bucketgate.ProvisionReady {
+		w.log().Warn("target bucket is not ready; the completed migration's cleanup waits for it",
+			zap.String("tenant_id", m.TenantID.String()), zap.String("target_bucket", m.Target.Bucket),
+			zap.String("provision_state", state))
+		return nil
+	}
+	return w.pass(ctx, m)
+}
+
+// clean deletes, once cleanup_after has passed, the source copy of every
+// object placed in the target, one batch a tick, and marks the migration
+// cleaned when the walk ends; endPass calls it only while nothing holds the
+// source. Deleting an absent key succeeds, so an object that never had a
+// source copy costs one request, and a walk resumed after a crash repeats
+// nothing harmful.
+func (w *StorageMigrationWorker) clean(ctx context.Context, log *zap.Logger, m StorageMigration) error {
 	if m.CleanupAfter.IsZero() || w.now().Before(m.CleanupAfter) {
+		log.Debug("the source copies are kept for the GET URLs signed for them; cleanup deferred",
+			zap.Time("cleanup_after", m.CleanupAfter))
 		return nil
 	}
 	objs, err := w.Repo.ListCleanable(ctx, m.Read(), m.Target, m.CursorCollection, m.CursorKey, w.batch())
@@ -689,8 +725,7 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 		if err := w.Repo.MarkCleaned(ctx, m.Read()); err != nil {
 			return err
 		}
-		w.log().Info("migration cleaned; the source copies are deleted",
-			zap.String("tenant_id", m.TenantID.String()), zap.String("source_bucket", m.Source.Bucket))
+		log.Info("migration cleaned; the source copies are deleted")
 		return nil
 	}
 	for _, o := range objs {
@@ -704,7 +739,7 @@ func (w *StorageMigrationWorker) stepCompleted(ctx context.Context, m StorageMig
 			return err
 		}
 	}
-	w.log().Info("source copies deleted", zap.String("tenant_id", m.TenantID.String()), zap.Int("objects", len(objs)))
+	log.Info("source copies deleted", zap.Int("objects", len(objs)))
 	return nil
 }
 

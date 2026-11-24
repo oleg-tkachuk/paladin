@@ -264,7 +264,8 @@ worker:
   jobs:
     reconciler:                         # closes gaps when S3 events are unavailable / lost
       interval: 30s                     # how often to run a reconcile pass
-      min_object_age: 2h                # only objects older than this are eligible
+      min_object_age: 2h                # a PENDING upload is left this long past its URL's expiry
+      write_settle_grace: 5m            # a promoted object's anchor settles this long past its URL's expiry
       batch_size: 100
     housekeeping:                       # audit-log reaper
       interval: 1h                      # how often the reaper loop runs
@@ -314,6 +315,14 @@ worker:
       # cannot write at all. 0 disables; only appropriate for a
       # deployment that configures no quotas.
       interval: 15m
+    # Storage migration (ADR-0051): a migration completes once nothing of
+    # the tenant is placed in or anchored to its source. The source copies
+    # are kept at least source_copy_retention after, for presigned GET URLs
+    # signed before their objects moved. Unset, it follows
+    # limits.presign.max_ttl, the longest a GET URL lives; shorter lets such
+    # a URL fail before it expires.
+    storage_migration: {}
+    #   source_copy_retention: 168h
 
 # ─── dispatcher role: durable webhook fan-out ──────────────────────────────
 # `serve dispatcher` polls the event_deliveries outbox (`001_initial_schema.sql`) and

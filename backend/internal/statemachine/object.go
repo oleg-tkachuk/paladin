@@ -125,8 +125,9 @@ func (t *Transitioner) PromoteToAvailable(
 type Placement struct {
 	BackendID string
 	Bucket    string
-	// Settled is a promote of bytes Paladin wrote itself, a copy: no URL of
-	// the row can write the key again, so the anchor is settled with the
+	// Settled is a promote after which no URL of the row can write the key
+	// again — bytes Paladin wrote itself (a copy), or a multipart upload the
+	// store assembled and so consumed — so the anchor is settled with the
 	// promote rather than when a URL expires.
 	Settled bool
 }
@@ -544,18 +545,34 @@ type ExpiredAnchor struct {
 	ProvisionState string
 }
 
+// AnchorGraces is how long past its URL's expiry an anchored object waits
+// before the reconciler takes it up, by what it is.
+type AnchorGraces struct {
+	// Pending is a PENDING upload's (worker.jobs.reconciler.min_object_age):
+	// its client may still complete it, and a storage event may still
+	// promote it, more cheaply than a HEAD.
+	Pending time.Duration
+	// Settle is a promoted object's (worker.jobs.reconciler.write_settle_grace):
+	// how long a write through its URL that the store accepted before the URL
+	// expired may still take to land.
+	Settle time.Duration
+}
+
 // ScanExpiredAnchors returns up to `limit` objects anchored to a bucket
-// (objects.upload_bucket_id) whose presign TTL has elapsed by `graceBeyond`,
-// oldest deadline first, leaving out the objects in the buckets of deferred.
+// (objects.upload_bucket_id) whose presign TTL has elapsed by their grace —
+// graces.Pending for a PENDING row, graces.Settle for any other — oldest
+// deadline first, leaving out the objects in the buckets of deferred.
 // Consumed by the reconciler, which asks the bucket gate about each row's
 // bucket and scans again without the buckets it refused, so their rows never
 // head every scan.
 func (t *Transitioner) ScanExpiredAnchors(
 	ctx context.Context,
-	graceBeyond time.Duration,
+	graces AnchorGraces,
 	limit int,
 	deferred []pgtype.UUID,
 ) ([]ExpiredAnchor, error) {
+	// The first bound, by the shorter grace, is the index's range
+	// (objects_upload_expiry_idx); the second is each row's own.
 	const q = `
         SELECT o.id, o.state, b.id, sb.name, b.name, sb.enabled, sb.read_only, b.provision_state
           FROM objects o
@@ -563,7 +580,9 @@ func (t *Transitioner) ScanExpiredAnchors(
           JOIN storage_backends sb ON sb.id = b.backend_id
          WHERE o.upload_bucket_id IS NOT NULL
            AND o.presign_expires_at IS NOT NULL
-           AND o.presign_expires_at < now() - $1::interval
+           AND o.presign_expires_at < now() - LEAST($1::interval, $4::interval)
+           AND o.presign_expires_at < now() - CASE WHEN o.state = 'PENDING'
+                                                   THEN $1::interval ELSE $4::interval END
            -- A tenant in the trash is frozen: its uploads are settled on restore.
            AND NOT EXISTS (SELECT 1 FROM tenants t
                             WHERE t.id = o.tenant_id AND t.deleted_at IS NOT NULL)
@@ -575,7 +594,7 @@ func (t *Transitioner) ScanExpiredAnchors(
 	if deferred == nil {
 		deferred = []pgtype.UUID{}
 	}
-	rows, err := t.pool.Query(ctx, q, graceBeyond.String(), limit, deferred)
+	rows, err := t.pool.Query(ctx, q, graces.Pending.String(), limit, deferred, graces.Settle.String())
 	if err != nil {
 		return nil, fmt.Errorf("sm: scan: %w", err)
 	}

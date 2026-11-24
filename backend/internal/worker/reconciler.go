@@ -32,13 +32,23 @@ import (
 const (
 	DefaultReconcilerPollInterval    = 30 * time.Second
 	DefaultReconcilerPendingGraceTTL = 2 * time.Hour
-	DefaultReconcilerBatchSize       = 100
+	// DefaultReconcilerSettleGrace matches the schema's
+	// worker.jobs.reconciler.write_settle_grace, which says why.
+	DefaultReconcilerSettleGrace = 5 * time.Minute
+	DefaultReconcilerBatchSize   = 100
 )
 
 type ReconcilerV2Config struct {
-	PollInterval    time.Duration
+	PollInterval time.Duration
+	// PendingGraceTTL is how long past its URL's expiry a PENDING upload is
+	// left to its client and the storage events before it is promoted or
+	// discarded (worker.jobs.reconciler.min_object_age).
 	PendingGraceTTL time.Duration
-	BatchSize       int
+	// SettleGrace is how long past its URL's expiry a promoted object's
+	// anchor is settled (worker.jobs.reconciler.write_settle_grace): the time
+	// a write the store accepted before the URL expired may take to land.
+	SettleGrace time.Duration
+	BatchSize   int
 }
 
 // StorageProbe HEADs the backend to materialize authoritative etag/size. A
@@ -65,6 +75,9 @@ func NewReconcilerV2(sm *statemachine.Transitioner, probe StorageProbe, cfg Reco
 	}
 	if cfg.PendingGraceTTL == 0 {
 		cfg.PendingGraceTTL = DefaultReconcilerPendingGraceTTL
+	}
+	if cfg.SettleGrace == 0 {
+		cfg.SettleGrace = DefaultReconcilerSettleGrace
 	}
 	if cfg.BatchSize == 0 {
 		cfg.BatchSize = DefaultReconcilerBatchSize
@@ -100,7 +113,9 @@ func (r *ReconcilerV2) tick(ctx context.Context) (first error) {
 	gate := newBucketDeferrals(r.log, bucketgate.Read)
 	_, err := claimAdmitted(ctx, gate, safecast.Int32(r.cfg.BatchSize),
 		func(limit int32, deferred []pgtype.UUID) ([]statemachine.ExpiredAnchor, error) {
-			return r.sm.ScanExpiredAnchors(ctx, r.cfg.PendingGraceTTL, int(limit), deferred)
+			return r.sm.ScanExpiredAnchors(ctx, statemachine.AnchorGraces{
+				Pending: r.cfg.PendingGraceTTL, Settle: r.cfg.SettleGrace,
+			}, int(limit), deferred)
 		},
 		anchorBucket,
 		func(p statemachine.ExpiredAnchor) error {

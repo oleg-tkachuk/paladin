@@ -8,7 +8,7 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 
 | Job | What it does | Key | Default |
 |---|---|---|---|
-| `reconciler` | promotes `PENDING` objects whose bytes arrived; deletes the row of one whose upload URL expired (`statemachine.DiscardFailed`) | `reconciler.interval`, `.min_object_age` | `30s`, `2h` |
+| `reconciler` | promotes `PENDING` objects whose bytes arrived; deletes the row of one whose upload URL expired (`statemachine.DiscardFailed`); settles a promoted object's upload anchor once its URL has expired (ADR-0051) | `reconciler.interval`, `.min_object_age` (a `PENDING` upload's grace past its URL's expiry), `.write_settle_grace` (a promoted object's) | `30s`, `2h`, `5m` |
 | `bucket_reconciler` | creates and deletes buckets on their backend, from the outbox | `reconciler.interval` | `30s` |
 | `multipart_reaper` | aborts multipart sessions older than the TTL; ticks on `housekeeping.interval` | `housekeeping.multipart_ttl` | `72h` |
 | `multipart_abort_drainer` | pays the abort debt a cascade delete recorded in `pending_multipart_aborts`; runs only while `multipart_ttl` is non-zero | `purge_drain.interval` | `1m` |

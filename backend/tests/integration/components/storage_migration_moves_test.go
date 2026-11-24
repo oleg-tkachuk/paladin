@@ -25,10 +25,9 @@ import (
 // clock — through the writes a migration used to lose.
 
 // The windows the tests run with: URLs signed before the migration live an
-// hour; the reconciler settles an anchor as soon as its URL has expired.
+// hour, and the source copies are kept as long.
 const (
 	movesURLWindow = time.Hour
-	movesNoGrace   = time.Duration(0)
 	// maxMoveTicks bounds the ticks a test drives a migration with before it
 	// gives up on the state it waits for.
 	maxMoveTicks = 20
@@ -59,7 +58,7 @@ func (f publicMigrationFixture) moveWorker(now func() time.Time) *worker.Storage
 	return &worker.StorageMigrationWorker{
 		Repo:   adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool),
 		Copier: f.store, Deleter: f.store, Header: f.store, Identity: f.store,
-		WriteWindow: movesURLWindow, SettleGrace: movesNoGrace, Now: now, Logger: zap.NewNop(),
+		WriteWindow: movesURLWindow, SourceCopyRetention: movesURLWindow, Now: now, Logger: zap.NewNop(),
 	}
 }
 
@@ -86,7 +85,7 @@ func (f publicMigrationFixture) tickUntil(t *testing.T, ctx context.Context, w *
 	if m.State == worker.MigStateRollingBack {
 		from = m.Target
 	}
-	holds, err := adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool).Holds(ctx, m.Read(), from, movesNoGrace)
+	holds, err := adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool).Holds(ctx, m.Read(), from)
 	t.Fatalf("migration at %s after %d ticks, want %s; what holds %s: %+v (%v)", m.State, maxMoveTicks, state, from.Bucket, holds, err)
 }
 
@@ -155,21 +154,19 @@ func (f publicMigrationFixture) complete(t *testing.T, ctx context.Context, id u
 	}
 }
 
-// expireURLs ends every URL of the tenant and the migration's write window,
-// as the passing of max_ttl does.
+// expireURLs ends every URL of the tenant. The migration's write deadline is
+// left as it is: the completion does not wait for it.
 func (f publicMigrationFixture) expireURLs(t *testing.T, ctx context.Context) {
 	t.Helper()
 	mustExec(t, ctx, f.pool, `UPDATE objects SET presign_expires_at = now() - interval '1 minute'
 		WHERE tenant_id = $1 AND presign_expires_at IS NOT NULL`, f.tenant)
-	mustExec(t, ctx, f.pool, `UPDATE tenant_storage_migrations SET writes_close_at = now() - interval '1 minute'
-		WHERE tenant_id = $1`, f.tenant)
 }
 
 // settle runs one reconciler tick over the fake store.
 func (f publicMigrationFixture) settle(t *testing.T, ctx context.Context) {
 	t.Helper()
 	r := worker.NewReconcilerV2(statemachine.New(f.pool), adapters.NewReconcilerProbe(sqlc.New(f.pool), contentHead{s: f.store}),
-		worker.ReconcilerV2Config{PendingGraceTTL: time.Second}, zap.NewNop())
+		worker.ReconcilerV2Config{PendingGraceTTL: time.Second, SettleGrace: time.Second}, zap.NewNop())
 	if err := r.RunOnce(ctx); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
@@ -203,7 +200,7 @@ func (f publicMigrationFixture) row(t *testing.T, ctx context.Context, id uuid.U
 // lands in the source after the switch: its completion places it there, it
 // is not moved while its URL can still write, and once the URL has expired
 // and the reconciler settled it, a later pass moves it. The migration waits
-// for it — and for the write window — before it completes, and the cleanup
+// for it before it completes, and the cleanup
 // deletes the source copies only after that.
 func TestStorageMigrationMovesALateWriteThroughAnOldURL(t *testing.T) {
 	t.Parallel()
@@ -349,6 +346,8 @@ func TestStorageMigrationRollsBackByMovingObjectsBack(t *testing.T) {
 	f := seedPublicMigrationFixture(t, ctx)
 	f.addCollection(t, ctx, "docs", f.private, false)
 	f.upload(t, ctx, "docs", "second", lateSize)
+	// An upload still pending in the source keeps the migration moving.
+	f.registerUpload(t, ctx, lateKey, f.private)
 	f.enterMoving(t, ctx)
 	w := f.moveWorker(time.Now)
 	f.tick(t, ctx, w)

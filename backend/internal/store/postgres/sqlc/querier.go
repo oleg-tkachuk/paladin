@@ -69,8 +69,9 @@ type Querier interface {
 	CollectionIDForPolicy(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error)
 	// Every object moved and no URL left that can write the source: the source
 	// copies are kept until cleanup_after — the retention the operator asked for,
-	// and at least the longest a GET URL signed for the source before its object
-	// moved can live (get_window).
+	// and at least get_window (worker.jobs.storage_migration.source_copy_retention),
+	// by default the longest a GET URL signed for the source before its object
+	// moved can live.
 	CompleteStorageMigration(ctx context.Context, toState string, getWindow pgtype.Interval, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// How many entries of a listing came in on each plane: list_audit_entry_ids'
 	// predicates (100), without its order or cursor, grouped. The caller leaves
@@ -716,9 +717,11 @@ type Querier interface {
 	// successor its parent's holder may recover.
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) error
 	MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// Records when the last URL that can write the bucket being emptied expires
-	// (writes_close_at, ADR-0051), once per direction: no URL for it is signed
-	// after this pass, and none signed before outlives limits.presign.max_ttl.
+	// Records the write deadline of the bucket being emptied (writes_close_at,
+	// ADR-0051), once per direction: a regenerated or part URL for a row or
+	// session anchored there expires by it, and is refused past it, so a client
+	// that keeps asking for one cannot hold the migration open. The completion
+	// does not wait for it: it waits for the anchors those URLs leave.
 	MigrationCloseWrites(ctx context.Context, window pgtype.Interval, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Holds one object's row against a delete for its move (FOR KEY SHARE: a tag
 	// or a taint still goes through), and reads what the move is decided on. No
@@ -726,11 +729,12 @@ type Querier interface {
 	// anchored again — nothing to move.
 	MigrationHoldMovable(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, fromBucketID pgtype.UUID) (MigrationHoldMovableRow, error)
 	// What keeps the bucket being emptied (from_bucket_id) in use, for the
-	// migration's completion (ADR-0051): the tenant's objects placed there, its
-	// rows anchored there (a URL signed for it may still write), its multipart
-	// sessions there, its private collections and default binding still bound
-	// there — and whether the last URL signed for it has expired by the grace.
-	MigrationHolds(ctx context.Context, tenantID pgtype.UUID, fromBucketID pgtype.UUID, grace pgtype.Interval, fromState string, attempts int32) (MigrationHoldsRow, error)
+	// migration's completion and its cleanup (ADR-0051): the tenant's objects
+	// placed there, its rows anchored there (a URL signed for it may still write
+	// until the reconciler settles the row), its multipart sessions there, its
+	// private collections and default binding still bound there. Nothing else:
+	// every URL that can write the bucket is one of these rows.
+	MigrationHolds(ctx context.Context, tenantID pgtype.UUID, fromBucketID pgtype.UUID, fromState string, attempts int32) (MigrationHoldsRow, error)
 	// The tenant's private collections bound to a bucket: what a pass points at
 	// the bucket the tenant's uploads go to. Public collections never move
 	// (collections_public_bucket_fixed, ADR-0027).
@@ -1044,6 +1048,9 @@ type Querier interface {
 	// from "silently did nothing", and a client that asked to bind to a
 	// nonexistent bucket would be told it succeeded.
 	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) (int64, error)
+	// A no-op when the tenant already has the layout: every pass of a migration
+	// sets it, and must not move the tenant's resource_version under a client's
+	// compare-and-set each time.
 	SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error)
 	// Settles a row the worker decided without writing a replica — filtered
 	// out, already current, its object trashed, its source confirmed missing —
@@ -1136,8 +1143,9 @@ type Querier interface {
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) (int64, error)
 	// The deadline a URL signed for the bucket (backend_name, bucket_name) must
 	// expire by: the bucket is being emptied by the tenant's migration — its
-	// source while moving, its target while rolling back — whose passes have set
-	// the deadline. No row: nothing bounds the URL but its TTL.
+	// source while moving and until cleaned, its target while rolling back —
+	// whose passes have set the deadline. No row: nothing bounds the URL but its
+	// TTL.
 	UploadWritesCloseAt(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (pgtype.Timestamptz, error)
 	// Same OCC contract as UpsertTenantQuota. bucket_quotas has no RLS
 	// (044_bucket_quotas.sql): the handler's role and Cedar checks gate the write.

@@ -45,7 +45,10 @@ func reboundRepo(tid uuid.UUID) *fakeRepo {
 
 // A multipart upload is assembled and promoted in the bucket its session was
 // anchored to, where its parts are (ADR-0051), whatever the collection is
-// bound to by then: nothing is copied, and the object is placed there.
+// bound to by then: nothing is copied, and the object is placed there. The
+// promote settles the anchor: the store consumed the upload, so no part URL
+// can write the key again, and a storage migration need not wait out the
+// session's deadline to move it.
 func TestCompletePromotesWhereThePartsAre(t *testing.T) {
 	tid := uuid.New()
 	storage := &fakeStorage{}
@@ -60,7 +63,7 @@ func TestCompletePromotesWhereThePartsAre(t *testing.T) {
 	if len(storage.copies) != 0 {
 		t.Errorf("copies %v, want none", storage.copies)
 	}
-	if want := []statemachine.Placement{{BackendID: testSessionBackend, Bucket: testSessionBucket}}; !slices.Equal(sm.placed, want) {
+	if want := []statemachine.Placement{{BackendID: testSessionBackend, Bucket: testSessionBucket, Settled: true}}; !slices.Equal(sm.placed, want) {
 		t.Errorf("promoted in %v, want %v", sm.placed, want)
 	}
 }

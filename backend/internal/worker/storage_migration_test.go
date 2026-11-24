@@ -29,6 +29,9 @@ type fakeMigRepo struct {
 	transitions []string
 	reasons     []string
 	cleanedPast []string
+	// sourceRetention is what Complete was asked to keep the source copies
+	// for.
+	sourceRetention time.Duration
 }
 
 func (f *fakeMigRepo) ListActive(context.Context, int) ([]StorageMigration, error) {
@@ -73,7 +76,7 @@ func (f *fakeMigRepo) MoveObject(ctx context.Context, _ MigrationRead, _, _ Migr
 	return true, nil
 }
 
-func (f *fakeMigRepo) Holds(context.Context, MigrationRead, MigrationBucket, time.Duration) (MigrationHolds, error) {
+func (f *fakeMigRepo) Holds(context.Context, MigrationRead, MigrationBucket) (MigrationHolds, error) {
 	return f.holds, nil
 }
 
@@ -86,8 +89,9 @@ func (f *fakeMigRepo) RecordPass(_ context.Context, _ MigrationRead, failed bool
 	return f.failedRuns, nil
 }
 
-func (f *fakeMigRepo) Complete(context.Context, MigrationRead, time.Duration) error {
+func (f *fakeMigRepo) Complete(_ context.Context, _ MigrationRead, sourceRetention time.Duration) error {
 	f.transitions = append(f.transitions, MigStateCompleted)
+	f.sourceRetention = sourceRetention
 	return nil
 }
 
@@ -233,7 +237,7 @@ func TestStepProvisioning(t *testing.T) {
 func TestMovingPassMovesEveryObjectAndCompletes(t *testing.T) {
 	s := newStore()
 	m := newMigration(MigStateMoving)
-	repo := &fakeMigRepo{m: m, holds: MigrationHolds{WritesClosed: true}}
+	repo := &fakeMigRepo{m: m, holds: MigrationHolds{}}
 	for _, k := range []string{"a", "b", "c"} {
 		repo.movable = append(repo.movable, candidate(s, "shared", k, etagA))
 	}
@@ -257,17 +261,19 @@ func TestMovingPassMovesEveryObjectAndCompletes(t *testing.T) {
 	}
 }
 
+// holdsOfEachKind is one of each thing that keeps the bucket being emptied
+// in use.
+var holdsOfEachKind = map[string]MigrationHolds{
+	"an object placed there": {Placed: 1},
+	"an upload anchored":     {Anchored: 1},
+	"a multipart session":    {Sessions: 1},
+	"a collection bound":     {Bound: 1},
+}
+
 // Anything that still holds the source — an object placed there, an
-// anchor, a session, a binding, a URL not yet expired — keeps the migration
-// moving.
+// anchor, a session, a binding — keeps the migration moving.
 func TestMovingWaitsForWhatHoldsTheSource(t *testing.T) {
-	for name, h := range map[string]MigrationHolds{
-		"an object placed there": {Placed: 1, WritesClosed: true},
-		"an upload anchored":     {Anchored: 1, WritesClosed: true},
-		"a multipart session":    {Sessions: 1, WritesClosed: true},
-		"a collection bound":     {Bound: 1, WritesClosed: true},
-		"a URL still valid":      {},
-	} {
+	for name, h := range holdsOfEachKind {
 		repo := &fakeMigRepo{m: newMigration(MigStateMoving), holds: h}
 		if err := newMigWorker(repo, newStore()).Tick(context.Background()); err != nil {
 			t.Fatal(err)
@@ -326,7 +332,7 @@ func TestMovingRollsBackAfterPassesOfFailedMoves(t *testing.T) {
 // migration once nothing holds the target.
 func TestRollingBackMovesBackAndFails(t *testing.T) {
 	s := newStore()
-	repo := &fakeMigRepo{m: newMigration(MigStateRollingBack), holds: MigrationHolds{WritesClosed: true}}
+	repo := &fakeMigRepo{m: newMigration(MigStateRollingBack), holds: MigrationHolds{}}
 	repo.movable = []MoveCandidate{candidate(s, "dedicated", "a", etagA)}
 	if err := newMigWorker(repo, s).Tick(context.Background()); err != nil {
 		t.Fatal(err)
@@ -413,6 +419,85 @@ func TestCompletedCleansTheSourceAfterItsRetention(t *testing.T) {
 	}
 	if fmt.Sprint(repo.transitions) != fmt.Sprint([]string{MigStateCleaned}) {
 		t.Errorf("transitions %v, want cleaned", repo.transitions)
+	}
+}
+
+// The completion is decided on the rows alone: with nothing placed,
+// anchored, in session or bound, the source is clear — no clock is waited
+// for — and the source copies are kept for the configured retention.
+func TestMovingCompletesOnTheRowsAlone(t *testing.T) {
+	if !(MigrationHolds{}).Clear() {
+		t.Fatal("no holds is not clear")
+	}
+	for name, h := range holdsOfEachKind {
+		if h.Clear() {
+			t.Errorf("%s: clear, want held", name)
+		}
+	}
+	const retention = 3 * time.Hour
+	repo := &fakeMigRepo{m: newMigration(MigStateMoving)}
+	w := newMigWorker(repo, newStore())
+	w.WriteWindow, w.SourceCopyRetention = 7*24*time.Hour, retention
+	if err := w.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(repo.transitions) != fmt.Sprint([]string{MigStateCompleted}) {
+		t.Fatalf("transitions %v, want completed on the first pass", repo.transitions)
+	}
+	if repo.sourceRetention != retention {
+		t.Errorf("source copies kept for %v, want the source copy retention %v", repo.sourceRetention, retention)
+	}
+}
+
+// A completed migration keeps passing: an object a request anchored to the
+// source after the completion is moved, a collection bound there is pointed
+// at the target, and the cleanup waits while anything holds the source —
+// past cleanup_after too.
+func TestCompletedMovesStragglersBeforeTheCleanup(t *testing.T) {
+	s := newStore()
+	now := time.Now()
+	m := newMigration(MigStateCompleted)
+	m.CleanupAfter = now.Add(-time.Hour)
+	repo := &fakeMigRepo{m: m, cleanable: []ObjectRef{{"c", "a"}}}
+	repo.movable = []MoveCandidate{candidate(s, "shared", "late", etagA)}
+	w := newMigWorker(repo, s)
+	w.Now = func() time.Time { return now }
+	for name, h := range holdsOfEachKind {
+		repo.holds = h
+		if err := w.Tick(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if len(s.deletes) != 0 || len(repo.transitions) != 0 {
+			t.Fatalf("%s: deleted %v, transitions %v; want the cleanup to wait", name, s.deletes, repo.transitions)
+		}
+	}
+	if len(repo.moved) == 0 || repo.repoints[0] != "shared>dedicated:"+LayoutDedicated {
+		t.Fatalf("moved %v, repointed %v; want the straggler moved and the uploads pointed at the target", repo.moved, repo.repoints)
+	}
+	repo.holds, repo.movable = MigrationHolds{}, nil
+	for range 2 {
+		if err := w.Tick(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if fmt.Sprint(s.deletes) != fmt.Sprint([]string{"shared|c/a"}) || fmt.Sprint(repo.transitions) != fmt.Sprint([]string{MigStateCleaned}) {
+		t.Errorf("deleted %v, transitions %v; want the source cleaned once nothing holds it", s.deletes, repo.transitions)
+	}
+}
+
+// A completed migration whose target left ready waits: nothing is moved,
+// cleaned or rolled back.
+func TestCompletedWaitsForItsTarget(t *testing.T) {
+	m := newMigration(MigStateCompleted)
+	m.CleanupAfter = time.Now().Add(-time.Hour)
+	repo := &fakeMigRepo{m: m, provision: map[string]string{"dedicated": bucketgate.ProvisionDeleting},
+		cleanable: []ObjectRef{{"c", "a"}}}
+	s := newStore()
+	if err := newMigWorker(repo, s).Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.repoints) != 0 || len(s.deletes) != 0 || len(repo.transitions) != 0 {
+		t.Errorf("repointed %v, deleted %v, transitions %v; want nothing", repo.repoints, s.deletes, repo.transitions)
 	}
 }
 

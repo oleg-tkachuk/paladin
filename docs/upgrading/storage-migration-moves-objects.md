@@ -8,11 +8,10 @@
   source, verifies each copy and moves its placement. `rebinding` and
   `verifying` are gone; migration 127 resumes a migration found in
   `copying`, `rebinding` or `verifying` as `moving`.
-- A migration completes only once nothing of the tenant is left in the
-  source and every URL signed for the source before it started has expired
-  — up to `limits.presign.max_ttl` plus `worker.jobs.reconciler.min_object_age`.
-  The source copies are then kept until the later of the retention the
-  operator asked for and `max_ttl`, so a GET URL signed before an object
+- A migration completes only once nothing of the tenant is left in or
+  anchored to the source. The source copies are then kept until the later of the retention the
+  operator asked for and `worker.jobs.storage_migration.source_copy_retention`
+  (by default `max_ttl`), so a GET URL signed before an object
   moved keeps working until it expires.
 - A rollback moves the objects back the same way. It starts when the target
   bucket leaves `ready`, the schema refuses to move a collection, or moves

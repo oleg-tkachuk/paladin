@@ -514,8 +514,10 @@ export type MigrateTenantStorageLayoutRequest =
     /**
      * cleanup_retention_seconds — how long the old (shared) copies are kept after
      * the migration completes before they are deleted. Optional; 0 uses the
-     * server default (24h). Never less than limits.presign.max_ttl, so a GET
-     * URL signed before an object moved keeps working until it expires.
+     * server default (24h). Never less than
+     * worker.jobs.storage_migration.source_copy_retention (by default
+     * limits.presign.max_ttl), so a GET URL signed before an object moved
+     * keeps working until it expires.
      *
      * @generated from field: int64 cleanup_retention_seconds = 3;
      */
