@@ -784,6 +784,14 @@ type StorageBackendHealth struct {
 	CheckedAt pgtype.Timestamptz  `json:"checked_at"`
 }
 
+type StorageMigrationCaughtUp struct {
+	TenantID  pgtype.UUID        `json:"tenant_id"`
+	ObjectID  pgtype.UUID        `json:"object_id"`
+	WrittenAt pgtype.Timestamptz `json:"written_at"`
+	Etag      *string            `json:"etag"`
+	CopiedAt  pgtype.Timestamptz `json:"copied_at"`
+}
+
 type Tenant struct {
 	ID                   pgtype.UUID         `json:"id"`
 	Slug                 string              `json:"slug"`
@@ -827,6 +835,7 @@ type TenantStorageMigration struct {
 	ReboundAt               pgtype.Timestamptz `json:"rebound_at"`
 	RollbackCursorAt        pgtype.Timestamptz `json:"rollback_cursor_at"`
 	RollbackCursorID        pgtype.UUID        `json:"rollback_cursor_id"`
+	CopyStartedAt           pgtype.Timestamptz `json:"copy_started_at"`
 }
 
 type User struct {

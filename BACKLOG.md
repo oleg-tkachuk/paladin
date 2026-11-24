@@ -517,22 +517,41 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### Writes behind a storage migration's copy cursor are not copied before the rebind
+### A storage migration's rollback can miss a write that commits behind its cursor
 
 - **Status:** Deferred.
-- **Reason:** the copy walks object rows once, in (collection, path) order,
-  and the tenant keeps writing to the source meanwhile. An object uploaded,
-  or overwritten through a storage event, at a path the cursor has passed is
-  in the source only, or stale in the target. The verify HEADs the target
-  after the rebind: a missing object rolls the migration back, which is safe
-  but fails a busy tenant's migration over and over; an overwrite that kept
-  its size passes the verify, and the tenant then reads the old bytes.
-- **Definition of Done:** before the rebind, the copy catches up on every
-  object whose bytes were written (`bytes_written_at`) since the copy
-  started — a second pass from a recorded start time, repeated until it is
-  empty under the rebind's lock, as the rollback does with `rebound_at` — and
-  a test uploads behind the cursor and overwrites a copied object, and finds
-  both in the target after the rebind.
+- **Reason:** the rollback copies back, in `(written at, id)` order behind a
+  cursor, the objects written since the rebind. A promote stamps its write
+  before it commits, so one that commits after a batch has listed past its
+  stamp falls behind the cursor and is never copied back; the rebind back
+  checks for writes past the cursor only. The promote's fence
+  (`migstate.FencingPromotes` includes `rolling_back`) makes the rebind back
+  wait for promotes in flight, but not the batches before it. The catch-up
+  before the rebind has the same shape and records each write it copied
+  (`storage_migration_caught_up`) instead of a cursor.
+- **Definition of Done:** the rollback lists what it has not copied back
+  rather than what is past a cursor — a record of the write each copy took,
+  as the catch-up keeps — and the rebind back counts those under the
+  migration row's lock; a test holds a promote open across a rollback batch
+  and finds its object in the source after the rebind back.
+- **Blockers:** none.
+
+### An overwrite whose storage event arrives after a storage migration's rebind is dropped
+
+- **Status:** Deferred.
+- **Reason:** the catch-up copies every write a promote recorded. An
+  overwrite in an explicit-mode bucket is recorded only when its storage
+  event is: one written to the source while the migration copied, whose
+  event is delivered after the rebind, is skipped as from a bucket the
+  collection is not bound to, so neither the catch-up nor the row ever sees
+  it. If the copy took the key before the overwrite landed, the target keeps
+  the older bytes and the newer ones go with the source at cleanup.
+- **Definition of Done:** an event from a migration's source bucket for a
+  collection the migration rebound is not dropped: its bytes are copied into
+  the binding (as `CompleteObject` moves an upload) and promoted there, or the
+  migration does not clean its source while such events can still arrive;
+  a test delivers the event after the rebind and finds the newer bytes in
+  the target after cleanup.
 - **Blockers:** none.
 
 ### A collection created while a storage migration rebinds stays on the source

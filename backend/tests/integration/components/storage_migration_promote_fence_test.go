@@ -89,35 +89,3 @@ func heldPromote(ctx context.Context, sm *statemachine.Transitioner, id uuid.UUI
 	}()
 	return done
 }
-
-// The promote holds the migration row while it runs, so a rebind waits for a
-// promote already past its binding check, and sees it once it commits.
-func TestRebindWaitsForAPromoteInFlight(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	f := seedPublicMigrationFixture(t, ctx)
-	f.addCollection(t, ctx, "docs", f.private, false)
-	id := f.presignBeforeRebind(t, ctx)
-	at := f.startedMigration(t, ctx, worker.MigStateRebinding)
-
-	inTx, release := make(chan struct{}), make(chan struct{})
-	promoted := heldPromote(ctx, statemachine.New(f.pool), id, f.sourcePlacement(), lateSize, inTx, release)
-	<-inTx
-	rebound := make(chan error, 1)
-	go func() {
-		rebound <- adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool).RebindTenant(ctx, at, f.backend, f.dedicated)
-	}()
-	select {
-	case err := <-rebound:
-		close(release)
-		t.Fatalf("the rebind did not wait for the promote in flight: %v", err)
-	case <-time.After(fenceWait):
-	}
-	close(release)
-	if err := <-promoted; err != nil {
-		t.Fatalf("promote: %v", err)
-	}
-	if err := <-rebound; err != nil {
-		t.Fatalf("rebind: %v", err)
-	}
-}

@@ -104,7 +104,7 @@ CROSS JOIN buckets tb
 JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE ssb.name = $2 AND sb.name = $3
   AND tsb.name = $4 AND tb.name = $5
-RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at, rebound_at, rollback_cursor_at, rollback_cursor_id
+RETURNING id, tenant_id, source_bucket_id, target_bucket_id, state, objects_total, objects_copied, cursor_collection, cursor_path, error, attempts, cleanup_retention_seconds, cleanup_after, cleaned_at, created_at, updated_at, completed_at, rebound_at, rollback_cursor_at, rollback_cursor_id, copy_started_at
 `
 
 // ADR-0015 Phase 3: shared->dedicated storage migration copy job.
@@ -139,6 +139,7 @@ func (q *Queries) CreateStorageMigration(ctx context.Context, tenantID pgtype.UU
 		&i.ReboundAt,
 		&i.RollbackCursorAt,
 		&i.RollbackCursorID,
+		&i.CopyStartedAt,
 	)
 	return i, err
 }
@@ -240,8 +241,19 @@ func (q *Queries) ForgetPurgedFromStorageMigrationCount(ctx context.Context, obj
 	return err
 }
 
+const forgetStorageMigrationCaughtUp = `-- name: ForgetStorageMigrationCaughtUp :exec
+DELETE FROM storage_migration_caught_up WHERE tenant_id = $1
+`
+
+// Drops what an attempt's catch-up recorded (migration 116): at the start of
+// an attempt's copy, which copies everything again, and once it completes.
+func (q *Queries) ForgetStorageMigrationCaughtUp(ctx context.Context, tenantID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, forgetStorageMigrationCaughtUp, tenantID)
+	return err
+}
+
 const getStorageMigration = `-- name: GetStorageMigration :one
-SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id,
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
 FROM tenant_storage_migrations m
@@ -288,6 +300,7 @@ func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID)
 		&i.TenantStorageMigration.ReboundAt,
 		&i.TenantStorageMigration.RollbackCursorAt,
 		&i.TenantStorageMigration.RollbackCursorID,
+		&i.TenantStorageMigration.CopyStartedAt,
 		&i.SourceBackendName,
 		&i.SourceBucketName,
 		&i.TargetBackendName,
@@ -316,7 +329,7 @@ func (q *Queries) LatestStorageMigration(ctx context.Context, tenantID pgtype.UU
 }
 
 const listActiveStorageMigrations = `-- name: ListActiveStorageMigrations :many
-SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id,
+SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at,
        ssb.name AS source_backend_name, sb.name AS source_bucket_name,
        tsb.name AS target_backend_name, tb.name AS target_bucket_name
 FROM tenant_storage_migrations m
@@ -372,6 +385,7 @@ func (q *Queries) ListActiveStorageMigrations(ctx context.Context, limitCount in
 			&i.TenantStorageMigration.ReboundAt,
 			&i.TenantStorageMigration.RollbackCursorAt,
 			&i.TenantStorageMigration.RollbackCursorID,
+			&i.TenantStorageMigration.CopyStartedAt,
 			&i.SourceBackendName,
 			&i.SourceBucketName,
 			&i.TargetBackendName,
@@ -506,6 +520,31 @@ func (q *Queries) MigrationCountTenantObjects(ctx context.Context, tenantID pgty
 	return count, err
 }
 
+const migrationCountUncaughtUp = `-- name: MigrationCountUncaughtUp :one
+SELECT count(*)
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
+LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
+WHERE o.tenant_id = $1
+  AND m.state = $2 AND m.attempts = $3
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+  AND o.bytes_written_at >= COALESCE(m.copy_started_at, m.created_at)
+  AND u.written_at IS DISTINCT FROM o.bytes_written_at
+`
+
+// How many objects MigrationListUncaughtUp would still return. The rebind
+// counts them under the migration row's lock, which every promote holds
+// while it runs, so no write commits unseen between the count and the
+// rebind: any is the rebind refused.
+func (q *Queries) MigrationCountUncaughtUp(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
+	row := q.db.QueryRow(ctx, migrationCountUncaughtUp, tenantID, fromState, attempts)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const migrationCountUploadsAnchoredTo = `-- name: MigrationCountUploadsAnchoredTo :one
 SELECT count(*)
 FROM objects o
@@ -559,6 +598,27 @@ func (q *Queries) MigrationHoldObject(ctx context.Context, tenantID pgtype.UUID,
 		return nil, err
 	}
 	return items, nil
+}
+
+const migrationHoldObjectForCatchUp = `-- name: MigrationHoldObjectForCatchUp :one
+SELECT o.bytes_written_at
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = $1 AND o.id = $2
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+FOR KEY SHARE OF o
+`
+
+// Holds one object's row against a delete and a promote (FOR KEY SHARE, which
+// a promote's FOR UPDATE waits on) while the catch-up copies it, and reads
+// the write whose bytes the copy takes. No row: purged, or no longer live or
+// trashed; nothing to copy.
+func (q *Queries) MigrationHoldObjectForCatchUp(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, migrationHoldObjectForCatchUp, tenantID, objectID)
+	var bytes_written_at pgtype.Timestamptz
+	err := row.Scan(&bytes_written_at)
+	return bytes_written_at, err
 }
 
 const migrationListObjectsWrittenSince = `-- name: MigrationListObjectsWrittenSince :many
@@ -657,11 +717,14 @@ func (q *Queries) MigrationListTenantCollections(ctx context.Context, tenantID p
 const migrationListTenantObjects = `-- name: MigrationListTenantObjects :many
 SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
        (o.state = 'DELETED')::bool AS trashed,
-       sb.name AS bound_backend_name, b.name AS bound_bucket_name
+       sb.name AS bound_backend_name, b.name AS bound_bucket_name,
+       o.bytes_written_at AS written_at,
+       u.written_at AS caught_up_written_at, u.etag AS caught_up_etag
 FROM objects o
 JOIN collections c       ON c.id = o.collection_id
 JOIN buckets b           ON b.id = c.bucket_id
 JOIN storage_backends sb ON sb.id = b.backend_id
+LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
 WHERE o.tenant_id = $1
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
@@ -672,12 +735,15 @@ LIMIT $4::int
 `
 
 type MigrationListTenantObjectsRow struct {
-	CollectionName   string `json:"collection_name"`
-	Path             string `json:"path"`
-	SizeBytes        int64  `json:"size_bytes"`
-	Trashed          bool   `json:"trashed"`
-	BoundBackendName string `json:"bound_backend_name"`
-	BoundBucketName  string `json:"bound_bucket_name"`
+	CollectionName    string             `json:"collection_name"`
+	Path              string             `json:"path"`
+	SizeBytes         int64              `json:"size_bytes"`
+	Trashed           bool               `json:"trashed"`
+	BoundBackendName  string             `json:"bound_backend_name"`
+	BoundBucketName   string             `json:"bound_bucket_name"`
+	WrittenAt         pgtype.Timestamptz `json:"written_at"`
+	CaughtUpWrittenAt pgtype.Timestamptz `json:"caught_up_written_at"`
+	CaughtUpEtag      *string            `json:"caught_up_etag"`
 }
 
 // Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
@@ -695,7 +761,9 @@ type MigrationListTenantObjectsRow struct {
 // so they need nothing copied.
 //
 // bound_* is the bucket the collection is bound to now: cleanup deletes a
-// source copy only of an object read from the target.
+// source copy only of an object read from the target. written_at and
+// caught_up_* are when its bytes were last written and what the catch-up
+// copied of them (migration 116), for the verify.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
 	rows, err := q.db.Query(ctx, migrationListTenantObjects,
 		tenantID,
@@ -717,6 +785,77 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 			&i.Trashed,
 			&i.BoundBackendName,
 			&i.BoundBucketName,
+			&i.WrittenAt,
+			&i.CaughtUpWrittenAt,
+			&i.CaughtUpEtag,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const migrationListUncaughtUp = `-- name: MigrationListUncaughtUp :many
+SELECT o.id, o.bytes_written_at AS written_at,
+       c.name AS collection_name, o.path,
+       COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
+       (o.state = 'DELETED')::bool AS trashed
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
+LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
+WHERE o.tenant_id = $1
+  AND m.state = $2 AND m.attempts = $3
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+  AND o.bytes_written_at >= COALESCE(m.copy_started_at, m.created_at)
+  AND u.written_at IS DISTINCT FROM o.bytes_written_at
+ORDER BY o.bytes_written_at, o.id
+LIMIT $4::int
+`
+
+type MigrationListUncaughtUpRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	WrittenAt      pgtype.Timestamptz `json:"written_at"`
+	CollectionName string             `json:"collection_name"`
+	Path           string             `json:"path"`
+	SizeBytes      int64              `json:"size_bytes"`
+	Trashed        bool               `json:"trashed"`
+}
+
+// The objects the catch-up copies before the rebind: live or trashed, in a
+// private collection, whose bytes were written since the copy started and
+// whose latest write the catch-up has not copied (migration 116). The copy
+// listed each object once, behind a moving cursor; a write after its start
+// may have reached only the source. Only while the migration is as the
+// worker read it, so a stale worker lists nothing. The set shrinks as the
+// catch-up copies, and grows by what is written meanwhile, in any order: it
+// has no cursor for a late commit to fall behind.
+func (q *Queries) MigrationListUncaughtUp(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32, limitCount int32) ([]MigrationListUncaughtUpRow, error) {
+	rows, err := q.db.Query(ctx, migrationListUncaughtUp,
+		tenantID,
+		fromState,
+		attempts,
+		limitCount,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MigrationListUncaughtUpRow
+	for rows.Next() {
+		var i MigrationListUncaughtUpRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WrittenAt,
+			&i.CollectionName,
+			&i.Path,
+			&i.SizeBytes,
+			&i.Trashed,
 		); err != nil {
 			return nil, err
 		}
@@ -750,6 +889,34 @@ func (q *Queries) MigrationObjectsWrittenSinceExist(ctx context.Context, tenantI
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const recordStorageMigrationCaughtUp = `-- name: RecordStorageMigrationCaughtUp :execrows
+INSERT INTO storage_migration_caught_up (tenant_id, object_id, written_at, etag)
+SELECT $1, $2, $3, $4
+WHERE EXISTS (SELECT 1 FROM tenant_storage_migrations m
+               WHERE m.tenant_id = $1
+                 AND m.state = $5 AND m.attempts = $6)
+ON CONFLICT (tenant_id, object_id) DO UPDATE
+SET written_at = EXCLUDED.written_at, etag = EXCLUDED.etag, copied_at = now()
+`
+
+// Records the catch-up's copy of an object: the write it took and the ETag
+// the target reported for it. Only while the migration is as the worker read
+// it: a stale worker's copy is not taken for the current attempt's.
+func (q *Queries) RecordStorageMigrationCaughtUp(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, writtenAt pgtype.Timestamptz, etag *string, fromState string, attempts int32) (int64, error) {
+	result, err := q.db.Exec(ctx, recordStorageMigrationCaughtUp,
+		tenantID,
+		objectID,
+		writtenAt,
+		etag,
+		fromState,
+		attempts,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const resetFailedTargetBucketProvision = `-- name: ResetFailedTargetBucketProvision :exec
@@ -791,7 +958,7 @@ JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.id = $2 AND m.state = 'failed'
   AND ssb.name = $3 AND sb.name = $4
   AND tsb.name = $5 AND tb.name = $6
-RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id
+RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at
 `
 
 // Starts a failed migration over from the beginning, in place: the row is the
@@ -830,6 +997,7 @@ func (q *Queries) RetryFailedStorageMigration(ctx context.Context, cleanupRetent
 		&i.ReboundAt,
 		&i.RollbackCursorAt,
 		&i.RollbackCursorID,
+		&i.CopyStartedAt,
 	)
 	return i, err
 }
@@ -846,7 +1014,7 @@ SET state              = 'rolling_back',
 FROM tenant_default_bindings d
 WHERE m.id = $1 AND m.state = 'failed'
   AND d.tenant_id = m.tenant_id AND d.bucket_id = m.target_bucket_id
-RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id
+RETURNING m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.rebound_at, m.rollback_cursor_at, m.rollback_cursor_id, m.copy_started_at
 `
 
 // A migration that failed its verify before rollbacks existed: 'failed', with
@@ -881,6 +1049,7 @@ func (q *Queries) RollBackStuckStorageMigration(ctx context.Context, id pgtype.U
 		&i.ReboundAt,
 		&i.RollbackCursorAt,
 		&i.RollbackCursorID,
+		&i.CopyStartedAt,
 	)
 	return i, err
 }
@@ -929,12 +1098,17 @@ func (q *Queries) SetStorageMigrationState(ctx context.Context, toState string, 
 
 const setStorageMigrationTotal = `-- name: SetStorageMigrationTotal :execrows
 UPDATE tenant_storage_migrations
-SET objects_total = $1, state = $2, updated_at = now()
+SET objects_total = $1, state = $2,
+    copy_started_at = clock_timestamp(), updated_at = now()
 WHERE tenant_id = $3 AND state = $4
   AND attempts = $5
 `
 
-// Records the object count and moves provisioning -> copying.
+// Records the object count, the copy's start and moves provisioning ->
+// copying. Run under the row's lock (LockStorageMigrationForCount), which
+// every promote holds while the migration provisions: the clock read here is
+// later than every promote that committed before, and earlier than the
+// stamp of every promote after (statemachine.checkPlacement).
 func (q *Queries) SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error) {
 	result, err := q.db.Exec(ctx, setStorageMigrationTotal,
 		objectsTotal,

@@ -20,6 +20,17 @@
   first when only the source does. A copy neither bucket holds as recorded
   is kept and logged at Error, and the migration stays `completed` until it
   is resolved.
+- Before a migration rebinds a tenant it copies again every object written
+  since its copy started (migration 116 adds
+  `tenant_storage_migrations.copy_started_at` and the
+  `storage_migration_caught_up` table; 117 builds an index on
+  `objects (tenant_id, bytes_written_at)` concurrently). The migration stays
+  in `rebinding` while it catches up, logging each pass with its counts, and
+  a rebind refused by writes since the last pass is logged at Warn. Objects
+  uploaded or overwritten behind the copy's cursor no longer roll the
+  migration back or leave the tenant reading older bytes. The verify also
+  checks such an object's write time and its ETag against the catch-up's
+  copy, not its size alone.
 - While a migration is provisioning, copying, rebinding, verifying or
   rolling back, every promote of one of the tenant's objects holds the
   migration's row for its transaction (`FOR SHARE`). Promotes do not wait on

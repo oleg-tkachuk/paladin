@@ -474,6 +474,59 @@ deleted the only copy.
   it may be read from there. So the cleanup never deletes the only copy of a
   live object, whatever wrote it after the copy passed.
 
+## Addendum (2026-11-24): writes behind the copy's cursor are caught up before the rebind
+
+The copy walks the tenant's objects once, in `(collection, path)` order,
+while the tenant keeps writing to the source. A write the cursor has passed
+reached the source only: a new object is missing from the target, and the
+verify rolled the migration back (for a busy tenant, every attempt); an
+overwrite is stale there, and one of the same size passed the verify by size,
+so the tenant then read the old bytes.
+
+Two designs were open: route every write during the migration to both
+buckets, or copy what was written behind the cursor again before the rebind.
+Writing both buckets doubles every upload's bytes and every failure mode —
+an upload half-written to one bucket, presigned URLs that can name only one
+— for the length of the copy, and a write still needs a way to tell which
+bucket's bytes are newer. The catch-up is chosen; it reuses the copy's hold
+and the promote's fence, and moves only what changed.
+
+- **The copy's start is fenced.** `copy_started_at` (migration 116) is read
+  with `clock_timestamp()` under the migration row's lock, which every
+  promote holds while the migration provisions. So every object written
+  before it was promoted before the copy listed anything, and is copied
+  after its write; every later write is stamped after it.
+- **The catch-up has no cursor.** It lists the live and trashed private
+  objects whose `bytes_written_at` is at or after the copy's start and whose
+  latest write it has not copied (`storage_migration_caught_up`, one row per
+  object, cleared when an attempt starts its copy and when it completes). It
+  copies each under its row's hold (`FOR KEY SHARE`, which a promote's
+  `FOR UPDATE` waits on), so the write it records is the one whose bytes it
+  copied, or an older one that leaves the object listed again; with the
+  write it records the ETag the target reported for the copy. A set with no
+  cursor cannot be outrun by a late commit: a promote stamped before a pass
+  and committed after it is listed by the next. One batch a tick, in the
+  `rebinding` state, logged with its counts.
+- **The rebind refuses while anything is behind.** Under the migration row's
+  lock — so every promote in flight has committed and every later one waits
+  — the rebind counts the objects the catch-up would still list, and any is
+  `ErrCopyBehind`: nothing changes, and the next tick copies them. A tenant
+  that writes faster than the catch-up copies stays in `rebinding`; it is
+  never rebound behind its writes.
+- **The verify compares content and write time, not size alone.** For an
+  object written between the copy's start and the rebind it requires the
+  catch-up to have recorded that very write, and the target's ETag to be the
+  one the target reported for that copy. ETags are compared with ETags the
+  same bucket reported for the same copy, never across buckets: a
+  server-side copy, a stream-through and an encrypted store each make their
+  own. An object written before the copy started was copied after its
+  write; one written at or after the rebind went to the target, its promote
+  fenced against the rebind. A failure rolls back, as before.
+
+Not covered, and recorded in BACKLOG: an overwrite reported only by a storage
+event that arrives after the rebind is dropped before it reaches the row; the
+rollback's own copy back still walks a cursor.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius
