@@ -26,7 +26,7 @@ type refusingPromoter struct {
 	calls int
 }
 
-func (p *refusingPromoter) PromoteToAvailableInTx(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source, func(context.Context, pgx.Tx) error) (bool, error) {
+func (p *refusingPromoter) PromoteToAvailableInTx(context.Context, uuid.UUID, *statemachine.Placement, string, int64, string, string, statemachine.Source, func(context.Context, pgx.Tx) error) (bool, error) {
 	p.calls++
 	return false, p.err
 }

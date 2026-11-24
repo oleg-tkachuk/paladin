@@ -407,6 +407,43 @@ Bytes a debt finds a new object's under the same key (`Superseded`) are left;
 the migration's own copy of that object overwrites them, or cleanup, which
 walks the new row, removes the source's.
 
+## Addendum (2026-11-24): a promote is fenced against the rebind
+
+Every writer resolves the collection's bucket, puts or finds the bytes there,
+and then promotes the row — on another transaction. A rebind committed in
+between made the row readable from the target while its bytes were only in
+the source, and the cleanup then deleted the only copy. Ordering by
+timestamps cannot close that: `bytes_written_at` was the promote
+transaction's start, so a promote that committed late landed behind any
+cursor or check that had already passed its time.
+
+The promote is fenced instead (`statemachine.checkPlacement`):
+
+- **It holds the migration row.** While the tenant's migration is in a state
+  whose step moves a binding or stamps the copy's start
+  (`migstate.FencingPromotes`: provisioning, copying, rebinding, verifying,
+  rolling back), the promote takes the row `FOR SHARE` for its transaction.
+  Promotes do not wait on each other; a step that takes the row `FOR UPDATE`
+  — the copy's start, the rebind, the rebind back — waits for every promote
+  in flight, and every later promote waits for it. Under `READ COMMITTED`
+  each statement after the lock sees every promote that committed before.
+  Outside those states nothing is locked.
+- **It checks the binding.** The caller names the bucket it confirmed the
+  bytes in (`statemachine.Placement`); under the fence the promote reads the
+  collection's binding and refuses with `ErrBindingMoved` when it differs.
+  `CompleteObject` and `CopyObject` answer `UNAVAILABLE` (a copy's bytes,
+  under its own new key, are deleted and its row discarded); a multipart
+  completion, the reconciler and a storage event leave the row `PENDING`,
+  anchored to the bucket its URL names, for the next attempt to move.
+- **It stamps the clock after the fence.** `bytes_written_at` is
+  `clock_timestamp()` at the promote's `UPDATE`, after the lock: a step that
+  held the fence first sees every later promote stamped after its own time.
+
+Lock order is the object's row, then the migration's — the order the copy
+and the purge already take — and the rebind takes no object row, so the
+fence adds no cycle. The cost falls on promotes during a migration alone: one
+more row lock, shared.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

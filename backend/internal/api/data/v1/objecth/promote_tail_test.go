@@ -47,7 +47,7 @@ type fakeStateMachine struct {
 }
 
 func (f *fakeStateMachine) PromoteToAvailableInTx(
-	ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64,
+	ctx context.Context, objectID uuid.UUID, placed *statemachine.Placement, etag string, sizeBytes int64,
 	_, _ string, _ statemachine.Source,
 	onPromoted func(context.Context, pgx.Tx) error,
 ) (bool, error) {
@@ -72,7 +72,7 @@ func (f *fakeStateMachine) DiscardFailed(_ context.Context, objectID uuid.UUID, 
 	return f.markFailErr
 }
 
-func (*fakeStateMachine) PromoteToAvailable(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source) (bool, error) {
+func (*fakeStateMachine) PromoteToAvailable(context.Context, uuid.UUID, *statemachine.Placement, string, int64, string, string, statemachine.Source) (bool, error) {
 	panic("not used")
 }
 func (*fakeStateMachine) SoftDeleteInTx(context.Context, uuid.UUID, int64, func(context.Context, pgx.Tx) error) error {

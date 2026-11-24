@@ -138,7 +138,7 @@ func TestPromoteInTxRunsCallbackAndCommits(t *testing.T) {
 	sm := &Transitioner{pool: pool}
 
 	var gotTx pgx.Tx
-	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, "e", 1, "c", "seq", SourceEvent,
+	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, nil, "e", 1, "c", "seq", SourceEvent,
 		func(_ context.Context, tx pgx.Tx) error { gotTx = tx; return nil })
 	if err != nil {
 		t.Fatalf("PromoteToAvailableInTx: %v", err)
@@ -163,7 +163,7 @@ func TestPromoteInTxSkipsCallbackWhenNothingChanged(t *testing.T) {
 	sm := &Transitioner{pool: &fakePool{tx: tx}}
 
 	called := false
-	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, "", 0, "", "seq", SourceEvent,
+	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, nil, "", 0, "", "seq", SourceEvent,
 		func(context.Context, pgx.Tx) error { called = true; return nil })
 	if err != nil {
 		t.Fatalf("a no-op promote must not error: %v", err)
@@ -185,7 +185,7 @@ func TestPromoteInTxRollsBackOnCallbackError(t *testing.T) {
 	sm := &Transitioner{pool: pool}
 	boom := errors.New("outbox insert failed")
 
-	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, "e", 1, "c", "seq", SourceEvent,
+	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, nil, "e", 1, "c", "seq", SourceEvent,
 		func(context.Context, pgx.Tx) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("callback error must surface, got %v", err)
@@ -208,7 +208,7 @@ func TestPromoteInTxSurfacesPromoteError(t *testing.T) {
 	sm := &Transitioner{pool: &fakePool{tx: tx}}
 
 	called := false
-	_, err := sm.PromoteToAvailableInTx(smCtx, objID, "", 0, "", "", SourceRPC,
+	_, err := sm.PromoteToAvailableInTx(smCtx, objID, nil, "", 0, "", "", SourceRPC,
 		func(context.Context, pgx.Tx) error { called = true; return nil })
 	if !errors.Is(err, boom) {
 		t.Fatalf("want the promote error, got %v", err)
@@ -222,7 +222,7 @@ func TestPromoteInTxWrapsBeginError(t *testing.T) {
 	boom := errors.New("pool exhausted")
 	sm := &Transitioner{pool: &fakePool{beginErr: boom}}
 
-	_, err := sm.PromoteToAvailableInTx(smCtx, objID, "", 0, "", "", SourceRPC, nil)
+	_, err := sm.PromoteToAvailableInTx(smCtx, objID, nil, "", 0, "", "", SourceRPC, nil)
 	if !errors.Is(err, boom) {
 		t.Fatalf("want the begin error wrapped, got %v", err)
 	}
@@ -233,7 +233,7 @@ func TestPromoteInTxWrapsCommitError(t *testing.T) {
 	tx.commitErr = errors.New("serialization failure")
 	sm := &Transitioner{pool: pool}
 
-	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, "e", 1, "c", "seq", SourceEvent, nil)
+	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, nil, "e", 1, "c", "seq", SourceEvent, nil)
 	if !errors.Is(err, tx.commitErr) {
 		t.Fatalf("want the commit error wrapped, got %v", err)
 	}
@@ -247,7 +247,7 @@ func TestPromoteInTxAcceptsNilCallback(t *testing.T) {
 	pool, tx := promotingPool()
 	sm := &Transitioner{pool: pool}
 
-	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, "e", 1, "c", "seq", SourceEvent, nil)
+	changed, err := sm.PromoteToAvailableInTx(smCtx, objID, nil, "e", 1, "c", "seq", SourceEvent, nil)
 	if err != nil || !changed {
 		t.Fatalf("changed=%v err=%v, want true/nil", changed, err)
 	}
@@ -386,7 +386,7 @@ func TestPromoteToAvailableRunsInATransaction(t *testing.T) {
 	pool := &fakePool{tx: tx}
 	sm := &Transitioner{pool: pool}
 
-	changed, err := sm.PromoteToAvailable(smCtx, objID, "e", 5, "c", "seq", SourceReconciler)
+	changed, err := sm.PromoteToAvailable(smCtx, objID, nil, "e", 5, "c", "seq", SourceReconciler)
 	if err != nil || !changed {
 		t.Fatalf("changed=%v err=%v, want true/nil", changed, err)
 	}

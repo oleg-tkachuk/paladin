@@ -62,7 +62,7 @@ type Storage interface {
 
 // StateMachine is the slice of *statemachine.Transitioner the handler uses.
 type StateMachine interface {
-	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (bool, error)
+	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, placed *statemachine.Placement, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (bool, error)
 	DiscardFailed(ctx context.Context, objectID uuid.UUID, reason statemachine.FailureReason) error
 }
 
@@ -508,17 +508,26 @@ type assembled struct {
 	changed bool
 }
 
-// assemble has the store assemble the parts and promotes the object. An
-// object whose bytes break its registration is discarded.
+// assemble has the store assemble the parts and promotes the object where
+// they were assembled. An object whose bytes break its registration is
+// discarded; one whose collection a storage migration rebound away from that
+// bucket is refused its promote (statemachine.ErrBindingMoved) and stays
+// PENDING, anchored there.
 func (h *Handler) assemble(ctx context.Context, sess Session, backendID, bucket string, args CompleteArgs) (assembled, error) {
 	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, args.TenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
 	if err != nil {
 		return assembled{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
 	// No sequencer from multipart completion — events will supply one later.
-	changed, err := h.sm.PromoteToAvailable(ctx, sess.ObjectID, etag, size, "", "", statemachine.SourceRPC)
+	placed := &statemachine.Placement{BackendID: backendID, Bucket: bucket}
+	changed, err := h.sm.PromoteToAvailable(ctx, sess.ObjectID, placed, etag, size, "", "", statemachine.SourceRPC)
 	if errors.Is(err, statemachine.ErrContentMismatch) {
 		return assembled{}, h.discardMismatched(ctx, sess, backendID, bucket, args.UploadID, err)
+	}
+	if errors.Is(err, statemachine.ErrBindingMoved) {
+		logger.FromContext(ctx).Warn("promote refused: the collection was rebound away from the session's bucket; the object stays pending",
+			zap.String("upload_id", args.UploadID), zap.String("object_id", sess.ObjectID.String()), zap.Error(err))
+		return assembled{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
 	}
 	if err != nil {
 		return assembled{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)

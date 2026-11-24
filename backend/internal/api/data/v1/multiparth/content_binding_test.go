@@ -24,7 +24,7 @@ type fakeSM struct {
 	failedReason statemachine.FailureReason
 }
 
-func (f *fakeSM) PromoteToAvailable(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source) (bool, error) {
+func (f *fakeSM) PromoteToAvailable(context.Context, uuid.UUID, *statemachine.Placement, string, int64, string, string, statemachine.Source) (bool, error) {
 	return f.promoteErr == nil, f.promoteErr
 }
 

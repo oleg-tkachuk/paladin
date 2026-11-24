@@ -60,7 +60,7 @@ func (f publicMigrationFixture) promotedUpload(t *testing.T, ctx context.Context
 		return
 	}
 	f.store.put(f.loc(f.boundTo(t, ctx, collection), collection, key), size)
-	if changed, err := statemachine.New(f.pool).PromoteToAvailable(ctx, id, "", size, "", "", statemachine.SourceRPC); err != nil || !changed {
+	if changed, err := statemachine.New(f.pool).PromoteToAvailable(ctx, id, nil, "", size, "", "", statemachine.SourceRPC); err != nil || !changed {
 		t.Errorf("promote %s/%s = %v, %v; want promoted", collection, key, changed, err)
 	}
 }
@@ -97,7 +97,7 @@ func TestStorageMigrationRollbackCopiesBackOnlyBytesWrites(t *testing.T) {
 		// Overwritten straight in the bucket; the storage event reports it.
 		f.store.put(f.loc(f.dedicated, "docs", "overwritten"), 11)
 		id := f.objectID(t, ctx, "docs", "overwritten")
-		if changed, err := statemachine.New(f.pool).PromoteToAvailable(ctx, id, "etag-2", 11, "", overwriteSequencer, statemachine.SourceEvent); err != nil || !changed {
+		if changed, err := statemachine.New(f.pool).PromoteToAvailable(ctx, id, nil, "etag-2", 11, "", overwriteSequencer, statemachine.SourceEvent); err != nil || !changed {
 			t.Errorf("overwrite promote = %v, %v; want applied", changed, err)
 		}
 	}}

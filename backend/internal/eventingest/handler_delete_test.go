@@ -32,9 +32,9 @@ type fakeProbe struct {
 	gotID  uuid.UUID
 }
 
-func (p *fakeProbe) HeadByObjectID(_ context.Context, id uuid.UUID) (string, int64, string, string, bool, error) {
+func (p *fakeProbe) HeadByObjectID(_ context.Context, id uuid.UUID) (string, int64, string, string, statemachine.Placement, bool, error) {
 	p.called, p.gotID = true, id
-	return "", 0, "", "", p.found, p.err
+	return "", 0, "", "", statemachine.Placement{}, p.found, p.err
 }
 
 type fakeDeleter struct {

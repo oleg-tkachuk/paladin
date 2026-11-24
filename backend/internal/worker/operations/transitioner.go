@@ -12,7 +12,7 @@ import (
 // state-transition branches are unit-testable with a fake — production
 // passes the concrete *statemachine.Transitioner, which satisfies this.
 type Transitioner interface {
-	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (changed bool, err error)
+	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, placed *statemachine.Placement, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (changed bool, err error)
 	DiscardFailed(ctx context.Context, objectID uuid.UUID, reason statemachine.FailureReason) error
 	SoftDelete(ctx context.Context, objectID uuid.UUID, resourceVersion int64) error
 	Restore(ctx context.Context, objectID uuid.UUID) error

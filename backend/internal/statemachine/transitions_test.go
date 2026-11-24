@@ -41,13 +41,17 @@ type fakeExec struct {
 	// lockRow answers the registration check's SELECT … FOR UPDATE; nil
 	// answers it with row, whose state then decides whether it checks.
 	lockRow pgx.Row
+	// bindingRow answers the placement check's read of the collection's
+	// binding (checkPlacement).
+	bindingRow pgx.Row
 
-	execSQL   string
-	execArgs  []any
-	querySQL  string
-	queryArgs []any
-	execCalls int
-	lockCalls int
+	execSQL      string
+	execArgs     []any
+	querySQL     string
+	queryArgs    []any
+	execCalls    int
+	lockCalls    int
+	bindingCalls int
 }
 
 func (f *fakeExec) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
@@ -63,6 +67,10 @@ func (f *fakeExec) QueryRow(_ context.Context, sql string, args ...any) pgx.Row 
 			return f.lockRow
 		}
 		return f.row
+	}
+	if strings.Contains(sql, "JOIN storage_backends") {
+		f.bindingCalls++
+		return f.bindingRow
 	}
 	f.querySQL, f.queryArgs = sql, args
 	return f.row
@@ -81,7 +89,7 @@ func TestPromoteReportsChangedOnUpdate(t *testing.T) {
 	sm := &Transitioner{}
 	ex := &fakeExec{row: fakeRow{state: string(StateAvailable)}}
 
-	changed, err := sm.promote(smCtx, ex, objID, "etag-1", 42, "chk-1", "seq-9", SourceEvent)
+	changed, err := sm.promote(smCtx, ex, objID, nil, "etag-1", 42, "chk-1", "seq-9", SourceEvent)
 	if err != nil {
 		t.Fatalf("promote: %v", err)
 	}
@@ -115,7 +123,7 @@ func TestPromoteTreatsNoRowsAsNoOp(t *testing.T) {
 			sm := &Transitioner{}
 			ex := &fakeExec{row: fakeRow{err: tc.err}}
 
-			changed, err := sm.promote(smCtx, ex, objID, "", 0, "", "seq-1", SourceEvent)
+			changed, err := sm.promote(smCtx, ex, objID, nil, "", 0, "", "seq-1", SourceEvent)
 			if err != nil {
 				t.Fatalf("no-rows must not surface an error, got %v", err)
 			}
@@ -131,7 +139,7 @@ func TestPromoteWrapsRealErrors(t *testing.T) {
 	boom := errors.New("connection refused")
 	ex := &fakeExec{row: fakeRow{err: boom}}
 
-	changed, err := sm.promote(smCtx, ex, objID, "", 0, "", "", SourceRPC)
+	changed, err := sm.promote(smCtx, ex, objID, nil, "", 0, "", "", SourceRPC)
 	if err == nil {
 		t.Fatal("a genuine scan error must surface")
 	}
@@ -160,7 +168,7 @@ func TestPromoteForwardsBothRegimes(t *testing.T) {
 			sm := &Transitioner{}
 			ex := &fakeExec{row: fakeRow{state: string(StateAvailable)}}
 
-			if _, err := sm.promote(smCtx, ex, objID, "e", 1, "c", tc.sequencer, tc.source); err != nil {
+			if _, err := sm.promote(smCtx, ex, objID, nil, "e", 1, "c", tc.sequencer, tc.source); err != nil {
 				t.Fatalf("promote: %v", err)
 			}
 			if got := ex.queryArgs[4]; got != tc.sequencer {

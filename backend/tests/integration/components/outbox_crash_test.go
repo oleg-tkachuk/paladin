@@ -154,7 +154,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 	// ── statemachine seam: promote + event commit together ───────────────
 	t.Run("promote commits state and outbox atomically", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
-		changed, err := sm.PromoteToAvailableInTx(ctx, id, "etag", 10, "", "", statemachine.SourceEvent,
+		changed, err := sm.PromoteToAvailableInTx(ctx, id, nil, "etag", 10, "", "", statemachine.SourceEvent,
 			func(ctx context.Context, tx pgx.Tx) error {
 				e := disp.RecordTx(ctx, tx, f.tenantID.String(), uploaded(f.tenantID))
 				return e
@@ -177,7 +177,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 	t.Run("dispatch error rolls back promote and outbox", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
 		before := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.uploaded")
-		_, err := sm.PromoteToAvailableInTx(ctx, id, "etag", 10, "", "", statemachine.SourceEvent,
+		_, err := sm.PromoteToAvailableInTx(ctx, id, nil, "etag", 10, "", "", statemachine.SourceEvent,
 			func(ctx context.Context, tx pgx.Tx) error {
 				if e := disp.RecordTx(ctx, tx, f.tenantID.String(), uploaded(f.tenantID)); e != nil {
 					return e
@@ -339,12 +339,12 @@ func TestPromoteSequencerRace(t *testing.T) {
 	t.Run("empty-sequencer promote defers to event-promoted row", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
 		// Storage event promotes first, with authoritative etag + sequencer.
-		changed, err := sm.PromoteToAvailable(ctx, id, "evt-etag", 100, "", "s100", statemachine.SourceEvent)
+		changed, err := sm.PromoteToAvailable(ctx, id, nil, "evt-etag", 100, "", "s100", statemachine.SourceEvent)
 		if err != nil || !changed {
 			t.Fatalf("event promote: changed=%v err=%v", changed, err)
 		}
 		// RPC HEAD path (empty sequencer) arrives late with a different etag.
-		changed, err = sm.PromoteToAvailable(ctx, id, "rpc-etag", 200, "", "", statemachine.SourceRPC)
+		changed, err = sm.PromoteToAvailable(ctx, id, nil, "rpc-etag", 200, "", "", statemachine.SourceRPC)
 		if err != nil {
 			t.Fatalf("rpc promote: %v", err)
 		}
@@ -358,11 +358,11 @@ func TestPromoteSequencerRace(t *testing.T) {
 
 	t.Run("double empty-sequencer promote charges once", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
-		changed, err := sm.PromoteToAvailable(ctx, id, "rpc-etag", 10, "", "", statemachine.SourceRPC)
+		changed, err := sm.PromoteToAvailable(ctx, id, nil, "rpc-etag", 10, "", "", statemachine.SourceRPC)
 		if err != nil || !changed {
 			t.Fatalf("first promote: changed=%v err=%v", changed, err)
 		}
-		changed, err = sm.PromoteToAvailable(ctx, id, "rpc-etag", 10, "", "", statemachine.SourceRPC)
+		changed, err = sm.PromoteToAvailable(ctx, id, nil, "rpc-etag", 10, "", "", statemachine.SourceRPC)
 		if err != nil {
 			t.Fatalf("second promote: %v", err)
 		}

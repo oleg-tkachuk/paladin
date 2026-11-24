@@ -61,13 +61,13 @@ type EventProducer interface {
 
 // Promoter is the slice of *statemachine.Transitioner the handler uses.
 type Promoter interface {
-	PromoteToAvailableInTx(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
+	PromoteToAvailableInTx(ctx context.Context, objectID uuid.UUID, placed *statemachine.Placement, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
 }
 
 // StorageProbe HEADs an object's bytes where its row places them now.
 // Satisfied by *adapters.ReconcilerProbe.
 type StorageProbe interface {
-	HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, found bool, err error)
+	HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, placed statemachine.Placement, found bool, err error)
 }
 
 // SoftDeleter is the slice of *statemachine.Transitioner a delete event uses.
@@ -148,7 +148,8 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		return nil
 	}
 
-	if skip, err := h.fromAnotherBucket(ctx, logger, tenantPg, collection, ev.SubjectFields.Bucket); skip || err != nil {
+	placed, skip, err := h.fromAnotherBucket(ctx, logger, tenantPg, collection, ev.SubjectFields.Bucket)
+	if skip || err != nil {
 		return err
 	}
 
@@ -188,6 +189,7 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 		changed, err := h.Transitioner.PromoteToAvailableInTx(
 			ctx,
 			objectID,
+			placed,
 			ev.SubjectFields.Etag,
 			ev.SubjectFields.SizeBytes,
 			"", // checksum: storage events typically don't carry it
@@ -204,6 +206,16 @@ func (h *PromoteHandler) Handle(ctx context.Context, ev CloudEvent) error {
 			// fields. The row stays PENDING; the reconciler HEADs it once
 			// its URL has expired and settles it from the store's answer.
 			logger.Warn("event does not match the object's registration; leaving it for the reconciler",
+				zap.String("object_id", objectID.String()), zap.Error(err))
+			return nil
+		}
+		if errors.Is(err, statemachine.ErrBindingMoved) {
+			// A storage migration rebound the collection after the event's
+			// bucket was checked: the bytes it reports are in a bucket the
+			// object is no longer read from. A PENDING row stays for the
+			// reconciler, which moves an upload's bytes from the bucket its
+			// URL names; retrying the event would only be refused again.
+			logger.Warn("promote refused: the collection was rebound since the event's bucket was checked; skipping",
 				zap.String("object_id", objectID.String()), zap.Error(err))
 			return nil
 		}
@@ -260,7 +272,7 @@ func (h *PromoteHandler) settleDeleted(ctx context.Context, logger *zap.Logger, 
 		logger.Debug("delete event for an object that is not available; skipping", zap.String("state", string(obj.State)))
 		return nil
 	}
-	_, _, _, _, found, err := h.Probe.HeadByObjectID(ctx, objectID)
+	_, _, _, _, _, found, err := h.Probe.HeadByObjectID(ctx, objectID)
 	if err != nil {
 		// The store could not be asked; a guess either way is wrong.
 		return fmt.Errorf("head object: %w", err)
@@ -344,17 +356,20 @@ func (h *PromoteHandler) emitUploaded(ctx context.Context, tx pgx.Tx, ev CloudEv
 // object. An event that names no bucket is taken as the collection's. An
 // unknown collection is skipped too, as an unknown object is; a failed read
 // is returned, so the event is retried.
-func (h *PromoteHandler) fromAnotherBucket(ctx context.Context, logger *zap.Logger, tenant pgtype.UUID, collection, bucket string) (bool, error) {
+//
+// placed is the bucket the event's bytes are in, which the promote checks the
+// collection is still bound to; nil for an event that names no bucket.
+func (h *PromoteHandler) fromAnotherBucket(ctx context.Context, logger *zap.Logger, tenant pgtype.UUID, collection, bucket string) (placed *statemachine.Placement, skip bool, err error) {
 	if bucket == "" {
-		return false, nil
+		return nil, false, nil
 	}
 	binding, err := h.Lookup.GetCollection(ctx, tenant, collection)
 	if errors.Is(err, pgx.ErrNoRows) {
 		logger.Debug("no such collection for event; skipping", zap.String("collection", collection))
-		return true, nil
+		return nil, true, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("collection binding: %w", err)
+		return nil, false, fmt.Errorf("collection binding: %w", err)
 	}
 	if binding.BucketName != bucket {
 		logger.Warn("event is from a bucket the collection is not bound to; skipping",
@@ -362,9 +377,9 @@ func (h *PromoteHandler) fromAnotherBucket(ctx context.Context, logger *zap.Logg
 			zap.String("event_bucket", bucket),
 			zap.String("collection_bucket", binding.BucketName),
 		)
-		return true, nil
+		return nil, true, nil
 	}
-	return false, nil
+	return &statemachine.Placement{BackendID: binding.BackendName, Bucket: binding.BucketName}, false, nil
 }
 
 // objectResourceName builds the canonical (A-shape) object resource name

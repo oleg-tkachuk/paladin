@@ -52,7 +52,7 @@ func TestPromoteHoldsAPendingObjectToItsRegistration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			sm := &Transitioner{}
 			ex := &fakeExec{lockRow: tc.row, row: fakeRow{state: string(StateAvailable)}}
-			changed, err := sm.promote(smCtx, ex, objID, "etag", tc.size, tc.checksum, tc.sequencer, SourceRPC)
+			changed, err := sm.promote(smCtx, ex, objID, nil, "etag", tc.size, tc.checksum, tc.sequencer, SourceRPC)
 			if tc.mismatch == "" {
 				if err != nil || !changed {
 					t.Fatalf("changed=%v err=%v, want a promote", changed, err)

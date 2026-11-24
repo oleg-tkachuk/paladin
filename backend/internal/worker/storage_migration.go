@@ -8,6 +8,8 @@ import (
 	"uuid"
 
 	"go.uber.org/zap"
+
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 )
 
 // ADR-0015 Phase 3 (slice 1): the shared->dedicated storage migration copy job.
@@ -47,19 +49,19 @@ import (
 // the lists are read on every step, a public collection created mid-migration
 // is skipped too.
 
-// Migration states. tenant_storage_migrations.state (`001_initial_schema.sql`)
-// is plain text with no CHECK, so this list is the only definition of the set.
+// Migration states, as package migstate defines them for every package that
+// must agree on them.
 const (
-	MigStateProvisioning = "provisioning"
-	MigStateCopying      = "copying"
-	MigStateRebinding    = "rebinding"
-	MigStateVerifying    = "verifying"
-	MigStateCompleted    = "completed"
-	MigStateCleaned      = "cleaned"
-	MigStateFailed       = "failed"
+	MigStateProvisioning = migstate.Provisioning
+	MigStateCopying      = migstate.Copying
+	MigStateRebinding    = migstate.Rebinding
+	MigStateVerifying    = migstate.Verifying
+	MigStateCompleted    = migstate.Completed
+	MigStateCleaned      = migstate.Cleaned
+	MigStateFailed       = migstate.Failed
 	// MigStateRollingBack: the physical verify failed after the rebind; the
 	// worker is putting the tenant back on its source bucket.
-	MigStateRollingBack = "rolling_back"
+	MigStateRollingBack = migstate.RollingBack
 )
 
 // CopyLocation is a physical object address for a server-side copy. Worker-local

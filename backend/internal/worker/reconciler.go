@@ -44,7 +44,9 @@ type ReconcilerV2Config struct {
 // StorageProbe HEADs the backend to materialize authoritative etag/size. A
 // narrow interface so unit tests don't need a full S3 client.
 type StorageProbe interface {
-	HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, found bool, err error)
+	// HeadByObjectID reports the object's bytes, and placed, the bucket they
+	// were found in, which the promote checks the collection is still bound to.
+	HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, placed statemachine.Placement, found bool, err error)
 	// DeleteByObjectID removes the stored bytes of an object that broke its
 	// registration.
 	DeleteByObjectID(ctx context.Context, objectID uuid.UUID) error
@@ -145,15 +147,23 @@ func (r *ReconcilerV2) sampleOverdue(ctx context.Context) error {
 // reconcile settles one object and returns the failure it logged. A content
 // mismatch is not one in itself: discardMismatched settles it.
 func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) error {
-	etag, size, checksum, seq, found, err := r.probe.HeadByObjectID(ctx, objectID)
+	etag, size, checksum, seq, placed, found, err := r.probe.HeadByObjectID(ctx, objectID)
 	if err != nil {
 		r.log.Warn("failed to HEAD object", zap.String("object_id", objectID.String()), zap.Error(err))
 		return err
 	}
 	if found {
-		_, err := r.sm.PromoteToAvailable(ctx, objectID, etag, size, checksum, seq, statemachine.SourceReconciler)
+		_, err := r.sm.PromoteToAvailable(ctx, objectID, &placed, etag, size, checksum, seq, statemachine.SourceReconciler)
 		if errors.Is(err, statemachine.ErrContentMismatch) {
 			return r.discardMismatched(ctx, objectID, err)
+		}
+		if errors.Is(err, statemachine.ErrBindingMoved) {
+			// A storage migration rebound the collection between the HEAD
+			// and the promote. The row stays PENDING, anchored to the bucket
+			// its URL names; the next tick moves the bytes to the new binding.
+			r.log.Warn("promote refused: the collection was rebound since the HEAD; the object stays pending for the next tick",
+				zap.String("object_id", objectID.String()), zap.Error(err))
+			return nil
 		}
 		if err != nil {
 			r.log.Warn("failed to promote object", zap.String("object_id", objectID.String()), zap.Error(err))

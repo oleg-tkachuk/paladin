@@ -11,13 +11,14 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
 
 // refusingProbe answers every delete with err.
 type refusingProbe struct{ err error }
 
-func (refusingProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, bool, error) {
-	return "", 0, "", "", false, nil
+func (refusingProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, statemachine.Placement, bool, error) {
+	return "", 0, "", "", statemachine.Placement{}, false, nil
 }
 
 func (p refusingProbe) DeleteByObjectID(context.Context, uuid.UUID) error { return p.err }
