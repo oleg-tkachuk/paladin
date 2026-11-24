@@ -11,7 +11,7 @@ require (
 	github.com/oleg-tkachuk/limes v1.0.0-rc.76
 	github.com/oleg-tkachuk/limes/biscuit v0.2.0
 	github.com/spiffe/go-spiffe/v2 v2.9.0
-	google.golang.org/genproto v0.0.0-20261118221215-c8830f628b3f
+	google.golang.org/genproto v0.0.0-20261123191846-1e707ab9fbc2
 	google.golang.org/genproto/googleapis/api v0.0.0-20261118221215-c8830f628b3f
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261118221215-c8830f628b3f
 	google.golang.org/protobuf v1.36.12
