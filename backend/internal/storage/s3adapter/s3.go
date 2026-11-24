@@ -657,9 +657,7 @@ func (c *Client) GetStream(ctx context.Context, bucket string, tenantID uuid.UUI
 		Key:    aws.String(fullKey),
 	})
 	if notFound(err) {
-		// A GET answers with a body, so a missing key arrives with its code
-		// and is told apart from a missing bucket.
-		return nil, "", fmt.Errorf("get stream: %w: %w", ErrObjectNotFound, err)
+		return nil, "", c.qualifyNotFound(ctx, err, c.resolveBucket(bucket))
 	}
 	if err != nil {
 		return nil, "", fmt.Errorf("get stream: %w", err)
