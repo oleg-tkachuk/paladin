@@ -212,6 +212,9 @@ type Repository interface {
 	// RecordCompositeChecksum records a PENDING object's composite checksum
 	// and its part size, before the store assembles it.
 	RecordCompositeChecksum(ctx context.Context, objectID uuid.UUID, composite string, partSizeBytes int64) error
+	// UploadWritesCloseAt is the deadline a part URL for the session's
+	// bucket must expire by, while a storage migration empties it.
+	objecth.WriteDeadlines
 }
 
 // VersionRecorder is the optional hook that records a versions-row when the
@@ -514,8 +517,7 @@ type assembled struct {
 }
 
 // assemble has the store assemble the parts in the bucket the session was
-// anchored to, and settles the object there or, after a storage migration
-// rebound its collection, in the bucket it is bound to now (settle).
+// anchored to, and promotes the object there (settle).
 func (h *Handler) assemble(ctx context.Context, sess Session, backendID, bucket string, args CompleteArgs) (assembled, error) {
 	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, args.TenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
 	if err != nil {
@@ -698,11 +700,21 @@ func (s Session) checkPart(partNumber int32, checksumValue string) error {
 
 // signPart signs the URL for part, living ttl within the bucket's ceiling,
 // against (backendID, bucket), where target found the session's parts. The
-// anchored bucket's constraints bound the part URL's lifetime.
+// anchored bucket's constraints bound the part URL's lifetime, and so does a
+// storage migration emptying the bucket (ADR-0051): the URL expires by its
+// write deadline, past which no part URL is signed there
+// (objecth.ErrWritesClosed).
 func (h *Handler) signPart(ctx context.Context, tenantID uuid.UUID, sess Session, backendID, bucket string, part PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
 	ttl, err := h.ttl.ResolveWithin(presignttl.OpPart, ttl, uploadpolicy.For(h.limits, sess.BucketConstraints).PutTTLCeiling())
 	if err != nil {
 		return "", nil, time.Time{}, err
+	}
+	deadline, ok, err := h.repo.UploadWritesCloseAt(ctx, tenantID, backendID, bucket)
+	if err != nil {
+		return "", nil, time.Time{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("read the bucket's write deadline: %w", err))
+	}
+	if ttl, err = objecth.CapWriteTTL(ttl, deadline, ok, time.Now()); err != nil {
+		return "", nil, time.Time{}, apiutil.MapError(err)
 	}
 	url, hdrs, exp, err := h.storage.PresignPart(ctx, backendID, bucket, tenantID, sess.StorageUploadID, sess.Collection, sess.Key, part, ttl)
 	if err != nil {
@@ -746,9 +758,8 @@ func (s Session) compositeChecksum(parts []PartETag) (string, error) {
 }
 
 // discardMismatched settles an assembled object whose size is not the one it
-// was registered with: its bytes are deleted from every bucket they are in —
-// the anchored one, and the collection's when they were moved there — then
-// the row is discarded. In that order, so a failure between the two leaves a
+// was registered with: its bytes are deleted from the bucket they were
+// assembled in, then the row is discarded. In that order, so a failure between the two leaves a
 // PENDING row the reconciler will HEAD and discard, never a row gone over
 // bytes nothing will remove.
 func (h *Handler) discardMismatched(ctx context.Context, sess Session, uploadID string, cause error, at ...objecth.Location) error {

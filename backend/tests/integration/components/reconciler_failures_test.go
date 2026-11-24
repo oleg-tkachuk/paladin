@@ -50,9 +50,9 @@ func seedOverdue(t *testing.T, ctx context.Context, pool *pgxpool.Pool, size int
 	t.Helper()
 	f := seedFixture(t, ctx, pool)
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state, content_type,
 		                     size_bytes, checksum_algorithm, presign_expires_at)
-		SELECT $1, $2, c.id, 'k-overdue', 'PENDING', 'application/octet-stream', $4, 0,
+		SELECT $1, $2, c.id, c.bucket_id, 'k-overdue', 'PENDING', 'application/octet-stream', $4, 0,
 		       now() - interval '48 hours'
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection, size)
 }

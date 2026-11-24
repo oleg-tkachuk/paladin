@@ -14,11 +14,29 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
-// foundLookup resolves the event to one object.
-type foundLookup struct{ fakeLookup }
+// The bucket the found object's upload is anchored to and its bytes are in.
+const (
+	foundBackend = "be-1"
+	foundBucket  = "shared"
+)
+
+// foundLookup resolves the event to one object, its upload anchored to and
+// its bytes placed in foundBackend/foundBucket unless settled is set.
+type foundLookup struct {
+	fakeLookup
+	settled bool
+}
 
 func (f *foundLookup) LookupObjectByKey(context.Context, pgtype.UUID, string, string) (sqlc.LookupObjectByKeyRow, error) {
-	return sqlc.LookupObjectByKeyRow{Object: sqlc.Object{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}}}, nil
+	backend, bucket := foundBackend, foundBucket
+	row := sqlc.LookupObjectByKeyRow{
+		Object:               sqlc.Object{ID: pgtype.UUID{Bytes: uuid.New(), Valid: true}, State: sqlc.ObjectStateAVAILABLE},
+		PlacementBackendName: &backend, PlacementBucketName: &bucket,
+	}
+	if !f.settled {
+		row.AnchorBackendName, row.AnchorBucketName = &backend, &bucket
+	}
+	return row, nil
 }
 
 type refusingPromoter struct {

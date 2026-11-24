@@ -19,7 +19,6 @@ import (
 // mismatchedHead answers every HEAD with bytes one longer than registered, and
 // counts the deletes it is asked for.
 type mismatchedHead struct {
-	noCopy
 	deletes int
 }
 

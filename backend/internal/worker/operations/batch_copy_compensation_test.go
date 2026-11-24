@@ -258,26 +258,18 @@ func TestCopyOneReadsTheSourcesPlacement(t *testing.T) {
 	}
 }
 
-// A destination whose collection a storage migration rebound after the copy
-// resolved it is refused its promote: its bytes are deleted from the bucket
-// it left and its row discarded, as a failed copy's, and the item fails.
-func TestCopyOneDiscardsADestinationTheRebindMoved(t *testing.T) {
-	tr := &copyFakeTransitioner{promoteErr: &statemachine.BindingMovedError{}}
-	st := &copyFakeStorage{}
-	e := &BatchCopyExecutor{Objects: &copyFakeRepo{created: objecth.Object{ObjectID: uuid.New()}}, Storage: st, Transitions: tr}
+// A copy is promoted where it was written, the destination's bucket, and
+// settles its anchor with the promote: no URL of the row can write the key
+// again (ADR-0051).
+func TestCopyOnePromotesInTheDestinationSettled(t *testing.T) {
+	tr := &copyFakeTransitioner{}
+	e := &BatchCopyExecutor{Objects: &copyFakeRepo{created: objecth.Object{ObjectID: uuid.New()}}, Storage: &copyFakeStorage{}, Transitions: tr}
 	job := copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc(), dstKey: "k",
 		to: objecth.Location{BackendID: "be-1", Bucket: "shared", Collection: "dst", Key: "k"}}
-	err := e.fill(context.Background(), job, uuid.New())
-	if !errors.Is(err, statemachine.ErrBindingMoved) {
-		t.Fatalf("err = %v, want the refusal", err)
+	if err := e.fill(context.Background(), job, uuid.New()); err != nil {
+		t.Fatalf("fill: %v", err)
 	}
-	if want := (statemachine.Placement{BackendID: "be-1", Bucket: "shared"}); tr.placed == nil || *tr.placed != want {
-		t.Errorf("promoted in %+v, want the destination's bucket %+v", tr.placed, want)
-	}
-	if len(st.deleted) != 1 || st.deleted[0] != "shared|dst/k" {
-		t.Errorf("deleted %v, want the copy in the bucket it left", st.deleted)
-	}
-	if !tr.markFailedHit {
-		t.Error("the destination row was not discarded")
+	if want := (statemachine.Placement{BackendID: "be-1", Bucket: "shared", Settled: true}); tr.placed == nil || *tr.placed != want {
+		t.Errorf("promoted in %+v, want the destination's bucket, settled %+v", tr.placed, want)
 	}
 }

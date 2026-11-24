@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 	"uuid"
 
@@ -28,7 +29,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
-	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 )
 
 // State mirrors the object_state enum in SQL.
@@ -111,40 +111,45 @@ func (t *Transitioner) PromoteToAvailable(
 // Placement is the bucket a promote's caller confirmed the object's bytes
 // in: where it HEADed them, assembled them or copied them to.
 //
-// The caller resolved the collection's binding before the promote, on
-// another transaction, and a storage migration (ADR-0015) can rebind the
-// collection in between. A promote committed after that would make the
-// object readable from a bucket that does not hold its bytes, and the
-// migration's cleanup would then delete the only copy. So the promote checks,
-// on its own transaction and under the tenant's migration row
-// (migstate.FencingPromotes), that the collection is still bound there.
+// An object's bytes reach a bucket only through a URL Paladin signed for it
+// or a copy Paladin made, and the row records that bucket
+// (objects.upload_bucket_id, its anchor). So the promote places the object
+// in its anchor, and refuses bytes confirmed anywhere else: they are not the
+// row's (ADR-0051). A storage migration or an operator may have pointed the
+// collection at another bucket since; the binding decides only where the
+// next upload is signed.
 //
-// A nil *Placement checks nothing: for a caller that cannot say where the
-// bytes are, a storage event naming no bucket.
+// A nil *Placement names no bucket: a storage event whose source reports
+// none. The bytes are then taken to be in the anchor, the one bucket a URL
+// of the row can write.
 type Placement struct {
 	BackendID string
 	Bucket    string
+	// Settled is a promote of bytes Paladin wrote itself, a copy: no URL of
+	// the row can write the key again, so the anchor is settled with the
+	// promote rather than when a URL expires.
+	Settled bool
 }
 
-// ErrBindingMoved is a promote refused because the object's collection is no
-// longer bound to the bucket its bytes were confirmed in: a storage migration
-// rebound it since. Nothing changed; the caller moves the bytes into the
-// collection's bucket and promotes again, or leaves the row PENDING for one
-// that will. Match with errors.Is.
-var ErrBindingMoved = errors.New("the object's collection is no longer bound to the bucket its bytes are in")
+// ErrNotAnchored is a promote refused because the bytes it confirms are not
+// in the bucket the object's upload is anchored to, or the object has no
+// anchor left to place a first upload in. Nothing changed. Match with
+// errors.Is.
+var ErrNotAnchored = errors.New("the bytes are not in the bucket the object's upload is anchored to")
 
-// BindingMovedError names the two buckets of an ErrBindingMoved.
-type BindingMovedError struct {
+// NotAnchoredError names the bucket of an ErrNotAnchored and the anchor,
+// empty when the object has none.
+type NotAnchoredError struct {
 	Placed Placement
-	Bound  Placement
+	Anchor Placement
 }
 
-func (e *BindingMovedError) Error() string {
-	return fmt.Sprintf("%v: bytes in %s/%s, collection bound to %s/%s",
-		ErrBindingMoved, e.Placed.BackendID, e.Placed.Bucket, e.Bound.BackendID, e.Bound.Bucket)
+func (e *NotAnchoredError) Error() string {
+	return fmt.Sprintf("%v: bytes in %s/%s, anchored to %q/%q",
+		ErrNotAnchored, e.Placed.BackendID, e.Placed.Bucket, e.Anchor.BackendID, e.Anchor.Bucket)
 }
 
-func (e *BindingMovedError) Is(target error) bool { return target == ErrBindingMoved }
+func (e *NotAnchoredError) Is(target error) bool { return target == ErrNotAnchored }
 
 // ErrContentMismatch is returned by a promote whose stored bytes are not the
 // ones the object was registered with: a different size, or a checksum that
@@ -235,15 +240,25 @@ func (t *Transitioner) promote(
 	sequencer string,
 	source Source,
 ) (changed bool, err error) {
-	if err := verifyRegistration(ctx, exec, objectID, sizeBytes, checksum, sequencer); err != nil {
-		if isNoRows(err) {
-			return false, nil
-		}
+	reg, err := lockRegistration(ctx, exec, objectID)
+	if isNoRows(err) {
+		return false, nil
+	}
+	if err != nil {
 		return false, err
 	}
-	if err := checkPlacement(ctx, exec, objectID, placed); err != nil {
+	if err := reg.check(sizeBytes, checksum, sequencer); err != nil {
 		return false, err
 	}
+	if !reg.anchored() && State(reg.state) != StatePending {
+		// Settled: every URL of the row has expired and the reconciler has
+		// read what the last one wrote. A later report of a write is stale.
+		return false, nil
+	}
+	if err := reg.anchoredAt(placed); err != nil {
+		return false, err
+	}
+	settled := placed != nil && placed.Settled
 	// Two promote regimes, split by whether the caller carries a sequencer:
 	//
 	//   - sequencer == '' (HEAD-driven: CompleteObject RPC, CopyObject, the
@@ -254,23 +269,17 @@ func (t *Transitioner) promote(
 	//     values the nightly accounting already counted (the HEAD→promote
 	//     race this closes).
 	//   - sequencer != '' (storage event): may also UPDATE an AVAILABLE row,
-	//     but only with a strictly newer sequencer (stale events are no-ops).
+	//     but only with a strictly newer sequencer (stale events are no-ops),
+	//     and only while its anchor is unsettled — a URL of the row can still
+	//     write — so the sequencer it is compared with came from the same
+	//     bucket.
 	//
 	// Either way a promote that applies records bytes written under the key
-	// (bytes_written_at): the first one confirms an upload's, a later one a
-	// newer write a storage event reported. It is what a storage migration's
-	// rollback selects on, where updated_at moves for any change to the row.
-	// It is the clock when the statement runs, not the transaction's start:
-	// the row is stamped after checkPlacement took the migration's fence, so
-	// a migration step that held the fence before this promote got it sees a
-	// time after its own.
-	// It also clears the upload's anchor (upload_bucket_id, migration 113):
-	// the bytes are now where the object is read from, and a storage
-	// migration's cleanup no longer waits on the row.
-	//
-	// And it places the object (placement_bucket_id, ADR-0051) in the
-	// collection's bucket: checkPlacement has just confirmed the bytes are
-	// there, and every caller put or moved them there first.
+	// (bytes_written_at), the content version a storage migration's move
+	// compares before it moves the object. It places the object in its
+	// anchor (placement_bucket_id, ADR-0051), and keeps the anchor until the
+	// URL can no longer write — the reconciler settles it then — unless the
+	// bytes are Paladin's own copy, which no URL can write again.
 	const q = `
         UPDATE objects
            SET state = 'AVAILABLE',
@@ -280,10 +289,10 @@ func (t *Transitioner) promote(
                sequencer = COALESCE(NULLIF($5, ''), sequencer),
                committed_at = CASE WHEN state = 'PENDING' THEN now() ELSE committed_at END,
                bytes_written_at = clock_timestamp(),
-               upload_bucket_id = NULL,
-               placement_bucket_id = (SELECT c.bucket_id FROM collections c
-                                       WHERE c.id = objects.collection_id)
+               placement_bucket_id = upload_bucket_id,
+               upload_bucket_id = CASE WHEN $6 THEN NULL ELSE upload_bucket_id END
          WHERE id = $1
+           AND upload_bucket_id IS NOT NULL
            AND (
                 ($5 = '' AND state = 'PENDING')
                 OR ($5 <> '' AND state IN ('PENDING', 'AVAILABLE')
@@ -292,7 +301,7 @@ func (t *Transitioner) promote(
         RETURNING state
     `
 	var newState string
-	err = exec.QueryRow(ctx, q, objectID, etag, sizeBytes, checksum, sequencer).Scan(&newState)
+	err = exec.QueryRow(ctx, q, objectID, etag, sizeBytes, checksum, sequencer, settled).Scan(&newState)
 	if err != nil {
 		if isNoRows(err) {
 			return false, nil
@@ -303,120 +312,89 @@ func (t *Transitioner) promote(
 	return true, nil
 }
 
-// verifyRegistration holds a PENDING object's first promote to what it was
-// registered with. The size and checksum the upload was admitted with are
-// what policy, quota and the presigned URL were checked against; promoting
-// bytes that differ would make every one of those checks about something
-// else. The URL already binds both, so a mismatch here means the object store
-// did not enforce the binding — this is the backstop that holds whatever the
-// backend does.
+// registration is what a promote is decided on, read under the row's lock:
+// the object's state, the size and checksum it was registered with, and the
+// bucket its upload is anchored to (by name; nil once settled).
+type registration struct {
+	state         string
+	size          *int64
+	checksum      *string
+	anchorBackend *string
+	anchorBucket  *string
+}
+
+// lockRegistration locks the object's row for the rest of the promote's
+// transaction and reads its registration. It must run inside that
+// transaction.
+func lockRegistration(ctx context.Context, exec dbExec, objectID uuid.UUID) (registration, error) {
+	const q = `
+        SELECT o.state, o.size_bytes, o.checksum, sb.name, b.name
+          FROM objects o
+          LEFT JOIN buckets b           ON b.id = o.upload_bucket_id
+          LEFT JOIN storage_backends sb ON sb.id = b.backend_id
+         WHERE o.id = $1
+         FOR UPDATE OF o
+    `
+	var r registration
+	if err := exec.QueryRow(ctx, q, objectID).Scan(&r.state, &r.size, &r.checksum, &r.anchorBackend, &r.anchorBucket); err != nil {
+		if isNoRows(err) {
+			return registration{}, err
+		}
+		return registration{}, fmt.Errorf("sm: lock for promote: %w", err)
+	}
+	return r, nil
+}
+
+// check holds a PENDING object's first promote to what it was registered
+// with. The size and checksum the upload was admitted with are what policy,
+// quota and the presigned URL were checked against; promoting bytes that
+// differ would make every one of those checks about something else. The URL
+// already binds both, so a mismatch here means the object store did not
+// enforce the binding — this is the backstop that holds whatever the backend
+// does.
 //
-// It locks the row, so it must run inside the promote's transaction. An
-// object that is not PENDING is past its first promote and is not checked.
-// A storage event (sequencer set) reporting size 0 is treated as not
+// An object that is not PENDING is past its first promote and is not
+// checked. A storage event (sequencer set) reporting size 0 is treated as not
 // reporting a size: event sources omit it, and refusing on a zero they did
 // not mean would strand the object until the reconciler HEADs it.
-func verifyRegistration(ctx context.Context, exec dbExec, objectID uuid.UUID, sizeBytes int64, checksum, sequencer string) error {
-	const q = `
-        SELECT state, size_bytes, checksum
-          FROM objects
-         WHERE id = $1
-         FOR UPDATE
-    `
-	var (
-		state      string
-		registered *int64
-		expected   *string
-	)
-	if err := exec.QueryRow(ctx, q, objectID).Scan(&state, &registered, &expected); err != nil {
-		if isNoRows(err) {
-			return err
-		}
-		return fmt.Errorf("sm: lock for promote: %w", err)
-	}
-	if State(state) != StatePending {
+func (r registration) check(sizeBytes int64, checksum, sequencer string) error {
+	if State(r.state) != StatePending {
 		return nil
 	}
 	sizeReported := sequencer == "" || sizeBytes > 0
-	if registered != nil && sizeReported && *registered != sizeBytes {
-		return &ContentMismatchError{Field: "size", Want: fmt.Sprint(*registered), Got: fmt.Sprint(sizeBytes)}
+	if r.size != nil && sizeReported && *r.size != sizeBytes {
+		return &ContentMismatchError{Field: "size", Want: fmt.Sprint(*r.size), Got: fmt.Sprint(sizeBytes)}
 	}
-	if expected != nil && *expected != "" && checksum != "" && *expected != checksum {
-		return &ContentMismatchError{Field: "checksum", Want: *expected, Got: checksum}
+	if r.checksum != nil && *r.checksum != "" && checksum != "" && *r.checksum != checksum {
+		return &ContentMismatchError{Field: "checksum", Want: *r.checksum, Got: checksum}
 	}
 	return nil
 }
 
-// checkPlacement holds the tenant's storage migration, when one is in a state
-// that rebinds the tenant's collections (migstate.FencingPromotes), for the
-// rest of the promote's transaction, then refuses a promote whose bytes are
-// not in the bucket the collection is bound to now (Placement).
-//
-// The hold is FOR SHARE: promotes do not wait on each other, but a migration
-// step that takes the row FOR UPDATE — the copy's start, the rebind, the
-// rebind back — waits for every promote holding it, and every later promote
-// waits for that step. So such a step sees every promote that committed
-// before it, and every promote after it sees the binding it left. It runs
-// after verifyRegistration, which holds the object's row: the copy and the
-// purge take the object's row before the migration's too, so the order is
-// the same everywhere.
-func checkPlacement(ctx context.Context, exec dbExec, objectID uuid.UUID, placed *Placement) error {
-	if err := holdMigrationFence(ctx, exec, objectID); err != nil {
-		return err
+// anchored reports whether a URL of the row may still write its key.
+func (r registration) anchored() bool {
+	return r.anchorBackend != nil && r.anchorBucket != nil
+}
+
+// anchoredAt refuses bytes confirmed anywhere but the row's anchor, and a
+// first upload with no anchor to place it in. A nil placed names no bucket
+// and is taken to be the anchor.
+func (r registration) anchoredAt(placed *Placement) error {
+	if !r.anchored() {
+		return &NotAnchoredError{Placed: derefPlacement(placed)}
 	}
-	if placed == nil {
+	if placed == nil || (placed.BackendID == *r.anchorBackend && placed.Bucket == *r.anchorBucket) {
 		return nil
 	}
-	const binding = `
-        SELECT sb.name, b.name
-          FROM objects o
-          JOIN collections c       ON c.id = o.collection_id
-          JOIN buckets b           ON b.id = c.bucket_id
-          JOIN storage_backends sb ON sb.id = b.backend_id
-         WHERE o.id = $1
-    `
-	var bound Placement
-	if err := exec.QueryRow(ctx, binding, objectID).Scan(&bound.BackendID, &bound.Bucket); err != nil {
-		return fmt.Errorf("sm: read the collection's binding: %w", err)
-	}
-	if bound != *placed {
-		return &BindingMovedError{Placed: *placed, Bound: bound}
-	}
-	return nil
+	return &NotAnchoredError{Placed: *placed, Anchor: Placement{BackendID: *r.anchorBackend, Bucket: *r.anchorBucket}}
 }
 
-// holdMigrationFence holds the object's tenant's storage migration row,
-// when it is in a fencing state, for the rest of the transaction.
-//
-// The row is read only after the tenant's start lock is held shared
-// (migstate.LockSpaceStart), in a statement of its own: under READ
-// COMMITTED that statement sees a migration started or retried before the
-// lock was granted, and a start, which takes the lock exclusively, waits for
-// this promote. Without it, a promote that read no fencing row could commit
-// after the copy started, stamped before copy_started_at, behind a cursor
-// that had passed its key — and the catch-up would skip it.
-func holdMigrationFence(ctx context.Context, exec dbExec, objectID uuid.UUID) error {
-	const tenantOf = `SELECT tenant_id FROM objects WHERE id = $1`
-	var tenant pgtype.UUID
-	if err := exec.QueryRow(ctx, tenantOf, objectID).Scan(&tenant); err != nil {
-		return fmt.Errorf("sm: read the object's tenant: %w", err)
+// derefPlacement is *p, or none.
+func derefPlacement(p *Placement) Placement {
+	if p == nil {
+		return Placement{}
 	}
-	tenantID := uuid.UUID(tenant.Bytes)
-	const lockShared = `SELECT pg_advisory_xact_lock_shared($1::int, $2::int)`
-	if _, err := exec.Exec(ctx, lockShared, migstate.LockSpaceStart, migstate.TenantLockKey(tenantID)); err != nil {
-		return fmt.Errorf("sm: hold the storage migration start lock: %w", err)
-	}
-	const fence = `
-        SELECT 1
-          FROM tenant_storage_migrations m
-         WHERE m.tenant_id = $1
-           AND m.state = ANY($2::text[])
-           FOR SHARE OF m
-    `
-	if _, err := exec.Exec(ctx, fence, tenantID, migstate.FencingPromotes()); err != nil {
-		return fmt.Errorf("sm: hold the storage migration: %w", err)
-	}
-	return nil
+	return *p
 }
 
 // DiscardFailed deletes a PENDING object that will never become AVAILABLE, and
@@ -550,11 +528,14 @@ func (t *Transitioner) transitionInTx(ctx context.Context, do func(exec dbExec) 
 	return nil
 }
 
-// PendingExpired is a PENDING object ScanPendingExpired found past its
-// presign TTL, with the bucket its collection is bound to — the one the
-// reconciler HEADs — and the state the bucket gate decides on there.
-type PendingExpired struct {
+// ExpiredAnchor is an object ScanExpiredAnchors found anchored to a bucket
+// whose URL has expired by the grace: a PENDING upload to settle by its
+// bytes, or a promoted object whose URL could still have written after its
+// promote. It carries the anchor — the bucket the reconciler HEADs — and the
+// state the bucket gate decides on there.
+type ExpiredAnchor struct {
 	ObjectID       uuid.UUID
+	State          State
 	BucketID       pgtype.UUID
 	BackendName    string
 	BucketName     string
@@ -563,24 +544,24 @@ type PendingExpired struct {
 	ProvisionState string
 }
 
-// ScanPendingExpired returns up to `limit` PENDING objects whose presign TTL
-// has elapsed by `graceBeyond`, oldest deadline first, leaving out the
-// objects in the buckets of deferred. Consumed by the reconciler, which asks
-// the bucket gate about each row's bucket and scans again without the
-// buckets it refused, so their rows never head every scan.
-func (t *Transitioner) ScanPendingExpired(
+// ScanExpiredAnchors returns up to `limit` objects anchored to a bucket
+// (objects.upload_bucket_id) whose presign TTL has elapsed by `graceBeyond`,
+// oldest deadline first, leaving out the objects in the buckets of deferred.
+// Consumed by the reconciler, which asks the bucket gate about each row's
+// bucket and scans again without the buckets it refused, so their rows never
+// head every scan.
+func (t *Transitioner) ScanExpiredAnchors(
 	ctx context.Context,
 	graceBeyond time.Duration,
 	limit int,
 	deferred []pgtype.UUID,
-) ([]PendingExpired, error) {
+) ([]ExpiredAnchor, error) {
 	const q = `
-        SELECT o.id, b.id, sb.name, b.name, sb.enabled, sb.read_only, b.provision_state
+        SELECT o.id, o.state, b.id, sb.name, b.name, sb.enabled, sb.read_only, b.provision_state
           FROM objects o
-          JOIN collections c       ON c.id = o.collection_id
-          JOIN buckets b           ON b.id = c.bucket_id
+          JOIN buckets b           ON b.id = o.upload_bucket_id
           JOIN storage_backends sb ON sb.id = b.backend_id
-         WHERE o.state = 'PENDING'
+         WHERE o.upload_bucket_id IS NOT NULL
            AND o.presign_expires_at IS NOT NULL
            AND o.presign_expires_at < now() - $1::interval
            -- A tenant in the trash is frozen: its uploads are settled on restore.
@@ -599,16 +580,145 @@ func (t *Transitioner) ScanPendingExpired(
 		return nil, fmt.Errorf("sm: scan: %w", err)
 	}
 	defer rows.Close()
-	var out []PendingExpired
+	var out []ExpiredAnchor
 	for rows.Next() {
-		var p PendingExpired
-		if err := rows.Scan(&p.ObjectID, &p.BucketID, &p.BackendName, &p.BucketName,
+		var p ExpiredAnchor
+		var state string
+		if err := rows.Scan(&p.ObjectID, &state, &p.BucketID, &p.BackendName, &p.BucketName,
 			&p.Enabled, &p.ReadOnly, &p.ProvisionState); err != nil {
 			return nil, err
 		}
+		p.State = State(state)
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// SettleOutcome is what settling an anchor found and did (SettleAnchorInTx).
+type SettleOutcome string
+
+const (
+	// SettleUnchanged: the anchor holds the bytes the row records.
+	SettleUnchanged SettleOutcome = "unchanged"
+	// SettleRecorded: the anchor holds other bytes, written after the last
+	// promote and reported by no event; the row now records them.
+	SettleRecorded SettleOutcome = "recorded"
+	// SettleMissing: the anchor holds nothing under the key.
+	SettleMissing SettleOutcome = "missing"
+	// SettleSkipped: the row is gone, PENDING, or anchored elsewhere since
+	// it was scanned; nothing changed.
+	SettleSkipped SettleOutcome = "skipped"
+)
+
+// StoredWrite is what a HEAD of an object's anchor found: whether anything is
+// there, and its ETag, size and checksum.
+type StoredWrite struct {
+	Found     bool
+	ETag      string
+	SizeBytes int64
+	Checksum  string
+}
+
+// SettleAnchorInTx settles the anchor of a promoted object whose URL has
+// expired (ADR-0051): after it, no URL of the row can write its key, so
+// what the anchor holds now is the last write. found is what a HEAD of the
+// anchor, named by anchor, read after the expiry.
+//
+// The same ETag clears the anchor. Another one is a write through the URL
+// after the last promote that no storage event recorded — an event lost, or
+// a store that did not enforce the URL's binding — and the last promoted
+// wins: the row records those bytes, as a promote would, its content version
+// moves, and onRecorded runs on the transaction (the caller's event). No
+// bytes at all clear the anchor and change nothing else: a delete straight
+// from the bucket is a storage delete event's to report.
+//
+// The row is held for the transaction, and only one still anchored to anchor
+// and promoted is settled; anything else is SettleSkipped.
+func (t *Transitioner) SettleAnchorInTx(
+	ctx context.Context,
+	objectID uuid.UUID,
+	anchor Placement,
+	found StoredWrite,
+	onRecorded func(ctx context.Context, tx pgx.Tx) error,
+) (SettleOutcome, error) {
+	tx, err := t.pool.Begin(ctx)
+	if err != nil {
+		return SettleSkipped, fmt.Errorf("sm: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op once committed
+
+	reg, err := lockRegistration(ctx, tx, objectID)
+	if isNoRows(err) {
+		return SettleSkipped, nil
+	}
+	if err != nil {
+		return SettleSkipped, err
+	}
+	if State(reg.state) == StatePending || !reg.anchored() ||
+		*reg.anchorBackend != anchor.BackendID || *reg.anchorBucket != anchor.Bucket {
+		return SettleSkipped, nil
+	}
+	outcome, err := settle(ctx, tx, objectID, found)
+	if err != nil {
+		return SettleSkipped, err
+	}
+	if outcome == SettleRecorded && onRecorded != nil {
+		if err := onRecorded(ctx, tx); err != nil {
+			return SettleSkipped, err
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return SettleSkipped, fmt.Errorf("sm: commit tx: %w", err)
+	}
+	if outcome == SettleRecorded {
+		recordTransition(ctx, string(SourceReconciler), string(StateAvailable))
+	}
+	return outcome, nil
+}
+
+// settle clears the anchor of the row held on exec, recording found first
+// when it is a write the row does not record.
+func settle(ctx context.Context, exec dbExec, objectID uuid.UUID, found StoredWrite) (SettleOutcome, error) {
+	const clear = `UPDATE objects SET upload_bucket_id = NULL WHERE id = $1`
+	if !found.Found {
+		if _, err := exec.Exec(ctx, clear, objectID); err != nil {
+			return SettleSkipped, fmt.Errorf("sm: settle anchor: %w", err)
+		}
+		return SettleMissing, nil
+	}
+	// ETags are compared with the ones the same bucket reported: the row's
+	// was recorded from the anchor, where the object is placed until it
+	// settles (a storage migration moves only settled objects).
+	const record = `
+        UPDATE objects
+           SET upload_bucket_id = NULL,
+               etag = $2,
+               size_bytes = $3,
+               checksum = COALESCE(NULLIF($4, ''), checksum),
+               bytes_written_at = clock_timestamp(),
+               placement_bucket_id = upload_bucket_id
+         WHERE id = $1
+           AND btrim(etag, '"') IS DISTINCT FROM $2
+        RETURNING id
+    `
+	var id uuid.UUID
+	err := exec.QueryRow(ctx, record, objectID, NormalizeETag(found.ETag), found.SizeBytes, found.Checksum).Scan(&id)
+	if err == nil {
+		return SettleRecorded, nil
+	}
+	if !isNoRows(err) {
+		return SettleSkipped, fmt.Errorf("sm: record the anchor's write: %w", err)
+	}
+	if _, err := exec.Exec(ctx, clear, objectID); err != nil {
+		return SettleSkipped, fmt.Errorf("sm: settle anchor: %w", err)
+	}
+	return SettleUnchanged, nil
+}
+
+// NormalizeETag is an ETag as rows record it: without the quotes S3 puts
+// around it on the wire.
+func NormalizeETag(etag string) string {
+	return strings.Trim(etag, `"`)
 }
 
 // PendingOverdue reports the PENDING objects the reconciler should already

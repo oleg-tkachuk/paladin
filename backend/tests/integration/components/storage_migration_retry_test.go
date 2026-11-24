@@ -181,8 +181,8 @@ func TestStorageMigrationRetry(t *testing.T) {
 	// Only 'failed' is retryable: a migration in flight belongs to the
 	// worker, a finished one has nothing left to do.
 	for _, state := range []string{
-		worker.MigStateProvisioning, worker.MigStateCopying, worker.MigStateRebinding,
-		worker.MigStateVerifying, worker.MigStateCompleted, worker.MigStateCleaned,
+		worker.MigStateProvisioning, worker.MigStateMoving, worker.MigStateRollingBack,
+		worker.MigStateCompleted, worker.MigStateCleaned,
 	} {
 		t.Run("refused while "+state, func(t *testing.T) {
 			t.Parallel()

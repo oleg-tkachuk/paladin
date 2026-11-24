@@ -62,6 +62,9 @@ type ObjectRef struct {
 	// Stored is the bucket the object's bytes are in (ADR-0051), which a GET
 	// URL is signed for; nil on a PENDING object.
 	Stored *objecth.BucketRef
+	// Upload is the bucket the object's upload URL was signed for, which a
+	// regenerated URL is signed for too; nil once settled.
+	Upload *objecth.BucketRef
 }
 
 // ErrNotPending is returned by ExtendPendingPresign when the object left
@@ -84,6 +87,9 @@ type Repository interface {
 	// regenerated URL that did not move it would be failed under a client
 	// still holding a valid URL. ErrNotPending when the row is not PENDING.
 	ExtendPendingPresign(ctx context.Context, tenantID, objectID uuid.UUID, expiresAt time.Time) error
+	// UploadWritesCloseAt is the deadline a URL that writes a bucket must
+	// expire by, while a storage migration empties it.
+	objecth.WriteDeadlines
 }
 
 type Handler struct {
@@ -250,11 +256,15 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 	if err := h.authorize(ctx, p, tenantID, collection, key, meta.BackendID, meta.BucketName, presignPut.action); err != nil {
 		return UploadURL{}, err
 	}
+	at, ttl, err := h.anchoredPut(ctx, tenantID, obj, ttl)
+	if err != nil {
+		return UploadURL{}, err
+	}
 	if err := auth.ChargeRequest(ctx); err != nil {
 		return UploadURL{}, err
 	}
 	url, headers, expires, err := h.storage.PresignPut(ctx, objecth.PresignPutArgs{
-		BackendID: meta.BackendID, TenantID: tenantID, Bucket: meta.BucketName,
+		BackendID: at.BackendID, TenantID: tenantID, Bucket: at.Bucket,
 		Collection: collection, Key: key, ContentType: obj.ContentType,
 		SizeBytes: *obj.SizeBytes, ChecksumAlgo: obj.ChecksumAlgo, ChecksumValue: obj.ChecksumValue,
 		TTL: ttl,
@@ -273,6 +283,31 @@ func (h *Handler) RegenerateUploadURL(ctx context.Context, collection, objectIDS
 		mode = objecth.CompletionModeImplicit
 	}
 	return UploadURL{URL: url, Headers: headers, ExpiresAt: expires, CompletionMode: mode}, nil
+}
+
+// anchoredPut is where a regenerated PUT URL for obj writes, and for how
+// long: the bucket its first URL was signed for, its anchor (ADR-0051), so a
+// row has URLs in one bucket only, whatever its collection is bound to now;
+// admitted by the gate as a write of bytes there; and, while a storage
+// migration empties that bucket, expiring by its write deadline, past which
+// it is refused (objecth.ErrWritesClosed) and the client starts a new upload.
+func (h *Handler) anchoredPut(ctx context.Context, tenantID uuid.UUID, obj ObjectRef, ttl time.Duration) (objecth.Location, time.Duration, error) {
+	at, err := obj.Upload.At(tenantID, obj.Collection, obj.Key, bucketgate.BytesWrite)
+	if err != nil {
+		if errors.Is(err, objecth.ErrNotStored) {
+			return objecth.Location{}, 0, rpcerr.New(connect.CodeInternal, fmt.Errorf("pending object: %w", objecth.ErrNotAnchored))
+		}
+		return objecth.Location{}, 0, objecth.MapResolveErr(err)
+	}
+	deadline, ok, err := h.repo.UploadWritesCloseAt(ctx, tenantID, at.BackendID, at.Bucket)
+	if err != nil {
+		return objecth.Location{}, 0, rpcerr.New(connect.CodeInternal, fmt.Errorf("read the bucket's write deadline: %w", err))
+	}
+	ttl, err = objecth.CapWriteTTL(ttl, deadline, ok, time.Now())
+	if err != nil {
+		return objecth.Location{}, 0, apiutil.MapError(err)
+	}
+	return at, ttl, nil
 }
 
 // authorize runs the Cedar check for a presign action. backendID/bucket carry

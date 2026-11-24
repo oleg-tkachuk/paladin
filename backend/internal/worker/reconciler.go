@@ -74,8 +74,10 @@ func NewReconcilerV2(sm *statemachine.Transitioner, probe StorageProbe, cfg Reco
 
 // Run blocks until ctx is cancelled. Each tick:
 //
-//  1. scans PENDING-expired rows
-//  2. HEADs the backend; if present → PromoteToAvailable, else → DiscardFailed
+//  1. scans the objects whose upload URL expired by the grace while their
+//     row is still anchored to a bucket (objects.upload_bucket_id)
+//  2. HEADs the anchor; a PENDING object is promoted or discarded, a
+//     promoted one settled (settleAnchor)
 //
 // Concurrent reconciler replicas both try to advance the same rows — both
 // are safe because the underlying SQL uses state guards.
@@ -90,39 +92,44 @@ func (r *ReconcilerV2) RunOnce(ctx context.Context) error { return r.tick(ctx) }
 // tick reconciles one batch, carrying on past an object that fails, and
 // returns the first failure — the scan's, an object's, or the overdue sample's.
 // Only the objects in buckets the gate admits as a read are reconciled
-// (pendingBucket); a refused bucket's objects stay PENDING, logged once per
-// tick, and the scan is taken again without them (bucket_gate.go).
+// (anchorBucket); a refused bucket's objects stay as they are, logged once
+// per tick, and the scan is taken again without them (bucket_gate.go).
 func (r *ReconcilerV2) tick(ctx context.Context) (first error) {
 	// After the batch, so the gauges show what the tick could not settle.
 	defer func() { keepFirst(&first, r.sampleOverdue(ctx)) }()
 	gate := newBucketDeferrals(r.log, bucketgate.Read)
 	_, err := claimAdmitted(ctx, gate, safecast.Int32(r.cfg.BatchSize),
-		func(limit int32, deferred []pgtype.UUID) ([]statemachine.PendingExpired, error) {
-			return r.sm.ScanPendingExpired(ctx, r.cfg.PendingGraceTTL, int(limit), deferred)
+		func(limit int32, deferred []pgtype.UUID) ([]statemachine.ExpiredAnchor, error) {
+			return r.sm.ScanExpiredAnchors(ctx, r.cfg.PendingGraceTTL, int(limit), deferred)
 		},
-		pendingBucket,
-		func(p statemachine.PendingExpired) error {
-			keepFirst(&first, r.reconcile(ctx, p.ObjectID))
+		anchorBucket,
+		func(p statemachine.ExpiredAnchor) error {
+			if p.State == statemachine.StatePending {
+				keepFirst(&first, r.reconcile(ctx, p.ObjectID))
+			} else {
+				keepFirst(&first, r.settleAnchor(ctx, p))
+			}
 			return nil
 		})
 	if err != nil {
-		keepFirst(&first, tickCutShort(ctx, r.log, "failed to scan pending objects", err))
+		keepFirst(&first, tickCutShort(ctx, r.log, "failed to scan expired upload anchors", err))
 	}
 	return first
 }
 
-// pendingBucket is the bucket a pending object's bytes are HEADed in.
+// anchorBucket is the bucket an object's bytes are HEADed in: the one its
+// upload URL was signed for.
 //
 // The reconciler asks the gate as a read. Its HEAD reads the bytes, and what
 // follows writes only the object's row: a promote of bytes the client already
-// put, or a discard of a row whose upload never came. So a disabled backend
-// defers its pending objects, which stay PENDING until it is enabled, and a
-// draining or provisioning one does not, though CompleteObject, which asks
-// for the same promote, is a write of bytes: that RPC is the client's next
-// step on an upload, the reconciler only settles one the client left.
-// Deleting bytes that broke their registration is a write of bytes, gated on
-// its own (ReconcilerProbe.DeleteByObjectID).
-func pendingBucket(p statemachine.PendingExpired) bucketGateRow {
+// put, a discard of a row whose upload never came, or the record of a write
+// the URL made. So a disabled backend defers its objects, which stay as they
+// are until it is enabled, and a draining or provisioning one does not,
+// though CompleteObject, which asks for the same promote, is a write of
+// bytes: that RPC is the client's next step on an upload, the reconciler only
+// settles one the client left. Deleting bytes that broke their registration
+// is a write of bytes, gated on its own (ReconcilerProbe.DeleteByObjectID).
+func anchorBucket(p statemachine.ExpiredAnchor) bucketGateRow {
 	return bucketGateRow{
 		ID: p.BucketID, BackendName: p.BackendName, BucketName: p.BucketName,
 		Enabled: p.Enabled, ReadOnly: p.ReadOnly, ProvisionState: p.ProvisionState,
@@ -144,8 +151,8 @@ func (r *ReconcilerV2) sampleOverdue(ctx context.Context) error {
 	return nil
 }
 
-// reconcile settles one object and returns the failure it logged. A content
-// mismatch is not one in itself: discardMismatched settles it.
+// reconcile settles one PENDING object and returns the failure it logged. A
+// content mismatch is not one in itself: discardMismatched settles it.
 func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) error {
 	etag, size, checksum, seq, placed, found, err := r.probe.HeadByObjectID(ctx, objectID)
 	if err != nil {
@@ -157,14 +164,6 @@ func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) error 
 		if errors.Is(err, statemachine.ErrContentMismatch) {
 			return r.discardMismatched(ctx, objectID, err)
 		}
-		if errors.Is(err, statemachine.ErrBindingMoved) {
-			// A storage migration rebound the collection between the HEAD
-			// and the promote. The row stays PENDING, anchored to the bucket
-			// its URL names; the next tick moves the bytes to the new binding.
-			r.log.Warn("promote refused: the collection was rebound since the HEAD; the object stays pending for the next tick",
-				zap.String("object_id", objectID.String()), zap.Error(err))
-			return nil
-		}
 		if err != nil {
 			r.log.Warn("failed to promote object", zap.String("object_id", objectID.String()), zap.Error(err))
 		}
@@ -173,6 +172,41 @@ func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) error 
 	if err := r.sm.DiscardFailed(ctx, objectID, statemachine.FailedPresignExpired); err != nil {
 		r.log.Warn("failed to discard object", zap.String("object_id", objectID.String()), zap.Error(err))
 		return err
+	}
+	return nil
+}
+
+// settleAnchor settles a promoted object whose upload URL has expired by the
+// grace (ADR-0051): no URL of it can write any more, so its anchor holds the
+// last write. A HEAD there that finds the recorded ETag clears the anchor;
+// another ETag is a write no storage event recorded, which the row now
+// records — the last promoted wins; nothing there clears the anchor and is
+// logged at Error. A storage migration moves only settled objects.
+func (r *ReconcilerV2) settleAnchor(ctx context.Context, p statemachine.ExpiredAnchor) error {
+	log := r.log.With(zap.String("object_id", p.ObjectID.String()),
+		zap.String("backend", p.BackendName), zap.String("bucket", p.BucketName))
+	etag, size, checksum, _, placed, found, err := r.probe.HeadByObjectID(ctx, p.ObjectID)
+	if err != nil {
+		log.Warn("failed to HEAD the object's upload anchor", zap.Error(err))
+		return err
+	}
+	outcome, err := r.sm.SettleAnchorInTx(ctx, p.ObjectID, placed, statemachine.StoredWrite{
+		Found: found, ETag: etag, SizeBytes: size, Checksum: checksum,
+	}, nil)
+	if err != nil {
+		log.Warn("failed to settle the object's upload anchor", zap.Error(err))
+		return err
+	}
+	switch outcome {
+	case statemachine.SettleRecorded:
+		log.Warn("upload anchor settled: its URL wrote after the object's last promote and no storage event reported it; the object now records those bytes",
+			zap.String("etag", etag), zap.Int64("size_bytes", size))
+	case statemachine.SettleMissing:
+		log.Error("upload anchor settled: the bucket holds no bytes under the object's key")
+	case statemachine.SettleUnchanged:
+		log.Debug("upload anchor settled: the bucket holds the bytes the object records")
+	case statemachine.SettleSkipped:
+		log.Debug("upload anchor changed since the scan; nothing to settle")
 	}
 	return nil
 }

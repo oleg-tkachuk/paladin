@@ -32,7 +32,9 @@ import (
 // fields verify the tenant-stamping / routing contract without a database.
 type fakeRepo struct {
 	// public makes the collection public, stored with cacheControl (ADR-0027).
-	public            bool
+	public bool
+	// writesCloseAt is the session bucket's write deadline; zero for none.
+	writesCloseAt     time.Time
 	cacheControl      string
 	initiateSessionFn func(ctx context.Context, args InitiateArgs, objectID uuid.UUID, storageUploadID, backendID, bucket string) (Session, error)
 	getSessionFn      func(ctx context.Context, uploadID string) (Session, error)
@@ -105,6 +107,11 @@ func (f *fakeRepo) DeleteSession(ctx context.Context, uploadID string) error {
 
 func (f *fakeRepo) Object(context.Context, uuid.UUID, uuid.UUID) (objecth.Object, error) {
 	return f.object, f.objectErr
+}
+
+// UploadWritesCloseAt answers the deadline the test set, none by default.
+func (f *fakeRepo) UploadWritesCloseAt(context.Context, uuid.UUID, string, string) (time.Time, bool, error) {
+	return f.writesCloseAt, !f.writesCloseAt.IsZero(), nil
 }
 
 func (f *fakeRepo) RecordCompositeChecksum(_ context.Context, objectID uuid.UUID, composite string, partSizeBytes int64) error {

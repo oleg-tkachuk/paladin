@@ -278,18 +278,6 @@ func TestCreateCollection(t *testing.T) {
 	// A bucket that is not registered, or was deleted after the caller listed
 	// it, is a missing resource. It reached the caller as a 500 carrying a
 	// NOT NULL violation on collections.bucket_id.
-	t.Run("bucket a storage migration left → aborted, retryable", func(t *testing.T) {
-		h := NewHandler(&fakeRepo{
-			createTxFn: func(context.Context, CreateCollectionArgs) (Collection, error) {
-				return Collection{}, fmt.Errorf("%w: aws-eu/shared", ErrBucketMigratedAway)
-			},
-		}, allowAll())
-		_, err := h.CreateCollection(authedCtx(tid), CreateCollectionArgs{
-			TenantID: tid, Collection: "k", BackendID: "aws-eu", BucketName: "shared",
-		})
-		wantCode(t, err, connect.CodeAborted)
-	})
-
 	t.Run("unknown bucket → not found", func(t *testing.T) {
 		h := NewHandler(&fakeRepo{
 			createTxFn: func(context.Context, CreateCollectionArgs) (Collection, error) {

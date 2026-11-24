@@ -71,8 +71,10 @@ func TestReplicationFollowsThePlacement(t *testing.T) {
 	}
 	mustExec(t, ctx, f.pool, `DELETE FROM object_replicas WHERE object_id = $1`, id)
 	mustExec(t, ctx, f.pool, `DELETE FROM replication_seeds`)
-	if n, err := sqlc.New(f.pool).SeedReplication(ctx, private); err != nil || n != 1 {
-		t.Fatalf("SeedReplication of the bucket the object is placed in queued %d, %v; want 1", n, err)
+	// obj-1, which the fixture placed there, and the promoted object.
+	const placedInPrivate = 2
+	if n, err := sqlc.New(f.pool).SeedReplication(ctx, private); err != nil || n != placedInPrivate {
+		t.Fatalf("SeedReplication of the bucket the objects are placed in queued %d, %v; want %d", n, err, placedInPrivate)
 	}
 
 	// Moving the bytes queues the object for the bucket it moved to.

@@ -14,7 +14,6 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
-	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // placementCollection is the private collection the placement tests write.
@@ -144,27 +143,5 @@ func assertStoredIn(t *testing.T, read string, ref *objecth.BucketRef, bucket st
 	t.Helper()
 	if ref == nil || ref.Bucket != bucket {
 		t.Errorf("%s: stored in %+v, want %q", read, ref, bucket)
-	}
-}
-
-// A storage migration that rebinds the tenant places every object it copied
-// in the target with the binding, so nothing is read from the source it
-// then cleans.
-func TestStorageMigrationPlacesTheObjectsItMoves(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	f := seedPublicMigrationFixture(t, ctx)
-	f.addCollection(t, ctx, placementCollection, f.private, false)
-	id := f.uploadAndPromote(t, ctx, placementCollection, "moved.txt")
-	f.store.put(worker.CopyLocation{BackendID: f.backend, TenantID: f.tenant, Bucket: f.private,
-		Collection: placementCollection, Key: "moved.txt"}, 7)
-	if err := f.start(t, ctx); err != nil {
-		t.Fatalf("start: %v", err)
-	}
-	if state, reason := f.drive(t, ctx); state != worker.MigStateCleaned {
-		t.Fatalf("migration ended %s (%s), want %s", state, reason, worker.MigStateCleaned)
-	}
-	if got := f.placedBucket(t, ctx, id); got != f.dedicated {
-		t.Fatalf("placed in %q after the migration, want the target %q", got, f.dedicated)
 	}
 }

@@ -33,7 +33,6 @@ const reconcilerGateGrace = time.Second
 // absentHead answers every HEAD as not found, so a reconciled object is
 // discarded, and records the bucket of every HEAD it is asked for.
 type absentHead struct {
-	noCopy
 	mu    sync.Mutex
 	heads []string
 }

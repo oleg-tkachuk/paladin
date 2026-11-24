@@ -99,10 +99,10 @@ func mustInsertPendingObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUI
 	objID := uuid.New()
 	_, err := pool.Exec(context.Background(), `
         INSERT INTO objects (
-            id, tenant_id, collection_id, path, state,
+            id, tenant_id, collection_id, upload_bucket_id, path, state,
             content_type, checksum_algorithm, presign_expires_at
         )
-        SELECT $1, $2, c.id, $4, 'PENDING',
+        SELECT $1, $2, c.id, c.bucket_id, $4, 'PENDING',
                'application/octet-stream', 1, now() + interval '15 minutes'
           FROM collections c
          WHERE c.tenant_id = $2 AND c.name = $3
@@ -171,8 +171,8 @@ func seaweedFSWebhook(tenantID uuid.UUID, kind string) []byte {
 
 type bytesProbe struct{ found bool }
 
-func (p bytesProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, statemachine.Placement, bool, error) {
-	return "", 0, "", "", statemachine.Placement{}, p.found, nil
+func (p bytesProbe) HeadPlaced(context.Context, uuid.UUID) (bool, error) {
+	return p.found, nil
 }
 
 // TestIngest_DeleteEventTrashesAnObjectWhoseBytesAreGone — a delete from the

@@ -17,10 +17,18 @@ func storedIn(backendID, bucket string) *BucketRef {
 
 // placedIn is obj as the store reads it when its bytes are in
 // (backendID, bucket): every object but a PENDING one is placed somewhere
-// (objects.placement_bucket_id). A fake that serves objects from one binding
-// places them there unless the test placed them itself.
+// (objects.placement_bucket_id), and a PENDING one is anchored to the bucket
+// its URL was signed for (objects.upload_bucket_id). A fake that serves
+// objects from one binding places or anchors them there unless the test did
+// itself.
 func placedIn(obj Object, backendID, bucket string) Object {
-	if obj.Stored == nil && obj.State != statemachine.StatePending {
+	if obj.State == statemachine.StatePending {
+		if obj.Upload == nil {
+			obj.Upload = storedIn(backendID, bucket)
+		}
+		return obj
+	}
+	if obj.Stored == nil {
 		obj.Stored = storedIn(backendID, bucket)
 	}
 	return obj

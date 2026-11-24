@@ -811,7 +811,7 @@ func (r *ObjectRepo) EnqueuePurgeTx(ctx context.Context, tx pgx.Tx, p objecth.Pu
 	copies, err := purgedebt.RecordMigrationCopies(ctx, qtx, purgedebt.Purge{
 		TenantID: p.TenantID, ObjectID: p.ObjectID,
 		BackendID: p.BackendID, Bucket: p.BucketName,
-		Collection: p.Collection, Key: p.Key, State: string(p.ObjectState),
+		Collection: p.Collection, Key: p.Key,
 	})
 	if err != nil {
 		return fmt.Errorf("enqueue purge: %w", err)

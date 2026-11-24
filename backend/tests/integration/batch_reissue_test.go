@@ -240,9 +240,9 @@ func TestBatchExecutor_ReissuedCopyAdoptsADeadRunsPendingRow(t *testing.T) {
 	pendingCopy := func(key string, creator uuid.UUID) uuid.UUID {
 		id := uuid.New()
 		if _, err := h.PoolMigrate.Exec(ctx, `
-			INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
+			INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state, content_type,
 			                     checksum_algorithm, size_bytes, presign_expires_at, created_by_operation)
-			SELECT $1, $2, c.id, $3, 'PENDING', 'application/octet-stream', 1, 100,
+			SELECT $1, $2, c.id, c.bucket_id, $3, 'PENDING', 'application/octet-stream', 1, 100,
 			       now() + interval '1 minute', $4
 			  FROM collections c WHERE c.tenant_id = $2 AND c.name = 'dst'`,
 			id, tenantID, key, creator); err != nil {

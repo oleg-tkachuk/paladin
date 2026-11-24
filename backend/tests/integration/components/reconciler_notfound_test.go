@@ -88,9 +88,9 @@ func TestReconcilerDiscardsWhenBytesAreAbsent(t *testing.T) {
 
 	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
-		SELECT $1, $2, c.id, 'k-gone', 'PENDING', 'application/octet-stream', 0,
+		SELECT $1, $2, c.id, c.bucket_id, 'k-gone', 'PENDING', 'application/octet-stream', 0,
 		       now() - interval '48 hours'
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
@@ -111,9 +111,9 @@ func TestReconcilerDiscardsWhenBytesAreAbsent(t *testing.T) {
 	}
 	// The key is free: a retry at the same path is not refused.
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state,
 		                     content_type, checksum_algorithm)
-		SELECT $1, $2, c.id, 'k-gone', 'PENDING', 'application/octet-stream', 0
+		SELECT $1, $2, c.id, c.bucket_id, 'k-gone', 'PENDING', 'application/octet-stream', 0
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection)
 }
 
@@ -129,9 +129,9 @@ func TestReconcilerLeavesPendingWhenBackendIsUnreachable(t *testing.T) {
 
 	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
-		SELECT $1, $2, c.id, 'k-unreachable', 'PENDING', 'application/octet-stream', 0,
+		SELECT $1, $2, c.id, c.bucket_id, 'k-unreachable', 'PENDING', 'application/octet-stream', 0,
 		       now() - interval '48 hours'
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
@@ -162,9 +162,9 @@ func TestReconcilerPromotesWhenBytesArePresent(t *testing.T) {
 
 	id := uuid.NewV7()
 	mustExec(t, ctx, pool, `
-		INSERT INTO objects (id, tenant_id, collection_id, path, state,
+		INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state,
 		                     content_type, checksum_algorithm, presign_expires_at)
-		SELECT $1, $2, c.id, 'k-present', 'PENDING', 'application/octet-stream', 0,
+		SELECT $1, $2, c.id, c.bucket_id, 'k-present', 'PENDING', 'application/octet-stream', 0,
 		       now() - interval '48 hours'
 		  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`,
 		id, f.tenantID, f.collection)
@@ -193,9 +193,9 @@ func TestPendingOverdueCountsWhatTheReconcilerCannotSettle(t *testing.T) {
 
 	seed := func(path, state, expires string) {
 		mustExec(t, ctx, pool, `
-			INSERT INTO objects (id, tenant_id, collection_id, path, state,
+			INSERT INTO objects (id, tenant_id, collection_id, upload_bucket_id, path, state,
 			                     content_type, checksum_algorithm, presign_expires_at)
-			SELECT $1, $2, c.id, $4, $5::object_state, 'application/octet-stream', 0,
+			SELECT $1, $2, c.id, c.bucket_id, $4, $5::object_state, 'application/octet-stream', 0,
 			       now() + $6::interval
 			  FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection, path, state, expires)
 	}

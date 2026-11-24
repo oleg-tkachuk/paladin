@@ -19,9 +19,7 @@ type Querier interface {
 	// Compare-and-set on the creator: of two reissues racing for one row, one
 	// adopts it and the other matches nothing.
 	AdoptPendingObject(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID, adopter pgtype.UUID, presignExpiresAt pgtype.Timestamptz, creator pgtype.UUID) (int64, error)
-	// Records copy progress + the resume cursor after a batch. Progress only moves
-	// forward: a stale batch reporting less than is recorded changes nothing.
-	AdvanceStorageMigrationCopy(ctx context.Context, objectsCopied int64, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	AdvanceStorageMigrationCleanup(ctx context.Context, cursorCollection string, cursorPath string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Puts a freshly promoted version under the parent bucket's default retention
 	// (ADR-0013). Skipped entirely when the bucket has no default, and never
 	// overwrites an existing row — an explicit SetObjectRetention that arrived
@@ -42,13 +40,6 @@ type Querier interface {
 	// The bucket whose policy layer storageBackends/{backend}/buckets/{name}
 	// addresses, its backend by name.
 	BucketIDForPolicy(ctx context.Context, backend string, bucket string) (pgtype.UUID, error)
-	// Whether the tenant's latest storage migration moved its private
-	// collections away from the bucket and nothing will move a collection bound
-	// there back: rebound to the target, the source left behind
-	// (migstate.SourceLeft); or rolled back, the target left behind. Asked under
-	// LockTenantBindingsShared, so a rebind either committed before it or waits
-	// for the creation asking.
-	BucketMigratedAway(ctx context.Context, tenantID pgtype.UUID, rolledBackState string, backendName string, bucketName string, sourceLeftStates []string) (bool, error)
 	CancelOperation(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID) (int64, error)
 	// True when a non-DELETED row already exists at (tenant, collection_id, path).
 	// Used by RestoreObject to refuse restoring into a slot that's been reused.
@@ -76,10 +67,11 @@ type Querier interface {
 	ClearTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	// The collection whose policy layer the name tenants/{tenant}/collections/{name} addresses.
 	CollectionIDForPolicy(ctx context.Context, tenantID pgtype.UUID, name string) (pgtype.UUID, error)
-	// Rebind verified: serve from the dedicated bucket. The old copies are kept
-	// until cleanup_after (now + the row's retention) so a bad migration is still
-	// rollback-able within the window.
-	CompleteStorageMigration(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	// Every object moved and no URL left that can write the source: the source
+	// copies are kept until cleanup_after — the retention the operator asked for,
+	// and at least the longest a GET URL signed for the source before its object
+	// moved can live (get_window).
+	CompleteStorageMigration(ctx context.Context, toState string, getWindow pgtype.Interval, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// How many entries of a listing came in on each plane: list_audit_entry_ids'
 	// predicates (100), without its order or cursor, grouped. The caller leaves
 	// out the plane facet's own choices, so each count says what choosing that
@@ -118,6 +110,7 @@ type Querier interface {
 	// backend are counted apart: they leave without the operator doing anything.
 	CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID) (CountPurgeBlockersRow, error)
 	CountPurgeEventSubscriptions(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	CountStorageMigrationMove(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Trashed tenants whose trash retention has lapsed as of as_of: the ones the
 	// console marks "Past retention" and an operator should decide on.
 	CountTenantsPastTrashRetention(ctx context.Context, trashRetentionSeconds float64, asOf pgtype.Timestamptz) (int64, error)
@@ -166,7 +159,8 @@ type Querier interface {
 	// Keyed on name, not id: the caller knows the config key ("primary"), and the
 	// uuid is generated here.
 	CreateStorageBackendV2(ctx context.Context, name string, kind string, endpoint string, region string, eventsEnabled bool, eventsTarget string, displayName string, publicEndpoint string, forcePathStyle bool, credentialsSecretRef string, sseType string, sseKeyID string, eventsQueueUrl string, eventsPollIntervalMs int64, cedarPolicy string, provider string) error
-	// ADR-0015 Phase 3: shared->dedicated storage migration copy job.
+	// A tenant's storage migration (ADR-0015, ADR-0051): the tenant's objects
+	// move one by one from its shared bucket into a dedicated one.
 	CreateStorageMigration(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, name_3 string, name_4 string, cleanupRetentionSeconds int64) (TenantStorageMigration, error)
 	// Tenant queries.
 	CreateTenant(ctx context.Context, iD pgtype.UUID, slug string, displayName string, labels []byte, inheritedCedarPolicy string, storageLayout TenantStorageLayout) error
@@ -244,37 +238,13 @@ type Querier interface {
 	// and the tenant switcher silently hid every membership past the fifth. Same
 	// cap, same class of bug, twice.
 	FindUsersBySubjectGlobal(ctx context.Context, subject string) ([]User, error)
-	// rolling_back -> failed, in the transaction that rebinds the tenant back.
-	// The verify error stays, and attempts too: the failure was counted when the
-	// rollback started. rebound_back_at is that transaction's now(), its START
-	// time (migration 119): no later than any moment a writer could have seen
-	// the tenant on its source again, so a write to the target that a late
-	// storage event reports is older than any the row records from then on.
+	// rolling_back -> failed, once nothing of the tenant is left in the target
+	// and no URL can write it. The reason the rollback started stays, and the
+	// attempt too: the failure was counted when it started.
 	FinishStorageMigrationRollback(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// A purge's part in the copy's count, on its transaction, after the row is
-	// deleted. The copy fails when it ends short of the total it counted, which
-	// an object purged before the copy reached it would cause though nothing was
-	// missed: such a purge takes it off the total. Counted means the copy's list
-	// holds it — live or trashed, not in a public collection — and not reached
-	// means past the cursor, which the copy advances on the transaction that
-	// holds the object's row (CopyObjectHeld), so a purge either waited for that
-	// copy and sees it counted, or ran first and the copy finds no row.
-	// In 'provisioning' it only takes the row's lock: the count is taken under
-	// it (LockStorageMigrationForCount), after this purge is visible.
-	ForgetPurgedFromStorageMigrationCount(ctx context.Context, objectState string, tenantID pgtype.UUID, collectionName string, path string) error
 	// Drops the row of an object that is gone or left the bucket, unless a write
 	// took the location since the claim: the row is then the new object's.
 	ForgetReplica(ctx context.Context, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string, generation int64) (int64, error)
-	// Drops what an attempt's catch-up recorded (migration 116): at the start of
-	// an attempt's copy, which copies everything again, and once it completes.
-	ForgetStorageMigrationCaughtUp(ctx context.Context, tenantID pgtype.UUID) error
-	// Drops what a rollback recorded (migration 118): when a rollback starts,
-	// and once it has rebound the tenant back.
-	ForgetStorageMigrationCopiedBack(ctx context.Context, tenantID pgtype.UUID) error
-	// Drops what the copies recorded of the source (migration 120): when an
-	// attempt's copy starts, once the source is cleaned, and once a rollback has
-	// rebound the tenant back.
-	ForgetStorageMigrationSourceETags(ctx context.Context, tenantID pgtype.UUID) error
 	GetAPIToken(ctx context.Context, id pgtype.UUID) (GetAPITokenRow, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
@@ -400,13 +370,10 @@ type Querier interface {
 	// Unconditional physical delete. Used by PurgeTenant.
 	// expected_version=0 → no OCC guard; non-zero → strict match.
 	HardDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
-	// Holds the migration row shared for a copy back, and only while it is
-	// still as the worker read it: taken before the copy, after the object's
-	// row, so a worker resumed past its lease finds out before it copies, and
-	// the rebind back (FOR UPDATE) waits for every copy back in flight. Once the
-	// tenant is on its source again, a stale copy from the target would put
-	// older bytes over what was written there since.
-	HoldStorageMigrationForCopyBack(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	// Holds the migration row shared for one object's move, while it is still as
+	// the worker read it: a stale worker moves nothing, and a transition waits
+	// for the moves in flight.
+	HoldStorageMigrationAsRead(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Charges the quota of the bucket an object's collection is bound to — the
 	// same object→collection→bucket hop the reconciler sums over — with the
 	// day-roll of IncrementQuotaUsage. Updates nothing when the bucket has no
@@ -421,22 +388,22 @@ type Querier interface {
 	IncrementQuotaUsage(ctx context.Context, iD pgtype.UUID, usageTotalBytes int64, usageObjectCount int64) error
 	InsertAPIToken(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, name string, prefix string, tokenHmac []byte, scopes []string, roles []string, audience []string, expiresAt pgtype.Timestamptz, rateLimitRpm *int32, createdBy string, createdAt pgtype.Timestamptz) error
 	InsertAuditEntry(ctx context.Context, iD pgtype.UUID, at pgtype.Timestamptz, actorSubject string, actorTenantID pgtype.UUID, actorAudience string, action string, resourceName string, requestID string, sourceIp *string, requestJson []byte, errorMessage *string, capabilityID pgtype.UUID, resourceTenantID pgtype.UUID, relayedBy *string, userAgent *string, stateBeforeJson []byte, stateAfterJson []byte) error
-	// The purge of an object while its tenant migrates (ADR-0015): one debt for
-	// each bucket of the migration other than the one the collection is bound to,
+	// The purge of an object while its tenant migrates (ADR-0051): one debt for
+	// each bucket of the migration other than the one the object is placed in,
 	// which InsertPendingPurge recorded. Run on the transaction that deletes the
 	// row, after the delete, so the debts exist exactly when the row is gone.
 	//
-	// Until 'cleaned', the object may have a copy in either bucket: the copy
-	// puts one in the target, the rebind leaves one in the source until cleanup,
-	// a rollback copies the target back, and a failed attempt leaves its copies
-	// in the target — through the retry's 'provisioning' too, until its copy
-	// overwrites them. 'cleaned' has removed the source copies. Only a ready
+	// In the owing states (migstate.Owing) the object may have a copy in either
+	// bucket: a move leaves the source's copy until cleanup, a rollback's move
+	// leaves the target's, and a failed attempt leaves its copies in the target —
+	// through the retry's 'provisioning' too, until its moves overwrite them.
+	// 'cleaned' has removed the source copies. Only a ready
 	// bucket: a first attempt's target is still being provisioned and holds
 	// nothing, nor does one whose provisioning failed, and a debt there would
 	// stay pinned behind the bucket gate. Only while the bound bucket is one of
 	// the two: a public collection never moves, and its bucket is neither.
 	// migration_copy marks the debts as the migration's: they announce nothing.
-	InsertMigrationPurgeDebts(ctx context.Context, objectID pgtype.UUID, collectionName string, path string, boundBackendName string, boundBucketName string, tenantID pgtype.UUID) (int64, error)
+	InsertMigrationPurgeDebts(ctx context.Context, objectID pgtype.UUID, collectionName string, path string, boundBackendName string, boundBucketName string, tenantID pgtype.UUID, owingStates []string) (int64, error)
 	// ObjectVersion queries — immutable history rows. Populated by the
 	// promotion path when the parent bucket has versioning_enabled = true.
 	InsertObjectVersion(ctx context.Context, iD pgtype.UUID, objectID pgtype.UUID, isDeleteMarker bool, storagePath string, sizeBytes *int64, etag *string, checksumAlgorithm int16, checksum *string, checksumPartSizeBytes *int64, contentType *string, metadata []byte, tags []byte) error
@@ -462,8 +429,8 @@ type Querier interface {
 	// ones it holds a grant on (ADR-0032).
 	ListAccessibleBuckets(ctx context.Context, ownerTenantID pgtype.UUID, column2 string, column3 string, limit int32) ([]ListAccessibleBucketsRow, error)
 	// Worker scan: non-terminal migrations, oldest-touched first. 'completed' is
-	// still active — the worker must run retention-gated cleanup on it — and so
-	// is 'rolling_back', which the worker must finish rolling back.
+	// still active — the worker must clean the source on it — and so is
+	// 'rolling_back', which the worker must finish rolling back.
 	ListActiveStorageMigrations(ctx context.Context, limitCount int32) ([]ListActiveStorageMigrationsRow, error)
 	// One page of the log in the order the caller names: list_audit_entry_ids
 	// (086) applies the predicates, the order and the keyset on (field, id); this
@@ -695,30 +662,13 @@ type Querier interface {
 	// Waits for the object-path lock (see package objectpath); held until the
 	// transaction ends.
 	LockObjectPath(ctx context.Context, lockKey int64) error
-	// Holds the migration row while the copy's total is counted, and only while
-	// it is still as the worker read it. A purge's transaction updates the row
-	// (ForgetPurgedFromStorageMigrationCount), so the count runs after any purge
-	// that touched it has committed, and a purge after it waits for 'copying'.
-	LockStorageMigrationForCount(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// Holds the migration row for the rebind transaction, and only while it is
-	// still in the state and attempt the worker read: a stale worker must not
-	// repoint the tenant's collections at a bucket a newer attempt is still
-	// filling.
-	LockStorageMigrationForRebind(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// Waits for every promote of the tenant in flight, and holds back every
-	// later one, until the transaction ends: each promote holds this lock shared
-	// before it reads the migration's row (migstate.LockSpaceStart). Taken by a
-	// transition into a fencing state from a non-fencing one, so every promote
-	// either committed before it or reads the row it leaves.
-	LockStorageMigrationStart(ctx context.Context, lockSpace int32, lockKey int32) error
-	// Held by the rebind and the rebind back before they list the tenant's
-	// collections (migstate.LockSpaceBindings): they wait for every collection
-	// being created, list it, and hold back every later creation until they
-	// commit.
-	LockTenantBindings(ctx context.Context, lockSpace int32, lockKey int32) error
-	// Held by a collection's creation: creations do not wait on each other, and
-	// a rebind waits for them (LockTenantBindings).
-	LockTenantBindingsShared(ctx context.Context, lockSpace int32, lockKey int32) error
+	// Every transition below applies only to the migration as the worker read
+	// it: the same state AND the same attempts. attempts grows on every failure
+	// and a retry keeps it, so a worker that read an earlier attempt and resumed
+	// after it failed and was retried matches nothing (ABA on state alone).
+	// Holds the migration row for a transaction that changes where the tenant's
+	// uploads go, and only while it is still as the worker read it.
+	LockStorageMigrationAsRead(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Starting (or retrying) a migration: StartStorageMigration runs these in one
 	// transaction, in this order, and says why each step is there.
 	// Serialises starts for one tenant. tenant_storage_migrations has no unique
@@ -737,6 +687,9 @@ type Querier interface {
 	// (bucketgate.State), for a worker that deletes the object's bytes.
 	LookupObjectByID(ctx context.Context, id pgtype.UUID) (LookupObjectByIDRow, error)
 	// Used by resource-name resolution: collections/{b}/objects-by-key/{path} → id.
+	// The anchor_* columns name the bucket the object's upload URL was signed
+	// for, NULL once settled; the placement_* ones the bucket its bytes are in
+	// (ADR-0051): what a storage event from a bucket is matched against.
 	LookupObjectByKey(ctx context.Context, tenantID pgtype.UUID, name string, path string) (LookupObjectByKeyRow, error)
 	// The bucket a PENDING object's upload URL was signed for (migration 113),
 	// with the state the bucket gate decides on there. No row when the object
@@ -763,104 +716,46 @@ type Querier interface {
 	// successor its parent's holder may recover.
 	MarkRefreshTokenUsed(ctx context.Context, id pgtype.UUID) error
 	MarkStorageMigrationCleaned(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// Rolling a migration back (ADR-0015): a physical verify that fails after the
-	// rebind moves the migration to 'rolling_back'; the worker copies the objects
-	// written since the rebind back to the source bucket, then rebinds the tenant
-	// to it and leaves the migration 'failed', retryable like any other failure.
-	// Run in the rebind transaction: rebound_at is that transaction's now(), its
-	// START time, so it is no later than any moment a writer could have seen the
-	// tenant rebound. Every object written into the dedicated bucket has a
-	// bytes_written_at at or after it.
-	MarkStorageMigrationRebound(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// The objects MigrationListTenantObjects walks: live and trashed, public
-	// collections' excluded.
-	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	// How many objects MigrationListUncaughtUp would still return. The rebind
-	// counts them under the migration row's lock, which every promote holds
-	// while it runs, so no write commits unseen between the count and the
-	// rebind: any is the rebind refused.
-	MigrationCountUncaughtUp(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// How many objects MigrationListUncopiedBack would still return. The rebind
-	// back counts them under the migration row's lock, which every promote holds
-	// while the migration rolls back, so no write commits unseen between the
-	// count and the rebind back: any is the rebind back refused.
-	MigrationCountUncopiedBack(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// The tenant's uploads whose URL names the bucket (migration 113) and that
-	// are still PENDING: their bytes may yet land there, and CompleteObject or
-	// the reconciler move them from it. Cleanup of the source waits for none.
-	MigrationCountUploadsAnchoredTo(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (int64, error)
-	// Holds the object's rows at (collection, path) against a delete for the
-	// transaction (FOR KEY SHARE: a tag or a taint still goes through), so a
-	// purge cannot remove the row while its bytes are copied: it waits, and then
-	// records a debt for the copy. No row: the object was purged since it was
-	// listed, and there is nothing to copy.
-	MigrationHoldObject(ctx context.Context, tenantID pgtype.UUID, collectionName string, path string) ([]pgtype.UUID, error)
-	// Holds one object's row against a delete and a promote (FOR KEY SHARE, which
-	// a promote's FOR UPDATE waits on) while the catch-up copies it, and reads
-	// the write whose bytes the copy takes. No row: purged, or no longer live or
-	// trashed; nothing to copy.
-	MigrationHoldObjectForCatchUp(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (pgtype.Timestamptz, error)
-	// Holds one object's row against a delete and a promote (FOR KEY SHARE,
-	// which a promote's FOR UPDATE waits on) while the rollback copies it back,
-	// and reads the write whose bytes the copy takes. No row: purged, or no
-	// longer live or trashed; nothing to copy.
-	MigrationHoldObjectForCopyBack(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (pgtype.Timestamptz, error)
-	// The collections the transactional rebind moves: all but the public ones,
-	// which never rebind (collections_public_bucket_fixed, ADR-0027).
-	MigrationListTenantCollections(ctx context.Context, tenantID pgtype.UUID) ([]string, error)
-	// Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
-	// worker restart resumes mid-prefix instead of rescanning from the top.
-	// size_bytes feeds the physical (HEAD size) verify after copy. A public
-	// collection's objects stay in their bucket (ADR-0027), so the copy, verify
-	// and cleanup never see them.
-	//
-	// Live and trashed objects: a trashed object keeps its bytes until the purge,
-	// and RestoreObject reads them from the bucket its collection is bound to, so
-	// they move with the collection. PENDING rows do not: no bytes are confirmed
-	// under them, and the upload URL they were handed names the source bucket,
-	// which the row records (upload_bucket_id): their completion moves the bytes.
-	// Versions and delete markers are rows only, all under the object's one key,
-	// so they need nothing copied.
-	//
-	// bound_* is the bucket the collection is bound to now: cleanup deletes a
-	// source copy only of an object read from the target. written_at and
-	// caught_up_* are when its bytes were last written and what the catch-up
-	// copied of them (migration 116), for the verify. source_etag is what the
-	// source reported for the key when it was last copied (migration 120), for
-	// the cleanup.
-	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
-	// The objects the catch-up copies before the rebind: live or trashed, in a
-	// private collection, whose bytes were written since the copy started and
-	// whose latest write the catch-up has not copied (migration 116). The copy
-	// listed each object once, behind a moving cursor; a write after its start
-	// may have reached only the source. Only while the migration is as the
-	// worker read it, so a stale worker lists nothing. The set shrinks as the
-	// catch-up copies, and grows by what is written meanwhile, in any order: it
-	// has no cursor for a late commit to fall behind.
-	MigrationListUncaughtUp(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32, limitCount int32) ([]MigrationListUncaughtUpRow, error)
-	// The objects the rollback copies back: live or trashed (a trashed object's
-	// bytes are what a later RestoreObject reads), in a private collection
-	// (public ones never moved, ADR-0027), whose bytes were written at or after
-	// the rebind and whose latest write the rollback has not copied back
-	// (migration 118). written_at is when the object's bytes were last written
-	// (bytes_written_at, which every promote sets), not when its row last
-	// changed: a tag, a taint, a lock or a trash move after the rebind leaves
-	// its bytes where they were, and its only target copy may be the broken one
-	// the verify failed on. A row promoted before the column existed has none;
-	// its updated_at stands in, at or after its last write. Only while the
-	// migration is as the worker read it. The set has no cursor for a late
-	// commit to fall behind: a promote stamped before a batch and committed
-	// after it is listed by the next.
-	MigrationListUncopiedBack(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32, limitCount int32) ([]MigrationListUncopiedBackRow, error)
-	// The mirror, in the rebind back's transaction: every object placed in the
-	// target is read from the source again, which the rollback's copy back
-	// filled before the rebind back could commit.
-	MigrationPlaceObjectsInSource(ctx context.Context, tenantID pgtype.UUID) (int64, error)
-	// Run in the rebind transaction, after the collections moved: every object
-	// of the tenant placed in the source is read from the target from here on
-	// (objects.placement_bucket_id, ADR-0051), which the copy and the catch-up
-	// filled before the rebind could commit.
-	MigrationPlaceObjectsInTarget(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// Records when the last URL that can write the bucket being emptied expires
+	// (writes_close_at, ADR-0051), once per direction: no URL for it is signed
+	// after this pass, and none signed before outlives limits.presign.max_ttl.
+	MigrationCloseWrites(ctx context.Context, window pgtype.Interval, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
+	// Holds one object's row against a delete for its move (FOR KEY SHARE: a tag
+	// or a taint still goes through), and reads what the move is decided on. No
+	// row: purged since it was listed, or no longer placed in from_bucket_id, or
+	// anchored again — nothing to move.
+	MigrationHoldMovable(ctx context.Context, iD pgtype.UUID, tenantID pgtype.UUID, fromBucketID pgtype.UUID) (MigrationHoldMovableRow, error)
+	// What keeps the bucket being emptied (from_bucket_id) in use, for the
+	// migration's completion (ADR-0051): the tenant's objects placed there, its
+	// rows anchored there (a URL signed for it may still write), its multipart
+	// sessions there, its private collections and default binding still bound
+	// there — and whether the last URL signed for it has expired by the grace.
+	MigrationHolds(ctx context.Context, tenantID pgtype.UUID, fromBucketID pgtype.UUID, grace pgtype.Interval, fromState string, attempts int32) (MigrationHoldsRow, error)
+	// The tenant's private collections bound to a bucket: what a pass points at
+	// the bucket the tenant's uploads go to. Public collections never move
+	// (collections_public_bucket_fixed, ADR-0027).
+	MigrationListBoundCollections(ctx context.Context, tenantID pgtype.UUID, bucketID pgtype.UUID) ([]string, error)
+	// The cleanup's walk: the tenant's live and trashed objects in private
+	// collections placed in the target, after the cursor by (collection, path).
+	// Each one's source copy is deleted; an object that never had one costs a
+	// delete of an absent key, which succeeds.
+	MigrationListCleanable(ctx context.Context, tenantID pgtype.UUID, targetBucketID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListCleanableRow, error)
+	// One batch of a pass: the tenant's live and trashed objects in private
+	// collections placed in from_bucket_id whose upload anchor has settled — no
+	// URL can write their key there any more (ADR-0051) — after the pass's
+	// cursor, by id. A PENDING row is placed nowhere and is not listed; its
+	// promote places it, and a later pass moves it.
+	MigrationListMovable(ctx context.Context, tenantID pgtype.UUID, fromBucketID pgtype.UUID, afterID pgtype.UUID, limitCount int32) ([]MigrationListMovableRow, error)
+	// The move's compare-and-set: the object is read from to_bucket_id from here
+	// on, with the ETag that bucket reported, only while it is still placed in
+	// from_bucket_id, settled, and its bytes are the ones the copy read — its
+	// content version (bytes_written_at) unchanged.
+	MigrationPlaceMoved(ctx context.Context, toBucketID pgtype.UUID, etag string, iD pgtype.UUID, tenantID pgtype.UUID, fromBucketID pgtype.UUID, bytesWrittenAt pgtype.Timestamptz) (int64, error)
+	// Points the tenant's default binding at to_bucket_id when it names
+	// from_bucket_id or the tenant has none, so a bare-name collection created
+	// from here on lands there; an operator's choice of another bucket is left
+	// alone.
+	MigrationRepointDefaultBinding(ctx context.Context, tenantID pgtype.UUID, toBucketID pgtype.UUID, setBy string, fromBucketID pgtype.UUID) (int64, error)
 	// The state of the row that owns a storage path now, if any.
 	ObjectStateAtPath(ctx context.Context, tenantID pgtype.UUID, name string, path string) (ObjectState, error)
 	// The taint of the live object at a path, for the capability read gate. No
@@ -957,17 +852,10 @@ type Querier interface {
 	// marked it due again since the claim (generation): that write is copied by
 	// a later pass.
 	RecordReplicaCopy(ctx context.Context, replicaBucketID pgtype.UUID, replicaObjectID pgtype.UUID, replicaWrittenAt pgtype.Timestamptz, replicaSizeBytes *int64, generation int64, bucketID pgtype.UUID, tenantID pgtype.UUID, collectionName string, path string) error
-	// Records the catch-up's copy of an object: the write it took and the ETag
-	// the target reported for it. Only while the migration is as the worker read
-	// it: a stale worker's copy is not taken for the current attempt's.
-	RecordStorageMigrationCaughtUp(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, writtenAt pgtype.Timestamptz, etag *string, fromState string, attempts int32) (int64, error)
-	// Records the write a copy back took, or decided to leave, on the
-	// transaction that holds the migration row as read.
-	RecordStorageMigrationCopiedBack(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, writtenAt pgtype.Timestamptz) error
-	// Records the ETag the source reported for an object's key just before a
-	// copy or the catch-up took its bytes (migration 120), on the transaction
-	// that holds the object's rows. The cleanup compares the source against it.
-	RecordStorageMigrationSourceETag(ctx context.Context, path string, etag string, tenantID pgtype.UUID, collectionName string) error
+	// A pass ended: counts the passes in a row whose moves failed their
+	// verification (none resets it), and the objects the migration covers —
+	// moved, and still placed in the bucket being emptied.
+	RecordStorageMigrationPass(ctx context.Context, failed bool, remaining int64, tenantID pgtype.UUID, fromState string, attempts int32) (int32, error)
 	// Undoes a claim whose handling failed, so the broker's redelivery is
 	// handled rather than skipped as a duplicate.
 	ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error
@@ -1093,7 +981,7 @@ type Querier interface {
 	SetBucketVersioning(ctx context.Context, name string, name_2 string, versioningEnabled bool, versioningKeepDeletesForever bool, expectedVersion int64) (int64, error)
 	SetCurrentVersionID(ctx context.Context, iD pgtype.UUID, currentVersionID pgtype.UUID) error
 	// Sets idle_in_transaction_session_timeout for the rest of the transaction
-	// (set_config's is_local), for one held open across a copy (HoldObject).
+	// (set_config's is_local), for one held open across a copy (MoveObject).
 	SetIdleInTransactionTimeout(ctx context.Context, timeout string) (string, error)
 	// A legal hold is independent of retention: it can be turned on and off
 	// freely by anyone the handler authorises, and while on it blocks deletion
@@ -1152,20 +1040,7 @@ type Querier interface {
 	// Flip the read-only (drain) state. Same OCC + operator-managed contract as
 	// SetStorageBackendEnabled; also not part of the bootstrap config-mirror.
 	SetStorageBackendReadOnly(ctx context.Context, readOnly bool, name string, expectedVersion int64) (int64, error)
-	// Every transition names the state the worker read the migration in
-	// (from_state) and applies only while it still holds: a worker resumed after a
-	// pause past its lease must not drag a migration its successor moved on.
-	// Every transition below applies only to the migration as the worker read
-	// it: the same state AND the same attempts. attempts grows on every failure
-	// and a retry keeps it, so a worker that read an earlier attempt and resumed
-	// after it failed and was retried matches nothing (ABA on state alone).
 	SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// Records the object count, the copy's start and moves provisioning ->
-	// copying. Run under the row's lock (LockStorageMigrationForCount), which
-	// every promote holds while the migration provisions: the clock read here is
-	// later than every promote that committed before, and earlier than the
-	// stamp of every promote after (statemachine.checkPlacement).
-	SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Tenant default-binding queries.
 	//
 	// One row per tenant. Set at CreateTenant time; updated by future
@@ -1188,9 +1063,10 @@ type Querier interface {
 	// the match. Updates resource_version + updated_at so audit reflects
 	// the soft-delete time independently of any subsequent restore.
 	SoftDeleteTenant(ctx context.Context, iD pgtype.UUID, expectedVersion int64) (int64, error)
-	// verifying -> rolling_back. The verify failure is recorded and counted here,
-	// where it happened; the rollback that follows keeps both. The cursor starts
-	// empty: the worker begins at rebound_at.
+	// moving -> rolling_back, recording the reason and counting the failure. The
+	// moves start over in the other direction: their count, the failed passes
+	// and the write deadline, which the rollback's first pass sets for the
+	// target.
 	StartStorageMigrationRollback(ctx context.Context, toState string, error *string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// What a start must know before it uses the target bucket: its owner, whether
 	// it is public, its provisioning state, and whether any OTHER tenant reaches
@@ -1212,8 +1088,8 @@ type Querier interface {
 	// without sharing anything.
 	SupersedeRefreshToken(ctx context.Context, id pgtype.UUID) (int64, error)
 	// Distinct buckets the tenant's collections currently bind to. The migration
-	// copies FROM this — a shared tenant's collections normally share one bucket;
-	// more than one row means the tenant spans buckets (not supported in slice 1).
+	// moves objects FROM this — a shared tenant's collections normally share one
+	// bucket; more than one row means the tenant spans buckets (not supported).
 	// Public collections are left out: they bind to a public bucket of their own
 	// and the migration leaves them there (ADR-0027).
 	TenantCollectionBuckets(ctx context.Context, tenantID pgtype.UUID) ([]TenantCollectionBucketsRow, error)
@@ -1267,6 +1143,11 @@ type Querier interface {
 	UpdateTenant(ctx context.Context, iD pgtype.UUID, displayName *string, labels []byte, policy *string, policyHash []byte, expectedVersion int64) (int64, error)
 	UpdateUser(ctx context.Context, displayName *string, disabled *bool, roles []byte, scopes []byte, iD pgtype.UUID, expectedVersion interface{}) (int64, error)
 	UpdateUserPasswordHash(ctx context.Context, iD pgtype.UUID, passwordHash []byte) (int64, error)
+	// The deadline a URL signed for the bucket (backend_name, bucket_name) must
+	// expire by: the bucket is being emptied by the tenant's migration — its
+	// source while moving, its target while rolling back — whose passes have set
+	// the deadline. No row: nothing bounds the URL but its TTL.
+	UploadWritesCloseAt(ctx context.Context, tenantID pgtype.UUID, backendName string, bucketName string) (pgtype.Timestamptz, error)
 	// Same OCC contract as UpsertTenantQuota. bucket_quotas has no RLS
 	// (044_bucket_quotas.sql): the handler's role and Cedar checks gate the write.
 	UpsertBucketQuota(ctx context.Context, iD pgtype.UUID, name string, name_2 string, maxTotalBytes *int64, maxObjectCount *int64, maxBytesPerDay *int64, maxObjectsPerDay *int64, expectedVersion int64) (int64, error)

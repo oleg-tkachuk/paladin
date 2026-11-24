@@ -17,6 +17,7 @@ func (r registrationRow) Scan(dest ...any) error {
 	*dest[0].(*string) = string(r.state)
 	*dest[1].(**int64) = r.size
 	*dest[2].(**string) = r.checksum
+	scanAnchor(dest)
 	return nil
 }
 
