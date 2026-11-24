@@ -121,6 +121,12 @@ func (f *passFixture) worker(rows []LifecycleObjectRow, rep StorageReplicator, l
 	}
 }
 
+// advanced reports whether the stored watermark moved past the window's
+// start, which the first pass writes down before it copies anything.
+func (f *passFixture) advanced() bool {
+	return f.stored().After(f.now.Add(-replicationTestLookback))
+}
+
 func (f *passFixture) stored() time.Time {
 	f.store.mu.Lock()
 	defer f.store.mu.Unlock()
@@ -246,7 +252,7 @@ func TestReplicationHoldsTheWatermarkBelowAFailedObject(t *testing.T) {
 	if err := w.tick(context.Background()); !errors.Is(err, errPermanentCopy) {
 		t.Fatalf("tick = %v, want %v", err, errPermanentCopy)
 	}
-	if got := f.stored(); !got.IsZero() {
+	if got := f.stored(); f.advanced() {
 		t.Fatalf("watermark advanced to %v past an object that failed to copy", got)
 	}
 	// The failure clears; the next tick copies it and only then advances.
@@ -298,7 +304,7 @@ func TestReplicationRetriesATransientFailureWithBackoff(t *testing.T) {
 	if fmt.Sprint(f.sleeps) != fmt.Sprint(want) {
 		t.Errorf("backoff = %v, want %v", f.sleeps, want)
 	}
-	if got := f.stored(); got.IsZero() {
+	if !f.advanced() {
 		t.Error("the watermark did not advance past a copy that succeeded on retry")
 	}
 }
@@ -321,8 +327,32 @@ func TestReplicationStopsTheBucketWhenRetriesRunOut(t *testing.T) {
 	if n := rep.attempts["after"]; n != 0 {
 		t.Errorf("the object after an exhausted retry was tried %d times; the bucket should stop", n)
 	}
-	if got := f.stored(); !got.IsZero() {
+	if got := f.stored(); f.advanced() {
 		t.Errorf("watermark advanced to %v after a stopped pass", got)
+	}
+}
+
+// A replica that still does not match after its retries holds the watermark
+// but does not stop the bucket: the mismatch is the object's, and the objects
+// after it copy.
+func TestReplicationHoldsAPersistentMismatchWithoutStoppingTheBucket(t *testing.T) {
+	f := newPassFixture()
+	errMismatch := fmt.Errorf("%w: %w", ErrCopyTransient, ErrCopyMismatch)
+	rows := []LifecycleObjectRow{f.row("odd", 2*passSettle), f.row("after", 3*passSettle)}
+	rep := newScriptedReplicator(map[string][]error{"odd": repeat(errMismatch, replicationCopyAttempts)})
+	w := f.worker(rows, rep, nil)
+
+	if err := w.tick(context.Background()); !errors.Is(err, ErrCopyMismatch) {
+		t.Fatalf("tick = %v, want the mismatch", err)
+	}
+	if rep.attempts["odd"] != replicationCopyAttempts {
+		t.Errorf("attempts = %d, want %d: a mismatch is retried", rep.attempts["odd"], replicationCopyAttempts)
+	}
+	if got := rep.copiedKeys(); len(got) != 1 || got[0] != "after" {
+		t.Errorf("copied %v, want the object after the mismatch", got)
+	}
+	if got := f.stored(); f.advanced() {
+		t.Errorf("watermark advanced to %v past a mismatched object", got)
 	}
 }
 
@@ -388,7 +418,7 @@ func TestReplicationHoldsAnUnconfirmedMissingSource(t *testing.T) {
 			if err := w.tick(context.Background()); !errors.Is(err, ErrObjectMissing) {
 				t.Errorf("tick = %v, want the held not-found", err)
 			}
-			if got := f.stored(); !got.IsZero() {
+			if got := f.stored(); f.advanced() {
 				t.Errorf("watermark advanced to %v past an unconfirmed not-found", got)
 			}
 		})
@@ -428,7 +458,7 @@ func TestReplicationDryRunNeverAdvances(t *testing.T) {
 	if err := w.tick(context.Background()); err != nil {
 		t.Fatalf("tick = %v", err)
 	}
-	if got := f.stored(); !got.IsZero() {
+	if got := f.stored(); f.advanced() {
 		t.Errorf("a dry run advanced the watermark to %v", got)
 	}
 }
@@ -460,7 +490,7 @@ func TestReplicationStopsQuietlyWhenCancelled(t *testing.T) {
 	if err := w.tick(ctx); err != nil {
 		t.Errorf("tick = %v, want nil when the worker is stopping", err)
 	}
-	if got := f.stored(); !got.IsZero() {
+	if got := f.stored(); f.advanced() {
 		t.Errorf("watermark advanced to %v on a cancelled pass", got)
 	}
 }
@@ -506,7 +536,7 @@ func TestReplicationHoldsTheWatermarkOnAFilterError(t *testing.T) {
 	if got := rep.copiedKeys(); len(got) != 0 {
 		t.Errorf("copied %v on a filter that could not decide", got)
 	}
-	if got := f.stored(); !got.IsZero() {
+	if got := f.stored(); f.advanced() {
 		t.Errorf("watermark advanced to %v past an undecided object", got)
 	}
 }
@@ -535,7 +565,7 @@ func TestReplicationRefusesAFilterItCannotRun(t *testing.T) {
 			if got := rep.copiedKeys(); len(got) != 0 {
 				t.Errorf("copied %v under a filter that cannot run", got)
 			}
-			if got := f.stored(); !got.IsZero() {
+			if got := f.stored(); f.advanced() {
 				t.Errorf("watermark advanced to %v", got)
 			}
 			if logs.Len() != 1 {

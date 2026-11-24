@@ -58,7 +58,7 @@ func TestReplicationCutoffPrefersStoreOverLookback(t *testing.T) {
 		Now:            func() time.Time { return time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC) },
 		watermarks:     map[string]time.Time{},
 	}
-	got, err := w.cutoff(context.Background(), "primary", "paladin-archive")
+	got, err := w.cutoff(context.Background(), "primary", "paladin-archive", w.Now())
 	if err != nil {
 		t.Fatalf("cutoff: %v", err)
 	}
@@ -75,13 +75,17 @@ func TestReplicationCutoffFallsBackToLookbackWhenStoreEmpty(t *testing.T) {
 		Now:            func() time.Time { return now },
 		watermarks:     map[string]time.Time{},
 	}
-	got, err := w.cutoff(context.Background(), "primary", "paladin-archive")
+	got, err := w.cutoff(context.Background(), "primary", "paladin-archive", w.Now())
 	if err != nil {
 		t.Fatalf("cutoff: %v", err)
 	}
 	want := now.Add(-1 * time.Hour)
 	if !got.Equal(want) {
 		t.Errorf("cutoff: got %v want %v", got, want)
+	}
+	// The window's start is written down at once, so it does not slide.
+	if stored := w.Watermarks.(*fakeWatermarkStore).stored["primary/paladin-archive"]; !stored.Equal(want) {
+		t.Errorf("stored watermark = %v, want the window's start %v", stored, want)
 	}
 }
 
@@ -150,7 +154,7 @@ func TestReplicationCutoffRefusesAnUnreadableWatermark(t *testing.T) {
 		Logger:         zap.New(core),
 		watermarks:     map[string]time.Time{},
 	}
-	if _, err := w.cutoff(context.Background(), "primary", "paladin-archive"); !errors.Is(err, store.getErr) {
+	if _, err := w.cutoff(context.Background(), "primary", "paladin-archive", w.Now()); !errors.Is(err, store.getErr) {
 		t.Errorf("cutoff error = %v, want %v", err, store.getErr)
 	}
 	got := logs.All()

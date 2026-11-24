@@ -20,10 +20,17 @@ type replicaStore interface {
 // storageReplicator adapts the storage router to worker.StorageReplicator,
 // translating the adapter's errors into the worker's: a confirmed-missing
 // source into worker.ErrObjectMissing, and a failure the SDK would retry
-// into worker.ErrCopyTransient. The worker never imports the SDK's types.
+// into worker.ErrCopyTransient — a replica that did not match into
+// worker.ErrCopyMismatch as well. The worker never imports the SDK's types.
 type storageReplicator struct {
 	s           replicaStore
 	isTransient func(error) bool
+}
+
+// NewStorageReplicator is the replicator the worker is wired with, routed
+// through reg's backends.
+func NewStorageReplicator(reg *s3adapter.BackendRegistry) worker.StorageReplicator {
+	return newStorageReplicator(s3adapter.NewObjectRouter(reg))
 }
 
 func newStorageReplicator(s replicaStore) storageReplicator {
@@ -39,6 +46,8 @@ func (r storageReplicator) Replicate(ctx context.Context, src, dst worker.Replic
 		return nil
 	case errors.Is(err, objecth.ErrStoredObjectNotFound):
 		return fmt.Errorf("%w: %w", worker.ErrObjectMissing, err)
+	case errors.Is(err, s3adapter.ErrReplicaMismatch):
+		return fmt.Errorf("%w: %w: %w", worker.ErrCopyTransient, worker.ErrCopyMismatch, err)
 	case r.isTransient(err):
 		return fmt.Errorf("%w: %w", worker.ErrCopyTransient, err)
 	default:

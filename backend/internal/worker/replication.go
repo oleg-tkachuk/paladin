@@ -88,6 +88,13 @@ type StorageReplicator interface {
 // error, a dropped connection.
 var ErrCopyTransient = errors.New("transient copy failure")
 
+// ErrCopyMismatch marks a replica that did not match its source, which the
+// implementation removed. It is retried as a transient failure, since the
+// source may have changed under the copy; one that outlasts the retries is
+// the object's own problem, not its backend's, so it holds the watermark
+// without stopping the bucket.
+var ErrCopyMismatch = errors.New("replica does not match its source")
+
 // ReplicationTarget identifies one side of a copy. Collection + Key are the
 // logical pair; BackendID + BucketName are the physical routing.
 type ReplicationTarget struct {
@@ -278,6 +285,17 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, rb ReplicationBuc
 		return err
 	}
 	bucketLog = bucketLog.With(zap.String(logKeyDstBackend, dstBackend), zap.String(logKeyDstBucket, dstBucket))
+	now, err := r.clockNow(ctx)
+	if err != nil {
+		bucketLog.Warn("failed to read the database clock; deferring the bucket to the next tick", zap.Error(err))
+		return err
+	}
+	// Before the gate: a bucket seen for the first time has its window's
+	// start written down now, so deferring it does not slide the window.
+	cutoff, err := r.cutoff(ctx, b.BackendID, b.BucketName, now)
+	if err != nil {
+		return err
+	}
 	if admitted, err := r.admitBoth(ctx, bucketLog, rb, dstBackend, dstBucket, gates); !admitted {
 		return err
 	}
@@ -285,15 +303,6 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, rb ReplicationBuc
 	if err != nil {
 		bucketLog.Error("replication filter does not compile; the bucket is not replicated until it is fixed",
 			zap.String("filter", b.Replication.Filter), zap.Error(err))
-		return err
-	}
-	cutoff, err := r.cutoff(ctx, b.BackendID, b.BucketName)
-	if err != nil {
-		return err
-	}
-	now, err := r.clockNow(ctx)
-	if err != nil {
-		bucketLog.Warn("failed to read the database clock; deferring the bucket to the next tick", zap.Error(err))
 		return err
 	}
 	horizon := now.Add(-r.SettleDelay)
@@ -462,6 +471,11 @@ func (r *ReplicationWorker) replicateRow(
 		pass.decided(committed)
 		log.Warn("source object missing; passing over it", zap.Error(err))
 		return nil
+	case errors.Is(err, ErrCopyMismatch):
+		log.Warn("replica did not match its source after retries; holding the watermark",
+			zap.Int("attempts", replicationCopyAttempts), zap.Error(err))
+		keepFirst(&pass.held, err)
+		return nil
 	case errors.Is(err, ErrCopyTransient):
 		log.Warn("failed to copy object after retries; deferring the bucket to the next tick",
 			zap.Int("attempts", replicationCopyAttempts), zap.Error(err))
@@ -557,12 +571,15 @@ func (r *ReplicationWorker) clockNow(ctx context.Context) (time.Time, error) {
 // cutoff resolves the start of a bucket's window. Layering:
 //  1. in-memory cache (hot path, no DB hit)
 //  2. WatermarkStore (cold start / new bucket)
-//  3. now − LookbackWindow (no prior state)
+//  3. now − LookbackWindow (no prior state), written as the watermark at
+//     once: a window computed afresh each tick would slide, and a bucket
+//     deferred or held for longer than the lookback would lose the objects
+//     that slid out of it.
 //
 // A watermark the store fails to return is an error: the lookback in its
 // place could start after objects the stored watermark had not reached, and
 // the pass would then move the watermark past them uncopied.
-func (r *ReplicationWorker) cutoff(ctx context.Context, backendID, bucketName string) (time.Time, error) {
+func (r *ReplicationWorker) cutoff(ctx context.Context, backendID, bucketName string, now time.Time) (time.Time, error) {
 	key := backendID + "/" + bucketName
 	if t, ok := r.watermarks[key]; ok {
 		return t, nil
@@ -579,7 +596,13 @@ func (r *ReplicationWorker) cutoff(ctx context.Context, backendID, bucketName st
 			return t, nil
 		}
 	}
-	return r.Now().Add(-r.LookbackWindow), nil
+	start := now.Add(-r.LookbackWindow)
+	if err := r.advance(ctx, backendID, bucketName, start); err != nil {
+		return time.Time{}, err
+	}
+	r.log().Info("replication window opened for a bucket with no watermark",
+		zap.String(logKeyBackend, backendID), zap.String(logKeyBucket, bucketName), zap.Time("watermark", start))
+	return start, nil
 }
 
 // advance moves the watermark forward — first in memory, then to the

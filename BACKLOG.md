@@ -400,6 +400,20 @@ the same commit. Treat this file like a runtime invariant.
 - **Blockers:** whether a replica is a mirror or a retention copy — a product
   decision.
 
+### Replication misses an object whose bytes change without a new commit
+
+- **Status:** Deferred.
+- **Reason:** the replication worker selects objects by `committed_at`, which
+  the promote stamps only on the move from `PENDING`. A later write that
+  changes an `AVAILABLE` object's bytes in place — an event-driven re-promote
+  with a newer sequencer, a version restore, a copy onto an existing key —
+  keeps the old stamp, so the replica keeps the old bytes.
+- **Definition of Done:** a change of an object's bytes is visible to the
+  worker — a stamp the worker selects on moves with every byte write, or the
+  per-object replication state records the version it copied — and a test
+  overwrites a replicated object and finds the replica updated.
+- **Blockers:** none.
+
 ### A streamed replica carries only the content type
 
 - **Status:** Deferred.

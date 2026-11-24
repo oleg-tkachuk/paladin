@@ -64,7 +64,7 @@ func TestReplicationAsksTheGateOnBothSides(t *testing.T) {
 			if !tc.deferred {
 				return
 			}
-			if got := f.stored(); !got.IsZero() {
+			if got := f.stored(); f.advanced() {
 				t.Errorf("a deferred bucket advanced its watermark to %v", got)
 			}
 			refusals := logs.FilterMessage("the bucket gate refuses this bucket; its work is deferred until the gate admits it").All()
@@ -94,6 +94,28 @@ func TestReplicationTakesADeferredBucketOnceAdmitted(t *testing.T) {
 	}
 	if got := rep.copiedKeys(); len(got) != 1 {
 		t.Errorf("copied %v after the gate admitted the bucket, want the object", got)
+	}
+}
+
+// A bucket deferred for longer than the lookback window still copies what
+// was in its first window: the window's start is written down on the first
+// pass, before the gate is asked, and does not slide with the clock.
+func TestReplicationKeepsTheFirstWindowOfADeferredBucket(t *testing.T) {
+	f := newPassFixture()
+	rep := newScriptedReplicator(nil)
+	w := f.worker([]LifecycleObjectRow{f.row("a", replicationTestLookback/2)}, rep, nil)
+	src := w.Buckets.(*fakeReplSource)
+	src.gateStates = map[string]bucketgate.State{gateDstBackend + "/" + gateDstBucket: replDisabled}
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v", err)
+	}
+	f.now = f.now.Add(2 * replicationTestLookback)
+	src.gateStates = nil
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("second tick = %v", err)
+	}
+	if got := rep.copiedKeys(); len(got) != 1 {
+		t.Errorf("copied %v, want the object from the first window", got)
 	}
 }
 

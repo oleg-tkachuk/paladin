@@ -36,7 +36,8 @@ tenant, collection and key in the destination bucket.
 
 | Failure | Classified by | The worker |
 |---|---|---|
-| throttling, 5xx, a dropped connection, a body cut short, a mismatch | the SDK's standard retryables, plus the last two | retries with exponential backoff (1s doubling, at most 30s, 4 tries); still failing, stops the bucket for the tick |
+| throttling, 5xx, a dropped connection, a body cut short | the SDK's standard retryables, plus the last | retries with exponential backoff (1s doubling, at most 30s, 4 tries); still failing, stops the bucket for the tick |
+| a replica that does not match its source | `ErrReplicaMismatch`, transient | retries as above; still failing, holds and carries on — the mismatch is the object's, not its backend's |
 | the source's key absent from a bucket confirmed reachable | `ErrObjectNotFound`, never a bare 404 | re-reads the row and HEADs the source; passes over the object only if the row is unchanged and still `AVAILABLE` and the key is still absent |
 | a not-found the destination answered | `ErrReplicaDestinationNotFound` | holds |
 | anything else, and a filter that cannot evaluate on the object | — | holds, and carries on with the next object |
@@ -54,8 +55,12 @@ clock skew does not move the horizon. The settle delay bounds the one case
 left: a promote transaction that takes longer than the delay to commit, with
 a stamp older than objects the pass already decided.
 
-A watermark the store cannot return defers the bucket rather than falling
-back to the lookback window, which could start after objects never copied.
+A bucket with no watermark gets one on its first pass, before the gate is
+asked: the database clock less the lookback window. Computed afresh each
+tick, the window would slide, and a bucket deferred or held for longer than
+the lookback would lose what slid out of it. A watermark the store cannot
+return defers the bucket rather than falling back to the lookback window,
+which could start after objects never copied.
 
 **The filter.** `replication.filter` is CEL over the same fields a
 `ListObjects` filter sees, compiled once per bucket per tick through the
@@ -83,8 +88,11 @@ destination naming no registered bucket is a failure.
   watermark limits what is copied, not what is read.
 - Deletes are not replicated, and a streamed replica carries the source's
   content type but not its other metadata.
+- Selection is by `committed_at`, stamped once on the promote from
+  `PENDING`: bytes rewritten in place under an `AVAILABLE` row are not
+  copied again.
 
-The last three are in BACKLOG.
+The last four are in BACKLOG.
 
 ## Alternatives considered
 

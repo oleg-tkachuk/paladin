@@ -31,15 +31,15 @@ func (f *fakeReplicaStore) Head(context.Context, string, string, uuid.UUID, stri
 
 func TestStorageReplicatorTranslatesErrors(t *testing.T) {
 	cases := []struct {
-		name                     string
-		err                      error
-		wantMissing, wantRetried bool
+		name                                   string
+		err                                    error
+		wantMissing, wantRetried, wantMismatch bool
 	}{
-		{"success", nil, false, false},
-		{"source missing", fmt.Errorf("replica: %w", objecth.ErrStoredObjectNotFound), true, false},
-		{"replica mismatch", fmt.Errorf("replica: %w", s3adapter.ErrReplicaMismatch), false, true},
-		{"destination not found", fmt.Errorf("replica: %w", s3adapter.ErrReplicaDestinationNotFound), false, false},
-		{"anything else", errors.New("access denied"), false, false},
+		{"success", nil, false, false, false},
+		{"source missing", fmt.Errorf("replica: %w", objecth.ErrStoredObjectNotFound), true, false, false},
+		{"replica mismatch", fmt.Errorf("replica: %w", s3adapter.ErrReplicaMismatch), false, true, true},
+		{"destination not found", fmt.Errorf("replica: %w", s3adapter.ErrReplicaDestinationNotFound), false, false, false},
+		{"anything else", errors.New("access denied"), false, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -55,6 +55,9 @@ func TestStorageReplicatorTranslatesErrors(t *testing.T) {
 			}
 			if got := errors.Is(err, worker.ErrCopyTransient); got != tc.wantRetried {
 				t.Errorf("ErrCopyTransient = %v, want %v", got, tc.wantRetried)
+			}
+			if got := errors.Is(err, worker.ErrCopyMismatch); got != tc.wantMismatch {
+				t.Errorf("ErrCopyMismatch = %v, want %v", got, tc.wantMismatch)
 			}
 			if store.gotSrc.Bucket != "sb" || store.gotDst.BackendID != "b" || store.gotDst.Key != "k" || store.gotSize != 7 {
 				t.Errorf("forwarded (%+v, %+v, %d)", store.gotSrc, store.gotDst, store.gotSize)

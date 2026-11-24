@@ -90,7 +90,7 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		out = append(out, &worker.ReplicationWorker{
 			Buckets:        adapters.NewLifecycleSource(reaperQ),
 			Objects:        adapters.NewLifecycleObjectIter(reaperQ),
-			Replicator:     newStorageReplicator(s3adapter.NewObjectRouter(deps.Registry)),
+			Replicator:     NewStorageReplicator(deps.Registry),
 			Watermarks:     watermarks,
 			Clock:          watermarks,
 			CELEvaluator:   deps.CELEval,
