@@ -9,7 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
@@ -22,7 +21,10 @@ type LifecycleSource struct {
 
 func NewLifecycleSource(q *sqlc.Queries) *LifecycleSource { return &LifecycleSource{q: q} }
 
-var _ worker.BucketLifecycleSource = (*LifecycleSource)(nil)
+var (
+	_ worker.BucketLifecycleSource = (*LifecycleSource)(nil)
+	_ worker.ReplicationSource     = (*LifecycleSource)(nil)
+)
 
 func (s *LifecycleSource) ListBucketsWithLifecycle(ctx context.Context) ([]worker.LifecycleBucket, error) {
 	rows, err := s.q.ListBucketsWithLifecycle(ctx)
@@ -66,25 +68,48 @@ func (s *LifecycleSource) ListCollectionBindings(ctx context.Context, backendID,
 }
 
 // ListBucketsWithReplication satisfies worker.ReplicationSource. Same shape
-// as ListBucketsWithLifecycle — different filter predicate.
-func (s *LifecycleSource) ListBucketsWithReplication(ctx context.Context) ([]admindomain.Bucket, error) {
+// as ListBucketsWithLifecycle — different filter predicate — with the state
+// the bucket gate decides the source's read on.
+func (s *LifecycleSource) ListBucketsWithReplication(ctx context.Context) ([]worker.ReplicationBucket, error) {
 	rows, err := s.q.ListBucketsWithReplication(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list buckets-with-replication: %w", err)
 	}
-	out := make([]admindomain.Bucket, 0, len(rows))
+	out := make([]worker.ReplicationBucket, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, decodeBucketRow(
-			row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
-			row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
-			row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
-			row.VersioningEnabled, row.VersioningKeepDeletesForever,
-			row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
-			row.ProvisionState, row.PublicRead, row.PublicBaseUrl, row.CreatedOnBackend,
-			row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
-		))
+		out = append(out, worker.ReplicationBucket{
+			ID: row.BucketID,
+			State: bucketgate.State{
+				Enabled: row.Enabled, ReadOnly: row.ReadOnly, ProvisionState: row.ProvisionState,
+			},
+			Bucket: decodeBucketRow(
+				row.BackendName, row.BucketName, row.DisplayName, row.Region, row.Labels,
+				row.OwnerTenantID, row.CedarPolicy, row.Constraints, row.LifecycleRules,
+				row.ObjectLockEnabled, lockModeFromSQL(row.ObjectLockDefaultMode), row.ObjectLockDefaultRetentionSeconds,
+				row.VersioningEnabled, row.VersioningKeepDeletesForever,
+				row.ReplicationEnabled, row.ReplicationDestination, row.ReplicationFilter,
+				row.ProvisionState, row.PublicRead, row.PublicBaseUrl, row.CreatedOnBackend,
+				row.ResourceVersion, row.CreatedAt, row.UpdatedAt,
+			),
+		})
 	}
 	return out, nil
+}
+
+// BucketGateState reads one bucket's gate state by backend and bucket name,
+// for the replication worker's write to its destination.
+func (s *LifecycleSource) BucketGateState(ctx context.Context, backendID, bucketName string) (worker.BucketGateState, error) {
+	row, err := s.q.GetBucketGateState(ctx, backendID, bucketName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return worker.BucketGateState{}, fmt.Errorf("%w: %s/%s", worker.ErrReplicationDestinationUnknown, backendID, bucketName)
+	}
+	if err != nil {
+		return worker.BucketGateState{}, fmt.Errorf("read bucket gate state: %w", err)
+	}
+	return worker.BucketGateState{
+		ID:    row.BucketID,
+		State: bucketgate.State{Enabled: row.Enabled, ReadOnly: row.ReadOnly, ProvisionState: row.ProvisionState},
+	}, nil
 }
 
 // ObjectReplicationState re-reads one object's state and version for the

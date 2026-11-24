@@ -590,21 +590,36 @@ the same commit. Treat this file like a runtime invariant.
   the rebind and finds it in the target.
 - **Blockers:** none.
 
-### The replication worker will skip the bucket gate once it copies
+## API error messages
 
-- **Status:** Blocked.
-- **Reason:** the lifecycle expiry and the reconciler ask the gate
-  (`internal/worker/bucket_gate.go`), but the replication worker
-  (`replication.go`) runs dry: `build_jobs.go` wires no `StorageReplicator`,
-  so it reads nothing and writes nothing yet. Once it copies, it reads the
-  source bucket and writes bytes to `replication.destination_bucket`, a
-  bucket its listing does not return the state of.
-- **Definition of Done:** the replication worker asks `bucketgate.Check` as
-  `Read` on the source and `BytesWrite` on the destination — the
-  destination's state read with it, by backend and bucket name — and defers a
-  refused bucket's copies without advancing its watermark, logged once per
-  tick; a test disables and drains each side.
-- **Blockers:** the `StorageReplicator` implementation.
+### The handler fuzz targets do not reach UserService
+
+- **Status:** Deferred.
+- **Reason:** `userh.CreateUser` and the password paths hash with the
+  production cost on every call, which leaves a fuzz search a handful of
+  inputs a second; the user subject and display name go unfuzzed at the
+  handler.
+- **Definition of Done:** a fuzz target drives `CreateUser` and `UpdateUser`
+  with a hasher of test cost injected through the handler, asserting the
+  `fuzzassert` invariants.
+- **Blockers:** the handler takes no hasher today.
+
+### The handler fuzz targets see no CHECK constraint they do not mirror
+
+- **Status:** Deferred.
+- **Reason:** the targets run over fakes that store anything, so a column
+  CHECK the handler does not enforce first is invisible to them. The
+  collection-name and tenant display-name CHECKs are now mirrored and
+  asserted, and user settings already were; the answer a request gets when a
+  CHECK refuses it — `Internal` through the adapters' fallback, by reading —
+  was not confirmed against Postgres, and the other CHECKs of the schema
+  (`object_tag_slug_format`, `api_tokens_rate_limit_rpm_check`) were not
+  traced to a handler.
+- **Definition of Done:** an integration test per write RPC sends a value
+  each CHECK on its table refuses and asserts `InvalidArgument`; any that
+  answers otherwise gets a handler refusal and a fuzz post-condition.
+- **Blockers:** none.
+
 
 ## Database
 

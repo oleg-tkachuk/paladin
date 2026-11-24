@@ -3,6 +3,11 @@
 //
 // Each tick, for every bucket with replication enabled:
 //
+//  0. Ask the bucket gate (ADR-0015): Read on the source, BytesWrite on the
+//     destination, whose state is read by backend and bucket name. A refused
+//     bucket's copies are deferred — nothing copied, the watermark left where
+//     it is — and the refusal is logged once per tick; the first tick the gate
+//     admits both sides takes them.
 //  1. Read the bucket's watermark: every object committed at or before it has
 //     been replicated. A bucket whose watermark cannot be read is deferred for
 //     the tick, since guessing a window could pass objects never copied.
@@ -36,9 +41,11 @@ import (
 	"uuid"
 
 	celpkg "cel.dev/cel-go/cel"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 )
@@ -93,11 +100,33 @@ type ReplicationTarget struct {
 
 // ReplicationSource lists buckets with replication enabled, and re-reads one
 // object's row.
+//
+// BucketGateState reads the destination's gate state by backend and bucket
+// name, ErrReplicationDestinationUnknown when no such bucket is registered.
 type ReplicationSource interface {
-	ListBucketsWithReplication(ctx context.Context) ([]admindomain.Bucket, error)
+	ListBucketsWithReplication(ctx context.Context) ([]ReplicationBucket, error)
 	ListCollectionBindings(ctx context.Context, backendID, bucketName string) ([]CollectionBinding, error)
 	ObjectReplicationState(ctx context.Context, tenantID, objectID uuid.UUID) (ReplicationObjectState, error)
+	BucketGateState(ctx context.Context, backendID, bucketName string) (BucketGateState, error)
 }
+
+// ReplicationBucket is a bucket with replication enabled, with its id and the
+// state the bucket gate decides its read on.
+type ReplicationBucket struct {
+	admindomain.Bucket
+	ID    pgtype.UUID
+	State bucketgate.State
+}
+
+// BucketGateState is one bucket's id and gate state.
+type BucketGateState struct {
+	ID    pgtype.UUID
+	State bucketgate.State
+}
+
+// ErrReplicationDestinationUnknown is a replication destination that names no
+// registered bucket: there is no state for the gate to admit a write on.
+var ErrReplicationDestinationUnknown = errors.New("the replication destination is not a registered bucket")
 
 // ReplicationObjectState is an object's row as re-read before the worker
 // passes over it. Found is false when the row is gone.
@@ -191,14 +220,24 @@ func (r *ReplicationWorker) tick(ctx context.Context) error {
 		r.log().Warn("failed to list buckets", zap.Error(err))
 		return err
 	}
+	gates := replicationGates{
+		src: newBucketDeferrals(r.log(), bucketgate.Read),
+		dst: newBucketDeferrals(r.log(), bucketgate.BytesWrite),
+	}
 	var first error
 	for _, b := range buckets {
 		if ctx.Err() != nil {
 			return first
 		}
-		keepFirst(&first, r.processBucket(ctx, b))
+		keepFirst(&first, r.processBucket(ctx, b, gates))
 	}
 	return first
+}
+
+// replicationGates are one tick's gate answers: Read on each source bucket,
+// BytesWrite on each destination. Each refused bucket is logged once a tick.
+type replicationGates struct {
+	src, dst *bucketDeferrals
 }
 
 // bucketPass is what one tick's walk of a bucket did.
@@ -227,7 +266,8 @@ var errPassStopped = errors.New("replication pass stopped")
 // it logged. An object that fails to copy for good does not stop the others;
 // one still failing transiently after its retries stops the bucket for the
 // tick. A dry run is not a failure.
-func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Bucket) error {
+func (r *ReplicationWorker) processBucket(ctx context.Context, rb ReplicationBucket, gates replicationGates) error {
+	b := rb.Bucket
 	if !b.Replication.Enabled || b.Replication.DestinationBucket == "" {
 		return nil
 	}
@@ -238,6 +278,9 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 		return err
 	}
 	bucketLog = bucketLog.With(zap.String(logKeyDstBackend, dstBackend), zap.String(logKeyDstBucket, dstBucket))
+	if admitted, err := r.admitBoth(ctx, bucketLog, rb, dstBackend, dstBucket, gates); !admitted {
+		return err
+	}
 	filter, err := r.compileFilter(b.Replication.Filter)
 	if err != nil {
 		bucketLog.Error("replication filter does not compile; the bucket is not replicated until it is fixed",
@@ -312,6 +355,30 @@ func (r *ReplicationWorker) processBucket(ctx context.Context, b admindomain.Buc
 		zap.Int("copied", pass.copied), zap.Int("filtered", pass.filtered), zap.Int("source_missing", pass.missing),
 		zap.Time("watermark", pass.covered))
 	return nil
+}
+
+// admitBoth asks the gate about both sides of a bucket's replication: Read on
+// the source, BytesWrite on the destination. A refusal is a deferral, not a
+// failure — false with no error, logged once a tick by the gate's deferrals —
+// while a destination whose state cannot be read is a failure.
+func (r *ReplicationWorker) admitBoth(
+	ctx context.Context, log *zap.Logger, rb ReplicationBucket, dstBackend, dstBucket string, gates replicationGates,
+) (bool, error) {
+	if !gates.src.admit(bucketGateRow{
+		ID: rb.ID, BackendName: rb.BackendID, BucketName: rb.BucketName,
+		Enabled: rb.State.Enabled, ReadOnly: rb.State.ReadOnly, ProvisionState: rb.State.ProvisionState,
+	}) {
+		return false, nil
+	}
+	dst, err := r.Buckets.BucketGateState(ctx, dstBackend, dstBucket)
+	if err != nil {
+		log.Warn("failed to read the replication destination's state; deferring the bucket to the next tick", zap.Error(err))
+		return false, err
+	}
+	return gates.dst.admit(bucketGateRow{
+		ID: dst.ID, BackendName: dstBackend, BucketName: dstBucket,
+		Enabled: dst.State.Enabled, ReadOnly: dst.State.ReadOnly, ProvisionState: dst.State.ProvisionState,
+	}), nil
 }
 
 // replicaRoute is where one collection's objects replicate from and to, and

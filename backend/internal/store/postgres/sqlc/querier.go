@@ -255,6 +255,9 @@ type Querier interface {
 	GetAPIToken(ctx context.Context, id pgtype.UUID) (GetAPITokenRow, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
+	// The bucket gate's state of one bucket, by backend and bucket name: what the
+	// replication worker decides a write to a replication destination on.
+	GetBucketGateState(ctx context.Context, name string, name_2 string) (GetBucketGateStateRow, error)
 	GetBucketQuota(ctx context.Context, backend string, bucket string) (GetBucketQuotaRow, error)
 	GetBucketQuotaByID(ctx context.Context, id pgtype.UUID) (GetBucketQuotaByIDRow, error)
 	// v2 bucket queries — full surface for admin/v1.BucketService.
@@ -457,6 +460,9 @@ type Querier interface {
 	// their way out, and 'failed' / 'deletion_failed' need operator triage —
 	// replicating into or out of any of those is at best wasted work and at
 	// worst ships objects into a bucket that's about to be torn down.
+	//
+	// bucket_id, enabled and read_only, with provision_state, are what the bucket
+	// gate decides the source's read on (bucketgate.State).
 	ListBucketsWithReplication(ctx context.Context) ([]ListBucketsWithReplicationRow, error)
 	// Lists every (tenant_id, collection name) bound to a given bucket. Used by
 	// lifecycle + replication workers to scope their object scans.
