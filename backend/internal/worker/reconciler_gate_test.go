@@ -30,7 +30,7 @@ func TestDiscardMismatchedDefersAGateRefusal(t *testing.T) {
 	for _, refusal := range []error{bucketgate.ErrBackendReadOnly, bucketgate.ErrBackendDisabled} {
 		t.Run(refusal.Error(), func(t *testing.T) {
 			core, logs := observer.New(zap.DebugLevel)
-			r := NewReconcilerV2(nil, refusingProbe{err: refusal}, ReconcilerV2Config{}, zap.New(core))
+			r := NewReconcilerV2(nil, refusingProbe{err: refusal}, ReconcilerV2Config{Events: NewEventRecorder(nil)}, zap.New(core))
 			if err := r.discardMismatched(context.Background(), uuid.New(), errors.New("size")); err != nil {
 				t.Fatalf("discardMismatched = %v, want nil: a deferral is not a failure", err)
 			}

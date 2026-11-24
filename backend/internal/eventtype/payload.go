@@ -12,4 +12,9 @@ const (
 	PayloadBucket     = "bucket"
 	PayloadReclaimed  = "reclaimed"
 	PayloadSource     = "source"
+	// What paladin.object.uploaded says of the bytes, from CompleteObject,
+	// a copy and the reconciler alike.
+	PayloadSizeBytes   = "size_bytes"
+	PayloadETag        = "etag"
+	PayloadContentType = "content_type"
 )

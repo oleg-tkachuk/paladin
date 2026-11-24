@@ -2,7 +2,8 @@
 // machine. It covers three gaps:
 //
 //   1. S3 event pipeline outage — promotes PENDING rows whose object is
-//      actually uploaded (HEAD succeeds).
+//      actually uploaded (HEAD succeeds), and announces the upload
+//      (paladin.object.uploaded) on the promote's transaction.
 //   2. Expired presigns with no uploads — discards the PENDING row, logging
 //      and counting why (statemachine.DiscardFailed).
 //
@@ -15,16 +16,19 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
+	"github.com/oleg-tkachuk/paladin/backend/internal/eventtype"
 	"github.com/oleg-tkachuk/paladin/backend/internal/safecast"
-
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
+	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
 // ReconcilerV2Config governs poll cadence and per-tick ceilings.
@@ -49,6 +53,10 @@ type ReconcilerV2Config struct {
 	// a write the store accepted before the URL expired may take to land.
 	SettleGrace time.Duration
 	BatchSize   int
+	// Events records paladin.object.uploaded on the transaction of each
+	// promote and recorded write the reconciler makes (ADR-0003), as the
+	// ingest does for a storage event. nil records none.
+	Events EventProducer
 }
 
 // StorageProbe HEADs the backend to materialize authoritative etag/size. A
@@ -82,8 +90,15 @@ func NewReconcilerV2(sm *statemachine.Transitioner, probe StorageProbe, cfg Reco
 	if cfg.BatchSize == 0 {
 		cfg.BatchSize = DefaultReconcilerBatchSize
 	}
+	if cfg.Events == nil && log != nil {
+		log.Warn("reconciler wired with no event producer; the writes it promotes or records announce nothing")
+	}
 	return &ReconcilerV2{sm: sm, probe: probe, cfg: cfg, log: log}
 }
+
+// Announces reports whether the reconciler records paladin.object.uploaded
+// for the writes it promotes or records.
+func (r *ReconcilerV2) Announces() bool { return r.cfg.Events != nil }
 
 // Run blocks until ctx is cancelled. Each tick:
 //
@@ -175,7 +190,8 @@ func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) error 
 		return err
 	}
 	if found {
-		_, err := r.sm.PromoteToAvailable(ctx, objectID, &placed, etag, size, checksum, seq, statemachine.SourceReconciler)
+		_, err := r.sm.PromoteToAvailableInTx(ctx, objectID, &placed, etag, size, checksum, seq, statemachine.SourceReconciler,
+			r.announceUploaded(objectID))
 		if errors.Is(err, statemachine.ErrContentMismatch) {
 			return r.discardMismatched(ctx, objectID, err)
 		}
@@ -207,7 +223,7 @@ func (r *ReconcilerV2) settleAnchor(ctx context.Context, p statemachine.ExpiredA
 	}
 	outcome, err := r.sm.SettleAnchorInTx(ctx, p.ObjectID, placed, statemachine.StoredWrite{
 		Found: found, ETag: etag, SizeBytes: size, Checksum: checksum,
-	}, nil)
+	}, r.announceUploaded(p.ObjectID))
 	if err != nil {
 		log.Warn("failed to settle the object's upload anchor", zap.Error(err))
 		return err
@@ -215,7 +231,7 @@ func (r *ReconcilerV2) settleAnchor(ctx context.Context, p statemachine.ExpiredA
 	switch outcome {
 	case statemachine.SettleRecorded:
 		log.Warn("upload anchor settled: its URL wrote after the object's last promote and no storage event reported it; the object now records those bytes",
-			zap.String("etag", etag), zap.Int64("size_bytes", size))
+			zap.String("etag", etag), zap.Int64("size_bytes", size), zap.Bool("announced", r.Announces()))
 	case statemachine.SettleMissing:
 		log.Error("upload anchor settled: the bucket holds no bytes under the object's key")
 	case statemachine.SettleUnchanged:
@@ -253,4 +269,61 @@ func (r *ReconcilerV2) discardMismatched(ctx context.Context, objectID uuid.UUID
 	// Settled: the Warn reports bad data a client sent, not a failed tick.
 	log.Warn("discarded object whose stored bytes broke its registration")
 	return nil
+}
+
+// objectResourceNameFormat names an object canonically (ADR-0014): the
+// backend and bucket its collection is bound to, the tenant, the collection
+// and the key, as the data plane's object events name it.
+const objectResourceNameFormat = "storageBackends/%s/buckets/%s/tenants/%s/collections/%s/objects-by-key/%s"
+
+// announceUploaded records paladin.object.uploaded for objectID on the
+// transaction of the reconciler's promote, or of its settle that recorded a
+// write no storage event reported, so the event commits with the change or
+// not at all (ADR-0003). The state machine calls it only when the row
+// changed: a promote CompleteObject or a storage event made first, or a
+// settle that finds the bytes the row records, announces nothing, which
+// keeps the event exactly once across the producers. It says what
+// CompleteObject's does, read on the transaction after the change, with the
+// reconciler as its source. nil when no producer is wired.
+func (r *ReconcilerV2) announceUploaded(objectID uuid.UUID) func(ctx context.Context, tx pgx.Tx) error {
+	if r.cfg.Events == nil {
+		return nil
+	}
+	return func(ctx context.Context, tx pgx.Tx) error {
+		row, err := sqlc.New(tx).GetUploadedObject(ctx, pgtype.UUID{Bytes: objectID, Valid: true})
+		if err != nil {
+			r.log.Error("failed to read the object to announce its upload; the change is rolled back for the next tick",
+				zap.String("object_id", objectID.String()), zap.Error(err))
+			return fmt.Errorf("read uploaded object %s: %w", objectID, err)
+		}
+		tenant := uuid.UUID(row.TenantID.Bytes).String()
+		payload := map[string]any{
+			eventtype.PayloadTenantID:    tenant,
+			eventtype.PayloadCollection:  row.CollectionName,
+			eventtype.PayloadKey:         row.Path,
+			eventtype.PayloadObjectID:    objectID.String(),
+			eventtype.PayloadContentType: row.ContentType,
+			eventtype.PayloadSource:      string(statemachine.SourceReconciler),
+		}
+		if row.SizeBytes != nil {
+			payload[eventtype.PayloadSizeBytes] = *row.SizeBytes
+		}
+		if row.Etag != nil {
+			payload[eventtype.PayloadETag] = *row.Etag
+		}
+		if err := r.cfg.Events.RecordTx(ctx, tx, tenant, Event{
+			Type:     eventtype.ObjectUploaded,
+			At:       time.Now().UTC(),
+			TenantID: tenant,
+			ResourceName: fmt.Sprintf(objectResourceNameFormat,
+				row.BackendName, row.BucketName, tenant, row.CollectionName, row.Path),
+			Payload: payload,
+		}); err != nil {
+			r.log.Error("failed to record the object's upload event; the change is rolled back for the next tick",
+				zap.String("object_id", objectID.String()), zap.Error(err))
+			return err
+		}
+		r.log.Debug("recorded the object's upload event", zap.String("object_id", objectID.String()))
+		return nil
+	}
 }
