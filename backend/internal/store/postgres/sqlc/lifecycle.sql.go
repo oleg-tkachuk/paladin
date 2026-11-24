@@ -13,7 +13,8 @@ import (
 
 const iterateObjectsForLifecycle = `-- name: IterateObjectsForLifecycle :many
 SELECT o.id, o.path, o.state, o.content_type, o.size_bytes, o.external_ref,
-       o.metadata, o.tags, o.created_at, o.updated_at, o.committed_at
+       o.metadata, o.tags, o.created_at, o.updated_at, o.committed_at,
+       o.resource_version
 FROM objects o
 WHERE o.tenant_id = $1
   AND o.collection_id = (SELECT c.id FROM collections c
@@ -25,17 +26,18 @@ LIMIT $4
 `
 
 type IterateObjectsForLifecycleRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	Path        string             `json:"path"`
-	State       ObjectState        `json:"state"`
-	ContentType string             `json:"content_type"`
-	SizeBytes   *int64             `json:"size_bytes"`
-	ExternalRef *string            `json:"external_ref"`
-	Metadata    []byte             `json:"metadata"`
-	Tags        []byte             `json:"tags"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
-	CommittedAt pgtype.Timestamptz `json:"committed_at"`
+	ID              pgtype.UUID        `json:"id"`
+	Path            string             `json:"path"`
+	State           ObjectState        `json:"state"`
+	ContentType     string             `json:"content_type"`
+	SizeBytes       *int64             `json:"size_bytes"`
+	ExternalRef     *string            `json:"external_ref"`
+	Metadata        []byte             `json:"metadata"`
+	Tags            []byte             `json:"tags"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	CommittedAt     pgtype.Timestamptz `json:"committed_at"`
+	ResourceVersion int64              `json:"resource_version"`
 }
 
 // Streams a window of AVAILABLE-only objects under (tenant, collection)
@@ -69,6 +71,7 @@ func (q *Queries) IterateObjectsForLifecycle(ctx context.Context, tenantID pgtyp
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.CommittedAt,
+			&i.ResourceVersion,
 		); err != nil {
 			return nil, err
 		}

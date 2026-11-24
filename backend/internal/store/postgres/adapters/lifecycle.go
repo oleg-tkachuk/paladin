@@ -2,9 +2,11 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"uuid"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
@@ -85,6 +87,21 @@ func (s *LifecycleSource) ListBucketsWithReplication(ctx context.Context) ([]adm
 	return out, nil
 }
 
+// ObjectReplicationState re-reads one object's state and version for the
+// replication worker. A row that is gone answers Found false, not an error.
+func (s *LifecycleSource) ObjectReplicationState(ctx context.Context, tenantID, objectID uuid.UUID) (worker.ReplicationObjectState, error) {
+	row, err := s.q.GetObjectReplicationState(ctx, pgUUID(tenantID), pgUUID(objectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return worker.ReplicationObjectState{}, nil
+	}
+	if err != nil {
+		return worker.ReplicationObjectState{}, fmt.Errorf("read object state: %w", err)
+	}
+	return worker.ReplicationObjectState{
+		Found: true, State: string(row.State), ResourceVersion: row.ResourceVersion,
+	}, nil
+}
+
 // LifecycleObjectIter implements worker.LifecycleObjectIter via paginated
 // reads. Uses object_id-descending cursor so each page is a fresh, point-in-
 // time slice of newer-than-last objects (UUIDv7 monotonicity).
@@ -115,17 +132,18 @@ func (it *LifecycleObjectIter) IterateObjects(ctx context.Context, tenantID uuid
 				size = *row.SizeBytes
 			}
 			err := cb(worker.LifecycleObjectRow{
-				ObjectID:    uuidFrom(row.ID),
-				Key:         row.Path,
-				State:       string(row.State),
-				ContentType: row.ContentType,
-				SizeBytes:   size,
-				Metadata:    decodeMap(row.Metadata),
-				Tags:        decodeMap(row.Tags),
-				CreatedAt:   timeFrom(row.CreatedAt),
-				UpdatedAt:   timeFrom(row.UpdatedAt),
-				CommittedAt: timePtr(row.CommittedAt),
-				ExternalRef: derefStr(row.ExternalRef),
+				ObjectID:        uuidFrom(row.ID),
+				Key:             row.Path,
+				State:           string(row.State),
+				ContentType:     row.ContentType,
+				SizeBytes:       size,
+				Metadata:        decodeMap(row.Metadata),
+				Tags:            decodeMap(row.Tags),
+				CreatedAt:       timeFrom(row.CreatedAt),
+				UpdatedAt:       timeFrom(row.UpdatedAt),
+				CommittedAt:     timePtr(row.CommittedAt),
+				ExternalRef:     derefStr(row.ExternalRef),
+				ResourceVersion: row.ResourceVersion,
 			})
 			if err != nil {
 				return err

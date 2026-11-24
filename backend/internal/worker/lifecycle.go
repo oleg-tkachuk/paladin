@@ -51,6 +51,9 @@ type LifecycleObjectRow struct {
 	ExternalRef string
 	Tags        map[string]string
 	Metadata    map[string]string
+	// ResourceVersion is the row's version, which the replication worker
+	// compares on a re-read before it passes over the object.
+	ResourceVersion int64
 }
 
 // BucketLifecycleSource lists buckets that carry non-empty lifecycle rules.

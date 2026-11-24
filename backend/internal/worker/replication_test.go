@@ -19,6 +19,17 @@ type fakeReplSource struct {
 	buckets  []admindomain.Bucket
 	bindings map[string][]CollectionBinding
 	listErr  error
+	// objStates answers ObjectReplicationState by object id; an id not in
+	// it reads as an unchanged AVAILABLE row at version 0.
+	objStates map[uuid.UUID]ReplicationObjectState
+	objErr    error
+}
+
+func (f *fakeReplSource) ObjectReplicationState(_ context.Context, _, id uuid.UUID) (ReplicationObjectState, error) {
+	if st, ok := f.objStates[id]; ok {
+		return st, f.objErr
+	}
+	return ReplicationObjectState{Found: true, State: "AVAILABLE"}, f.objErr
 }
 
 func (f *fakeReplSource) ListBucketsWithReplication(_ context.Context) ([]admindomain.Bucket, error) {
@@ -32,6 +43,10 @@ type fakeReplicator struct {
 	mu     sync.Mutex
 	copies []ReplicationTarget // dst targets, for inspection
 	fail   bool
+}
+
+func (f *fakeReplicator) SourceMissing(context.Context, ReplicationTarget) (bool, error) {
+	return false, nil
 }
 
 func (f *fakeReplicator) Replicate(_ context.Context, _ ReplicationTarget, dst ReplicationTarget, _ int64) error {
@@ -265,6 +280,10 @@ func replicatingFixture(now time.Time) (*fakeReplSource, *fakeObjIter, Collectio
 type countingReplicator struct {
 	attempts int
 	err      error
+}
+
+func (c *countingReplicator) SourceMissing(context.Context, ReplicationTarget) (bool, error) {
+	return false, nil
 }
 
 func (c *countingReplicator) Replicate(context.Context, ReplicationTarget, ReplicationTarget, int64) error {

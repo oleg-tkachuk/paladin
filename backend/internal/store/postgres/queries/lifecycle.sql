@@ -70,7 +70,8 @@ ORDER BY c.tenant_id, c.name;
 -- Every column cel.ObjectVars projects, so a rule's match sees what a
 -- ListObjects filter sees.
 SELECT o.id, o.path, o.state, o.content_type, o.size_bytes, o.external_ref,
-       o.metadata, o.tags, o.created_at, o.updated_at, o.committed_at
+       o.metadata, o.tags, o.created_at, o.updated_at, o.committed_at,
+       o.resource_version
 FROM objects o
 WHERE o.tenant_id = $1
   AND o.collection_id = (SELECT c.id FROM collections c

@@ -287,6 +287,9 @@ type Querier interface {
 	// object's current version. LEFT JOIN plus COALESCE: an object with no lock
 	// row is the common case and must answer "not locked", not "no row".
 	GetObjectLockState(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectLockStateRow, error)
+	// One object's state and resource version, re-read by the replication worker
+	// before it passes over an object whose bytes the source does not hold.
+	GetObjectReplicationState(ctx context.Context, tenantID pgtype.UUID, iD pgtype.UUID) (GetObjectReplicationStateRow, error)
 	GetObjectVersion(ctx context.Context, id pgtype.UUID) (GetObjectVersionRow, error)
 	// Batch lookup for batch-operation executors: one round-trip for the
 	// whole id list instead of one GetObject per id (a 1000-object batch
@@ -874,6 +877,10 @@ type Querier interface {
 	// Forgets a retired slug and says whose it was; no row when it was not
 	// retired.
 	ReleaseTenantSlug(ctx context.Context, slug string) (pgtype.UUID, error)
+	// The database's clock, which stamps objects.committed_at: the replication
+	// worker's horizon is measured on it, so no clock skew between a worker pod
+	// and the database moves the watermark past rows not yet stamped.
+	ReplicationClock(ctx context.Context) (pgtype.Timestamptz, error)
 	// Records a RUNNING operation's latest {processed, total} snapshot. Its own
 	// column, so the arguments in metadata survive the whole run — the stale
 	// reclaimer used to fail an operation whose metadata had been overwritten by

@@ -23,6 +23,13 @@ type scriptedReplicator struct {
 	script   map[string][]error
 	attempts map[string]int
 	copied   []replicatedCall
+	// missing and missingErr answer SourceMissing.
+	missing    bool
+	missingErr error
+}
+
+func (s *scriptedReplicator) SourceMissing(context.Context, ReplicationTarget) (bool, error) {
+	return s.missing, s.missingErr
 }
 
 type replicatedCall struct {
@@ -114,8 +121,6 @@ func (f *passFixture) worker(rows []LifecycleObjectRow, rep StorageReplicator, l
 	}
 }
 
-func (f *passFixture) horizon() time.Time { return f.now.Add(-passSettle) }
-
 func (f *passFixture) stored() time.Time {
 	f.store.mu.Lock()
 	defer f.store.mu.Unlock()
@@ -142,15 +147,73 @@ func TestReplicationCopiesTheObjectKeyAndSize(t *testing.T) {
 	}
 }
 
-// A completed pass moves the watermark to the horizon, not to the newest copy.
-func TestReplicationAdvancesTheWatermarkToTheHorizon(t *testing.T) {
+// A completed pass moves the watermark to the latest commit it decided, not
+// to the horizon.
+func TestReplicationAdvancesTheWatermarkToTheLatestDecidedCommit(t *testing.T) {
 	f := newPassFixture()
-	w := f.worker([]LifecycleObjectRow{f.row("a", 3*passSettle)}, newScriptedReplicator(nil), nil)
+	newest := f.row("a", 3*passSettle)
+	w := f.worker([]LifecycleObjectRow{newest, f.row("b", 4*passSettle)}, newScriptedReplicator(nil), nil)
 	if err := w.tick(context.Background()); err != nil {
 		t.Fatalf("tick = %v", err)
 	}
-	if got := f.stored(); !got.Equal(f.horizon()) {
-		t.Errorf("watermark = %v, want the horizon %v", got, f.horizon())
+	if got := f.stored(); !got.Equal(*newest.CommittedAt) {
+		t.Errorf("watermark = %v, want the newest decided commit %v", got, *newest.CommittedAt)
+	}
+}
+
+// A row stamped before the last pass's horizon but visible only after it —
+// a promote whose transaction committed late — is still selected: the
+// watermark stopped at what the pass saw, not at the horizon.
+func TestReplicationCopiesARowThatBecameVisibleAfterThePass(t *testing.T) {
+	f := newPassFixture()
+	rep := newScriptedReplicator(nil)
+	seen := f.row("seen", 4*passSettle)
+	iter := &fakeObjIter{rows: []LifecycleObjectRow{seen}}
+	w := f.worker(nil, rep, nil)
+	w.Objects = iter
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v", err)
+	}
+	late := f.row("late", 3*passSettle) // after "seen", before that pass's horizon
+	iter.rows = []LifecycleObjectRow{late, seen}
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("second tick = %v", err)
+	}
+	if got := rep.copiedKeys(); fmt.Sprint(got) != fmt.Sprint([]string{"seen", "late"}) {
+		t.Errorf("copied %v, want the late row copied on the next pass", got)
+	}
+}
+
+// fixedClock is a database clock at a set time, or failing.
+type fixedClock struct {
+	at  time.Time
+	err error
+}
+
+func (c fixedClock) Now(context.Context) (time.Time, error) { return c.at, c.err }
+
+// The horizon is measured on the database's clock, not the worker's.
+func TestReplicationMeasuresTheHorizonOnTheDatabaseClock(t *testing.T) {
+	f := newPassFixture()
+	rep := newScriptedReplicator(nil)
+	row := f.row("a", 2*passSettle)
+	w := f.worker([]LifecycleObjectRow{row}, rep, nil)
+	// The database is behind the pod: by its clock the row is still inside
+	// the settle delay.
+	w.Clock = fixedClock{at: row.CommittedAt.Add(passSettle / 2)}
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v", err)
+	}
+	if got := rep.copiedKeys(); len(got) != 0 {
+		t.Errorf("copied %v inside the database's settle delay", got)
+	}
+
+	w.Clock = fixedClock{err: errors.New("database unreachable")}
+	if err := w.tick(context.Background()); err == nil {
+		t.Error("tick = nil, want the clock's failure: the bucket is deferred")
+	}
+	if got := rep.copiedKeys(); len(got) != 0 {
+		t.Errorf("copied %v without a horizon", got)
 	}
 }
 
@@ -193,8 +256,8 @@ func TestReplicationHoldsTheWatermarkBelowAFailedObject(t *testing.T) {
 	if rep.attempts["older"] != 2 {
 		t.Errorf("older attempted %d times, want 2: the next tick must select it again", rep.attempts["older"])
 	}
-	if got := f.stored(); !got.Equal(f.horizon()) {
-		t.Errorf("watermark = %v, want the horizon once everything copied", got)
+	if got := f.stored(); !got.Equal(*rows[0].CommittedAt) {
+		t.Errorf("watermark = %v, want the newest commit once everything copied", got)
 	}
 }
 
@@ -235,8 +298,8 @@ func TestReplicationRetriesATransientFailureWithBackoff(t *testing.T) {
 	if fmt.Sprint(f.sleeps) != fmt.Sprint(want) {
 		t.Errorf("backoff = %v, want %v", f.sleeps, want)
 	}
-	if got := f.stored(); !got.Equal(f.horizon()) {
-		t.Errorf("watermark = %v, want the horizon", got)
+	if got := f.stored(); got.IsZero() {
+		t.Error("the watermark did not advance past a copy that succeeded on retry")
 	}
 }
 
@@ -263,22 +326,98 @@ func TestReplicationStopsTheBucketWhenRetriesRunOut(t *testing.T) {
 	}
 }
 
-// A source the backend does not hold is passed over: there is nothing to copy
-// now or later, so it does not hold the watermark.
-func TestReplicationPassesOverAMissingSource(t *testing.T) {
+// A source the backend does not hold is passed over once confirmed — the row
+// unchanged and still AVAILABLE, a fresh HEAD finding no key in a reachable
+// bucket: there is nothing to copy now or later, so it does not hold the
+// watermark.
+func TestReplicationPassesOverAConfirmedMissingSource(t *testing.T) {
 	f := newPassFixture()
 	rep := newScriptedReplicator(map[string][]error{"gone": {errSourceGone}})
+	rep.missing = true
 	core, logs := observer.New(zapcore.WarnLevel)
-	w := f.worker([]LifecycleObjectRow{f.row("gone", 2*passSettle)}, rep, zap.New(core))
+	gone := f.row("gone", 2*passSettle)
+	w := f.worker([]LifecycleObjectRow{gone}, rep, zap.New(core))
 
 	if err := w.tick(context.Background()); err != nil {
 		t.Fatalf("tick = %v", err)
 	}
-	if got := f.stored(); !got.Equal(f.horizon()) {
-		t.Errorf("watermark = %v, want the horizon", got)
+	if got := f.stored(); !got.Equal(*gone.CommittedAt) {
+		t.Errorf("watermark = %v, want past the confirmed-missing object", got)
 	}
 	if n := logs.FilterMessage("source object missing; passing over it").Len(); n != 1 {
 		t.Errorf("missing-source lines = %d, want 1", n)
+	}
+}
+
+// A not-found that cannot be confirmed holds the watermark: the bytes may be
+// there, or the row may have moved on, and passing over it would leave the
+// replica without an object that exists.
+func TestReplicationHoldsAnUnconfirmedMissingSource(t *testing.T) {
+	cases := map[string]func(*scriptedReplicator, *fakeReplSource, LifecycleObjectRow){
+		"HEAD finds the object": func(rep *scriptedReplicator, _ *fakeReplSource, _ LifecycleObjectRow) {
+			rep.missing = false
+		},
+		"HEAD fails": func(rep *scriptedReplicator, _ *fakeReplSource, _ LifecycleObjectRow) {
+			rep.missing, rep.missingErr = true, errors.New("bucket unreachable")
+		},
+		"row changed": func(rep *scriptedReplicator, src *fakeReplSource, row LifecycleObjectRow) {
+			rep.missing = true
+			src.objStates = map[uuid.UUID]ReplicationObjectState{row.ObjectID: {Found: true, State: "AVAILABLE", ResourceVersion: row.ResourceVersion + 1}}
+		},
+		"row no longer available": func(rep *scriptedReplicator, src *fakeReplSource, row LifecycleObjectRow) {
+			rep.missing = true
+			src.objStates = map[uuid.UUID]ReplicationObjectState{row.ObjectID: {Found: true, State: "DELETED", ResourceVersion: row.ResourceVersion}}
+		},
+		"row gone": func(rep *scriptedReplicator, src *fakeReplSource, row LifecycleObjectRow) {
+			rep.missing = true
+			src.objStates = map[uuid.UUID]ReplicationObjectState{row.ObjectID: {}}
+		},
+		"row unreadable": func(rep *scriptedReplicator, src *fakeReplSource, _ LifecycleObjectRow) {
+			rep.missing = true
+			src.objErr = errors.New("pool closed")
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newPassFixture()
+			rep := newScriptedReplicator(map[string][]error{"gone": {errSourceGone}})
+			row := f.row("gone", 2*passSettle)
+			w := f.worker([]LifecycleObjectRow{row}, rep, nil)
+			setup(rep, w.Buckets.(*fakeReplSource), row)
+
+			if err := w.tick(context.Background()); !errors.Is(err, ErrObjectMissing) {
+				t.Errorf("tick = %v, want the held not-found", err)
+			}
+			if got := f.stored(); !got.IsZero() {
+				t.Errorf("watermark advanced to %v past an unconfirmed not-found", got)
+			}
+		})
+	}
+}
+
+// A copy is logged at Debug by object id alone; the key appears on failure
+// lines only.
+func TestReplicationLogsASuccessAtDebugWithoutTheKey(t *testing.T) {
+	f := newPassFixture()
+	core, logs := observer.New(zapcore.DebugLevel)
+	row := f.row("private/report.pdf", 2*passSettle)
+	w := f.worker([]LifecycleObjectRow{row}, newScriptedReplicator(nil), zap.New(core))
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick = %v", err)
+	}
+	lines := logs.FilterMessage("replicated object").All()
+	if len(lines) != 1 {
+		t.Fatalf("success lines = %d, want 1", len(lines))
+	}
+	if lines[0].Level != zapcore.DebugLevel {
+		t.Errorf("success logged at %v, want debug", lines[0].Level)
+	}
+	fields := lines[0].ContextMap()
+	if _, ok := fields[logKeyKey]; ok {
+		t.Errorf("success line carries the object key: %v", fields)
+	}
+	if fields[logKeyObjectID] != row.ObjectID.String() {
+		t.Errorf("success line object_id = %v, want %s", fields[logKeyObjectID], row.ObjectID)
 	}
 }
 
@@ -349,8 +488,8 @@ func TestReplicationCopiesOnlyWhatTheFilterMatches(t *testing.T) {
 	if got := rep.copiedKeys(); len(got) != 1 || got[0] != "keep/a" {
 		t.Errorf("copied %v, want only the object the filter matches", got)
 	}
-	if got := f.stored(); !got.Equal(f.horizon()) {
-		t.Errorf("watermark = %v, want the horizon: a filtered object is decided", got)
+	if got := f.stored(); !got.Equal(*rows[0].CommittedAt) {
+		t.Errorf("watermark = %v, want the newest decided commit: a filtered object is decided", got)
 	}
 }
 

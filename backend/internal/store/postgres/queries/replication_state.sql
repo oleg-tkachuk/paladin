@@ -16,3 +16,16 @@ VALUES ((SELECT b.id FROM buckets b
 ON CONFLICT (bucket_id) DO UPDATE
 SET watermark  = GREATEST(replication_state.watermark, EXCLUDED.watermark),
     updated_at = now();
+
+-- name: ReplicationClock :one
+-- The database's clock, which stamps objects.committed_at: the replication
+-- worker's horizon is measured on it, so no clock skew between a worker pod
+-- and the database moves the watermark past rows not yet stamped.
+SELECT now()::timestamptz AS now;
+
+-- name: GetObjectReplicationState :one
+-- One object's state and resource version, re-read by the replication worker
+-- before it passes over an object whose bytes the source does not hold.
+SELECT state, resource_version
+FROM objects
+WHERE tenant_id = $1 AND id = $2;
