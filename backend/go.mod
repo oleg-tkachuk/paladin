@@ -21,7 +21,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.53.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.53.0
 	github.com/aws/smithy-go v1.28.9
-	github.com/cedar-policy/cedar-go v1.9.3
+	github.com/cedar-policy/cedar-go v1.9.4
 	github.com/containerd/errdefs v1.0.0
 	github.com/dustin/go-humanize v1.1.0
 	github.com/exaring/otelpgx v0.13.0
@@ -46,7 +46,7 @@ require (
 	github.com/oleg-tkachuk/limes/exchange v0.27.0
 	github.com/oleg-tkachuk/limes/otelmetric v0.23.1
 	github.com/oleg-tkachuk/limes/pgstore v0.85.0
-	github.com/oleg-tkachuk/paladin/sdk/go v0.151.2
+	github.com/oleg-tkachuk/paladin/sdk/go v0.152.1
 	github.com/pressly/goose/v3 v3.30.1
 	github.com/prometheus/client_golang v1.25.0
 	github.com/rabbitmq/amqp091-go v1.17.0
@@ -59,7 +59,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/redpanda v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/valkey v0.45.0
 	github.com/valkey-io/valkey-go v1.0.80
-	github.com/vektra/mockery/v3 v3.9.1
+	github.com/vektra/mockery/v3 v3.9.2
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.47.0
@@ -75,7 +75,7 @@ require (
 	go.uber.org/zap v1.28.0
 	go.uber.org/zap/exp v0.3.0
 	golang.org/x/crypto v0.59.0
-	golang.org/x/mod v0.42.0
+	golang.org/x/mod v0.43.0
 	golang.org/x/sync v0.25.0
 	google.golang.org/genproto v0.0.0-20261118221215-c8830f628b3f
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261118221215-c8830f628b3f
