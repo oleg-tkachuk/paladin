@@ -288,8 +288,11 @@ type MigrationRepo interface {
 	// ListCleanable lists the tenant's private objects placed in target
 	// after the cursor, by (collection, key).
 	ListCleanable(ctx context.Context, at MigrationRead, target MigrationBucket, afterCollection, afterKey string, limit int) ([]ObjectRef, error)
-	// AdvanceCleanup records the cleanup past (collection, key).
-	AdvanceCleanup(ctx context.Context, at MigrationRead, collection, key string) error
+	// AdvanceCleanup deletes the source copy of (collection, key) — runs del —
+	// and records the cleanup past it, holding the migration row as read
+	// across both: an operator's cancel, which rolls the objects back into
+	// the source, waits for a delete in flight, and no delete runs after it.
+	AdvanceCleanup(ctx context.Context, at MigrationRead, collection, key string, del func(context.Context) error) error
 	// MarkCleaned is the terminal transition after the source copies are
 	// deleted.
 	MarkCleaned(ctx context.Context, at MigrationRead) error
@@ -785,10 +788,13 @@ func (w *StorageMigrationWorker) clean(ctx context.Context, log *zap.Logger, m S
 		if ctx.Err() != nil {
 			return nil
 		}
-		if err := w.Deleter.DeleteObject(ctx, m.loc(m.Source, o.Collection, o.Key)); err != nil {
-			return fmt.Errorf("delete the source copy of %s/%s: %w", o.Collection, o.Key, err)
-		}
-		if err := w.Repo.AdvanceCleanup(ctx, m.Read(), o.Collection, o.Key); err != nil {
+		err := w.Repo.AdvanceCleanup(ctx, m.Read(), o.Collection, o.Key, func(ctx context.Context) error {
+			if err := w.Deleter.DeleteObject(ctx, m.loc(m.Source, o.Collection, o.Key)); err != nil {
+				return fmt.Errorf("delete the source copy of %s/%s: %w", o.Collection, o.Key, err)
+			}
+			return nil
+		})
+		if err != nil {
 			return err
 		}
 	}

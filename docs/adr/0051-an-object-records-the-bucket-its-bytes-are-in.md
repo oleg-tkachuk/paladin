@@ -3,7 +3,8 @@
 - **Status:** Accepted 2026-11-24 — implemented in the three stages below.
   Amended 2026-11-24: the completion waits for the anchors, not for the
   write deadline (see Amendment). Amended 2026-11-25: a rolled-back
-  migration keeps passing after it fails (see the second amendment).
+  migration keeps passing after it fails, and an operator can cancel a
+  migration (see the later amendments).
   Supersedes the storage-migration parts of
   [ADR-0015](0015-per-tenant-bucket-layout.md): Phase 3 and the migration
   addenda of 2026-11-24.
@@ -384,3 +385,34 @@ keeps bounding the regenerated and part URLs for it.
   `settle_after` before it inserts its row is left in the target, as one
   that read the source binding more than `source_copy_retention` before the
   completion is left in the source after `cleaned`.
+
+## Amendment (2026-11-25): an operator cancels a migration
+
+`CancelTenantStorageMigration` is the rollback on an operator's word. It takes
+the migration row `FOR UPDATE`, decides on the state it reads there
+(`migstate.CancelTo`), and counts a failure (`attempts` grows), so every worker
+write read before it — a move, a pass's record, a transition — matches nothing:
+
+| State | Cancel |
+|---|---|
+| `provisioning` | `failed`, settled: nothing was pointed at the target |
+| `moving` | `rolling_back`: the passes move every object back, as a rollback the worker starts |
+| `completed` | `rolling_back`, its completion and cleanup forgotten: the moves copy the target's bytes, so the source copies are not needed |
+| `rolling_back`, `failed`, `cleaned` | refused, `FAILED_PRECONDITION` |
+
+- **Who.** The migration records `cancelled by <subject>` as its error, and the
+  call is audited with the status before and after. It is authorised as
+  `MigrateTenantStorageLayout` is: platform admin, and Cedar's `ManageTenant`
+  on the tenant.
+- **Version.** `StorageMigrationStatus.resource_version` (migration 134) moves
+  with every change of state and with a retry, never with a pass's progress,
+  so a cancel decided on a status polled while objects move applies, and one
+  decided before the worker moved the migration on is `ABORTED`.
+- **The cleanup holds the row.** A cancel of a `completed` migration may come
+  while its cleanup deletes source copies. Each delete now runs on a
+  transaction holding the migration row as read, `FOR SHARE` as a move does:
+  the cancel waits for a delete in flight, and no delete read before it runs
+  after it.
+- **Not an agent's tool.** The MCP bridge exposes no storage-migration RPC;
+  moving a tenant's storage stays an operator's decision, like the tenant
+  lifecycle in `DefaultAlwaysDeny`.

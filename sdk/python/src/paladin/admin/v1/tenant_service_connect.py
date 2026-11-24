@@ -22,7 +22,7 @@ from connectrpc.server import ConnectASGIApplication, ConnectWSGIApplication, DE
 from paladin.admin.v1.types_pb2 import Tenant
 from pyqwest import Client, SyncClient
 
-from .tenant_service_pb2 import ClearTenantDefaultBindingRequest, ClearTenantDefaultBindingResponse, CreateTenantRequest, DeleteTenantRequest, DeleteTenantResponse, GetTenantDefaultBindingRequest, GetTenantRequest, GetTenantStorageMigrationRequest, ListRetiredTenantSlugsRequest, ListRetiredTenantSlugsResponse, ListTenantsRequest, ListTenantsResponse, MigrateTenantStorageLayoutRequest, PreviewPurgeTenantRequest, PreviewPurgeTenantResponse, PurgeTenantRequest, PurgeTenantResponse, ReleaseTenantSlugRequest, ReleaseTenantSlugResponse, RestoreTenantRequest, SetInheritedPolicyRequest, SetTenantDefaultBindingRequest, StorageMigrationStatus, TenantDefaultBinding, UpdateTenantRequest
+from .tenant_service_pb2 import CancelTenantStorageMigrationRequest, ClearTenantDefaultBindingRequest, ClearTenantDefaultBindingResponse, CreateTenantRequest, DeleteTenantRequest, DeleteTenantResponse, GetTenantDefaultBindingRequest, GetTenantRequest, GetTenantStorageMigrationRequest, ListRetiredTenantSlugsRequest, ListRetiredTenantSlugsResponse, ListTenantsRequest, ListTenantsResponse, MigrateTenantStorageLayoutRequest, PreviewPurgeTenantRequest, PreviewPurgeTenantResponse, PurgeTenantRequest, PurgeTenantResponse, ReleaseTenantSlugRequest, ReleaseTenantSlugResponse, RestoreTenantRequest, SetInheritedPolicyRequest, SetTenantDefaultBindingRequest, StorageMigrationStatus, TenantDefaultBinding, UpdateTenantRequest
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Iterable, Mapping
@@ -139,6 +139,19 @@ class TenantService(Protocol):
         """
         GetTenantStorageMigration returns the current migration status for a
         tenant, or NOT_FOUND if none was ever started.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
+    async def cancel_tenant_storage_migration(self, request: CancelTenantStorageMigrationRequest, ctx: RequestContext[CancelTenantStorageMigrationRequest, StorageMigrationStatus], /) -> StorageMigrationStatus:
+        """
+        CancelTenantStorageMigration cancels a tenant's storage migration
+        (ADR-0051) at the resource_version read. A `provisioning` migration fails
+        at once; a `moving` or `completed` one rolls back: the worker moves every
+        object back into the source and points the tenant's uploads there, and
+        the migration ends `failed`, retryable with MigrateTenantStorageLayout.
+        The error records who cancelled it. FAILED_PRECONDITION for a migration
+        `rolling_back`, `failed` or `cleaned`; ABORTED for a stale
+        resource_version; NOT_FOUND when none was ever started.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -315,6 +328,17 @@ class TenantServiceASGIApplication(ConnectASGIApplication[TenantService]):
                         stream_type=StreamType.UNARY,
                     ),
                     function=svc.get_tenant_storage_migration,
+                ),
+                "/paladin.admin.v1.TenantService/CancelTenantStorageMigration": Endpoint.unary(
+                    method=MethodInfo(
+                        name="CancelTenantStorageMigration",
+                        service_name="paladin.admin.v1.TenantService",
+                        input=CancelTenantStorageMigrationRequest,
+                        output=StorageMigrationStatus,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=svc.cancel_tenant_storage_migration,
                 ),
                 "/paladin.admin.v1.TenantService/GetTenantDefaultBinding": Endpoint.unary(
                     method=MethodInfo(
@@ -707,6 +731,36 @@ class TenantServiceClient(ConnectClient):
             timeout_ms=timeout_ms,
             use_get=use_get,
         )
+    async def cancel_tenant_storage_migration(
+        self,
+        request: CancelTenantStorageMigrationRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> StorageMigrationStatus:
+        """
+        CancelTenantStorageMigration cancels a tenant's storage migration
+        (ADR-0051) at the resource_version read. A `provisioning` migration fails
+        at once; a `moving` or `completed` one rolls back: the worker moves every
+        object back into the source and points the tenant's uploads there, and
+        the migration ends `failed`, retryable with MigrateTenantStorageLayout.
+        The error records who cancelled it. FAILED_PRECONDITION for a migration
+        `rolling_back`, `failed` or `cleaned`; ABORTED for a stale
+        resource_version; NOT_FOUND when none was ever started.
+        """
+        return await self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="CancelTenantStorageMigration",
+                service_name="paladin.admin.v1.TenantService",
+                input=CancelTenantStorageMigrationRequest,
+                output=StorageMigrationStatus,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
+        )
     async def get_tenant_default_binding(
         self,
         request: GetTenantDefaultBindingRequest,
@@ -940,6 +994,19 @@ class TenantServiceSync(Protocol):
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
+    def cancel_tenant_storage_migration(self, request: CancelTenantStorageMigrationRequest, ctx: RequestContext[CancelTenantStorageMigrationRequest, StorageMigrationStatus], /) -> StorageMigrationStatus:
+        """
+        CancelTenantStorageMigration cancels a tenant's storage migration
+        (ADR-0051) at the resource_version read. A `provisioning` migration fails
+        at once; a `moving` or `completed` one rolls back: the worker moves every
+        object back into the source and points the tenant's uploads there, and
+        the migration ends `failed`, retryable with MigrateTenantStorageLayout.
+        The error records who cancelled it. FAILED_PRECONDITION for a migration
+        `rolling_back`, `failed` or `cleaned`; ABORTED for a stale
+        resource_version; NOT_FOUND when none was ever started.
+        """
+        raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
+
     def get_tenant_default_binding(self, request: GetTenantDefaultBindingRequest, ctx: RequestContext[GetTenantDefaultBindingRequest, TenantDefaultBinding], /) -> TenantDefaultBinding:
         """
         GetTenantDefaultBinding returns the tenant's default (backend, bucket)
@@ -1111,6 +1178,17 @@ class TenantServiceWSGIApplication(ConnectWSGIApplication):
                         stream_type=StreamType.UNARY,
                     ),
                     function=service.get_tenant_storage_migration,
+                ),
+                "/paladin.admin.v1.TenantService/CancelTenantStorageMigration": EndpointSync.unary(
+                    method=MethodInfo(
+                        name="CancelTenantStorageMigration",
+                        service_name="paladin.admin.v1.TenantService",
+                        input=CancelTenantStorageMigrationRequest,
+                        output=StorageMigrationStatus,
+                        idempotency_level=IdempotencyLevel.UNKNOWN,
+                        stream_type=StreamType.UNARY,
+                    ),
+                    function=service.cancel_tenant_storage_migration,
                 ),
                 "/paladin.admin.v1.TenantService/GetTenantDefaultBinding": EndpointSync.unary(
                     method=MethodInfo(
@@ -1502,6 +1580,36 @@ class TenantServiceClientSync(ConnectClientSync):
             headers=headers,
             timeout_ms=timeout_ms,
             use_get=use_get,
+        )
+    def cancel_tenant_storage_migration(
+        self,
+        request: CancelTenantStorageMigrationRequest,
+        *,
+        headers: Headers | Mapping[str, str] | None = None, 
+        timeout_ms: int | None = None,
+    ) -> StorageMigrationStatus:
+        """
+        CancelTenantStorageMigration cancels a tenant's storage migration
+        (ADR-0051) at the resource_version read. A `provisioning` migration fails
+        at once; a `moving` or `completed` one rolls back: the worker moves every
+        object back into the source and points the tenant's uploads there, and
+        the migration ends `failed`, retryable with MigrateTenantStorageLayout.
+        The error records who cancelled it. FAILED_PRECONDITION for a migration
+        `rolling_back`, `failed` or `cleaned`; ABORTED for a stale
+        resource_version; NOT_FOUND when none was ever started.
+        """
+        return self.execute_unary(
+            request=request,
+            method=MethodInfo(
+                name="CancelTenantStorageMigration",
+                service_name="paladin.admin.v1.TenantService",
+                input=CancelTenantStorageMigrationRequest,
+                output=StorageMigrationStatus,
+                idempotency_level=IdempotencyLevel.UNKNOWN,
+                stream_type=StreamType.UNARY,
+            ),
+            headers=headers,
+            timeout_ms=timeout_ms,
         )
     def get_tenant_default_binding(
         self,

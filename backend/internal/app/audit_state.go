@@ -88,10 +88,11 @@ func (s adminStateServers) fill(readers middleware.StateReaders) {
 	})
 	readers[adminconnect.TenantServiceSetTenantDefaultBindingProcedure] = binding
 	readers[adminconnect.TenantServiceClearTenantDefaultBindingProcedure] = binding
-	readers[adminconnect.TenantServiceMigrateTenantStorageLayoutProcedure] = byName(s.tenant.GetTenantStorageMigration,
-		func(n string) *adminv1.GetTenantStorageMigrationRequest {
-			return &adminv1.GetTenantStorageMigrationRequest{Name: n}
-		})
+	migration := byName(s.tenant.GetTenantStorageMigration, func(n string) *adminv1.GetTenantStorageMigrationRequest {
+		return &adminv1.GetTenantStorageMigrationRequest{Name: n}
+	})
+	readers[adminconnect.TenantServiceMigrateTenantStorageLayoutProcedure] = migration
+	readers[adminconnect.TenantServiceCancelTenantStorageMigrationProcedure] = migration
 	collection := byName(s.collection.GetCollection, func(n string) *adminv1.GetCollectionRequest { return &adminv1.GetCollectionRequest{Name: n} })
 	for _, p := range []string{
 		adminconnect.CollectionServiceUpdateCollectionProcedure,

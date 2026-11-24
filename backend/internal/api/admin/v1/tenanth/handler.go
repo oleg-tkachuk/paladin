@@ -194,6 +194,14 @@ type Repository interface {
 	// GetStorageMigration returns the tenant's migration status.
 	// ErrStorageMigrationNotFound when none was ever started.
 	GetStorageMigration(ctx context.Context, tenantID uuid.UUID) (StorageMigration, error)
+	// CancelStorageMigration cancels the tenant's migration at
+	// expectedVersion, recording reason as its error: under the migration
+	// row's lock it moves it to the state migstate.CancelTo names, counting
+	// a failure, so a worker step read before it applies nothing. Returns the
+	// cancelled migration. ErrStorageMigrationNotFound when none was ever
+	// started, ErrVersionMismatch when it is no longer at expectedVersion,
+	// ErrStorageMigrationNotCancellable when its state takes no cancel.
+	CancelStorageMigration(ctx context.Context, tenantID uuid.UUID, expectedVersion int64, reason string) (StorageMigration, error)
 	// TenantSourceBucket returns the (backend, bucket) the tenant's objects
 	// physically live in today — the DISTINCT binding across its collections.
 	// A shared tenant's keys normally share one bucket; ErrSourceBucketAmbiguous
@@ -227,7 +235,15 @@ type StorageMigration struct {
 	ObjectsTotal      int64
 	ObjectsCopied     int64
 	Error             string
+	// ResourceVersion moves with every change of state, never with a pass's
+	// progress: the compare-and-set CancelStorageMigration takes.
+	ResourceVersion int64
 }
+
+// ErrStorageMigrationNotCancellable is returned by CancelStorageMigration for
+// a migration whose state takes no cancel (migstate.CancelTo): rolling back
+// already, failed, or cleaned.
+var ErrStorageMigrationNotCancellable = errors.New("storage migration cannot be cancelled in its state")
 
 // ErrStorageMigrationExists is returned by StartStorageMigration when the
 // tenant already has a migration that is not 'failed' — in flight, completed
@@ -939,6 +955,53 @@ func (h *Handler) GetTenantStorageMigration(ctx context.Context, tenantID uuid.U
 	return &m, nil
 }
 
+// reasonCancelledBy is the error a cancelled migration records, naming the
+// subject that asked; GetTenantStorageMigration returns it.
+const reasonCancelledBy = "cancelled by %s"
+
+// CancelTenantStorageMigration cancels a tenant's storage migration
+// (ADR-0051): a provisioning one fails at once, a moving or completed one
+// rolls back — the worker moves every object back into the source and points
+// the tenant's uploads there — and any other is refused. Authorised as
+// MigrateTenantStorageLayout is: changing where a tenant's objects live is
+// managing the tenant. expectedVersion is the status's resource_version.
+func (h *Handler) CancelTenantStorageMigration(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) (*StorageMigration, error) {
+	if err := requirePlatformAdmin(ctx); err != nil {
+		return nil, err
+	}
+	if err := h.authorize(ctx, cedar.ActionManageTenant, tenantID); err != nil {
+		return nil, err
+	}
+	if expectedVersion <= 0 {
+		return nil, connect.Errorf(connect.CodeInvalidArgument,
+			"resource_version is required: read the migration first and cancel the version read")
+	}
+	p, err := auth.PrincipalFromContext(ctx)
+	if err != nil {
+		return nil, rpcerr.New(connect.CodeUnauthenticated, err)
+	}
+	log := h.log.With(zap.String("tenant_id", tenantID.String()), zap.String("subject", p.Subject),
+		zap.Int64("expected_version", expectedVersion))
+	// The migration row is tenant-scoped (RLS): act as the tenant authorised
+	// above.
+	m, err := h.repo.CancelStorageMigration(auth.WithActingTenant(ctx, tenantID), tenantID, expectedVersion,
+		fmt.Sprintf(reasonCancelledBy, p.Subject))
+	switch {
+	case err == nil:
+		log.Info("storage migration cancelled", zap.String("state", m.State))
+		return &m, nil
+	case errors.Is(err, ErrStorageMigrationNotCancellable):
+		log.Warn("storage migration cancel refused", zap.Error(err))
+		return nil, rpcerr.New(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, ErrVersionMismatch) || errors.Is(err, ErrStorageMigrationNotFound):
+		log.Warn("storage migration cancel refused", zap.Error(err))
+		return nil, apiutil.MapError(err)
+	default:
+		log.Error("storage migration cancel failed", zap.Error(err))
+		return nil, apiutil.MapError(fmt.Errorf("cancel storage migration: %w", err))
+	}
+}
+
 // requireUpdateAuthority admits a platform admin to any update, and a tenant
 // provisioner to one that sets the inherited policy and nothing else. The
 // refusal is the platform-admin one either way.
@@ -1398,6 +1461,7 @@ func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
 	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
 	apiutil.RegisterError(ErrStorageMigrationNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
+	apiutil.RegisterError(ErrStorageMigrationNotCancellable, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_FAILED_PRECONDITION)
 	apiutil.RegisterError(ErrSlugConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
 	apiutil.RegisterError(ErrSlugHeldInTrash, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
 	apiutil.RegisterError(ErrSlugRetired, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)

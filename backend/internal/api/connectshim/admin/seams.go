@@ -156,6 +156,7 @@ type tenantHandler interface {
 	GetTenant(ctx context.Context, tenantID uuid.UUID) (*tenanth.Tenant, error)
 	GetTenantBySlug(ctx context.Context, slug string) (*tenanth.Tenant, error)
 	GetTenantStorageMigration(ctx context.Context, tenantID uuid.UUID) (*tenanth.StorageMigration, error)
+	CancelTenantStorageMigration(ctx context.Context, tenantID uuid.UUID, expectedVersion int64) (*tenanth.StorageMigration, error)
 	ListTenants(ctx context.Context, args tenanth.ListTenantsArgs, pageToken string) ([]tenanth.Tenant, string, error)
 	MigrateTenantStorageLayout(ctx context.Context, tenantID uuid.UUID, targetBackendID string, cleanupRetentionSeconds int64) (*tenanth.StorageMigration, error)
 	PurgeTenant(ctx context.Context, tenantID uuid.UUID) error

@@ -49,7 +49,9 @@ ORDER BY m.updated_at
 LIMIT sqlc.arg('limit_count')::int;
 
 -- Every transition below applies only to the migration as the worker read
--- it: the same state AND the same attempts. attempts grows on every failure
+-- it: the same state AND the same attempts. Each change of state moves
+-- resource_version, the operator's compare-and-set; a pass's progress does
+-- not. attempts grows on every failure
 -- and a retry keeps it, so a worker that read an earlier attempt and resumed
 -- after it failed and was retried matches nothing (ABA on state alone).
 
@@ -72,7 +74,7 @@ FOR SHARE;
 
 -- name: SetStorageMigrationState :execrows
 UPDATE tenant_storage_migrations
-SET state = sqlc.arg('to_state'), error = '', updated_at = now()
+SET state = sqlc.arg('to_state'), error = '', resource_version = resource_version + 1, updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
@@ -223,6 +225,7 @@ RETURNING failed_passes;
 -- moved can live.
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), error = '', completed_at = now(),
+    resource_version = resource_version + 1,
     cleanup_after = now() + GREATEST(make_interval(secs => cleanup_retention_seconds),
                                      sqlc.arg('get_window')::interval),
     cursor_collection = '', cursor_path = '',
@@ -245,6 +248,16 @@ WHERE o.tenant_id = sqlc.arg('tenant_id')
 ORDER BY c.name, o.path
 LIMIT sqlc.arg('limit_count')::int;
 
+-- name: LockLatestStorageMigration :one
+-- The tenant's migration, held for an operator's change of it
+-- (CancelTenantStorageMigration): the change is decided on the state read
+-- here, and a worker's transition waits for it, as it waits for a move.
+SELECT id, state, attempts, resource_version FROM tenant_storage_migrations
+WHERE tenant_id = $1
+ORDER BY created_at DESC
+LIMIT 1
+FOR UPDATE;
+
 -- name: AdvanceStorageMigrationCleanup :execrows
 UPDATE tenant_storage_migrations
 SET cursor_collection = sqlc.arg('cursor_collection'),
@@ -255,7 +268,8 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
 
 -- name: MarkStorageMigrationCleaned :execrows
 UPDATE tenant_storage_migrations
-SET state = sqlc.arg('to_state'), cleaned_at = now(), updated_at = now()
+SET state = sqlc.arg('to_state'), cleaned_at = now(), resource_version = resource_version + 1,
+    updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
@@ -264,18 +278,21 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
 -- nothing of the tenant can be there, so it is settled at once.
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1,
-    settled_at = now(), updated_at = now()
+    settled_at = now(), resource_version = resource_version + 1, updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
 -- name: StartStorageMigrationRollback :execrows
--- moving -> rolling_back, recording the reason and counting the failure. The
--- moves start over in the other direction: their count, the failed passes
--- and the write deadline, which the rollback's first pass sets for the
--- target.
+-- moving (or, cancelled, completed) -> rolling_back, recording the reason and
+-- counting the failure. The moves start over in the other direction: their
+-- count, the failed passes and the write deadline, which the rollback's first
+-- pass sets for the target. A completed migration's completion and cleanup
+-- are forgotten: there is nothing to clean once its objects are back.
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), error = sqlc.arg('error'), attempts = attempts + 1,
     objects_copied = 0, failed_passes = 0, writes_close_at = NULL,
+    completed_at = NULL, cleanup_after = NULL, cursor_collection = '', cursor_path = '',
+    resource_version = resource_version + 1,
     updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
@@ -288,7 +305,7 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
 -- before the switch back and anchors to it after this.
 UPDATE tenant_storage_migrations
 SET state = sqlc.arg('to_state'), settle_after = now() + sqlc.arg('settle_window')::interval,
-    updated_at = now()
+    resource_version = resource_version + 1, updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
@@ -409,6 +426,7 @@ SET source_bucket_id          = sb.id,
     cleaned_at                = NULL,
     settle_after              = NULL,
     settled_at                = NULL,
+    resource_version          = m.resource_version + 1,
     updated_at                = now()
 FROM buckets sb
 JOIN storage_backends ssb ON ssb.id = sb.backend_id

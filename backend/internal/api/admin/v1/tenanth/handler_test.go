@@ -46,25 +46,26 @@ func (f *fakeAuthz) IsAuthorized(_ context.Context, _ *cedar.Principal, action c
 // wires are exercised; the rest return zero values so the full interface stays
 // satisfied without a database.
 type fakeRepo struct {
-	createFn         func(context.Context, CreateTenantArgs) (Tenant, error)
-	getDefBindingFn  func(context.Context, uuid.UUID) (DefaultBinding, error)
-	setDefBindingFn  func(ctx context.Context, tenantID uuid.UUID, bucket, setBy string) (DefaultBinding, error)
-	clearDefBindFn   func(context.Context, uuid.UUID) error
-	getFn            func(context.Context, uuid.UUID) (Tenant, error)
-	getBySlugFn      func(context.Context, string) (Tenant, error)
-	updateFn         func(context.Context, UpdateTenantArgs) (Tenant, error)
-	listFn           func(context.Context, ListTenantsArgs) ([]Tenant, string, error)
-	createTxFn       func(context.Context, pgx.Tx, CreateTenantArgs) error
-	updateTxFn       func(context.Context, pgx.Tx, UpdateTenantArgs) (Tenant, error)
-	softDeleteTxFn   func(context.Context, pgx.Tx, uuid.UUID, int64) error
-	purgeFn          func(context.Context, PurgeTenantArgs) error
-	previewPurgeFn   func(context.Context, uuid.UUID, int) (PurgePreview, error)
-	listRetiredFn    func(ctx context.Context, afterSlug string, pageSize int32) ([]RetiredSlug, string, error)
-	releaseSlugFn    func(ctx context.Context, slug string) (uuid.UUID, error)
-	restoreTxFn      func(context.Context, pgx.Tx, uuid.UUID) (Tenant, error)
-	startMigrationFn func(context.Context, StartStorageMigrationArgs) (StorageMigration, error)
-	getMigrationFn   func(context.Context, uuid.UUID) (StorageMigration, error)
-	sourceBucketFn   func(context.Context, uuid.UUID) (string, string, error)
+	createFn          func(context.Context, CreateTenantArgs) (Tenant, error)
+	getDefBindingFn   func(context.Context, uuid.UUID) (DefaultBinding, error)
+	setDefBindingFn   func(ctx context.Context, tenantID uuid.UUID, bucket, setBy string) (DefaultBinding, error)
+	clearDefBindFn    func(context.Context, uuid.UUID) error
+	getFn             func(context.Context, uuid.UUID) (Tenant, error)
+	getBySlugFn       func(context.Context, string) (Tenant, error)
+	updateFn          func(context.Context, UpdateTenantArgs) (Tenant, error)
+	listFn            func(context.Context, ListTenantsArgs) ([]Tenant, string, error)
+	createTxFn        func(context.Context, pgx.Tx, CreateTenantArgs) error
+	updateTxFn        func(context.Context, pgx.Tx, UpdateTenantArgs) (Tenant, error)
+	softDeleteTxFn    func(context.Context, pgx.Tx, uuid.UUID, int64) error
+	purgeFn           func(context.Context, PurgeTenantArgs) error
+	previewPurgeFn    func(context.Context, uuid.UUID, int) (PurgePreview, error)
+	listRetiredFn     func(ctx context.Context, afterSlug string, pageSize int32) ([]RetiredSlug, string, error)
+	releaseSlugFn     func(ctx context.Context, slug string) (uuid.UUID, error)
+	restoreTxFn       func(context.Context, pgx.Tx, uuid.UUID) (Tenant, error)
+	startMigrationFn  func(context.Context, StartStorageMigrationArgs) (StorageMigration, error)
+	getMigrationFn    func(context.Context, uuid.UUID) (StorageMigration, error)
+	cancelMigrationFn func(ctx context.Context, id uuid.UUID, expectedVersion int64, reason string) (StorageMigration, error)
+	sourceBucketFn    func(context.Context, uuid.UUID) (string, string, error)
 
 	// recorded args for forwarding assertions
 	lastCreateTx   CreateTenantArgs
@@ -229,6 +230,13 @@ func (f *fakeRepo) GetStorageMigration(ctx context.Context, id uuid.UUID) (Stora
 	}
 	// No migration yet: MigrateTenantStorageLayout reads this to tell a first
 	// start from a retry.
+	return StorageMigration{}, ErrStorageMigrationNotFound
+}
+
+func (f *fakeRepo) CancelStorageMigration(ctx context.Context, id uuid.UUID, expectedVersion int64, reason string) (StorageMigration, error) {
+	if f.cancelMigrationFn != nil {
+		return f.cancelMigrationFn(ctx, id, expectedVersion, reason)
+	}
 	return StorageMigration{}, ErrStorageMigrationNotFound
 }
 

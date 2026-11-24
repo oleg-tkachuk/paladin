@@ -92,6 +92,16 @@ service TenantService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
+  // CancelTenantStorageMigration cancels a tenant's storage migration
+  // (ADR-0051) at the resource_version read. A `provisioning` migration fails
+  // at once; a `moving` or `completed` one rolls back: the worker moves every
+  // object back into the source and points the tenant's uploads there, and
+  // the migration ends `failed`, retryable with MigrateTenantStorageLayout.
+  // The error records who cancelled it. FAILED_PRECONDITION for a migration
+  // `rolling_back`, `failed` or `cleaned`; ABORTED for a stale
+  // resource_version; NOT_FOUND when none was ever started.
+  rpc CancelTenantStorageMigration(CancelTenantStorageMigrationRequest) returns (StorageMigrationStatus);
+
   // GetTenantDefaultBinding returns the tenant's default (backend, bucket)
   // route used to complete the bare collection name shape (ADR-0014 Phase 3).
   // NOT_FOUND when the tenant has no binding set.
@@ -309,6 +319,15 @@ message GetTenantStorageMigrationRequest {
   string name = 1 [(buf.validate.field).string.min_len = 1];
 }
 
+message CancelTenantStorageMigrationRequest {
+  // name — "tenants/{tenant_id_or_slug}".
+  string name = 1 [(buf.validate.field).string.min_len = 1];
+  // OCC, required: the StorageMigrationStatus.resource_version the cancel was
+  // decided on. A migration the worker moved to another state since is
+  // ABORTED; one that only made progress is not.
+  string resource_version = 2 [(buf.validate.field).string.min_len = 1];
+}
+
 // StorageMigrationStatus mirrors a tenant_storage_migrations row (ADR-0015
 // Phase 3): the copy job's state machine + progress.
 message StorageMigrationStatus {
@@ -329,6 +348,9 @@ message StorageMigrationStatus {
   reserved 7, 8;
   // error — why the migration is rolling back or failed; empty otherwise.
   string error = 9;
+  // resource_version — changes with every change of state and with a retry,
+  // never with a pass's progress. CancelTenantStorageMigration takes it.
+  string resource_version = 10 [(google.api.field_behavior) = OUTPUT_ONLY];
 }
 
 // TenantDefaultBinding is a tenant's default (backend, bucket) route for the

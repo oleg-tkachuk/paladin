@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
 
@@ -28,7 +29,60 @@ func storageMigrationToDomain(m sqlc.TenantStorageMigration,
 		ObjectsTotal:      m.ObjectsTotal,
 		ObjectsCopied:     m.ObjectsCopied,
 		Error:             derefStr(m.Error),
+		ResourceVersion:   m.ResourceVersion,
 	}
+}
+
+// CancelStorageMigration cancels the tenant's migration under its row's lock
+// (see tenanth.Repository): the transition is decided on the state read
+// there, and counts a failure — attempts grows — so a worker step read before
+// it matches nothing. A worker's move holds the row shared, so the cancel
+// waits for the moves in flight; a cleanup's delete too.
+func (r *TenantRepo) CancelStorageMigration(ctx context.Context, tenantID uuid.UUID, expectedVersion int64, reason string) (tenanth.StorageMigration, error) {
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return tenanth.StorageMigration{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	qtx := r.q.WithTx(tx)
+	tenant := pgUUID(tenantID)
+
+	m, err := qtx.LockLatestStorageMigration(ctx, tenant)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return tenanth.StorageMigration{}, tenanth.ErrStorageMigrationNotFound
+	} else if err != nil {
+		return tenanth.StorageMigration{}, fmt.Errorf("lock storage migration: %w", err)
+	}
+	if m.ResourceVersion != expectedVersion {
+		return tenanth.StorageMigration{}, fmt.Errorf("%w: storage migration is at %d, not %d",
+			tenanth.ErrVersionMismatch, m.ResourceVersion, expectedVersion)
+	}
+	to, ok := migstate.CancelTo(m.State)
+	if !ok {
+		return tenanth.StorageMigration{}, fmt.Errorf("%w (state %q)", tenanth.ErrStorageMigrationNotCancellable, m.State)
+	}
+	var n int64
+	if to == migstate.Failed {
+		n, err = qtx.FailStorageMigration(ctx, to, &reason, tenant, m.State, m.Attempts)
+	} else {
+		n, err = qtx.StartStorageMigrationRollback(ctx, to, &reason, tenant, m.State, m.Attempts)
+	}
+	if err != nil {
+		return tenanth.StorageMigration{}, fmt.Errorf("cancel storage migration: %w", err)
+	}
+	if n == 0 {
+		// The row is locked as read: nothing else can have moved it.
+		return tenanth.StorageMigration{}, fmt.Errorf("cancel storage migration: no row moved from %q", m.State)
+	}
+	got, err := qtx.GetStorageMigration(ctx, tenant)
+	if err != nil {
+		return tenanth.StorageMigration{}, fmt.Errorf("read the cancelled migration: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return tenanth.StorageMigration{}, err
+	}
+	return storageMigrationToDomain(got.TenantStorageMigration, got.SourceBackendName, got.SourceBucketName,
+		got.TargetBackendName, got.TargetBucketName), nil
 }
 
 // StartStorageMigration provisions the tenant's dedicated bucket (pending,

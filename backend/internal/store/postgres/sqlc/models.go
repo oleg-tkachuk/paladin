@@ -845,6 +845,7 @@ type TenantStorageMigration struct {
 	FailedPasses            int32              `json:"failed_passes"`
 	SettleAfter             pgtype.Timestamptz `json:"settle_after"`
 	SettledAt               pgtype.Timestamptz `json:"settled_at"`
+	ResourceVersion         int64              `json:"resource_version"`
 }
 
 type User struct {

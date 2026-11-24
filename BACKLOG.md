@@ -550,20 +550,6 @@ the same commit. Treat this file like a runtime invariant.
   regenerates between the scan and the discard and finds the row kept.
 - **Blockers:** none.
 
-### An operator cannot cancel a storage migration
-
-- **Status:** Deferred.
-- **Reason:** a migration rolls back on its own only when its target leaves
-  `ready`, the schema refuses a collection, or moves keep failing their
-  verification (ADR-0051). An operator who wants a tenant back on its
-  source while the migration is healthy has no RPC for it.
-- **Definition of Done:** an admin RPC moves a `moving` or `completed`
-  migration to `rolling_back`, records who asked, and the worker moves the
-  objects back; a test cancels a migration midway and finds the tenant
-  `shared` with every object in the source.
-- **Blockers:** whether cancelling a `completed` migration within its
-  retention is wanted.
-
 ## API error messages
 
 ### The handler fuzz targets do not reach UserService
