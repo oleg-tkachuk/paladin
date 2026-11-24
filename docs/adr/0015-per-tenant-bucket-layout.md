@@ -407,6 +407,128 @@ Bytes a debt finds a new object's under the same key (`Superseded`) are left;
 the migration's own copy of that object overwrites them, or cleanup, which
 walks the new row, removes the source's.
 
+## Addendum (2026-11-24): a promote is fenced against the rebind
+
+Every writer resolves the collection's bucket, puts or finds the bytes there,
+and then promotes the row — on another transaction. A rebind committed in
+between made the row readable from the target while its bytes were only in
+the source, and the cleanup then deleted the only copy. Ordering by
+timestamps cannot close that: `bytes_written_at` was the promote
+transaction's start, so a promote that committed late landed behind any
+cursor or check that had already passed its time.
+
+The promote is fenced instead (`statemachine.checkPlacement`):
+
+- **It holds the migration row.** While the tenant's migration is in a state
+  whose step moves a binding or stamps the copy's start
+  (`migstate.FencingPromotes`: provisioning, copying, rebinding, verifying,
+  rolling back), the promote takes the row `FOR SHARE` for its transaction.
+  Promotes do not wait on each other; a step that takes the row `FOR UPDATE`
+  — the copy's start, the rebind, the rebind back — waits for every promote
+  in flight, and every later promote waits for it. Under `READ COMMITTED`
+  each statement after the lock sees every promote that committed before.
+  Outside those states nothing is locked.
+- **It checks the binding.** The caller names the bucket it confirmed the
+  bytes in (`statemachine.Placement`); under the fence the promote reads the
+  collection's binding and refuses with `ErrBindingMoved` when it differs.
+  `CompleteObject` and `CopyObject` answer `UNAVAILABLE` (a copy's bytes,
+  under its own new key, are deleted and its row discarded); a multipart
+  completion, the reconciler and a storage event leave the row `PENDING`,
+  anchored to the bucket its URL names, for the next attempt to move.
+- **It stamps the clock after the fence.** `bytes_written_at` is
+  `clock_timestamp()` at the promote's `UPDATE`, after the lock: a step that
+  held the fence first sees every later promote stamped after its own time.
+
+Lock order is the object's row, then the migration's — the order the copy
+and the purge already take — and the rebind takes no object row, so the
+fence adds no cycle. The cost falls on promotes during a migration alone: one
+more row lock, shared.
+
+## Addendum (2026-11-24): a multipart completion follows its collection; cleanup checks the target
+
+A multipart session assembles its object where its parts are, the bucket it
+was anchored to at initiate. After a rebind that is the source:
+`CompleteMultipartUpload` promoted the object there, the promote cleared the
+anchor, and the cleanup — which waited only while the row was `PENDING` —
+deleted the only copy.
+
+- **The completion moves the object**, as `CompleteObject` moves a
+  single-part upload (`multiparth.settle`): it looks the collection's binding
+  up through the bucket gate as a write of bytes, copies the assembled object
+  there under the same key, checks the copy's size against the assembled one
+  and promotes it there, under the ETag the binding reports. The anchored
+  copy is left for the cleanup. A promote the fence refuses — a rebind in
+  between — follows the collection again, at most twice: the storage upload
+  is consumed, so a client's retry could not assemble the parts again. A
+  crash at any step leaves the row `PENDING` and anchored; the cleanup waits
+  for it, and the reconciler moves and promotes it once the session's
+  deadline passes. An object that breaks its registration is deleted from
+  both buckets before its row is discarded.
+- **The cleanup deletes a source copy only once the target holds it.** For
+  each object it HEADs the target: at the recorded size, the source copy
+  goes. Missing or at another size while the source holds it at the
+  recorded size, the source copy is carried — copied to the target, checked,
+  then deleted. Held as recorded by neither, it is kept and logged at Error,
+  and the migration stays `completed` until a later pass can delete it. An
+  object whose collection is not bound to the target keeps its source copy:
+  it may be read from there. So the cleanup never deletes the only copy of a
+  live object, whatever wrote it after the copy passed.
+
+## Addendum (2026-11-24): writes behind the copy's cursor are caught up before the rebind
+
+The copy walks the tenant's objects once, in `(collection, path)` order,
+while the tenant keeps writing to the source. A write the cursor has passed
+reached the source only: a new object is missing from the target, and the
+verify rolled the migration back (for a busy tenant, every attempt); an
+overwrite is stale there, and one of the same size passed the verify by size,
+so the tenant then read the old bytes.
+
+Two designs were open: route every write during the migration to both
+buckets, or copy what was written behind the cursor again before the rebind.
+Writing both buckets doubles every upload's bytes and every failure mode —
+an upload half-written to one bucket, presigned URLs that can name only one
+— for the length of the copy, and a write still needs a way to tell which
+bucket's bytes are newer. The catch-up is chosen; it reuses the copy's hold
+and the promote's fence, and moves only what changed.
+
+- **The copy's start is fenced.** `copy_started_at` (migration 116) is read
+  with `clock_timestamp()` under the migration row's lock, which every
+  promote holds while the migration provisions. So every promote that took
+  the fence committed before the copy listed anything, and is copied after
+  its write; every later write is stamped after it. A promote that ran its
+  fence before the migration's row existed holds nothing, and can commit
+  across the copy's start stamped before it (BACKLOG).
+- **The catch-up has no cursor.** It lists the live and trashed private
+  objects whose `bytes_written_at` is at or after the copy's start and whose
+  latest write it has not copied (`storage_migration_caught_up`, one row per
+  object, cleared when an attempt starts its copy and when it completes). It
+  copies each under its row's hold (`FOR KEY SHARE`, which a promote's
+  `FOR UPDATE` waits on), so the write it records is the one whose bytes it
+  copied, or an older one that leaves the object listed again; with the
+  write it records the ETag the target reported for the copy. A set with no
+  cursor cannot be outrun by a late commit: a promote stamped before a pass
+  and committed after it is listed by the next. One batch a tick, in the
+  `rebinding` state, logged with its counts.
+- **The rebind refuses while anything is behind.** Under the migration row's
+  lock — so every promote in flight has committed and every later one waits
+  — the rebind counts the objects the catch-up would still list, and any is
+  `ErrCopyBehind`: nothing changes, and the next tick copies them. A tenant
+  that writes faster than the catch-up copies stays in `rebinding`; it is
+  never rebound behind its writes.
+- **The verify compares content and write time, not size alone.** For an
+  object written between the copy's start and the rebind it requires the
+  catch-up to have recorded that very write, and the target's ETag to be the
+  one the target reported for that copy. ETags are compared with ETags the
+  same bucket reported for the same copy, never across buckets: a
+  server-side copy, a stream-through and an encrypted store each make their
+  own. An object written before the copy started was copied after its
+  write; one written at or after the rebind went to the target, its promote
+  fenced against the rebind. A failure rolls back, as before.
+
+Not covered, and recorded in BACKLOG: an overwrite reported only by a storage
+event that arrives after the rebind is dropped before it reaches the row; the
+rollback's own copy back still walks a cursor.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

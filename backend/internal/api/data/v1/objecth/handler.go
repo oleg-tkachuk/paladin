@@ -584,8 +584,8 @@ func (h *Handler) SetVersionHandler(v *VersionHandler) { h.versions = v }
 // because the transactional guarantee (ADR-0003) is the point of these two
 // methods: the caller's outbox writes must ride the transition's own tx.
 type StateMachine interface {
-	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (bool, error)
-	PromoteToAvailableInTx(ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
+	PromoteToAvailable(ctx context.Context, objectID uuid.UUID, placed *statemachine.Placement, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source) (bool, error)
+	PromoteToAvailableInTx(ctx context.Context, objectID uuid.UUID, placed *statemachine.Placement, etag string, sizeBytes int64, checksum, sequencer string, source statemachine.Source, onPromoted func(ctx context.Context, tx pgx.Tx) error) (bool, error)
 	SoftDeleteInTx(ctx context.Context, objectID uuid.UUID, resourceVersion int64, onDeleted func(ctx context.Context, tx pgx.Tx) error) error
 	RestoreInTx(ctx context.Context, objectID uuid.UUID, onRestored func(ctx context.Context, tx pgx.Tx) error) error
 	DiscardFailed(ctx context.Context, objectID uuid.UUID, reason statemachine.FailureReason) error
@@ -1145,11 +1145,13 @@ func checkUploadClaims(in CompleteObjectInput, obj Object, storedETag string) er
 // the promote back so the client's at-least-once retry re-promotes and
 // re-emits — consistent, never half-done. The payload is the object plus
 // extra, built from what the caller already knows, so no in-tx re-read is
-// needed. Bytes that break the object's registration are discarded. It
-// reports whether the promotion was this call's.
+// needed. Bytes that break the object's registration are discarded, and a
+// promote refused because the collection moved since loc was resolved is
+// answered by bindingMoved. It reports whether the promotion was this call's.
 func (h *Handler) promoteUploaded(ctx context.Context, op string, objectID uuid.UUID, loc Location, b storedBytes, extra map[string]any) (bool, error) {
 	okPrefix := h.canonicalObjectPrefix(ctx, op, loc.TenantID, loc.Collection)
-	changed, err := h.sm.PromoteToAvailableInTx(ctx, objectID, b.etag, b.size, b.checksum, b.sequencer, statemachine.SourceRPC,
+	placed := &statemachine.Placement{BackendID: loc.BackendID, Bucket: loc.Bucket}
+	changed, err := h.sm.PromoteToAvailableInTx(ctx, objectID, placed, b.etag, b.size, b.checksum, b.sequencer, statemachine.SourceRPC,
 		func(ctx context.Context, tx pgx.Tx) error {
 			return h.dispatchEventTx(ctx, tx, loc.TenantID, eventtype.ObjectUploaded,
 				objectResourceNameFrom(okPrefix, loc.TenantID, loc.Collection, loc.Key),
@@ -1158,10 +1160,44 @@ func (h *Handler) promoteUploaded(ctx context.Context, op string, objectID uuid.
 	if errors.Is(err, statemachine.ErrContentMismatch) {
 		return false, h.discardMismatched(ctx, objectID, loc, err)
 	}
+	if errors.Is(err, statemachine.ErrBindingMoved) {
+		return false, h.bindingMoved(ctx, op, objectID, loc, err)
+	}
 	if err != nil {
 		return false, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
 	}
 	return changed, nil
+}
+
+// bindingMoved answers a promote refused because a storage migration rebound
+// the collection after loc was resolved: the bytes are in a bucket the object
+// would not be read from. The answer is UNAVAILABLE, and a retry resolves the
+// new binding.
+//
+// A completion's row stays PENDING, anchored to the bucket its URL names, so
+// the retry, or the reconciler, moves its bytes into the new binding. A
+// copy's row anchors nothing, and its bytes are under the new object's own
+// key, which no other row holds: they are deleted and the row discarded, as a
+// failed copy's is, and the retry copies again.
+func (h *Handler) bindingMoved(ctx context.Context, op string, objectID uuid.UUID, loc Location, cause error) error {
+	log := logger.FromContext(ctx).With(zap.String(LogFieldObjectID, objectID.String()),
+		zap.String(LogFieldTenantID, loc.TenantID.String()), zap.String(LogFieldCollection, loc.Collection),
+		zap.String(LogFieldFromBucket, loc.Bucket), zap.Error(cause))
+	refused := connect.NewError(connect.CodeUnavailable, msgBindingMoved).WithCause(cause)
+	if op != opCopy {
+		log.Warn("promote refused: the collection was rebound since its bucket was resolved; the object stays pending")
+		return refused
+	}
+	log.Warn("promote refused: the collection was rebound since the copy's destination was resolved; discarding the copy")
+	if err := h.storage.DeleteObject(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key); err != nil {
+		log.Error("deleting the copy from the bucket the collection left failed", zap.NamedError("delete", err))
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; deleting the copy failed: %w", cause, err))
+	}
+	if err := h.sm.DiscardFailed(ctx, objectID, statemachine.FailedStorageCopy); err != nil {
+		log.Error("discarding the copy's object failed", zap.NamedError("discard", err))
+		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; discarding the object failed: %w", cause, err))
+	}
+	return refused
 }
 
 // promotedObject reads back an object just promoted. Version history, quota
@@ -2639,7 +2675,10 @@ func headFailure(err error) error {
 // the cause, which the RPC log line carries.
 const (
 	msgUploadUnchecked = "the uploaded bytes could not be checked; retry"
-	msgBytesUnchecked  = "the object's bytes could not be checked; retry"
+	// msgBindingMoved: a storage migration moved the collection to another
+	// bucket while the object was written.
+	msgBindingMoved   = "the collection moved to another bucket while the object was written; retry"
+	msgBytesUnchecked = "the object's bytes could not be checked; retry"
 )
 
 // assertBytesPresent HEADs a trashed object before it is restored. Its bytes

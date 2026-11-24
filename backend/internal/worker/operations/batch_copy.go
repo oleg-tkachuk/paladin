@@ -282,18 +282,39 @@ func (e *BatchCopyExecutor) fill(ctx context.Context, job copyJob, dstID uuid.UU
 		return fmt.Errorf("storage copy: %w", err)
 	}
 
-	if _, err := e.Transitions.PromoteToAvailable(
+	_, err := e.Transitions.PromoteToAvailable(
 		ctx,
 		dstID,
+		&statemachine.Placement{BackendID: job.to.BackendID, Bucket: job.to.Bucket},
 		job.src.ETag,
 		job.src.SizeBytes,
 		job.src.Checksum,
 		"", // sequencer: copy doesn't carry one
 		statemachine.SourceRPC,
-	); err != nil {
+	)
+	if errors.Is(err, statemachine.ErrBindingMoved) {
+		// A storage migration rebound the destination collection since the
+		// copy resolved it: the bytes are under the new object's own key in
+		// a bucket it is no longer read from. Delete them and discard the
+		// row, as a failed copy's; the item fails, and a retry copies again.
+		return e.bindingMoved(ctx, job, dstID, err)
+	}
+	if err != nil {
 		return fmt.Errorf("promote dst: %w", err)
 	}
 	return nil
+}
+
+// bindingMoved compensates a destination whose promote was refused because
+// its collection moved to another bucket after the copy wrote it.
+func (e *BatchCopyExecutor) bindingMoved(ctx context.Context, job copyJob, dstID uuid.UUID, cause error) error {
+	if err := e.Storage.DeleteObject(ctx, job.to.BackendID, job.to.Bucket, job.to.TenantID, job.to.Collection, job.to.Key); err != nil {
+		return fmt.Errorf("promote dst: %w (deleting the copy also failed: %w)", cause, err)
+	}
+	if err := e.Transitions.DiscardFailed(ctx, dstID, statemachine.FailedStorageCopy); err != nil {
+		return fmt.Errorf("promote dst: %w (compensation also failed: %w)", cause, err)
+	}
+	return fmt.Errorf("promote dst: %w", cause)
 }
 
 // occupiedDestination explains a destination key that already has a row.

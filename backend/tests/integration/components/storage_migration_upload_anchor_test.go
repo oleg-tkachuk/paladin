@@ -130,7 +130,7 @@ func (f publicMigrationFixture) runWorker(t *testing.T, ctx context.Context, sto
 	t.Helper()
 	w := &worker.StorageMigrationWorker{
 		Repo:   adapters.NewStorageMigrationRepo(sqlc.New(f.pool), f.pool),
-		Copier: f.store, Deleter: f.store, Header: f.store,
+		Copier: f.store, Deleter: f.store, Header: f.store, Identity: f.store,
 		Interval: 10 * time.Millisecond,
 		Now:      func() time.Time { return time.Now().Add(time.Hour) },
 	}

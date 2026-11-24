@@ -30,11 +30,11 @@ type closingProbe struct {
 	closeOnDelete bool
 }
 
-func (p closingProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, bool, error) {
+func (p closingProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, statemachine.Placement, bool, error) {
 	if !p.closeOnDelete {
 		p.pool.Close()
 	}
-	return "etag", p.size, "", "", p.found, nil
+	return "etag", p.size, "", "", statemachine.Placement{}, p.found, nil
 }
 
 func (p closingProbe) DeleteByObjectID(context.Context, uuid.UUID) error {

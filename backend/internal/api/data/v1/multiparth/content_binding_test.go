@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/checksum"
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
@@ -24,7 +25,7 @@ type fakeSM struct {
 	failedReason statemachine.FailureReason
 }
 
-func (f *fakeSM) PromoteToAvailable(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source) (bool, error) {
+func (f *fakeSM) PromoteToAvailable(context.Context, uuid.UUID, *statemachine.Placement, string, int64, string, string, statemachine.Source) (bool, error) {
 	return f.promoteErr == nil, f.promoteErr
 }
 
@@ -33,8 +34,15 @@ func (f *fakeSM) DiscardFailed(_ context.Context, id uuid.UUID, reason statemach
 	return nil
 }
 
+// sessionRepo serves a session whose collection is still bound to the bucket
+// it was anchored to.
 func sessionRepo(tid uuid.UUID) *fakeRepo {
-	return &fakeRepo{getSessionFn: func(context.Context, string) (Session, error) { return sessionForTenant(tid), nil }}
+	return &fakeRepo{
+		getSessionFn: func(context.Context, string) (Session, error) { return sessionForTenant(tid), nil },
+		lookupBucketFn: func(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
+			return testSessionBackend, testSessionBucket, nil
+		},
+	}
 }
 
 // A part URL was signed for its part number alone, so it accepted a body of

@@ -121,6 +121,17 @@ type MultipartRouter struct{ reg *BackendRegistry }
 
 func NewMultipartRouter(reg *BackendRegistry) *MultipartRouter { return &MultipartRouter{reg: reg} }
 
+// CopyObject moves an assembled object between buckets as ObjectRouter
+// does: server-side on one backend, streamed through across two.
+func (r *MultipartRouter) CopyObject(ctx context.Context, src, dst objecth.Location) error {
+	return NewObjectRouter(r.reg).CopyObject(ctx, src, dst)
+}
+
+// Head reads an object as ObjectRouter does.
+func (r *MultipartRouter) Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (string, int64, string, string, error) {
+	return NewObjectRouter(r.reg).Head(ctx, backendID, bucket, tenantID, collection, key, checksumAlgo)
+}
+
 func (r *MultipartRouter) InitiateMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, contentType, cacheControl, checksumAlgo string) (string, error) {
 	c, err := r.reg.For(ctx, backendID)
 	if err != nil {

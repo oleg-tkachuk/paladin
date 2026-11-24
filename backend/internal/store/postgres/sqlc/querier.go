@@ -249,6 +249,9 @@ type Querier interface {
 	// In 'provisioning' it only takes the row's lock: the count is taken under
 	// it (LockStorageMigrationForCount), after this purge is visible.
 	ForgetPurgedFromStorageMigrationCount(ctx context.Context, objectState string, tenantID pgtype.UUID, collectionName string, path string) error
+	// Drops what an attempt's catch-up recorded (migration 116): at the start of
+	// an attempt's copy, which copies everything again, and once it completes.
+	ForgetStorageMigrationCaughtUp(ctx context.Context, tenantID pgtype.UUID) error
 	GetAPIToken(ctx context.Context, id pgtype.UUID) (GetAPITokenRow, error)
 	GetAuditEntry(ctx context.Context, id pgtype.UUID) (GetAuditEntryRow, error)
 	GetBucket(ctx context.Context, name string, name_2 string) (GetBucketRow, error)
@@ -699,6 +702,11 @@ type Querier interface {
 	// The objects MigrationListTenantObjects walks: live and trashed, public
 	// collections' excluded.
 	MigrationCountTenantObjects(ctx context.Context, tenantID pgtype.UUID) (int64, error)
+	// How many objects MigrationListUncaughtUp would still return. The rebind
+	// counts them under the migration row's lock, which every promote holds
+	// while it runs, so no write commits unseen between the count and the
+	// rebind: any is the rebind refused.
+	MigrationCountUncaughtUp(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// The tenant's uploads whose URL names the bucket (migration 113) and that
 	// are still PENDING: their bytes may yet land there, and CompleteObject or
 	// the reconciler move them from it. Cleanup of the source waits for none.
@@ -709,6 +717,11 @@ type Querier interface {
 	// records a debt for the copy. No row: the object was purged since it was
 	// listed, and there is nothing to copy.
 	MigrationHoldObject(ctx context.Context, tenantID pgtype.UUID, collectionName string, path string) ([]pgtype.UUID, error)
+	// Holds one object's row against a delete and a promote (FOR KEY SHARE, which
+	// a promote's FOR UPDATE waits on) while the catch-up copies it, and reads
+	// the write whose bytes the copy takes. No row: purged, or no longer live or
+	// trashed; nothing to copy.
+	MigrationHoldObjectForCatchUp(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID) (pgtype.Timestamptz, error)
 	// The objects the rollback copies back: live or trashed (a trashed object's
 	// bytes are what a later RestoreObject reads), in a private collection
 	// (public ones never moved, ADR-0027), and written at or after the cursor —
@@ -739,7 +752,21 @@ type Querier interface {
 	// which the row records (upload_bucket_id): their completion moves the bytes.
 	// Versions and delete markers are rows only, all under the object's one key,
 	// so they need nothing copied.
+	//
+	// bound_* is the bucket the collection is bound to now: cleanup deletes a
+	// source copy only of an object read from the target. written_at and
+	// caught_up_* are when its bytes were last written and what the catch-up
+	// copied of them (migration 116), for the verify.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
+	// The objects the catch-up copies before the rebind: live or trashed, in a
+	// private collection, whose bytes were written since the copy started and
+	// whose latest write the catch-up has not copied (migration 116). The copy
+	// listed each object once, behind a moving cursor; a write after its start
+	// may have reached only the source. Only while the migration is as the
+	// worker read it, so a stale worker lists nothing. The set shrinks as the
+	// catch-up copies, and grows by what is written meanwhile, in any order: it
+	// has no cursor for a late commit to fall behind.
+	MigrationListUncaughtUp(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32, limitCount int32) ([]MigrationListUncaughtUpRow, error)
 	// Whether any object MigrationListObjectsWrittenSince would still return past
 	// the cursor. The rebind back asks it under its lock: an object written since
 	// the worker's last batch is still only in the dedicated bucket, and
@@ -837,6 +864,10 @@ type Querier interface {
 	// in place whichever promotes the object first: this upload's completion, or
 	// the storage event, which carries no checksum.
 	RecordCompositeChecksum(ctx context.Context, checksum *string, partSizeBytes *int64, objectID pgtype.UUID) (int64, error)
+	// Records the catch-up's copy of an object: the write it took and the ETag
+	// the target reported for it. Only while the migration is as the worker read
+	// it: a stale worker's copy is not taken for the current attempt's.
+	RecordStorageMigrationCaughtUp(ctx context.Context, tenantID pgtype.UUID, objectID pgtype.UUID, writtenAt pgtype.Timestamptz, etag *string, fromState string, attempts int32) (int64, error)
 	// Undoes a claim whose handling failed, so the broker's redelivery is
 	// handled rather than skipped as a duplicate.
 	ReleaseIngestedEvent(ctx context.Context, source string, eventID string) error
@@ -1013,7 +1044,11 @@ type Querier interface {
 	// and a retry keeps it, so a worker that read an earlier attempt and resumed
 	// after it failed and was retried matches nothing (ABA on state alone).
 	SetStorageMigrationState(ctx context.Context, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
-	// Records the object count and moves provisioning -> copying.
+	// Records the object count, the copy's start and moves provisioning ->
+	// copying. Run under the row's lock (LockStorageMigrationForCount), which
+	// every promote holds while the migration provisions: the clock read here is
+	// later than every promote that committed before, and earlier than the
+	// stamp of every promote after (statemachine.checkPlacement).
 	SetStorageMigrationTotal(ctx context.Context, objectsTotal int64, toState string, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Tenant default-binding queries.
 	//

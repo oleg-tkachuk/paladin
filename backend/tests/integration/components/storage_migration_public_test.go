@@ -27,6 +27,10 @@ type fakeObjectStore struct {
 	mu      sync.Mutex
 	objects map[string]int64 // "bucket|tenant/collection/key" -> size
 	touched []string         // every location a copy or delete named
+	// etags is the content each location holds: every put writes new
+	// content, a copy carries the source's.
+	etags map[string]string
+	puts  int
 }
 
 func storeKey(l worker.CopyLocation) string {
@@ -37,6 +41,22 @@ func (s *fakeObjectStore) put(l worker.CopyLocation, size int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.objects[storeKey(l)] = size
+	if s.etags == nil {
+		s.etags = map[string]string{}
+	}
+	s.puts++
+	s.etags[storeKey(l)] = fmt.Sprintf("content-%d", s.puts)
+}
+
+// ObjectETag is worker.ObjectIdentity: the content l holds.
+func (s *fakeObjectStore) ObjectETag(_ context.Context, l worker.CopyLocation) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e, ok := s.etags[storeKey(l)]
+	if !ok {
+		return "", fmt.Errorf("NotFound: %s: %w", storeKey(l), worker.ErrObjectMissing)
+	}
+	return e, nil
 }
 
 func (s *fakeObjectStore) has(l worker.CopyLocation) bool {
@@ -55,6 +75,10 @@ func (s *fakeObjectStore) CopyObject(_ context.Context, src, dst worker.CopyLoca
 		return fmt.Errorf("NoSuchKey: %s", storeKey(src))
 	}
 	s.objects[storeKey(dst)] = size
+	if s.etags == nil {
+		s.etags = map[string]string{}
+	}
+	s.etags[storeKey(dst)] = s.etags[storeKey(src)]
 	return nil
 }
 
@@ -73,6 +97,7 @@ func (s *fakeObjectStore) DeleteObject(_ context.Context, l worker.CopyLocation)
 	defer s.mu.Unlock()
 	s.touched = append(s.touched, l.Collection)
 	delete(s.objects, storeKey(l))
+	delete(s.etags, storeKey(l))
 	return nil
 }
 
@@ -179,6 +204,7 @@ func (f publicMigrationFixture) driveWith(t *testing.T, ctx context.Context,
 		Copier:   copier,
 		Deleter:  f.store,
 		Header:   header,
+		Identity: f.store,
 		Interval: 10 * time.Millisecond,
 		// Past the retention window, so a completed migration cleans up too.
 		Now: func() time.Time { return time.Now().Add(time.Hour) },

@@ -40,6 +40,8 @@ type fakeStateMachine struct {
 	promotedETag string
 	promotedSize int64
 	promoteCalls int
+	// promotedIn is the placement the last promote named.
+	promotedIn *statemachine.Placement
 
 	markedFailed []uuid.UUID
 	markFailedBy []statemachine.FailureReason
@@ -47,12 +49,12 @@ type fakeStateMachine struct {
 }
 
 func (f *fakeStateMachine) PromoteToAvailableInTx(
-	ctx context.Context, objectID uuid.UUID, etag string, sizeBytes int64,
+	ctx context.Context, objectID uuid.UUID, placed *statemachine.Placement, etag string, sizeBytes int64,
 	_, _ string, _ statemachine.Source,
 	onPromoted func(context.Context, pgx.Tx) error,
 ) (bool, error) {
 	f.promoteCalls++
-	f.promotedID, f.promotedETag, f.promotedSize = objectID, etag, sizeBytes
+	f.promotedID, f.promotedETag, f.promotedSize, f.promotedIn = objectID, etag, sizeBytes, placed
 	if f.promoteErr != nil {
 		return false, f.promoteErr
 	}
@@ -72,7 +74,7 @@ func (f *fakeStateMachine) DiscardFailed(_ context.Context, objectID uuid.UUID, 
 	return f.markFailErr
 }
 
-func (*fakeStateMachine) PromoteToAvailable(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source) (bool, error) {
+func (*fakeStateMachine) PromoteToAvailable(context.Context, uuid.UUID, *statemachine.Placement, string, int64, string, string, statemachine.Source) (bool, error) {
 	panic("not used")
 }
 func (*fakeStateMachine) SoftDeleteInTx(context.Context, uuid.UUID, int64, func(context.Context, pgx.Tx) error) error {

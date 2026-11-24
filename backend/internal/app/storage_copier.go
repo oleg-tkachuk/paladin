@@ -38,6 +38,17 @@ func (c storageCopier) HeadObject(ctx context.Context, loc worker.CopyLocation) 
 	return size, err
 }
 
+// ObjectETag returns one object's ETag — what the migration's catch-up
+// records of its copy in the target, and the verify compares against. A
+// confirmed miss is worker.ErrObjectMissing, as for HeadObject.
+func (c storageCopier) ObjectETag(ctx context.Context, loc worker.CopyLocation) (string, error) {
+	etag, _, _, _, err := c.s.Head(ctx, loc.BackendID, loc.Bucket, loc.TenantID, loc.Collection, loc.Key, "")
+	if errors.Is(err, objecth.ErrStoredObjectNotFound) {
+		return "", fmt.Errorf("%w: %w", worker.ErrObjectMissing, err)
+	}
+	return etag, err
+}
+
 func objLoc(l worker.CopyLocation) objecth.Location {
 	return objecth.Location{
 		BackendID:  l.BackendID,

@@ -517,39 +517,77 @@ the same commit. Treat this file like a runtime invariant.
 
 ## Data-plane handlers
 
-### Writes behind a storage migration's copy cursor are not copied before the rebind
+### A storage migration's rollback can miss a write that commits behind its cursor
 
 - **Status:** Deferred.
-- **Reason:** the copy walks object rows once, in (collection, path) order,
-  and the tenant keeps writing to the source meanwhile. An object uploaded,
-  or overwritten through a storage event, at a path the cursor has passed is
-  in the source only, or stale in the target. The verify HEADs the target
-  after the rebind: a missing object rolls the migration back, which is safe
-  but fails a busy tenant's migration over and over; an overwrite that kept
-  its size passes the verify, and the tenant then reads the old bytes.
-- **Definition of Done:** before the rebind, the copy catches up on every
-  object whose bytes were written (`bytes_written_at`) since the copy
-  started — a second pass from a recorded start time, repeated until it is
-  empty under the rebind's lock, as the rollback does with `rebound_at` — and
-  a test uploads behind the cursor and overwrites a copied object, and finds
-  both in the target after the rebind.
+- **Reason:** the rollback copies back, in `(written at, id)` order behind a
+  cursor, the objects written since the rebind. A promote stamps its write
+  before it commits, so one that commits after a batch has listed past its
+  stamp falls behind the cursor and is never copied back; the rebind back
+  checks for writes past the cursor only. The promote's fence
+  (`migstate.FencingPromotes` includes `rolling_back`) makes the rebind back
+  wait for promotes in flight, but not the batches before it. The catch-up
+  before the rebind has the same shape and records each write it copied
+  (`storage_migration_caught_up`) instead of a cursor.
+- **Definition of Done:** the rollback lists what it has not copied back
+  rather than what is past a cursor — a record of the write each copy took,
+  as the catch-up keeps — and the rebind back counts those under the
+  migration row's lock; a test holds a promote open across a rollback batch
+  and finds its object in the source after the rebind back.
 - **Blockers:** none.
 
-### A multipart upload completed after a storage migration's rebind is lost at cleanup
+### A promote in flight when a storage migration starts escapes its fence
 
 - **Status:** Deferred.
-- **Reason:** a session assembles its parts in the bucket it was anchored to
-  at initiate, and `CompleteMultipartUpload` promotes the object there. After
-  a rebind that is the source, while the object is read from the target; the
-  migration's cleanup, which waits only while the row is PENDING, then
-  deletes the source copy — the only one: the object is lost. Single-part
-  uploads move their bytes into the
-  collection's bucket on completion (`objecth.UploadOrigin`); the multipart
-  storage seam has no copy, and its HEAD-free complete path would need one.
-- **Definition of Done:** `CompleteMultipartUpload` copies an assembled
-  object whose session bucket is not the collection's binding into the
-  binding before promoting it, as `CompleteObject` does; a test initiates,
-  rebinds, completes and finds the object in the target after cleanup.
+- **Reason:** a promote holds the migration row only if the row is in a
+  fencing state when the promote reads it. One that read it before the
+  migration was created (or while it was `failed`) and commits after the
+  copy's start is stamped before `copy_started_at`, so the catch-up skips it,
+  and the copy may have listed its key before it committed. A new object is
+  then missing from the target and the verify rolls back; an overwrite of
+  the same size keeps the older bytes in the target. The window is one
+  promote transaction long.
+- **Definition of Done:** the copy's start waits for promotes that began
+  before the migration existed — `StartStorageMigration` takes a lock every
+  promote takes, or the copy starts only after a grace longer than a promote
+  can run — and a test holds a promote open across the start and finds its
+  bytes in the target.
+- **Blockers:** none.
+
+### An overwrite whose storage event arrives after a storage migration's rebind is dropped
+
+- **Status:** Deferred.
+- **Reason:** the catch-up copies every write a promote recorded. An
+  overwrite in an explicit-mode bucket is recorded only when its storage
+  event is: one written to the source while the migration copied, whose
+  event is delivered after the rebind, is skipped as from a bucket the
+  collection is not bound to, so neither the catch-up nor the row ever sees
+  it. If the copy took the key before the overwrite landed, the target keeps
+  the older bytes and the newer ones go with the source at cleanup.
+- **Definition of Done:** an event from a migration's source bucket for a
+  collection the migration rebound is not dropped: its bytes are copied into
+  the binding (as `CompleteObject` moves an upload) and promoted there, or the
+  migration does not clean its source while such events can still arrive;
+  a test delivers the event after the rebind and finds the newer bytes in
+  the target after cleanup.
+- **Blockers:** none.
+
+### A collection created while a storage migration rebinds stays on the source
+
+- **Status:** Deferred.
+- **Reason:** the rebind lists the tenant's private collections and points
+  the default binding at the target in one transaction, but a
+  `CreateCollection` that read the default binding before that transaction
+  committed inserts its collection bound to the source after it. The tenant
+  is then `dedicated` with one collection still in the shared bucket. The
+  cleanup keeps that collection's source copies (it deletes a source copy
+  only of an object bound to the target), so nothing is lost, but nothing
+  moves it either.
+- **Definition of Done:** a collection cannot be created bound to a
+  migration's source between the copy's start and the end of the migration —
+  the rebind takes a lock `CreateCollection` takes too, or the verify finds
+  such a collection and rolls back — and a test creates one concurrently with
+  the rebind and finds it in the target.
 - **Blockers:** none.
 
 ### The replication worker will skip the bucket gate once it copies

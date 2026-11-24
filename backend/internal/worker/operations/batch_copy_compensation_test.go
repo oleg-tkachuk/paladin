@@ -88,7 +88,11 @@ func (*copyFakeRepo) LiveCollision(context.Context, uuid.UUID, string, string) (
 	panic("unused")
 }
 
-type copyFakeStorage struct{ copyErr error }
+type copyFakeStorage struct {
+	copyErr error
+	// deleted records each DeleteObject's bucket and key.
+	deleted []string
+}
 
 func (f *copyFakeStorage) CopyObject(context.Context, objecth.Location, objecth.Location) error {
 	return f.copyErr
@@ -105,23 +109,28 @@ func (*copyFakeStorage) PresignGet(context.Context, objecth.PresignGetArgs) (str
 func (*copyFakeStorage) Head(context.Context, string, string, uuid.UUID, string, string, string) (string, int64, string, string, error) {
 	panic("unused")
 }
-func (*copyFakeStorage) DeleteObject(context.Context, string, string, uuid.UUID, string, string) error {
-	panic("unused")
+func (f *copyFakeStorage) DeleteObject(_ context.Context, _, bucket string, _ uuid.UUID, collection, key string) error {
+	f.deleted = append(f.deleted, bucket+"|"+collection+"/"+key)
+	return nil
 }
 
 type copyFakeTransitioner struct {
 	markFailedErr error
 	markFailedHit bool
 	promoteHit    bool
+	promoteErr    error
+	// placed is the placement the last promote named.
+	placed *statemachine.Placement
 }
 
 func (f *copyFakeTransitioner) DiscardFailed(context.Context, uuid.UUID, statemachine.FailureReason) error {
 	f.markFailedHit = true
 	return f.markFailedErr
 }
-func (f *copyFakeTransitioner) PromoteToAvailable(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source) (bool, error) {
+func (f *copyFakeTransitioner) PromoteToAvailable(_ context.Context, _ uuid.UUID, placed *statemachine.Placement, _ string, _ int64, _, _ string, _ statemachine.Source) (bool, error) {
 	f.promoteHit = true
-	return true, nil
+	f.placed = placed
+	return f.promoteErr == nil, f.promoteErr
 }
 func (*copyFakeTransitioner) SoftDelete(context.Context, uuid.UUID, int64) error { panic("unused") }
 func (*copyFakeTransitioner) Restore(context.Context, uuid.UUID) error           { panic("unused") }
@@ -217,5 +226,29 @@ func TestCopyOneRefusesANonCanonicalDestinationKey(t *testing.T) {
 		if !errors.Is(err, storagepath.ErrNotCanonical) {
 			t.Errorf("dstKey %q: err = %v, want a key refusal", key, err)
 		}
+	}
+}
+
+// A destination whose collection a storage migration rebound after the copy
+// resolved it is refused its promote: its bytes are deleted from the bucket
+// it left and its row discarded, as a failed copy's, and the item fails.
+func TestCopyOneDiscardsADestinationTheRebindMoved(t *testing.T) {
+	tr := &copyFakeTransitioner{promoteErr: &statemachine.BindingMovedError{}}
+	st := &copyFakeStorage{}
+	e := &BatchCopyExecutor{Objects: &copyFakeRepo{created: objecth.Object{ObjectID: uuid.New()}}, Storage: st, Transitions: tr}
+	job := copyJob{args: batchh.BatchCopyArgs{TenantID: uuid.New()}, src: availableSrc(), dstKey: "k",
+		to: objecth.Location{BackendID: "be-1", Bucket: "shared", Collection: "dst", Key: "k"}}
+	err := e.fill(context.Background(), job, uuid.New())
+	if !errors.Is(err, statemachine.ErrBindingMoved) {
+		t.Fatalf("err = %v, want the refusal", err)
+	}
+	if want := (statemachine.Placement{BackendID: "be-1", Bucket: "shared"}); tr.placed == nil || *tr.placed != want {
+		t.Errorf("promoted in %+v, want the destination's bucket %+v", tr.placed, want)
+	}
+	if len(st.deleted) != 1 || st.deleted[0] != "shared|dst/k" {
+		t.Errorf("deleted %v, want the copy in the bucket it left", st.deleted)
+	}
+	if !tr.markFailedHit {
+		t.Error("the destination row was not discarded")
 	}
 }

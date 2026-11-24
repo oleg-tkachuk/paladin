@@ -33,7 +33,7 @@ func (r *recordedAudit) Insert(_ context.Context, e admindomain.AuditEntry) erro
 // real transition does when it changed the row.
 type promoterOutcome struct{ changed bool }
 
-func (p promoterOutcome) PromoteToAvailableInTx(ctx context.Context, _ uuid.UUID, _ string, _ int64, _, _ string, _ statemachine.Source, onPromoted func(context.Context, pgx.Tx) error) (bool, error) {
+func (p promoterOutcome) PromoteToAvailableInTx(ctx context.Context, _ uuid.UUID, _ *statemachine.Placement, _ string, _ int64, _, _ string, _ statemachine.Source, onPromoted func(context.Context, pgx.Tx) error) (bool, error) {
 	if p.changed {
 		if err := onPromoted(ctx, nil); err != nil {
 			return false, err

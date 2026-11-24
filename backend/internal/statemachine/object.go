@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/logger"
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 )
 
 // State mirrors the object_state enum in SQL.
@@ -94,6 +95,7 @@ type dbPool interface {
 func (t *Transitioner) PromoteToAvailable(
 	ctx context.Context,
 	objectID uuid.UUID,
+	placed *Placement,
 	etag string,
 	sizeBytes int64,
 	checksum string,
@@ -103,8 +105,46 @@ func (t *Transitioner) PromoteToAvailable(
 	// In a transaction even with nothing to run after it: the check against
 	// what the object was registered with locks the row, and the lock has to
 	// last until the promote that depends on it.
-	return t.PromoteToAvailableInTx(ctx, objectID, etag, sizeBytes, checksum, sequencer, source, nil)
+	return t.PromoteToAvailableInTx(ctx, objectID, placed, etag, sizeBytes, checksum, sequencer, source, nil)
 }
+
+// Placement is the bucket a promote's caller confirmed the object's bytes
+// in: where it HEADed them, assembled them or copied them to.
+//
+// The caller resolved the collection's binding before the promote, on
+// another transaction, and a storage migration (ADR-0015) can rebind the
+// collection in between. A promote committed after that would make the
+// object readable from a bucket that does not hold its bytes, and the
+// migration's cleanup would then delete the only copy. So the promote checks,
+// on its own transaction and under the tenant's migration row
+// (migstate.FencingPromotes), that the collection is still bound there.
+//
+// A nil *Placement checks nothing: for a caller that cannot say where the
+// bytes are, a storage event naming no bucket.
+type Placement struct {
+	BackendID string
+	Bucket    string
+}
+
+// ErrBindingMoved is a promote refused because the object's collection is no
+// longer bound to the bucket its bytes were confirmed in: a storage migration
+// rebound it since. Nothing changed; the caller moves the bytes into the
+// collection's bucket and promotes again, or leaves the row PENDING for one
+// that will. Match with errors.Is.
+var ErrBindingMoved = errors.New("the object's collection is no longer bound to the bucket its bytes are in")
+
+// BindingMovedError names the two buckets of an ErrBindingMoved.
+type BindingMovedError struct {
+	Placed Placement
+	Bound  Placement
+}
+
+func (e *BindingMovedError) Error() string {
+	return fmt.Sprintf("%v: bytes in %s/%s, collection bound to %s/%s",
+		ErrBindingMoved, e.Placed.BackendID, e.Placed.Bucket, e.Bound.BackendID, e.Bound.Bucket)
+}
+
+func (e *BindingMovedError) Is(target error) bool { return target == ErrBindingMoved }
 
 // ErrContentMismatch is returned by a promote whose stored bytes are not the
 // ones the object was registered with: a different size, or a checksum that
@@ -152,6 +192,7 @@ const (
 func (t *Transitioner) PromoteToAvailableInTx(
 	ctx context.Context,
 	objectID uuid.UUID,
+	placed *Placement,
 	etag string,
 	sizeBytes int64,
 	checksum string,
@@ -165,7 +206,7 @@ func (t *Transitioner) PromoteToAvailableInTx(
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // no-op once committed
 
-	changed, err = t.promote(ctx, tx, objectID, etag, sizeBytes, checksum, sequencer, source)
+	changed, err = t.promote(ctx, tx, objectID, placed, etag, sizeBytes, checksum, sequencer, source)
 	if err != nil {
 		return false, err
 	}
@@ -187,6 +228,7 @@ func (t *Transitioner) promote(
 	ctx context.Context,
 	exec dbExec,
 	objectID uuid.UUID,
+	placed *Placement,
 	etag string,
 	sizeBytes int64,
 	checksum string,
@@ -197,6 +239,9 @@ func (t *Transitioner) promote(
 		if isNoRows(err) {
 			return false, nil
 		}
+		return false, err
+	}
+	if err := checkPlacement(ctx, exec, objectID, placed); err != nil {
 		return false, err
 	}
 	// Two promote regimes, split by whether the caller carries a sequencer:
@@ -215,6 +260,10 @@ func (t *Transitioner) promote(
 	// (bytes_written_at): the first one confirms an upload's, a later one a
 	// newer write a storage event reported. It is what a storage migration's
 	// rollback selects on, where updated_at moves for any change to the row.
+	// It is the clock when the statement runs, not the transaction's start:
+	// the row is stamped after checkPlacement took the migration's fence, so
+	// a migration step that held the fence before this promote got it sees a
+	// time after its own.
 	// It also clears the upload's anchor (upload_bucket_id, migration 113):
 	// the bytes are now where the object is read from, and a storage
 	// migration's cleanup no longer waits on the row.
@@ -226,7 +275,7 @@ func (t *Transitioner) promote(
                checksum = COALESCE(NULLIF($4, ''), checksum),
                sequencer = COALESCE(NULLIF($5, ''), sequencer),
                committed_at = CASE WHEN state = 'PENDING' THEN now() ELSE committed_at END,
-               bytes_written_at = now(),
+               bytes_written_at = clock_timestamp(),
                upload_bucket_id = NULL
          WHERE id = $1
            AND (
@@ -288,6 +337,51 @@ func verifyRegistration(ctx context.Context, exec dbExec, objectID uuid.UUID, si
 	}
 	if expected != nil && *expected != "" && checksum != "" && *expected != checksum {
 		return &ContentMismatchError{Field: "checksum", Want: *expected, Got: checksum}
+	}
+	return nil
+}
+
+// checkPlacement holds the tenant's storage migration, when one is in a state
+// that rebinds the tenant's collections (migstate.FencingPromotes), for the
+// rest of the promote's transaction, then refuses a promote whose bytes are
+// not in the bucket the collection is bound to now (Placement).
+//
+// The hold is FOR SHARE: promotes do not wait on each other, but a migration
+// step that takes the row FOR UPDATE — the copy's start, the rebind, the
+// rebind back — waits for every promote holding it, and every later promote
+// waits for that step. So such a step sees every promote that committed
+// before it, and every promote after it sees the binding it left. It runs
+// after verifyRegistration, which holds the object's row: the copy and the
+// purge take the object's row before the migration's too, so the order is
+// the same everywhere.
+func checkPlacement(ctx context.Context, exec dbExec, objectID uuid.UUID, placed *Placement) error {
+	const fence = `
+        SELECT 1
+          FROM tenant_storage_migrations m
+         WHERE m.tenant_id = (SELECT o.tenant_id FROM objects o WHERE o.id = $1)
+           AND m.state = ANY($2::text[])
+           FOR SHARE OF m
+    `
+	if _, err := exec.Exec(ctx, fence, objectID, migstate.FencingPromotes()); err != nil {
+		return fmt.Errorf("sm: hold the storage migration: %w", err)
+	}
+	if placed == nil {
+		return nil
+	}
+	const binding = `
+        SELECT sb.name, b.name
+          FROM objects o
+          JOIN collections c       ON c.id = o.collection_id
+          JOIN buckets b           ON b.id = c.bucket_id
+          JOIN storage_backends sb ON sb.id = b.backend_id
+         WHERE o.id = $1
+    `
+	var bound Placement
+	if err := exec.QueryRow(ctx, binding, objectID).Scan(&bound.BackendID, &bound.Bucket); err != nil {
+		return fmt.Errorf("sm: read the collection's binding: %w", err)
+	}
+	if bound != *placed {
+		return &BindingMovedError{Placed: *placed, Bound: bound}
 	}
 	return nil
 }

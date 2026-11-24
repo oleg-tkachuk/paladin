@@ -454,7 +454,9 @@ func BuildBackgroundJobs(deps *SharedDeps) []BackgroundJob {
 		Copier:  migCopier,
 		Deleter: migCopier, // retention-gated source cleanup (slice 2)
 		Header:  migCopier, // physical (HEAD size) verify
-		Logger:  l.Named("storage-migration"),
+		// The catch-up records each copy's ETag; the verify compares it.
+		Identity: migCopier,
+		Logger:   l.Named("storage-migration"),
 	})
 
 	return out

@@ -62,9 +62,14 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
 -- name: SetStorageMigrationTotal :execrows
--- Records the object count and moves provisioning -> copying.
+-- Records the object count, the copy's start and moves provisioning ->
+-- copying. Run under the row's lock (LockStorageMigrationForCount), which
+-- every promote holds while the migration provisions: the clock read here is
+-- later than every promote that committed before, and earlier than the
+-- stamp of every promote after (statemachine.checkPlacement).
 UPDATE tenant_storage_migrations
-SET objects_total = sqlc.arg('objects_total'), state = sqlc.arg('to_state'), updated_at = now()
+SET objects_total = sqlc.arg('objects_total'), state = sqlc.arg('to_state'),
+    copy_started_at = clock_timestamp(), updated_at = now()
 WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
@@ -100,6 +105,79 @@ SET objects_total = objects_total - CASE
              < ROW(sqlc.arg('collection_name')::text, sqlc.arg('path')::text)
         THEN 1 ELSE 0 END
 WHERE tenant_id = sqlc.arg('tenant_id') AND state IN ('provisioning', 'copying');
+
+-- name: ForgetStorageMigrationCaughtUp :exec
+-- Drops what an attempt's catch-up recorded (migration 116): at the start of
+-- an attempt's copy, which copies everything again, and once it completes.
+DELETE FROM storage_migration_caught_up WHERE tenant_id = $1;
+
+-- name: MigrationListUncaughtUp :many
+-- The objects the catch-up copies before the rebind: live or trashed, in a
+-- private collection, whose bytes were written since the copy started and
+-- whose latest write the catch-up has not copied (migration 116). The copy
+-- listed each object once, behind a moving cursor; a write after its start
+-- may have reached only the source. Only while the migration is as the
+-- worker read it, so a stale worker lists nothing. The set shrinks as the
+-- catch-up copies, and grows by what is written meanwhile, in any order: it
+-- has no cursor for a late commit to fall behind.
+SELECT o.id, o.bytes_written_at AS written_at,
+       c.name AS collection_name, o.path,
+       COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
+       (o.state = 'DELETED')::bool AS trashed
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
+LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
+WHERE o.tenant_id = sqlc.arg('tenant_id')
+  AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts')
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+  AND o.bytes_written_at >= COALESCE(m.copy_started_at, m.created_at)
+  AND u.written_at IS DISTINCT FROM o.bytes_written_at
+ORDER BY o.bytes_written_at, o.id
+LIMIT sqlc.arg('limit_count')::int;
+
+-- name: MigrationCountUncaughtUp :one
+-- How many objects MigrationListUncaughtUp would still return. The rebind
+-- counts them under the migration row's lock, which every promote holds
+-- while it runs, so no write commits unseen between the count and the
+-- rebind: any is the rebind refused.
+SELECT count(*)
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+JOIN tenant_storage_migrations m ON m.tenant_id = o.tenant_id
+LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
+WHERE o.tenant_id = sqlc.arg('tenant_id')
+  AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts')
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+  AND o.bytes_written_at >= COALESCE(m.copy_started_at, m.created_at)
+  AND u.written_at IS DISTINCT FROM o.bytes_written_at;
+
+-- name: MigrationHoldObjectForCatchUp :one
+-- Holds one object's row against a delete and a promote (FOR KEY SHARE, which
+-- a promote's FOR UPDATE waits on) while the catch-up copies it, and reads
+-- the write whose bytes the copy takes. No row: purged, or no longer live or
+-- trashed; nothing to copy.
+SELECT o.bytes_written_at
+FROM objects o
+JOIN collections c ON c.id = o.collection_id
+WHERE o.tenant_id = sqlc.arg('tenant_id') AND o.id = sqlc.arg('object_id')
+  AND o.state IN ('AVAILABLE', 'DELETED')
+  AND NOT c.public_read
+FOR KEY SHARE OF o;
+
+-- name: RecordStorageMigrationCaughtUp :execrows
+-- Records the catch-up's copy of an object: the write it took and the ETag
+-- the target reported for it. Only while the migration is as the worker read
+-- it: a stale worker's copy is not taken for the current attempt's.
+INSERT INTO storage_migration_caught_up (tenant_id, object_id, written_at, etag)
+SELECT sqlc.arg('tenant_id'), sqlc.arg('object_id'), sqlc.arg('written_at'), sqlc.narg('etag')
+WHERE EXISTS (SELECT 1 FROM tenant_storage_migrations m
+               WHERE m.tenant_id = sqlc.arg('tenant_id')
+                 AND m.state = sqlc.arg('from_state') AND m.attempts = sqlc.arg('attempts'))
+ON CONFLICT (tenant_id, object_id) DO UPDATE
+SET written_at = EXCLUDED.written_at, etag = EXCLUDED.etag, copied_at = now();
 
 -- name: SetIdleInTransactionTimeout :one
 -- Sets idle_in_transaction_session_timeout for the rest of the transaction
@@ -180,10 +258,21 @@ FOR UPDATE;
 -- which the row records (upload_bucket_id): their completion moves the bytes.
 -- Versions and delete markers are rows only, all under the object's one key,
 -- so they need nothing copied.
+--
+-- bound_* is the bucket the collection is bound to now: cleanup deletes a
+-- source copy only of an object read from the target. written_at and
+-- caught_up_* are when its bytes were last written and what the catch-up
+-- copied of them (migration 116), for the verify.
 SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
-       (o.state = 'DELETED')::bool AS trashed
+       (o.state = 'DELETED')::bool AS trashed,
+       sb.name AS bound_backend_name, b.name AS bound_bucket_name,
+       o.bytes_written_at AS written_at,
+       u.written_at AS caught_up_written_at, u.etag AS caught_up_etag
 FROM objects o
-JOIN collections c ON c.id = o.collection_id
+JOIN collections c       ON c.id = o.collection_id
+JOIN buckets b           ON b.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
+LEFT JOIN storage_migration_caught_up u ON u.tenant_id = o.tenant_id AND u.object_id = o.id
 WHERE o.tenant_id = $1
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read

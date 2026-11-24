@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 	"uuid"
@@ -53,7 +54,17 @@ func migFromSQLC(m sqlc.TenantStorageMigration,
 		ReboundAt:        timeFrom(m.ReboundAt),
 		RollbackCursorAt: timeFrom(m.RollbackCursorAt),
 		RollbackCursorID: uuidFrom(m.RollbackCursorID),
+		CopyStartedAt:    copyStartedAt(m),
 	}
+}
+
+// copyStartedAt is when the migration's copy started; for a row from before
+// migration 116, which has none, its creation, earlier than any copy of it.
+func copyStartedAt(m sqlc.TenantStorageMigration) time.Time {
+	if m.CopyStartedAt.Valid {
+		return m.CopyStartedAt.Time
+	}
+	return m.CreatedAt.Time
 }
 
 func (r *StorageMigrationRepo) ListActive(ctx context.Context, limit int) ([]worker.StorageMigration, error) {
@@ -108,6 +119,11 @@ func (r *StorageMigrationRepo) SetCopying(ctx context.Context, at worker.Migrati
 		if err := migrationMoved(q.LockStorageMigrationForCount(ctx, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
 			return err
 		}
+		// This attempt copies everything again; what an earlier one caught
+		// up says nothing about it.
+		if err := q.ForgetStorageMigrationCaughtUp(ctx, pgUUID(at.TenantID)); err != nil {
+			return fmt.Errorf("forget the last attempt's catch-up: %w", err)
+		}
 		n, err := q.MigrationCountTenantObjects(ctx, pgUUID(at.TenantID))
 		if err != nil {
 			return fmt.Errorf("count objects: %w", err)
@@ -127,11 +143,77 @@ func (r *StorageMigrationRepo) ListObjects(ctx context.Context, tenantID uuid.UU
 		}
 		out = make([]worker.ObjectRef, 0, len(rows))
 		for _, o := range rows {
-			out = append(out, worker.ObjectRef{Collection: o.CollectionName, Key: o.Path, SizeBytes: o.SizeBytes, Trashed: o.Trashed})
+			out = append(out, worker.ObjectRef{Collection: o.CollectionName, Key: o.Path, SizeBytes: o.SizeBytes, Trashed: o.Trashed,
+				BoundBackendID: o.BoundBackendName, BoundBucket: o.BoundBucketName,
+				WrittenAt: timeFrom(o.WrittenAt), CaughtUp: caughtUpFrom(o.CaughtUpWrittenAt, o.CaughtUpEtag)})
 		}
 		return nil
 	})
 	return out, err
+}
+
+// caughtUpFrom is what the catch-up recorded of an object; nil when it
+// recorded nothing.
+func caughtUpFrom(writtenAt pgtype.Timestamptz, etag *string) *worker.CaughtUp {
+	if !writtenAt.Valid {
+		return nil
+	}
+	return &worker.CaughtUp{WrittenAt: writtenAt.Time, ETag: etag}
+}
+
+// ListUncaughtUp lists the objects the catch-up still has to copy (see
+// worker.MigrationRepo).
+func (r *StorageMigrationRepo) ListUncaughtUp(ctx context.Context, at worker.MigrationRead, limit int) ([]worker.WrittenObject, error) {
+	var out []worker.WrittenObject
+	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		rows, e := q.MigrationListUncaughtUp(ctx, pgUUID(at.TenantID), at.State, at.Attempts, safecast.Int32(limit))
+		if e != nil {
+			return e
+		}
+		out = make([]worker.WrittenObject, 0, len(rows))
+		for _, o := range rows {
+			out = append(out, worker.WrittenObject{
+				ObjectRef: worker.ObjectRef{Collection: o.CollectionName, Key: o.Path, SizeBytes: o.SizeBytes, Trashed: o.Trashed},
+				ID:        uuidFrom(o.ID),
+				WrittenAt: o.WrittenAt.Time,
+			})
+		}
+		return nil
+	})
+	return out, err
+}
+
+// CatchUpObject holds o's row for fn, the catch-up's copy, and records on the
+// same transaction the write it copied (see worker.MigrationRepo). The hold
+// is FOR KEY SHARE, which a promote's FOR UPDATE waits on: the write read
+// under it is the one whose bytes fn copies, or an older one, which leaves
+// the object listed again. The transaction is idle while fn copies, so it
+// lifts the idle-in-transaction timeout for itself, as HoldObject does.
+func (r *StorageMigrationRepo) CatchUpObject(ctx context.Context, at worker.MigrationRead, o worker.WrittenObject, fn func(context.Context) (*string, error)) (bool, error) {
+	var held bool
+	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if _, err := q.SetIdleInTransactionTimeout(ctx, idleInTransactionUnbounded); err != nil {
+			return fmt.Errorf("lift the idle-in-transaction timeout: %w", err)
+		}
+		writtenAt, err := q.MigrationHoldObjectForCatchUp(ctx, pgUUID(at.TenantID), pgUUID(o.ID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("hold object: %w", err)
+		}
+		etag, err := fn(ctx)
+		if err != nil {
+			return err
+		}
+		held = true
+		return migrationMoved(q.RecordStorageMigrationCaughtUp(ctx, pgUUID(at.TenantID), pgUUID(o.ID), writtenAt, etag,
+			at.State, at.Attempts))
+	})
+	if err != nil {
+		return false, err
+	}
+	return held, nil
 }
 
 func (r *StorageMigrationRepo) AdvanceCopy(ctx context.Context, at worker.MigrationRead, copied int64, cursorCollection, cursorKey string) error {
@@ -227,6 +309,16 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, at worker.Migra
 	if err := migrationMoved(qtx.LockStorageMigrationForRebind(ctx, pgUUID(tenantID), at.State, at.Attempts)); err != nil {
 		return err
 	}
+	// Every promote holds the row while it runs, so the lock above waited for
+	// the ones in flight and holds back the rest: this count sees every write
+	// that will ever land in the source while the collections point there.
+	behind, err := qtx.MigrationCountUncaughtUp(ctx, pgUUID(tenantID), at.State, at.Attempts)
+	if err != nil {
+		return fmt.Errorf("count objects written since the copy started: %w", err)
+	}
+	if behind > 0 {
+		return &worker.CopyBehindError{Objects: behind}
+	}
 	// The rollback copies back what was written from here on.
 	if err := migrationMoved(qtx.MarkStorageMigrationRebound(ctx, pgUUID(tenantID), at.State, at.Attempts)); err != nil {
 		return fmt.Errorf("record rebound_at: %w", err)
@@ -263,8 +355,15 @@ func (r *StorageMigrationRepo) RebindTenant(ctx context.Context, at worker.Migra
 	return tx.Commit(ctx)
 }
 
+// Complete moves verifying -> completed and drops what the catch-up
+// recorded, which only the verify reads.
 func (r *StorageMigrationRepo) Complete(ctx context.Context, at worker.MigrationRead) error {
-	return migrationMoved(r.q.CompleteStorageMigration(ctx, worker.MigStateCompleted, pgUUID(at.TenantID), at.State, at.Attempts))
+	return r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if err := migrationMoved(q.CompleteStorageMigration(ctx, worker.MigStateCompleted, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		return q.ForgetStorageMigrationCaughtUp(ctx, pgUUID(at.TenantID))
+	})
 }
 
 func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, at worker.MigrationRead) error {

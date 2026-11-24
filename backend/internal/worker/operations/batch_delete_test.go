@@ -89,7 +89,7 @@ func (f *fakeTransitions) DiscardFailed(context.Context, uuid.UUID, statemachine
 	return nil
 }
 
-func (f *fakeTransitions) PromoteToAvailable(context.Context, uuid.UUID, string, int64, string, string, statemachine.Source) (bool, error) {
+func (f *fakeTransitions) PromoteToAvailable(context.Context, uuid.UUID, *statemachine.Placement, string, int64, string, string, statemachine.Source) (bool, error) {
 	return false, nil
 }
 

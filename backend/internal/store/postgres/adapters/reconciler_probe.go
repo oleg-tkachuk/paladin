@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/bucketgate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/storage/s3adapter"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 )
@@ -65,14 +66,18 @@ func (r *ReconcilerProbe) WithLogger(l *zap.Logger) *ReconcilerProbe {
 // anchored copy stays for the migration's cleanup. The copy writes bytes, so
 // it asks the bucket gate as a write on the collection's bucket. Not in the
 // anchored bucket, the bytes are looked for in the collection's.
-func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, found bool, err error) {
+//
+// placed is the collection's bucket, where found bytes are by then: the
+// promote checks the collection is still bound there.
+func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID) (etag string, sizeBytes int64, checksum, sequencer string, placed statemachine.Placement, found bool, err error) {
 	row, err := r.q.LookupObjectByID(ctx, pgUUID(objectID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", 0, "", "", false, nil
+			return "", 0, "", "", placed, false, nil
 		}
-		return "", 0, "", "", false, fmt.Errorf("lookup object: %w", err)
+		return "", 0, "", "", placed, false, fmt.Errorf("lookup object: %w", err)
 	}
+	placed = statemachine.Placement{BackendID: row.BackendName, Bucket: row.BucketName}
 	tenantID := uuidFrom(row.TenantID)
 	// LookupObjectByID already materializes the backend binding, so the HEAD
 	// is routed to the object's own backend (not the default).
@@ -80,18 +85,18 @@ func (r *ReconcilerProbe) HeadByObjectID(ctx context.Context, objectID uuid.UUID
 	algo := checksumAlgoName(row.ChecksumAlgorithm)
 	anchor, err := r.uploadAnchor(ctx, objectID)
 	if err != nil {
-		return "", 0, "", "", false, err
+		return "", 0, "", "", placed, false, err
 	}
 	if origin, relocate := objecth.UploadOrigin(anchor, bound); relocate {
 		b, moved, err := r.relocate(ctx, objectID, origin, bound, algo, bucketgate.State{
 			Enabled: row.Enabled, ReadOnly: row.ReadOnly, ProvisionState: row.ProvisionState,
 		})
 		if err != nil || moved {
-			return b.etag, b.size, b.checksum, b.sequencer, moved, err
+			return b.etag, b.size, b.checksum, b.sequencer, placed, moved, err
 		}
 	}
 	b, found, err := r.headAt(ctx, bound, algo)
-	return b.etag, b.size, b.checksum, b.sequencer, found, err
+	return b.etag, b.size, b.checksum, b.sequencer, placed, found, err
 }
 
 // probedBytes is what a HEAD reports of an object's bytes.

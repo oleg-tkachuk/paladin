@@ -171,8 +171,8 @@ func seaweedFSWebhook(tenantID uuid.UUID, kind string) []byte {
 
 type bytesProbe struct{ found bool }
 
-func (p bytesProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, bool, error) {
-	return "", 0, "", "", p.found, nil
+func (p bytesProbe) HeadByObjectID(context.Context, uuid.UUID) (string, int64, string, string, statemachine.Placement, bool, error) {
+	return "", 0, "", "", statemachine.Placement{}, p.found, nil
 }
 
 // TestIngest_DeleteEventTrashesAnObjectWhoseBytesAreGone — a delete from the

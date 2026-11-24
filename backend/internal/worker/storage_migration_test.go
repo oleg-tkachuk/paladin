@@ -12,6 +12,14 @@ import (
 
 // fakeMigRepo is an in-memory MigrationRepo for one tenant's migration.
 type fakeMigRepo struct {
+	// uncaught are the objects written behind the copy's cursor; caughtUp
+	// what the catch-up recorded of them, by id.
+	uncaught []WrittenObject
+	caughtUp map[uuid.UUID]*CaughtUp
+	// behind, when positive, refuses the rebind with that many objects.
+	behind int64
+	// catchUpErr answers every CatchUpObject.
+	catchUpErr  error
 	mig         StorageMigration
 	objects     []ObjectRef
 	bucketState string // provision_state the worker sees for the target bucket
@@ -105,6 +113,9 @@ func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterCollectio
 	out := []ObjectRef{}
 	for _, o := range f.objects {
 		if o.Collection > afterCollection || (o.Collection == afterCollection && o.Key > afterKey) {
+			if o.BoundBucket == "" {
+				o.BoundBackendID, o.BoundBucket = f.binding()
+			}
 			out = append(out, o)
 			if len(out) == limit {
 				break
@@ -112,6 +123,55 @@ func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterCollectio
 		}
 	}
 	return out, nil
+}
+
+// ListUncaughtUp lists the objects written behind the cursor whose write the
+// catch-up has not recorded.
+func (f *fakeMigRepo) ListUncaughtUp(_ context.Context, at MigrationRead, limit int) ([]WrittenObject, error) {
+	if !f.holds(at) {
+		return nil, nil
+	}
+	var out []WrittenObject
+	for _, o := range f.uncaught {
+		if c := f.caughtUp[o.ID]; c != nil && c.WrittenAt.Equal(o.WrittenAt) {
+			continue
+		}
+		out = append(out, o)
+		if len(out) == limit {
+			break
+		}
+	}
+	return out, nil
+}
+
+// CatchUpObject runs fn and records the write it copied, or answers
+// catchUpErr.
+func (f *fakeMigRepo) CatchUpObject(ctx context.Context, at MigrationRead, o WrittenObject, fn func(context.Context) (*string, error)) (bool, error) {
+	if f.catchUpErr != nil {
+		return false, f.catchUpErr
+	}
+	if !f.holds(at) {
+		return false, ErrMigrationMoved
+	}
+	etag, err := fn(ctx)
+	if err != nil {
+		return false, err
+	}
+	if f.caughtUp == nil {
+		f.caughtUp = map[uuid.UUID]*CaughtUp{}
+	}
+	f.caughtUp[o.ID] = &CaughtUp{WrittenAt: o.WrittenAt, ETag: etag}
+	return true, nil
+}
+
+// binding is the bucket the tenant's collections are bound to: the target
+// once rebound — or once the test starts the migration completed — and the
+// source before, and again after a rebind back.
+func (f *fakeMigRepo) binding() (string, string) {
+	if !f.reboundBack && (f.rebound || f.mig.State == MigStateCompleted || f.mig.State == MigStateCleaned) {
+		return f.mig.TargetBackendID, f.mig.TargetBucketName
+	}
+	return f.mig.SourceBackendID, f.mig.SourceBucketName
 }
 
 func (f *fakeMigRepo) AdvanceCopy(_ context.Context, at MigrationRead, copied int64, cursorCollection, cursorKey string) error {
@@ -131,6 +191,9 @@ func (f *fakeMigRepo) SetState(_ context.Context, at MigrationRead, to string) e
 func (f *fakeMigRepo) RebindTenant(_ context.Context, at MigrationRead, _, _ string) error {
 	if !f.holds(at) {
 		return ErrMigrationMoved
+	}
+	if f.behind > 0 {
+		return &CopyBehindError{Objects: f.behind}
 	}
 	if f.rebindErr != nil {
 		return f.rebindErr

@@ -175,8 +175,19 @@ type fakeStorage struct {
 	}
 	abortCalled bool
 	deleted     []string
-	deleteErr   error
+	// deletedIn is the bucket of each delete, in order.
+	deletedIn []string
+	deleteErr error
+	// copies records each CopyObject as "src>dst" buckets; copyErr fails it.
+	copies  []string
+	copyErr error
+	// heads records each Head's bucket; headFn answers it.
+	heads  []string
+	headFn func(bucket string) (string, int64, string, string, error)
 }
+
+// testCompletedSize is the size the fake store reports for an assembled object.
+const testCompletedSize = int64(123)
 
 func (f *fakeStorage) ListMultipartParts(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, maxParts, after int32) ([]Part, int32, error) {
 	f.lastListParts.backendID = backendID
@@ -214,7 +225,7 @@ func (f *fakeStorage) CompleteMultipart(ctx context.Context, backendID, bucket s
 	if f.completeFn != nil {
 		return f.completeFn(parts)
 	}
-	return "etag-1", 123, nil
+	return "etag-1", testCompletedSize, nil
 }
 
 func (f *fakeStorage) AbortMultipart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string) error {
@@ -230,7 +241,24 @@ func (f *fakeStorage) AbortMultipart(ctx context.Context, backendID, bucket stri
 
 func (f *fakeStorage) DeleteObject(_ context.Context, backendID, bucket string, _ uuid.UUID, collection, key string) error {
 	f.deleted = append(f.deleted, collection+"/"+key)
+	f.deletedIn = append(f.deletedIn, bucket)
 	return f.deleteErr
+}
+
+// fakeCopiedETag is the ETag the fake reports for an object it copied.
+const fakeCopiedETag = "etag-copied"
+
+func (f *fakeStorage) CopyObject(_ context.Context, src, dst objecth.Location) error {
+	f.copies = append(f.copies, src.Bucket+">"+dst.Bucket)
+	return f.copyErr
+}
+
+func (f *fakeStorage) Head(_ context.Context, _, bucket string, _ uuid.UUID, _, _, _ string) (string, int64, string, string, error) {
+	f.heads = append(f.heads, bucket)
+	if f.headFn != nil {
+		return f.headFn(bucket)
+	}
+	return fakeCopiedETag, testCompletedSize, "", "", nil
 }
 
 func (f *fakeStorage) PresignPart(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, storageUploadID, collection, key string, part PartBinding, ttl time.Duration) (string, map[string]string, time.Time, error) {
