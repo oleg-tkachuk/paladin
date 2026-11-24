@@ -1,6 +1,8 @@
 # ADR-0015: Per-tenant physical S3 bucket layout (hybrid with the shared layout)
 
-- **Status:** Accepted — Phases 1 and 2 and the Phase 3 copy job have shipped
+- **Status:** Accepted; Phase 3 and the storage-migration addenda superseded
+  by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md).
+  Phases 1 and 2 and the Phase 3 copy job have shipped
   (see *Implementation status* below); what remains of Phase 3 is in
   [`BACKLOG.md`](../../BACKLOG.md). Originally Proposed 2026-07-02 — design ratified on explicit request (the
   BACKLOG entry *"Per-tenant S3 bucket layout"* was held **do-not-design until
@@ -118,6 +120,8 @@ Everything else — `owner_tenant_id`, `provision_state`, `region`,
   AssumeRole / credential per backend). Detailed component design:
   [docs/backend-registry.md](../../backend/docs/backend-registry.md).
 - **Phase 3 — shared→dedicated migration job (reuse StorageReplicator).**
+  *Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md):
+  the migration moves objects one by one and no longer rebinds at an instant.*
   Because keys are uniform: provision the dedicated bucket → server-side
   `CopyObject` every object under the `<tenant_id>/` prefix with the **same**
   key (the `CopyObject` path already exists) → under a lock, rebind
@@ -351,6 +355,8 @@ the storage migration, which is what drains a backend.
 
 ## Addendum (2026-11-24): an upload is anchored to the bucket its URL names
 
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
+
 The copy skips PENDING objects, and a single-part upload's URL names the
 bucket the collection was bound to when it was signed. A PUT made after the
 rebind lands in the source, which nothing read again: `CompleteObject` HEADed
@@ -370,6 +376,8 @@ upload completed after one is moved like this, and its anchored copy stays
 in the old bucket with every other object's.
 
 ## Addendum (2026-11-24): a purge during a migration owes both buckets
+
+*Amended by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): the debts are kept; the copy's hold becomes the move's, and the total is recounted each pass.*
 
 The copy, the verify and the cleanup walk object rows; a purge deletes the
 row, then the bytes in the bucket the collection is bound to. Purged after
@@ -409,6 +417,8 @@ walks the new row, removes the source's.
 
 ## Addendum (2026-11-24): a promote is fenced against the rebind
 
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
+
 Every writer resolves the collection's bucket, puts or finds the bytes there,
 and then promotes the row — on another transaction. A rebind committed in
 between made the row readable from the target while its bytes were only in
@@ -446,6 +456,8 @@ more row lock, shared.
 
 ## Addendum (2026-11-24): a multipart completion follows its collection; cleanup checks the target
 
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
+
 A multipart session assembles its object where its parts are, the bucket it
 was anchored to at initiate. After a rebind that is the source:
 `CompleteMultipartUpload` promoted the object there, the promote cleared the
@@ -475,6 +487,8 @@ deleted the only copy.
   live object, whatever wrote it after the copy passed.
 
 ## Addendum (2026-11-24): writes behind the copy's cursor are caught up before the rebind
+
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
 
 The copy walks the tenant's objects once, in `(collection, path)` order,
 while the tenant keeps writing to the source. A write the cursor has passed
@@ -531,6 +545,8 @@ rollback's own copy back still walks a cursor.
 
 ## Addendum (2026-11-24): a source write whose event comes after the rebind is moved
 
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
+
 In an explicit-mode bucket an overwrite is recorded only when its storage
 event is. One written to the source behind the copy's cursor and delivered
 after the rebind named a bucket the collection was no longer bound to, and
@@ -565,6 +581,8 @@ either (BACKLOG).
 
 ## Addendum (2026-11-24): a start waits for the promotes in flight
 
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
+
 A promote holds the migration row only if the row is in a fencing state when
 the promote reads it. One that read it before the migration existed, or
 while it was `failed`, held nothing: it could commit after the copy listed
@@ -588,6 +606,8 @@ migration row would close a cycle.
 
 ## Addendum (2026-11-24): a collection created during a rebind moves with the others
 
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
+
 `CreateCollection` resolves its bucket — the tenant's default binding, most
 often — before its transaction. One that resolved the source before the
 rebind and inserted after it stayed in the source while the tenant was
@@ -608,6 +628,8 @@ migration is too much to pay for one creation.
   caller's authorization and the resource name already named the bucket.
 
 ## Addendum (2026-11-24): the rollback records what it copied back
+
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
 
 The rollback copied back, behind a `(written at, id)` cursor, the objects
 written since the rebind. A promote stamps its write before it commits, so
@@ -635,6 +657,8 @@ shape, and is mirrored:
 dropped once no running binary selects them (BACKLOG).
 
 ## Addendum (2026-11-24): a target write whose event comes after the rebind back is moved
+
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
 
 The mirror of a late source write. An overwrite written to the target while
 the migration rolled back, whose storage event was delivered after the
@@ -668,6 +692,8 @@ row whose sequencer came from the source, which the target's event cannot be
 ordered against.
 
 ## Addendum (2026-11-24): the cleanup keeps a source write the copy did not take
+
+*Superseded by [ADR-0051](0051-an-object-records-the-bucket-its-bytes-are-in.md): an object records the bucket its bytes are in, and a migration moves objects one by one.*
 
 A late source write is moved only while the source holds it. The cleanup
 deleted the source once the retention window passed and the target held the
