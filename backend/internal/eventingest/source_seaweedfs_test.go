@@ -51,6 +51,21 @@ func TestSeaweedFSSource_ParseCapturedCreate(t *testing.T) {
 	}
 }
 
+// An entry that records no version gives no time either: the receipt clock
+// stands in, and the event says so.
+func TestSeaweedFSSource_UnversionedEntryTimeIsNotReported(t *testing.T) {
+	body := string(webhookBody(t, "create"))
+	body = strings.Replace(body, `"mtime":1793700665,`, "", 1)
+	body = strings.Replace(body, `,"commit_ts_ns":1793700668832899354`, "", 1)
+	ev, err := parseOne(&SeaweedFSSource{URI: "seaweedfs://primary"}, []byte(body), "application/json")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if ev.TimeReported || ev.Time.IsZero() {
+		t.Errorf("time = %v, reported %v; want the receipt clock, not reported", ev.Time, ev.TimeReported)
+	}
+}
+
 func TestSeaweedFSSource_ParseCapturedDelete(t *testing.T) {
 	src := &SeaweedFSSource{URI: "seaweedfs://primary"}
 	ev, err := parseOne(src, webhookBody(t, "delete"), "application/json")
