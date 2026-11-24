@@ -954,8 +954,10 @@ type MigrateTenantStorageLayoutRequest struct {
 	TargetBackendId string `protobuf:"bytes,2,opt,name=target_backend_id,json=targetBackendId,proto3" json:"target_backend_id,omitempty"`
 	// cleanup_retention_seconds — how long the old (shared) copies are kept after
 	// the migration completes before they are deleted. Optional; 0 uses the
-	// server default (24h). Never less than limits.presign.max_ttl, so a GET
-	// URL signed before an object moved keeps working until it expires.
+	// server default (24h). Never less than
+	// worker.jobs.storage_migration.source_copy_retention (by default
+	// limits.presign.max_ttl), so a GET URL signed before an object moved
+	// keeps working until it expires.
 	CleanupRetentionSeconds int64 `protobuf:"varint,3,opt,name=cleanup_retention_seconds,json=cleanupRetentionSeconds,proto3" json:"cleanup_retention_seconds,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
