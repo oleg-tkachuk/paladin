@@ -56,6 +56,8 @@ const GUARDED: Record<string, string> = {
     "AlertDialog on the page",
   "app/tenants/[id]/default-binding/page.tsx::clearTenantDefaultBinding":
     "ConfirmModal",
+  "app/tenants/[id]/StorageMigrationCard.tsx::cancelTenantStorageMigration":
+    "ConfirmModal, the cancel's consequence as its warning",
   "app/tenants/[id]/event-subscriptions/page.tsx::deleteSubscription":
     "ConfirmModal",
   "app/tenants/[id]/m2m-tokens/RevokeTokenDialog.tsx::revoke":
