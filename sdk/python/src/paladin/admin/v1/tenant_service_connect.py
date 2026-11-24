@@ -126,11 +126,12 @@ class TenantService(Protocol):
     async def migrate_tenant_storage_layout(self, request: MigrateTenantStorageLayoutRequest, ctx: RequestContext[MigrateTenantStorageLayoutRequest, StorageMigrationStatus], /) -> StorageMigrationStatus:
         """
         MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-        (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
-        async copy job that server-side-copies every object into it, then rebinds
-        the collections and flips the layout. Returns the initial migration status;
-        poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
-        tenant is not currently `shared` or a migration is already in flight.
+        (ADR-0015, ADR-0051). It provisions the tenant's own bucket and starts an
+        async migration that points new uploads at it, flips the layout, and
+        moves the tenant's objects into it one by one. Returns the initial
+        migration status; poll GetTenantStorageMigration for progress.
+        FAILED_PRECONDITION if the tenant is not currently `shared` or a migration
+        is already in flight; a `failed` one is retried.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -660,11 +661,12 @@ class TenantServiceClient(ConnectClient):
     ) -> StorageMigrationStatus:
         """
         MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-        (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
-        async copy job that server-side-copies every object into it, then rebinds
-        the collections and flips the layout. Returns the initial migration status;
-        poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
-        tenant is not currently `shared` or a migration is already in flight.
+        (ADR-0015, ADR-0051). It provisions the tenant's own bucket and starts an
+        async migration that points new uploads at it, flips the layout, and
+        moves the tenant's objects into it one by one. Returns the initial
+        migration status; poll GetTenantStorageMigration for progress.
+        FAILED_PRECONDITION if the tenant is not currently `shared` or a migration
+        is already in flight; a `failed` one is retried.
         """
         return await self.execute_unary(
             request=request,
@@ -922,11 +924,12 @@ class TenantServiceSync(Protocol):
     def migrate_tenant_storage_layout(self, request: MigrateTenantStorageLayoutRequest, ctx: RequestContext[MigrateTenantStorageLayoutRequest, StorageMigrationStatus], /) -> StorageMigrationStatus:
         """
         MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-        (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
-        async copy job that server-side-copies every object into it, then rebinds
-        the collections and flips the layout. Returns the initial migration status;
-        poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
-        tenant is not currently `shared` or a migration is already in flight.
+        (ADR-0015, ADR-0051). It provisions the tenant's own bucket and starts an
+        async migration that points new uploads at it, flips the layout, and
+        moves the tenant's objects into it one by one. Returns the initial
+        migration status; poll GetTenantStorageMigration for progress.
+        FAILED_PRECONDITION if the tenant is not currently `shared` or a migration
+        is already in flight; a `failed` one is retried.
         """
         raise ConnectError(Code.UNIMPLEMENTED, 'Not implemented')
 
@@ -1454,11 +1457,12 @@ class TenantServiceClientSync(ConnectClientSync):
     ) -> StorageMigrationStatus:
         """
         MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-        (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
-        async copy job that server-side-copies every object into it, then rebinds
-        the collections and flips the layout. Returns the initial migration status;
-        poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
-        tenant is not currently `shared` or a migration is already in flight.
+        (ADR-0015, ADR-0051). It provisions the tenant's own bucket and starts an
+        async migration that points new uploads at it, flips the layout, and
+        moves the tenant's objects into it one by one. Returns the initial
+        migration status; poll GetTenantStorageMigration for progress.
+        FAILED_PRECONDITION if the tenant is not currently `shared` or a migration
+        is already in flight; a `failed` one is retried.
         """
         return self.execute_unary(
             request=request,

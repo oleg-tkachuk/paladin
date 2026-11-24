@@ -954,7 +954,8 @@ type MigrateTenantStorageLayoutRequest struct {
 	TargetBackendId string `protobuf:"bytes,2,opt,name=target_backend_id,json=targetBackendId,proto3" json:"target_backend_id,omitempty"`
 	// cleanup_retention_seconds — how long the old (shared) copies are kept after
 	// the migration completes before they are deleted. Optional; 0 uses the
-	// server default (24h). A rollback is only possible within this window.
+	// server default (24h). Never less than limits.presign.max_ttl, so a GET
+	// URL signed before an object moved keeps working until it expires.
 	CleanupRetentionSeconds int64 `protobuf:"varint,3,opt,name=cleanup_retention_seconds,json=cleanupRetentionSeconds,proto3" json:"cleanup_retention_seconds,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
@@ -1062,15 +1063,19 @@ type StorageMigrationStatus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// tenant — "tenants/{tenant_id}".
 	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
-	// state — provisioning | copying | rebinding | verifying | completed | failed.
-	State         string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
-	ObjectsTotal  int64  `protobuf:"varint,3,opt,name=objects_total,json=objectsTotal,proto3" json:"objects_total,omitempty"`
-	ObjectsCopied int64  `protobuf:"varint,4,opt,name=objects_copied,json=objectsCopied,proto3" json:"objects_copied,omitempty"`
+	// state — provisioning | moving | completed | cleaned | rolling_back | failed.
+	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	// objects_total — the objects moved plus those still to move, as of the
+	// last pass.
+	ObjectsTotal int64 `protobuf:"varint,3,opt,name=objects_total,json=objectsTotal,proto3" json:"objects_total,omitempty"`
+	// objects_copied — the objects moved in the current direction (back to the
+	// source while rolling_back).
+	ObjectsCopied int64 `protobuf:"varint,4,opt,name=objects_copied,json=objectsCopied,proto3" json:"objects_copied,omitempty"`
 	// Bucket references as resource names, consistent with
 	// TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
 	SourceBucket string `protobuf:"bytes,5,opt,name=source_bucket,json=sourceBucket,proto3" json:"source_bucket,omitempty"`
 	TargetBucket string `protobuf:"bytes,6,opt,name=target_bucket,json=targetBucket,proto3" json:"target_bucket,omitempty"`
-	// error — non-empty only in the `failed` state.
+	// error — why the migration is rolling back or failed; empty otherwise.
 	Error         string `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

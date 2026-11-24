@@ -245,11 +245,12 @@ type TenantServiceClient interface {
 	// active or trashed; the answer is the same either way.
 	PreviewPurgeTenant(context.Context, *v1.PreviewPurgeTenantRequest) (*v1.PreviewPurgeTenantResponse, error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-	// (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
-	// async copy job that server-side-copies every object into it, then rebinds
-	// the collections and flips the layout. Returns the initial migration status;
-	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
-	// tenant is not currently `shared` or a migration is already in flight.
+	// (ADR-0015, ADR-0051). It provisions the tenant's own bucket and starts an
+	// async migration that points new uploads at it, flips the layout, and
+	// moves the tenant's objects into it one by one. Returns the initial
+	// migration status; poll GetTenantStorageMigration for progress.
+	// FAILED_PRECONDITION if the tenant is not currently `shared` or a migration
+	// is already in flight; a `failed` one is retried.
 	MigrateTenantStorageLayout(context.Context, *v1.MigrateTenantStorageLayoutRequest) (*v1.StorageMigrationStatus, error)
 	// GetTenantStorageMigration returns the current migration status for a
 	// tenant, or NOT_FOUND if none was ever started.
@@ -329,11 +330,12 @@ type TenantServiceHandler interface {
 	// active or trashed; the answer is the same either way.
 	PreviewPurgeTenant(context.Context, *v1.PreviewPurgeTenantRequest) (*v1.PreviewPurgeTenantResponse, error)
 	// MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-	// (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
-	// async copy job that server-side-copies every object into it, then rebinds
-	// the collections and flips the layout. Returns the initial migration status;
-	// poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
-	// tenant is not currently `shared` or a migration is already in flight.
+	// (ADR-0015, ADR-0051). It provisions the tenant's own bucket and starts an
+	// async migration that points new uploads at it, flips the layout, and
+	// moves the tenant's objects into it one by one. Returns the initial
+	// migration status; poll GetTenantStorageMigration for progress.
+	// FAILED_PRECONDITION if the tenant is not currently `shared` or a migration
+	// is already in flight; a `failed` one is retried.
 	MigrateTenantStorageLayout(context.Context, *v1.MigrateTenantStorageLayoutRequest) (*v1.StorageMigrationStatus, error)
 	// GetTenantStorageMigration returns the current migration status for a
 	// tenant, or NOT_FOUND if none was ever started.

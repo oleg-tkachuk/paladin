@@ -514,7 +514,8 @@ export type MigrateTenantStorageLayoutRequest =
     /**
      * cleanup_retention_seconds — how long the old (shared) copies are kept after
      * the migration completes before they are deleted. Optional; 0 uses the
-     * server default (24h). A rollback is only possible within this window.
+     * server default (24h). Never less than limits.presign.max_ttl, so a GET
+     * URL signed before an object moved keeps working until it expires.
      *
      * @generated from field: int64 cleanup_retention_seconds = 3;
      */
@@ -566,18 +567,24 @@ export type StorageMigrationStatus =
     tenant: string;
 
     /**
-     * state — provisioning | copying | rebinding | verifying | completed | failed.
+     * state — provisioning | moving | completed | cleaned | rolling_back | failed.
      *
      * @generated from field: string state = 2;
      */
     state: string;
 
     /**
+     * objects_total — the objects moved plus those still to move, as of the
+     * last pass.
+     *
      * @generated from field: int64 objects_total = 3;
      */
     objectsTotal: bigint;
 
     /**
+     * objects_copied — the objects moved in the current direction (back to the
+     * source while rolling_back).
+     *
      * @generated from field: int64 objects_copied = 4;
      */
     objectsCopied: bigint;
@@ -596,7 +603,7 @@ export type StorageMigrationStatus =
     targetBucket: string;
 
     /**
-     * error — non-empty only in the `failed` state.
+     * error — why the migration is rolling back or failed; empty otherwise.
      *
      * @generated from field: string error = 9;
      */
@@ -1055,11 +1062,12 @@ export const TenantService: GenService<{
   };
   /**
    * MigrateTenantStorageLayout switches a `shared` tenant to `dedicated`
-   * (ADR-0015 Phase 3). It provisions the tenant's own bucket and starts an
-   * async copy job that server-side-copies every object into it, then rebinds
-   * the collections and flips the layout. Returns the initial migration status;
-   * poll GetTenantStorageMigration for progress. FAILED_PRECONDITION if the
-   * tenant is not currently `shared` or a migration is already in flight.
+   * (ADR-0015, ADR-0051). It provisions the tenant's own bucket and starts an
+   * async migration that points new uploads at it, flips the layout, and
+   * moves the tenant's objects into it one by one. Returns the initial
+   * migration status; poll GetTenantStorageMigration for progress.
+   * FAILED_PRECONDITION if the tenant is not currently `shared` or a migration
+   * is already in flight; a `failed` one is retried.
    *
    * @generated from rpc paladin.admin.v1.TenantService.MigrateTenantStorageLayout
    */
