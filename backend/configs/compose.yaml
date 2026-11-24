@@ -220,7 +220,6 @@ worker:
     replication:
       enabled: false
       interval: 5m
-      lookback_window: 1h
     capability:
       interval: 1h
       expired_for: 24h

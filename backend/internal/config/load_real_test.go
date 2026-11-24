@@ -205,8 +205,8 @@ func TestLoadRealConfigYAML(t *testing.T) {
 	if cfg.Worker.Jobs.Lifecycle.Interval == 0 {
 		t.Error("workers.lifecycle.interval defaulted to zero")
 	}
-	if cfg.Worker.Jobs.Replication.Interval == 0 || cfg.Worker.Jobs.Replication.LookbackWindow == 0 {
-		t.Error("workers.replication interval/lookback_window defaulted to zero")
+	if cfg.Worker.Jobs.Replication.Interval == 0 {
+		t.Error("workers.replication.interval defaulted to zero")
 	}
 }
 

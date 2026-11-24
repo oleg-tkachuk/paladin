@@ -606,6 +606,24 @@ type ObjectLock struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ObjectReplica struct {
+	SourceBucketID   pgtype.UUID        `json:"source_bucket_id"`
+	TenantID         pgtype.UUID        `json:"tenant_id"`
+	CollectionName   string             `json:"collection_name"`
+	Path             string             `json:"path"`
+	ObjectID         pgtype.UUID        `json:"object_id"`
+	Generation       int64              `json:"generation"`
+	NextAttemptAt    pgtype.Timestamptz `json:"next_attempt_at"`
+	ClaimedUntil     pgtype.Timestamptz `json:"claimed_until"`
+	Attempts         int32              `json:"attempts"`
+	LastError        *string            `json:"last_error"`
+	ReplicaBucketID  pgtype.UUID        `json:"replica_bucket_id"`
+	ReplicaObjectID  pgtype.UUID        `json:"replica_object_id"`
+	ReplicaWrittenAt pgtype.Timestamptz `json:"replica_written_at"`
+	ReplicaSizeBytes *int64             `json:"replica_size_bytes"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ObjectVersion struct {
 	ID                    pgtype.UUID        `json:"id"`
 	TenantID              pgtype.UUID        `json:"tenant_id"`
@@ -726,11 +744,9 @@ type RefreshToken struct {
 	OauthScopes []string `json:"oauth_scopes"`
 }
 
-type ReplicationState struct {
-	ID        pgtype.UUID        `json:"id"`
-	BucketID  pgtype.UUID        `json:"bucket_id"`
-	Watermark pgtype.Timestamptz `json:"watermark"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+type ReplicationSeed struct {
+	BucketID pgtype.UUID        `json:"bucket_id"`
+	SeededAt pgtype.Timestamptz `json:"seeded_at"`
 }
 
 type RetiredTenantSlug struct {

@@ -30,7 +30,7 @@ defaults come from `internal/config/schema.cue`. A job whose interval or TTL is
 | `capability_purger` | releases expired budget reservations, deletes capabilities expired for longer than the grace, and drops DPoP proof ids (`limes.dpop_seen_proofs`) past their window | `capability.interval`, `.expired_for` | `1h`, `24h` |
 | `storage-migration` | runs operator-started tenant storage migrations; always registered, idle without an active migration | none — `StorageMigrationWorker` default | `30s` |
 | `stale_operation_reclaimer` | fails operations no worker has touched for `stale_after`; ticks every `housekeeping.interval`, at most `stale_after / 3`, at least `1m` | `operations.stale_after` | `15m` (so a `5m` tick) |
-| `replication` | copies new objects to each bucket's replication destination (ADR-0050) | `replication.enabled`, `.interval` | `false`, `5m` |
+| `replication` | copies new, changed and purged objects to each bucket's replication destination (ADR-0050) | `replication.enabled`, `.interval` | `false`, `5m` |
 
 The operations runner, which executes queued batch operations (`BatchDelete`,
 `BatchCopy`, `BatchUpdateTags`, `BatchRestoreObjects`), is a worker job too

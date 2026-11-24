@@ -290,10 +290,9 @@ worker:
     lifecycle:                          # CEL-based per-bucket expiration
       enabled: true
       interval: 30m
-    replication:                        # copies new objects to each bucket's replication destination
+    replication:                        # copies each bucket's new, changed and purged objects to its destination
       enabled: false
       interval: 5m
-      lookback_window: 1h
     purge_drain:                        # reclaims bytes owed by permanent deletes
       # The permanent-delete API removes the DB row first and the S3
       # bytes second (safe ordering: the reverse could strand a live row

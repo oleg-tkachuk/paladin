@@ -529,7 +529,6 @@ worker.jobs.refresh_token_reap.interval
 worker.jobs.replication
 worker.jobs.replication.enabled
 worker.jobs.replication.interval
-worker.jobs.replication.lookback_window
 worker.ops
 worker.ops.addr
 worker.ops.cors_allowed_origins

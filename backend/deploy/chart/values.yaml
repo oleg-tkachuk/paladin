@@ -1122,7 +1122,6 @@ config:
       replication:
         enabled: false
         interval: 5m
-        lookback_window: 1h
       # Recomputes quotas.usage_* from live objects and rolls the
       # per-day counters at midnight UTC. Required whenever quotas are
       # in use: the upload path only increments those columns and the
