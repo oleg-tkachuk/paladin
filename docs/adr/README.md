@@ -24,7 +24,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0012](0012-machine-principals-may-delete-their-own-objects.md) | Cedar knows the credential kind; machines may delete their own objects | Accepted |
 | [0013](0013-object-lock-retention-and-legal-hold.md) | Object Lock — retention a mode of Paladin cannot lift | Accepted |
 | [0014](0014-canonical-resource-names.md) | Canonical resource names (A + B + C) | Accepted |
-| [0015](0015-per-tenant-bucket-layout.md) | Per-tenant bucket layout | Accepted |
+| [0015](0015-per-tenant-bucket-layout.md) | Per-tenant bucket layout | Accepted; superseded in part by 0051 |
 | [0016](0016-cedar-tenant-membership-isolation.md) | Cedar tenant-membership isolation | Accepted |
 | [0017](0017-single-identity-model-and-naming.md) | One identity model, one naming convention | Accepted |
 | [0018](0018-sdk-layers.md) | The SDKs as three layers over the generated clients | Accepted |
@@ -60,6 +60,7 @@ Status vocabulary: **Accepted** (decided + implemented), **Proposed**
 | [0048](0048-the-console-holds-no-token.md) | The console renders the UI, and a Go session role holds the session | Accepted |
 | [0049](0049-the-console-ships-as-a-static-export.md) | The console ships as a static export behind a small Go server | Accepted |
 | [0050](0050-bucket-replication-copies-between-any-backends.md) | Bucket replication copies between any two backends, behind a watermark it never passes uncopied | Accepted |
+| [0051](0051-an-object-records-the-bucket-its-bytes-are-in.md) | An object records the bucket its bytes are in, and a storage migration moves objects one by one | Proposed |
 
 The deferred-work register that feeds these decisions is
 [`../../BACKLOG.md`](../../BACKLOG.md); an item graduates from BACKLOG to
