@@ -606,24 +606,6 @@ the same commit. Treat this file like a runtime invariant.
   tick; a test disables and drains each side.
 - **Blockers:** the `StorageReplicator` implementation.
 
-## API error messages
-
-### The handler fuzz targets see no CHECK constraint they do not mirror
-
-- **Status:** Deferred.
-- **Reason:** the targets run over fakes that store anything, so a column
-  CHECK the handler does not enforce first is invisible to them. The
-  collection-name and tenant display-name CHECKs are now mirrored and
-  asserted, and user settings already were; the answer a request gets when a
-  CHECK refuses it — `Internal` through the adapters' fallback, by reading —
-  was not confirmed against Postgres, and the other CHECKs of the schema
-  (`object_tag_slug_format`, `api_tokens_rate_limit_rpm_check`) were not
-  traced to a handler.
-- **Definition of Done:** an integration test per write RPC sends a value
-  each CHECK on its table refuses and asserts `InvalidArgument`; any that
-  answers otherwise gets a handler refusal and a fuzz post-condition.
-- **Blockers:** none.
-
 ## Database
 
 ### Index candidates considered and rejected (2026-08-18 audit)
