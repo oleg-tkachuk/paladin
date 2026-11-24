@@ -1048,6 +1048,9 @@ type Querier interface {
 	// from "silently did nothing", and a client that asked to bind to a
 	// nonexistent bucket would be told it succeeded.
 	SetTenantDefaultBinding(ctx context.Context, tenantID pgtype.UUID, name string, name_2 string, setBy string) (int64, error)
+	// A no-op when the tenant already has the layout: every pass of a migration
+	// sets it, and must not move the tenant's resource_version under a client's
+	// compare-and-set each time.
 	SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error)
 	// Settles a row the worker decided without writing a replica — filtered
 	// out, already current, its object trashed, its source confirmed missing —

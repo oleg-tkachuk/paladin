@@ -870,9 +870,12 @@ UPDATE tenants
 SET storage_layout   = $2,
     resource_version = resource_version + 1,
     updated_at       = now()
-WHERE id = $1
+WHERE id = $1 AND storage_layout IS DISTINCT FROM $2
 `
 
+// A no-op when the tenant already has the layout: every pass of a migration
+// sets it, and must not move the tenant's resource_version under a client's
+// compare-and-set each time.
 func (q *Queries) SetTenantStorageLayout(ctx context.Context, iD pgtype.UUID, storageLayout TenantStorageLayout) (int64, error) {
 	result, err := q.db.Exec(ctx, setTenantStorageLayout, iD, storageLayout)
 	if err != nil {

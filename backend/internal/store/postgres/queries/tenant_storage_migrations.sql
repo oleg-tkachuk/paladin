@@ -107,11 +107,14 @@ WHERE tenant_id = sqlc.arg('tenant_id') AND state = sqlc.arg('from_state')
   AND attempts = sqlc.arg('attempts');
 
 -- name: SetTenantStorageLayout :execrows
+-- A no-op when the tenant already has the layout: every pass of a migration
+-- sets it, and must not move the tenant's resource_version under a client's
+-- compare-and-set each time.
 UPDATE tenants
 SET storage_layout   = $2,
     resource_version = resource_version + 1,
     updated_at       = now()
-WHERE id = $1;
+WHERE id = $1 AND storage_layout IS DISTINCT FROM $2;
 
 -- name: MigrationListMovable :many
 -- One batch of a pass: the tenant's live and trashed objects in private

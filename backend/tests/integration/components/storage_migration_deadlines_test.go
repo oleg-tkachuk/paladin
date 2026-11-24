@@ -77,6 +77,16 @@ func (f publicMigrationFixture) writeDeadlineAhead(t *testing.T, ctx context.Con
 	return ahead
 }
 
+// tenantVersion is the tenant's resource_version.
+func (f publicMigrationFixture) tenantVersion(t *testing.T, ctx context.Context) int64 {
+	t.Helper()
+	var v int64
+	if err := f.pool.QueryRow(ctx, `SELECT resource_version FROM tenants WHERE id = $1`, f.tenant).Scan(&v); err != nil {
+		t.Fatalf("read the tenant's version: %v", err)
+	}
+	return v
+}
+
 // A migration whose only write URL for the source is a short one completes
 // once that URL has expired and its anchor settled — a minute past its
 // expiry — not max_ttl after it started moving. The source copies are kept
@@ -108,10 +118,15 @@ func TestStorageMigrationCompletesOnceItsURLsSettle(t *testing.T) {
 		t.Fatalf("upload placed in %s, want the target", r.placed)
 	}
 
-	// Within the retention the source copies stay.
+	// Within the retention the source copies stay, and the passes the
+	// completed migration keeps running leave the tenant's version alone.
+	version := f.tenantVersion(t, ctx)
 	f.ticks(t, ctx, f.deadlinesWorker(func() time.Time { return start.Add(deadlinesCopyRetention / 2) }), deadlinesQuietTicks)
 	if state := f.migrationState(t, ctx); state != worker.MigStateCompleted {
 		t.Fatalf("migration %s within the source copy retention, want completed", state)
+	}
+	if got := f.tenantVersion(t, ctx); got != version {
+		t.Fatalf("tenant resource_version %d after passes that changed nothing, want %d", got, version)
 	}
 	if !f.store.has(f.loc(f.private, "docs", lateKey)) {
 		t.Fatal("the source copy is gone within its retention")
