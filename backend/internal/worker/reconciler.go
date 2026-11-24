@@ -135,7 +135,7 @@ func (r *ReconcilerV2) tick(ctx context.Context) (first error) {
 		anchorBucket,
 		func(p statemachine.ExpiredAnchor) error {
 			if p.State == statemachine.StatePending {
-				keepFirst(&first, r.reconcile(ctx, p.ObjectID))
+				keepFirst(&first, r.reconcile(ctx, p))
 			} else {
 				keepFirst(&first, r.settleAnchor(ctx, p))
 			}
@@ -183,7 +183,8 @@ func (r *ReconcilerV2) sampleOverdue(ctx context.Context) error {
 
 // reconcile settles one PENDING object and returns the failure it logged. A
 // content mismatch is not one in itself: discardMismatched settles it.
-func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) error {
+func (r *ReconcilerV2) reconcile(ctx context.Context, p statemachine.ExpiredAnchor) error {
+	objectID := p.ObjectID
 	etag, size, checksum, seq, placed, found, err := r.probe.HeadByObjectID(ctx, objectID)
 	if err != nil {
 		r.log.Warn("failed to HEAD object", zap.String("object_id", objectID.String()), zap.Error(err))
@@ -193,18 +194,32 @@ func (r *ReconcilerV2) reconcile(ctx context.Context, objectID uuid.UUID) error 
 		_, err := r.sm.PromoteToAvailableInTx(ctx, objectID, &placed, etag, size, checksum, seq, statemachine.SourceReconciler,
 			r.announceUploaded(objectID))
 		if errors.Is(err, statemachine.ErrContentMismatch) {
-			return r.discardMismatched(ctx, objectID, err)
+			return r.discardMismatched(ctx, p, err)
 		}
 		if err != nil {
 			r.log.Warn("failed to promote object", zap.String("object_id", objectID.String()), zap.Error(err))
 		}
 		return err
 	}
-	if err := r.sm.DiscardFailed(ctx, objectID, statemachine.FailedPresignExpired); err != nil {
-		r.log.Warn("failed to discard object", zap.String("object_id", objectID.String()), zap.Error(err))
-		return err
+	_, err = r.discardExpired(ctx, p, statemachine.FailedPresignExpired)
+	return err
+}
+
+// discardExpired discards the PENDING upload p for reason, unless it changed
+// since the scan — a RegenerateUploadURL extended its URL, or it was
+// completed or removed: the row is then kept, and logged. It reports whether
+// the row was discarded.
+func (r *ReconcilerV2) discardExpired(ctx context.Context, p statemachine.ExpiredAnchor, reason statemachine.FailureReason) (bool, error) {
+	discarded, err := r.sm.DiscardExpired(ctx, p.ObjectID, p.BucketID, r.cfg.PendingGraceTTL, reason)
+	if err != nil {
+		r.log.Warn("failed to discard object", zap.String("object_id", p.ObjectID.String()), zap.Error(err))
+		return false, err
 	}
-	return nil
+	if !discarded {
+		r.log.Info("upload changed since the scan (a regenerated URL, a completion, or gone); keeping it",
+			zap.String("object_id", p.ObjectID.String()), zap.String("reason", string(reason)))
+	}
+	return discarded, nil
 }
 
 // settleAnchor settles a promoted object whose upload URL has expired by the
@@ -250,9 +265,9 @@ func (r *ReconcilerV2) settleAnchor(ctx context.Context, p statemachine.ExpiredA
 // A delete the bucket gate refuses — a draining or disabled backend — is
 // deferred the same way, and is not a failure: the row stays PENDING until a
 // tick whose gate takes the delete.
-func (r *ReconcilerV2) discardMismatched(ctx context.Context, objectID uuid.UUID, cause error) error {
-	log := r.log.With(zap.String("object_id", objectID.String()), zap.NamedError("mismatch", cause))
-	err := r.probe.DeleteByObjectID(ctx, objectID)
+func (r *ReconcilerV2) discardMismatched(ctx context.Context, p statemachine.ExpiredAnchor, cause error) error {
+	log := r.log.With(zap.String("object_id", p.ObjectID.String()), zap.NamedError("mismatch", cause))
+	err := r.probe.DeleteByObjectID(ctx, p.ObjectID)
 	if bucketgate.Refused(err) {
 		log.Warn("the bucket gate refuses deleting the mismatched bytes; the object stays pending until it admits it",
 			zap.String("reason", err.Error()))
@@ -262,9 +277,13 @@ func (r *ReconcilerV2) discardMismatched(ctx context.Context, objectID uuid.UUID
 		log.Warn("failed to delete mismatched object bytes", zap.Error(err))
 		return err
 	}
-	if err := r.sm.DiscardFailed(ctx, objectID, statemachine.FailedContentMismatch); err != nil {
+	discarded, err := r.discardExpired(ctx, p, statemachine.FailedContentMismatch)
+	if err != nil {
 		log.Warn("failed to discard mismatched object", zap.Error(err))
 		return err
+	}
+	if !discarded {
+		return nil
 	}
 	// Settled: the Warn reports bad data a client sent, not a failed tick.
 	log.Warn("discarded object whose stored bytes broke its registration")

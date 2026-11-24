@@ -31,7 +31,7 @@ func TestDiscardMismatchedDefersAGateRefusal(t *testing.T) {
 		t.Run(refusal.Error(), func(t *testing.T) {
 			core, logs := observer.New(zap.DebugLevel)
 			r := NewReconcilerV2(nil, refusingProbe{err: refusal}, ReconcilerV2Config{Events: NewEventRecorder(nil)}, zap.New(core))
-			if err := r.discardMismatched(context.Background(), uuid.New(), errors.New("size")); err != nil {
+			if err := r.discardMismatched(context.Background(), statemachine.ExpiredAnchor{ObjectID: uuid.New()}, errors.New("size")); err != nil {
 				t.Fatalf("discardMismatched = %v, want nil: a deferral is not a failure", err)
 			}
 			entries := logs.All()
@@ -49,7 +49,7 @@ func TestDiscardMismatchedDefersAGateRefusal(t *testing.T) {
 func TestDiscardMismatchedReturnsADeleteFailure(t *testing.T) {
 	boom := errors.New("backend unreachable")
 	r := NewReconcilerV2(nil, refusingProbe{err: boom}, ReconcilerV2Config{}, zap.NewNop())
-	if err := r.discardMismatched(context.Background(), uuid.New(), errors.New("size")); !errors.Is(err, boom) {
+	if err := r.discardMismatched(context.Background(), statemachine.ExpiredAnchor{ObjectID: uuid.New()}, errors.New("size")); !errors.Is(err, boom) {
 		t.Fatalf("discardMismatched = %v, want %v", err, boom)
 	}
 }

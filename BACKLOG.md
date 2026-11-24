@@ -537,17 +537,20 @@ the same commit. Treat this file like a runtime invariant.
   and finds the bytes gone after the drain.
 - **Blockers:** none.
 
-### A regenerated upload URL can outlive the row the reconciler discards
+### The reconciler deletes mismatched bytes before it rechecks the upload
 
 - **Status:** Deferred.
-- **Reason:** `statemachine.DiscardFailed` deletes a `PENDING` row without
-  rechecking `presign_expires_at`, so a `RegenerateUploadURL` that extends it
-  between the reconciler's scan and the discard hands the client a URL whose
-  row is gone; its `CompleteObject` then finds nothing (ADR-0051 amendment).
-  The bytes belong to no row, so a storage migration is not affected.
-- **Definition of Done:** the discard applies only while the row's
-  `presign_expires_at` is still past the grace it was scanned with; a test
-  regenerates between the scan and the discard and finds the row kept.
+- **Reason:** for a `PENDING` upload whose bytes break its registration, the
+  reconciler deletes the bytes and then discards the row. The discard keeps a
+  row a `RegenerateUploadURL` extended since the scan
+  (`statemachine.DiscardExpired`), but the byte delete runs first and outside
+  the row's lock: a client that regenerated and wrote correct bytes through
+  the new URL in that window loses them, and its `CompleteObject` finds
+  nothing until it uploads again.
+- **Definition of Done:** the byte delete is skipped for a row extended since
+  the scan (a recheck under the row's lock, or a delete conditional on the
+  ETag the HEAD saw); a test regenerates and writes between the HEAD and the
+  delete and finds the new bytes kept.
 - **Blockers:** none.
 
 ### An operator cannot cancel a storage migration
