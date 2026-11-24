@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -184,8 +185,13 @@ func TestLeaseRefusals(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, err := tc.h.Lease(adminCtx(), tc.req); codeOf(err) != tc.want {
-				t.Errorf("code = %v, want %v (%v)", codeOf(err), tc.want, err)
+			_, err := tc.h.Lease(adminCtx(), tc.req)
+			if codeOf(err) != tc.want {
+				t.Fatalf("code = %v, want %v (%v)", codeOf(err), tc.want, err)
+			}
+			// A refusal wrapped into another prints its code into the text.
+			if ce, ok := errors.AsType[*connect.Error](err); ok && strings.HasPrefix(ce.Message(), tc.want.String()+":") {
+				t.Errorf("message %q repeats the code", ce.Message())
 			}
 		})
 	}
