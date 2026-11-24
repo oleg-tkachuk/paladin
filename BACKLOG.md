@@ -535,21 +535,22 @@ the same commit. Treat this file like a runtime invariant.
   both in the target after the rebind.
 - **Blockers:** none.
 
-### A multipart upload completed after a storage migration's rebind is lost at cleanup
+### A collection created while a storage migration rebinds stays on the source
 
 - **Status:** Deferred.
-- **Reason:** a session assembles its parts in the bucket it was anchored to
-  at initiate, and `CompleteMultipartUpload` promotes the object there. After
-  a rebind that is the source, while the object is read from the target; the
-  migration's cleanup, which waits only while the row is PENDING, then
-  deletes the source copy — the only one: the object is lost. Single-part
-  uploads move their bytes into the
-  collection's bucket on completion (`objecth.UploadOrigin`); the multipart
-  storage seam has no copy, and its HEAD-free complete path would need one.
-- **Definition of Done:** `CompleteMultipartUpload` copies an assembled
-  object whose session bucket is not the collection's binding into the
-  binding before promoting it, as `CompleteObject` does; a test initiates,
-  rebinds, completes and finds the object in the target after cleanup.
+- **Reason:** the rebind lists the tenant's private collections and points
+  the default binding at the target in one transaction, but a
+  `CreateCollection` that read the default binding before that transaction
+  committed inserts its collection bound to the source after it. The tenant
+  is then `dedicated` with one collection still in the shared bucket. The
+  cleanup keeps that collection's source copies (it deletes a source copy
+  only of an object bound to the target), so nothing is lost, but nothing
+  moves it either.
+- **Definition of Done:** a collection cannot be created bound to a
+  migration's source between the copy's start and the end of the migration —
+  the rebind takes a lock `CreateCollection` takes too, or the verify finds
+  such a collection and rolls back — and a test creates one concurrently with
+  the rebind and finds it in the target.
 - **Blockers:** none.
 
 ### The replication worker will skip the bucket gate once it copies

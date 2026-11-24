@@ -444,6 +444,36 @@ and the purge already take — and the rebind takes no object row, so the
 fence adds no cycle. The cost falls on promotes during a migration alone: one
 more row lock, shared.
 
+## Addendum (2026-11-24): a multipart completion follows its collection; cleanup checks the target
+
+A multipart session assembles its object where its parts are, the bucket it
+was anchored to at initiate. After a rebind that is the source:
+`CompleteMultipartUpload` promoted the object there, the promote cleared the
+anchor, and the cleanup — which waited only while the row was `PENDING` —
+deleted the only copy.
+
+- **The completion moves the object**, as `CompleteObject` moves a
+  single-part upload (`multiparth.settle`): it looks the collection's binding
+  up through the bucket gate as a write of bytes, copies the assembled object
+  there under the same key, checks the copy's size against the assembled one
+  and promotes it there, under the ETag the binding reports. The anchored
+  copy is left for the cleanup. A promote the fence refuses — a rebind in
+  between — follows the collection again, at most twice: the storage upload
+  is consumed, so a client's retry could not assemble the parts again. A
+  crash at any step leaves the row `PENDING` and anchored; the cleanup waits
+  for it, and the reconciler moves and promotes it once the session's
+  deadline passes. An object that breaks its registration is deleted from
+  both buckets before its row is discarded.
+- **The cleanup deletes a source copy only once the target holds it.** For
+  each object it HEADs the target: at the recorded size, the source copy
+  goes. Missing or at another size while the source holds it at the
+  recorded size, the source copy is carried — copied to the target, checked,
+  then deleted. Held as recorded by neither, it is kept and logged at Error,
+  and the migration stays `completed` until a later pass can delete it. An
+  object whose collection is not bound to the target keeps its source copy:
+  it may be read from there. So the cleanup never deletes the only copy of a
+  live object, whatever wrote it after the copy passed.
+
 ## Consequences
 
 - **Positive.** Native per-tenant cost attribution; per-tenant IAM blast-radius

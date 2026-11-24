@@ -105,6 +105,9 @@ func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterCollectio
 	out := []ObjectRef{}
 	for _, o := range f.objects {
 		if o.Collection > afterCollection || (o.Collection == afterCollection && o.Key > afterKey) {
+			if o.BoundBucket == "" {
+				o.BoundBackendID, o.BoundBucket = f.binding()
+			}
 			out = append(out, o)
 			if len(out) == limit {
 				break
@@ -112,6 +115,16 @@ func (f *fakeMigRepo) ListObjects(_ context.Context, _ uuid.UUID, afterCollectio
 		}
 	}
 	return out, nil
+}
+
+// binding is the bucket the tenant's collections are bound to: the target
+// once rebound — or once the test starts the migration completed — and the
+// source before, and again after a rebind back.
+func (f *fakeMigRepo) binding() (string, string) {
+	if !f.reboundBack && (f.rebound || f.mig.State == MigStateCompleted || f.mig.State == MigStateCleaned) {
+		return f.mig.TargetBackendID, f.mig.TargetBucketName
+	}
+	return f.mig.SourceBackendID, f.mig.SourceBucketName
 }
 
 func (f *fakeMigRepo) AdvanceCopy(_ context.Context, at MigrationRead, copied int64, cursorCollection, cursorKey string) error {

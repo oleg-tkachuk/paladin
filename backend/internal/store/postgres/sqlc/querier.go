@@ -739,6 +739,9 @@ type Querier interface {
 	// which the row records (upload_bucket_id): their completion moves the bytes.
 	// Versions and delete markers are rows only, all under the object's one key,
 	// so they need nothing copied.
+	//
+	// bound_* is the bucket the collection is bound to now: cleanup deletes a
+	// source copy only of an object read from the target.
 	MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error)
 	// Whether any object MigrationListObjectsWrittenSince would still return past
 	// the cursor. The rebind back asks it under its lock: an object written since

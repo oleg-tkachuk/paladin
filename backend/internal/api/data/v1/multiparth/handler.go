@@ -58,6 +58,11 @@ type Storage interface {
 	// DeleteObject removes an assembled object whose bytes broke its
 	// registration (see discardMismatched).
 	DeleteObject(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key string) error
+	// CopyObject and Head move an object assembled in the bucket its session
+	// was anchored to into the one its collection is bound to now, and check
+	// the copy (relocate).
+	CopyObject(ctx context.Context, src, dst objecth.Location) error
+	Head(ctx context.Context, backendID, bucket string, tenantID uuid.UUID, collection, key, checksumAlgo string) (etag string, sizeBytes int64, checksum, sequencer string, err error)
 }
 
 // StateMachine is the slice of *statemachine.Transitioner the handler uses.
@@ -508,31 +513,16 @@ type assembled struct {
 	changed bool
 }
 
-// assemble has the store assemble the parts and promotes the object where
-// they were assembled. An object whose bytes break its registration is
-// discarded; one whose collection a storage migration rebound away from that
-// bucket is refused its promote (statemachine.ErrBindingMoved) and stays
-// PENDING, anchored there.
+// assemble has the store assemble the parts in the bucket the session was
+// anchored to, and settles the object there or, after a storage migration
+// rebound its collection, in the bucket it is bound to now (settle).
 func (h *Handler) assemble(ctx context.Context, sess Session, backendID, bucket string, args CompleteArgs) (assembled, error) {
 	etag, size, err := h.storage.CompleteMultipart(ctx, backendID, bucket, args.TenantID, sess.StorageUploadID, sess.Collection, sess.Key, sess.ChecksumAlgo, args.Parts)
 	if err != nil {
 		return assembled{}, rpcerr.New(connect.CodeInternal, fmt.Errorf("storage complete: %w", err))
 	}
-	// No sequencer from multipart completion — events will supply one later.
-	placed := &statemachine.Placement{BackendID: backendID, Bucket: bucket}
-	changed, err := h.sm.PromoteToAvailable(ctx, sess.ObjectID, placed, etag, size, "", "", statemachine.SourceRPC)
-	if errors.Is(err, statemachine.ErrContentMismatch) {
-		return assembled{}, h.discardMismatched(ctx, sess, backendID, bucket, args.UploadID, err)
-	}
-	if errors.Is(err, statemachine.ErrBindingMoved) {
-		logger.FromContext(ctx).Warn("promote refused: the collection was rebound away from the session's bucket; the object stays pending",
-			zap.String("upload_id", args.UploadID), zap.String("object_id", sess.ObjectID.String()), zap.Error(err))
-		return assembled{}, connect.NewError(connect.CodeUnavailable, err.Error()).WithCause(err)
-	}
-	if err != nil {
-		return assembled{}, connect.NewError(connect.CodeInternal, err.Error()).WithCause(err)
-	}
-	return assembled{etag: etag, size: size, changed: changed}, nil
+	anchor := objecth.Location{BackendID: backendID, TenantID: args.TenantID, Bucket: bucket, Collection: sess.Collection, Key: sess.Key}
+	return h.settle(ctx, sess, anchor, assembled{etag: etag, size: size}, args.UploadID)
 }
 
 // afterPromote records the version and the quota of an object this call
@@ -756,13 +746,16 @@ func (s Session) compositeChecksum(parts []PartETag) (string, error) {
 }
 
 // discardMismatched settles an assembled object whose size is not the one it
-// was registered with: its bytes are deleted, then the row is discarded. In
-// that order, so a failure between the two leaves a PENDING row the
-// reconciler will HEAD and discard, never a row gone over bytes nothing will
-// remove.
-func (h *Handler) discardMismatched(ctx context.Context, sess Session, backendID, bucket, uploadID string, cause error) error {
-	if err := h.storage.DeleteObject(ctx, backendID, bucket, sess.TenantID, sess.Collection, sess.Key); err != nil {
-		return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
+// was registered with: its bytes are deleted from every bucket they are in —
+// the anchored one, and the collection's when they were moved there — then
+// the row is discarded. In that order, so a failure between the two leaves a
+// PENDING row the reconciler will HEAD and discard, never a row gone over
+// bytes nothing will remove.
+func (h *Handler) discardMismatched(ctx context.Context, sess Session, uploadID string, cause error, at ...objecth.Location) error {
+	for _, loc := range at {
+		if err := h.storage.DeleteObject(ctx, loc.BackendID, loc.Bucket, sess.TenantID, sess.Collection, sess.Key); err != nil {
+			return rpcerr.New(connect.CodeInternal, fmt.Errorf("%w; deleting the stored bytes failed: %w", cause, err))
+		}
 	}
 	// The session first, as on abort: discarding the object cascades to it.
 	h.dropSession(ctx, uploadID, "multipart session not deleted after a refused complete")

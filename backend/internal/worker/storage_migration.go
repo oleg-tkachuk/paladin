@@ -156,6 +156,11 @@ type ObjectRef struct {
 	// bucket trashes the row through a storage event, and such an object has
 	// nothing to move.
 	Trashed bool
+	// BoundBackendID and BoundBucket are the bucket the object's collection
+	// is bound to now; cleanup deletes a source copy only of an object read
+	// from the target. Set by the list the cleanup walks.
+	BoundBackendID string
+	BoundBucket    string
 }
 
 // WrittenObject is an object written since a point in time, as the rollback
@@ -705,11 +710,14 @@ func (w *StorageMigrationWorker) uploadsAnchoredToSource(ctx context.Context, m 
 	return false, nil
 }
 
-// cleanSource deletes every listed object's copy from the source bucket, and
-// reports whether it got through them all: a cancelled context stops it short
-// with nothing to report, and the next tick starts over.
+// cleanSource deletes every listed object's copy from the source bucket that
+// the target holds too (cleanOne), and reports whether it got through them
+// all: a cancelled context stops it short with nothing to report, and the
+// next tick starts over. A source copy that may be an object's only one is
+// kept, and the migration is not cleaned while one is: ErrCleanupKept.
 func (w *StorageMigrationWorker) cleanSource(ctx context.Context, m StorageMigration) (bool, error) {
 	curOK, curKey, batch := "", "", w.batch()
+	var tally cleanTally
 	for {
 		if ctx.Err() != nil {
 			return false, nil
@@ -719,16 +727,140 @@ func (w *StorageMigrationWorker) cleanSource(ctx context.Context, m StorageMigra
 			return false, fmt.Errorf("cleanup list objects: %w", err)
 		}
 		for _, o := range objs {
-			if err := w.Deleter.DeleteObject(ctx, m.sourceLoc(o)); err != nil {
-				return false, fmt.Errorf("cleanup delete %s/%s: %w", o.Collection, o.Key, err)
+			outcome, err := w.cleanOne(ctx, m, o)
+			if err != nil {
+				return false, fmt.Errorf("cleanup %s/%s: %w", o.Collection, o.Key, err)
 			}
+			tally[outcome]++
 			curOK, curKey = o.Collection, o.Key
 		}
 		// A short page is the last: an empty one included.
 		if len(objs) < batch {
-			return true, nil
+			break
 		}
 	}
+	w.log().Info("migration cleanup pass",
+		zap.String("tenant_id", m.TenantID.String()),
+		zap.Int64("deleted", tally[cleanDeleted]), zap.Int64("carried", tally[cleanCarried]),
+		zap.Int64("bound_elsewhere", tally[cleanBoundElsewhere]), zap.Int64("kept", tally[cleanKept]))
+	if tally[cleanKept] > 0 {
+		return false, fmt.Errorf("%w: %d objects", ErrCleanupKept, tally[cleanKept])
+	}
+	return true, nil
+}
+
+// ErrCleanupKept is a cleanup that kept source copies the target does not
+// hold as their rows record them: deleting them could delete an object's
+// only copy. The migration stays completed, and the next tick looks again.
+var ErrCleanupKept = errors.New("source copies kept: the target does not hold them as recorded")
+
+// cleanOutcome is what cleanup did with one object's source copy.
+type cleanOutcome int
+
+const (
+	// cleanDeleted: the target holds the object; its source copy is gone.
+	cleanDeleted cleanOutcome = iota
+	// cleanCarried: the target lacked the object as recorded and the source
+	// held it; the source copy was copied to the target, then deleted.
+	cleanCarried
+	// cleanBoundElsewhere: the object's collection is not bound to the
+	// target, so its source copy may be what it is read from; kept.
+	cleanBoundElsewhere
+	// cleanKept: neither bucket holds the object as its row records it;
+	// the source copy is kept.
+	cleanKept
+	// cleanOutcomes is the number of outcomes, for a tally.
+	cleanOutcomes
+)
+
+// cleanTally counts a cleanup's outcomes.
+type cleanTally [cleanOutcomes]int64
+
+// cleanOne deletes o's copy from the source, once the target is known to hold
+// the object — the size its row records — so cleanup never deletes the only
+// copy of a live object, whatever wrote it after the copy passed:
+//
+//   - a collection not bound to the target (one created while the rebind ran
+//     stays bound where the default binding pointed) is read from wherever
+//     it is bound, the source maybe; its copy is kept;
+//   - an object the target lacks, or holds at another size, while the source
+//     holds it as recorded, is carried: copied to the target, checked, and
+//     only then deleted from the source;
+//   - one neither bucket holds as recorded is kept and logged: deleting the
+//     source copy could lose the newer bytes, and only an operator can tell.
+//
+// A trashed object whose bytes are gone from both buckets has nothing to
+// delete. Without a Header nothing can be checked, and the source copy is
+// deleted as before.
+func (w *StorageMigrationWorker) cleanOne(ctx context.Context, m StorageMigration, o ObjectRef) (cleanOutcome, error) {
+	log := w.log().With(zap.String("tenant_id", m.TenantID.String()),
+		zap.String("collection", o.Collection), zap.String("key", o.Key))
+	if o.BoundBackendID != m.TargetBackendID || o.BoundBucket != m.TargetBucketName {
+		log.Warn("cleanup: the object's collection is not bound to the migration's target; keeping its source copy",
+			zap.String("bound_bucket", o.BoundBackendID+"/"+o.BoundBucket))
+		return cleanBoundElsewhere, nil
+	}
+	src, dst := m.sourceLoc(o), m.targetLoc(o)
+	if w.Header == nil {
+		return cleanDeleted, w.Deleter.DeleteObject(ctx, src)
+	}
+	targetSize, inTarget, err := w.headSize(ctx, dst)
+	if err != nil {
+		return 0, fmt.Errorf("head target: %w", err)
+	}
+	if inTarget && targetSize == o.SizeBytes {
+		return cleanDeleted, w.Deleter.DeleteObject(ctx, src)
+	}
+	sourceSize, inSource, err := w.headSize(ctx, src)
+	switch {
+	case err != nil:
+		return 0, fmt.Errorf("head source: %w", err)
+	case !inSource && !inTarget:
+		log.Info("cleanup: the object has no bytes in either bucket; nothing to delete")
+		return cleanDeleted, nil
+	case !inSource || sourceSize != o.SizeBytes:
+		log.Error("cleanup: neither bucket holds the object at its recorded size; keeping the source copy",
+			zap.Int64("recorded_size", o.SizeBytes), zap.Int64("target_size", targetSize), zap.Int64("source_size", sourceSize))
+		return cleanKept, nil
+	}
+	return w.carry(ctx, log, m, o, src, dst)
+}
+
+// carry copies o from the source to the target, where cleanup found it
+// missing or at another size, and deletes the source copy once the target
+// holds it at its recorded size. A copy that does not land keeps the source.
+func (w *StorageMigrationWorker) carry(ctx context.Context, log *zap.Logger, m StorageMigration, o ObjectRef, src, dst CopyLocation) (cleanOutcome, error) {
+	if err := w.Copier.CopyObject(ctx, src, dst); err != nil {
+		log.Error("cleanup: carrying the source copy to the target failed; keeping it", zap.Error(err))
+		return 0, fmt.Errorf("carry to the target: %w", err)
+	}
+	size, ok, err := w.headSize(ctx, dst)
+	if err != nil {
+		return 0, fmt.Errorf("head target after the carry: %w", err)
+	}
+	if !ok || size != o.SizeBytes {
+		log.Error("cleanup: the carried copy is not the recorded size; keeping the source copy",
+			zap.Int64("recorded_size", o.SizeBytes), zap.Int64("target_size", size))
+		return cleanKept, nil
+	}
+	if err := w.Deleter.DeleteObject(ctx, src); err != nil {
+		return 0, err
+	}
+	log.Warn("cleanup: the target lacked the object; carried its source copy there before deleting it",
+		zap.String("source", m.SourceBackendID+"/"+m.SourceBucketName))
+	return cleanCarried, nil
+}
+
+// headSize HEADs loc: its size, and whether the backend holds it at all.
+func (w *StorageMigrationWorker) headSize(ctx context.Context, loc CopyLocation) (int64, bool, error) {
+	size, err := w.Header.HeadObject(ctx, loc)
+	if errors.Is(err, ErrObjectMissing) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return size, true, nil
 }
 
 // stepRollingBack puts a tenant whose physical verify failed back on its

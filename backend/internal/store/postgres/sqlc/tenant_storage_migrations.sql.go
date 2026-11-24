@@ -656,9 +656,12 @@ func (q *Queries) MigrationListTenantCollections(ctx context.Context, tenantID p
 
 const migrationListTenantObjects = `-- name: MigrationListTenantObjects :many
 SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
-       (o.state = 'DELETED')::bool AS trashed
+       (o.state = 'DELETED')::bool AS trashed,
+       sb.name AS bound_backend_name, b.name AS bound_bucket_name
 FROM objects o
-JOIN collections c ON c.id = o.collection_id
+JOIN collections c       ON c.id = o.collection_id
+JOIN buckets b           ON b.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE o.tenant_id = $1
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
@@ -669,10 +672,12 @@ LIMIT $4::int
 `
 
 type MigrationListTenantObjectsRow struct {
-	CollectionName string `json:"collection_name"`
-	Path           string `json:"path"`
-	SizeBytes      int64  `json:"size_bytes"`
-	Trashed        bool   `json:"trashed"`
+	CollectionName   string `json:"collection_name"`
+	Path             string `json:"path"`
+	SizeBytes        int64  `json:"size_bytes"`
+	Trashed          bool   `json:"trashed"`
+	BoundBackendName string `json:"bound_backend_name"`
+	BoundBucketName  string `json:"bound_bucket_name"`
 }
 
 // Objects to copy, keyset-paginated by (collection_id, path) after the cursor so a
@@ -688,6 +693,9 @@ type MigrationListTenantObjectsRow struct {
 // which the row records (upload_bucket_id): their completion moves the bytes.
 // Versions and delete markers are rows only, all under the object's one key,
 // so they need nothing copied.
+//
+// bound_* is the bucket the collection is bound to now: cleanup deletes a
+// source copy only of an object read from the target.
 func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtype.UUID, afterCollection string, afterPath string, limitCount int32) ([]MigrationListTenantObjectsRow, error) {
 	rows, err := q.db.Query(ctx, migrationListTenantObjects,
 		tenantID,
@@ -707,6 +715,8 @@ func (q *Queries) MigrationListTenantObjects(ctx context.Context, tenantID pgtyp
 			&i.Path,
 			&i.SizeBytes,
 			&i.Trashed,
+			&i.BoundBackendName,
+			&i.BoundBucketName,
 		); err != nil {
 			return nil, err
 		}

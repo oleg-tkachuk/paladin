@@ -180,10 +180,16 @@ FOR UPDATE;
 -- which the row records (upload_bucket_id): their completion moves the bytes.
 -- Versions and delete markers are rows only, all under the object's one key,
 -- so they need nothing copied.
+--
+-- bound_* is the bucket the collection is bound to now: cleanup deletes a
+-- source copy only of an object read from the target.
 SELECT c.name AS collection_name, o.path, COALESCE(o.size_bytes, 0)::bigint AS size_bytes,
-       (o.state = 'DELETED')::bool AS trashed
+       (o.state = 'DELETED')::bool AS trashed,
+       sb.name AS bound_backend_name, b.name AS bound_bucket_name
 FROM objects o
-JOIN collections c ON c.id = o.collection_id
+JOIN collections c       ON c.id = o.collection_id
+JOIN buckets b           ON b.id = c.bucket_id
+JOIN storage_backends sb ON sb.id = b.backend_id
 WHERE o.tenant_id = $1
   AND o.state IN ('AVAILABLE', 'DELETED')
   AND NOT c.public_read
