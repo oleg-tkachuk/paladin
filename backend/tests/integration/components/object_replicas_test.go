@@ -14,6 +14,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 const (
@@ -54,12 +55,11 @@ func (rf replicaFixture) enable(t *testing.T, ctx context.Context) {
 // available inserts an AVAILABLE object at key, as a promoted upload is.
 func (rf replicaFixture) available(t *testing.T, ctx context.Context, key string) uuid.UUID {
 	t.Helper()
-	id := uuid.NewV7()
-	mustExec(t, ctx, rf.pool, `INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
-		   checksum_algorithm, size_bytes, committed_at, bytes_written_at)
-		 VALUES ($1, $2, $3, $4, 'AVAILABLE', 'text/plain', 0, 1, now(), clock_timestamp())`,
-		id, rf.tenantID, rf.collectionID, key)
-	return id
+	now := time.Now()
+	return seedObject(t, ctx, rf.pool, objectrow.Row{
+		TenantID: rf.tenantID, CollectionID: rf.collectionID, Path: key, ContentType: "text/plain",
+		SizeBytes: objectrow.Ptr[int64](1), CommittedAt: &now, BytesWrittenAt: &now,
+	})
 }
 
 // promote moves a PENDING object to AVAILABLE with a byte write, as the
@@ -67,7 +67,7 @@ func (rf replicaFixture) available(t *testing.T, ctx context.Context, key string
 func (rf replicaFixture) promote(t *testing.T, ctx context.Context, id uuid.UUID) {
 	t.Helper()
 	mustExec(t, ctx, rf.pool, `UPDATE objects SET state = 'AVAILABLE', committed_at = now(),
-		bytes_written_at = clock_timestamp() WHERE id = $1`, id)
+		bytes_written_at = clock_timestamp(), placement_bucket_id = upload_bucket_id WHERE id = $1`, id)
 }
 
 func (rf replicaFixture) claim(t *testing.T, ctx context.Context) []worker.ReplicaClaim {
@@ -381,7 +381,7 @@ func TestObjectReplicasQueueUnderTheApplicationRole(t *testing.T) {
 	if _, err := tx.Exec(ctx, `SELECT set_config('paladin.tenant_id', $1, true)`, rf.tenantID.String()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec(ctx, `UPDATE objects SET state = 'AVAILABLE', bytes_written_at = clock_timestamp() WHERE id = $1`, id); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE objects SET state = 'AVAILABLE', bytes_written_at = clock_timestamp(), placement_bucket_id = upload_bucket_id WHERE id = $1`, id); err != nil {
 		t.Fatalf("promote as the application: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

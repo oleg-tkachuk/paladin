@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // walkAlphabet is what the random keys are made of: the delimiter, LIKE's
@@ -89,16 +90,14 @@ func TestListObjectPrefixes_MatchesReference(t *testing.T) {
 	objs := make([]walkObject, 0, len(byKey))
 	for _, o := range byKey {
 		objs = append(objs, o)
-		mustExec(t, ctx, admin, `
-			INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-			SELECT $1, c.id, $2, $3::object_state, 'text/plain'
-			  FROM collections c WHERE c.tenant_id = $1 AND c.name = $4`, tenant, o.key, o.state, walkCollection)
+		seedObject(t, ctx, admin, objectrow.Row{
+			TenantID: tenant, Collection: walkCollection, Path: o.key, State: o.state, ContentType: "text/plain",
+		})
 		// The same keys under another tenant, live, so a leak shows as an
 		// extra folder.
-		mustExec(t, ctx, admin, `
-			INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-			SELECT $1, c.id, $2 || 'leak/', 'AVAILABLE', 'text/plain'
-			  FROM collections c WHERE c.tenant_id = $1 AND c.name = $3`, other, o.key, walkCollection)
+		seedObject(t, ctx, admin, objectrow.Row{
+			TenantID: other, Collection: walkCollection, Path: o.key + "leak/", ContentType: "text/plain",
+		})
 	}
 
 	pool := rlsPool(t, ctx, admin)

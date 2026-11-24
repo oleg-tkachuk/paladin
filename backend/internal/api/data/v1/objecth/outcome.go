@@ -40,6 +40,7 @@ const (
 const (
 	fieldCollection = "collection"
 	fieldObjectID   = "object_id"
+	fieldState      = "state"
 )
 
 // objectFields names the collection and the object an RPC was about, as the

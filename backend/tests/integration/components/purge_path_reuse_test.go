@@ -38,7 +38,7 @@ func TestPurgeDrainerSparesAReusedPath(t *testing.T) {
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
 	newer, err := repo.CreateObject(ctx, objecth.CreateObjectArgs{
 		TenantID: f.tenantID, Collection: f.collection, Key: orphanPath,
-		PresignExpiresAt: time.Now().Add(time.Hour),
+		PresignExpiresAt: time.Now().Add(time.Hour), UploadBackendID: f.backend, UploadBucket: f.bucket,
 	})
 	if err != nil {
 		t.Fatalf("upload at the reused path: %v", err)
@@ -63,7 +63,7 @@ func TestPurgeDrainerSparesAReusedPath(t *testing.T) {
 	}
 
 	// Uploaded: its write replaced the old bytes, so the debt is paid.
-	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, newer.ObjectID)
+	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE', placement_bucket_id = upload_bucket_id WHERE id = $1`, newer.ObjectID)
 	mustExec(t, ctx, pool, `UPDATE pending_purges SET next_attempt_at = now() WHERE id = $1`, debt)
 	if err := d.Sweep(ctx); err != nil {
 		t.Fatalf("Sweep = %v, want nil", err)
@@ -87,7 +87,7 @@ func TestObjectInsertWaitsForAPurgeOfItsPath(t *testing.T) {
 	repo := adapters.NewObjectRepo(sqlc.New(pool), pool)
 	args := objecth.CreateObjectArgs{
 		TenantID: f.tenantID, Collection: f.collection, Key: orphanPath,
-		PresignExpiresAt: time.Now().Add(time.Hour),
+		PresignExpiresAt: time.Now().Add(time.Hour), UploadBackendID: f.backend, UploadBucket: f.bucket,
 	}
 
 	purge := holdPathForPurge(t, ctx, pool, f)

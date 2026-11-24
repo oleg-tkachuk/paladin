@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/statemachine"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // trashFixture is two tenants with the same rows in one bucket — one live,
@@ -50,11 +51,14 @@ func setupTrashFixture(t *testing.T, pool *pgxpool.Pool) trashFixture {
 		mustEnsureBindableBucket(t, pool, tenant, trashBackend, trashBucket)
 		exec(`INSERT INTO collections (tenant_id, name, bucket_id)
 		      SELECT $1, 'docs', b.id FROM buckets b WHERE b.name = $2`, tenant, trashBucket)
-		for _, state := range []string{"DELETED", "PENDING"} {
-			exec(`INSERT INTO objects (tenant_id, collection_id, upload_bucket_id, path, state, content_type, terminated_at, presign_expires_at)
-			      SELECT $1, c.id, CASE WHEN $3 = 'PENDING' THEN c.bucket_id END, $2, $3::object_state, 'text/plain',
-			             now() - $4::interval, now() - $4::interval
-			        FROM collections c WHERE c.tenant_id = $1`, tenant, "a-"+state, state, oldEnough.String())
+		long := time.Now().Add(-oldEnough)
+		for _, state := range []string{objectrow.StateDeleted, objectrow.StatePending} {
+			if _, err := objectrow.Insert(ctx, pool, objectrow.Row{
+				TenantID: tenant, Collection: "docs", Path: "a-" + state, State: state,
+				ContentType: "text/plain", TerminatedAt: &long, PresignExpiresAt: &long,
+			}); err != nil {
+				t.Fatalf("seed %s object: %v", state, err)
+			}
 		}
 		exec(`INSERT INTO operations (tenant_id, type) VALUES ($1, 'batch_delete')`, tenant)
 		exec(`INSERT INTO tenant_storage_migrations (tenant_id, source_bucket_id, target_bucket_id)

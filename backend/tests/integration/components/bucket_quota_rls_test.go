@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/middleware"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // A bucket quota used to be a `quotas` row with tenant_id NULL, under a tenant
@@ -88,12 +89,10 @@ func TestBucketQuota_SetReadChargeEnforceResetUnderRLS(t *testing.T) {
 	}
 
 	// The promote path charges the bucket through the uploader's own session.
-	objectID := uuid.NewV7()
-	mustExec(t, ctx, admin,
-		`INSERT INTO objects (id, tenant_id, collection_id, path, state,
-		                      content_type, checksum_algorithm, size_bytes)
-		 VALUES ($1, $2, $3, $4, 'AVAILABLE', 'application/octet-stream', 0, 10)`,
-		objectID, f.tenantID, f.collectionID, "k-"+uuid.New().String()[:8])
+	objectID := seedObject(t, ctx, admin, objectrow.Row{
+		TenantID: f.tenantID, CollectionID: f.collectionID, Path: "k-" + uuid.New().String()[:8],
+		SizeBytes: objectrow.Ptr[int64](10),
+	})
 	if err := quotas.OnObjectPromoted(uploader, f.tenantID, objectID, 10); err != nil {
 		t.Fatalf("OnObjectPromoted: %v", err)
 	}

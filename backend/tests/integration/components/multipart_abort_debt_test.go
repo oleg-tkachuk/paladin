@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 	"uuid"
+
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // A multipart session is reachable by ON DELETE CASCADE from objects and from
@@ -39,11 +41,10 @@ func TestMultipartAbortDebt(t *testing.T) {
 		mustExec(t, ctx, pool,
 			`INSERT INTO collections (tenant_id, name, bucket_id)
 			 SELECT $1, $2, id FROM buckets WHERE name = $3`, tenant, collection, bucket)
-		object = uuid.New()
-		mustExec(t, ctx, pool,
-			`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type)
-			 SELECT $1, $2, id, $4, 'PENDING', 'application/octet-stream' FROM collections WHERE tenant_id = $2 AND name = $3`,
-			object, tenant, collection, "k-"+uuid.New().String()[:8])
+		object = seedObject(t, ctx, pool, objectrow.Row{
+			TenantID: tenant, Collection: collection, Path: "k-" + uuid.New().String()[:8],
+			State: objectrow.StatePending,
+		})
 		upload = uuid.New()
 		storageID = "s3-upload-" + uuid.New().String()[:8]
 		mustExec(t, ctx, pool,

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,6 +30,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker/operations"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // TestBatchExecutor_Delete: 3 AVAILABLE rows + 1 nonexistent id ⇒
@@ -197,19 +199,16 @@ func TestBatchExecutor_TenantMismatch_FailsWholeOp(t *testing.T) {
 
 // ─── helpers ────────────────────────────────────────────────────────
 
+// availableObjectSize is the size mustInsertAvailableObject records.
+const availableObjectSize int64 = 100
+
 func mustInsertAvailableObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, collection, key string) uuid.UUID {
 	t.Helper()
-	objID := uuid.New()
-	_, err := pool.Exec(context.Background(), `
-        INSERT INTO objects (
-            id, tenant_id, collection_id, path, state,
-            content_type, checksum_algorithm, size_bytes, etag, committed_at
-        )
-        SELECT $1, $2, c.id, $4, 'AVAILABLE',
-               'application/octet-stream', 1, 100, 'etag', now()
-          FROM collections c
-         WHERE c.tenant_id = $2 AND c.name = $3
-    `, objID, tenantID, collection, key)
+	objID, err := objectrow.Insert(context.Background(), pool, objectrow.Row{
+		TenantID: tenantID, Collection: collection, Path: key, ChecksumAlgorithm: 1,
+		SizeBytes: objectrow.Ptr(availableObjectSize), ETag: objectrow.Ptr("etag"),
+		CommittedAt: objectrow.Ptr(time.Now()),
+	})
 	if err != nil {
 		t.Fatalf("insert available object: %v", err)
 	}

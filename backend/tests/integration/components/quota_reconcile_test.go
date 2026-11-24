@@ -12,6 +12,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // TestReconcileQuotaUsage_DrivesCountersToLiveTruth is the regression test
@@ -72,7 +73,8 @@ func TestReconcileQuotaUsage_DrivesCountersToLiveTruth(t *testing.T) {
 	// Deleting everything must drive the counter to zero — the direction
 	// the increment-only path could never go, and the one that wedged
 	// tenants.
-	mustExec(t, ctx, pool, `UPDATE objects SET state = 'DELETED' WHERE tenant_id = $1`, f.tenantID)
+	mustExec(t, ctx, pool, `UPDATE objects SET state = 'DELETED',
+		placement_bucket_id = COALESCE(placement_bucket_id, upload_bucket_id) WHERE tenant_id = $1`, f.tenantID)
 	if _, err := repo.ReconcileUsage(ctx); err != nil {
 		t.Fatalf("ReconcileUsage after delete: %v", err)
 	}
@@ -291,14 +293,17 @@ func TestFirstChargeOfTheDayIsKeptByTheRoll(t *testing.T) {
 	}
 }
 
+// insertObj inserts an object in state of size bytes; a nil size leaves it
+// NULL, as on a PENDING row.
 func insertObj(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, state string, size any) {
 	t.Helper()
-	mustExec(t, ctx, pool,
-		`INSERT INTO objects (id, tenant_id, collection_id, path, state,
-		                      content_type, checksum_algorithm, size_bytes)
-		 SELECT $1, $2, c.id, $4, $5, 'application/octet-stream', 0, $6
-		   FROM collections c WHERE c.tenant_id = $2 AND c.name = $3`, uuid.NewV7(), f.tenantID, f.collection,
-		"k-"+uuid.New().String()[:8], state, size)
+	row := objectrow.Row{
+		TenantID: f.tenantID, Collection: f.collection, Path: "k-" + uuid.New().String()[:8], State: state,
+	}
+	if n, ok := size.(int); ok {
+		row.SizeBytes = objectrow.Ptr(int64(n))
+	}
+	seedObject(t, ctx, pool, row)
 }
 
 // quotaUsage reads a quota of either scope: the id is unique across both tables.

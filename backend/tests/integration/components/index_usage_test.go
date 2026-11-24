@@ -308,9 +308,12 @@ func seedObjectsUnder(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f f
 	t.Helper()
 	mustExec(t, ctx, pool, `
 		INSERT INTO objects (id, tenant_id, collection_id, path, state,
-		                     content_type, checksum_algorithm, size_bytes)
+		                     content_type, checksum_algorithm, size_bytes,
+		                     upload_bucket_id, placement_bucket_id)
 		SELECT gen_random_uuid(), $1, c.id, 'k-' || g, $3::object_state,
-		       'application/octet-stream', 0, 100
+		       'application/octet-stream', 0, 100,
+		       CASE WHEN $3::object_state = 'PENDING' THEN c.bucket_id END,
+		       CASE WHEN $3::object_state <> 'PENDING' THEN c.bucket_id END
 		  FROM generate_series(1, $4) AS g
 		 CROSS JOIN collections c
 		 WHERE c.tenant_id = $1 AND c.name = $2`,

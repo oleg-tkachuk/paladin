@@ -14,6 +14,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/tests/integration/pgharness"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // TestRLS_ObjectsCrossTenantSelectReturnsZero seeds two tenants with
@@ -221,15 +222,10 @@ func mustEnsureBindableBucket(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UU
 
 func mustInsertObject(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, collection, key string) {
 	t.Helper()
-	_, err := pool.Exec(context.Background(), `
-        INSERT INTO objects (
-            id, tenant_id, collection_id, path, state,
-            content_type, checksum_algorithm
-        )
-        SELECT $1, $2, c.id, $4, 'AVAILABLE', 'text/plain', 1
-          FROM collections c
-         WHERE c.tenant_id = $2 AND c.name = $3
-    `, uuid.New(), tenantID, collection, key)
+	_, err := objectrow.Insert(context.Background(), pool, objectrow.Row{
+		TenantID: tenantID, Collection: collection, Path: key,
+		ContentType: "text/plain", ChecksumAlgorithm: 1,
+	})
 	if err != nil {
 		t.Fatalf("insert object: %v", err)
 	}

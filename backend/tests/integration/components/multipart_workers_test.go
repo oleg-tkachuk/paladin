@@ -17,6 +17,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // The two workers that close S3-side multipart sessions nothing else will:
@@ -82,10 +83,9 @@ func seedMultipart(t *testing.T, ctx context.Context, pool *pgxpool.Pool, age ti
 	mustExec(t, ctx, pool,
 		`INSERT INTO collections (tenant_id, name, bucket_id) SELECT $1, $2, id FROM buckets WHERE name = $3`,
 		s.tenant, s.collect, s.bucket)
-	mustExec(t, ctx, pool,
-		`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type)
-		 SELECT $1, $2, id, $4, 'PENDING', 'application/octet-stream' FROM collections WHERE tenant_id = $2 AND name = $3`,
-		s.object, s.tenant, s.collect, s.path)
+	seedObject(t, ctx, pool, objectrow.Row{
+		ID: s.object, TenantID: s.tenant, Collection: s.collect, Path: s.path, State: objectrow.StatePending,
+	})
 	mustExec(t, ctx, pool,
 		`INSERT INTO multipart_uploads
 		   (id, tenant_id, object_id, bucket_id, storage_upload_id, part_size_bytes,

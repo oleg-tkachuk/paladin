@@ -22,6 +22,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // fixture seeds one tenant + backend + collection + an active (match-all)
@@ -35,6 +36,9 @@ type fixture struct {
 	// the test would pass for the wrong reason.
 	collection   string
 	collectionID uuid.UUID
+	// backend and bucket name the bucket the collection is bound to, as an
+	// upload's URL is signed for it.
+	backend, bucket string
 }
 
 func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture {
@@ -43,6 +47,7 @@ func seedFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool) fixture 
 	f := fixture{tenantID: uuid.New(), collection: "ok-" + hex}
 	backendID := "be-" + hex
 	bucketName := "bkt-" + hex // satisfies buckets.bucket_name_format
+	f.backend, f.bucket = backendID, bucketName
 
 	mustExec(t, ctx, pool, `INSERT INTO storage_backends (name, kind) VALUES ($1, 's3-compatible')`, backendID)
 	// slug + display_name are NOT NULL with format/unique CHECKs (migrations
@@ -93,6 +98,17 @@ func grantBucket(tb testing.TB, ctx context.Context, pool *pgxpool.Pool, tenantI
 		   JOIN storage_backends sb ON sb.id = b.backend_id
 		  WHERE sb.name = $1 AND b.name = $2
 		 ON CONFLICT DO NOTHING`, backendID, bucketName, tenantID, bucketGrantor)
+}
+
+// seedObject inserts one object row, placed and anchored as its state
+// requires (package objectrow), and returns its id.
+func seedObject(tb testing.TB, ctx context.Context, q objectrow.Querier, row objectrow.Row) uuid.UUID {
+	tb.Helper()
+	id, err := objectrow.Insert(ctx, q, row)
+	if err != nil {
+		tb.Fatalf("seed object: %v", err)
+	}
+	return id
 }
 
 func mustExec(tb testing.TB, ctx context.Context, pool *pgxpool.Pool, sql string, args ...any) {
@@ -198,7 +214,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 	// ── repo seam: permanent delete + event commit together ──────────────
 	t.Run("hard delete commits row removal and outbox atomically", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
-		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, id)
+		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE', placement_bucket_id = upload_bucket_id WHERE id = $1`, id)
 		err := repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 			if e := repo.HardDeleteTx(ctx, tx, f.tenantID, id, 0); e != nil {
 				return e
@@ -222,7 +238,7 @@ func TestOutboxCrashWindow(t *testing.T) {
 	// ── repo seam: dispatch error rolls BOTH back ────────────────────────
 	t.Run("dispatch error rolls back hard delete and outbox", func(t *testing.T) {
 		id := seedPendingObject(t, ctx, pool, f)
-		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, id)
+		mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE', placement_bucket_id = upload_bucket_id WHERE id = $1`, id)
 		before := recordedEventCount(t, ctx, pool, f.tenantID, "paladin.object.deleted")
 		err := repo.RunInTx(ctx, func(ctx context.Context, tx pgx.Tx) error {
 			if e := repo.HardDeleteTx(ctx, tx, f.tenantID, id, 0); e != nil {

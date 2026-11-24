@@ -41,12 +41,18 @@ type purgeRepo struct {
 	settled     []uuid.UUID
 }
 
+// The bucket purgeRepo binds its collection to and places its object in.
+const (
+	purgeBackend = "backend-1"
+	purgeBucket  = "bucket-1"
+)
+
 func (r *purgeRepo) FindByName(context.Context, uuid.UUID, string, string) (Object, error) {
-	return r.obj, nil
+	return placedIn(r.obj, purgeBackend, purgeBucket), nil
 }
 
 func (r *purgeRepo) LookupBucket(context.Context, uuid.UUID, string, bucketgate.Access) (string, string, error) {
-	return "backend-1", "bucket-1", nil
+	return purgeBackend, purgeBucket, nil
 }
 
 func (r *purgeRepo) ObjectLock(context.Context, uuid.UUID, uuid.UUID) (ObjectLock, error) {
@@ -146,7 +152,7 @@ func TestPermanentDeleteQueuesPurgeDebtWhenStorageFails(t *testing.T) {
 			"they live", len(repo.enqueued))
 	}
 	d := repo.enqueued[0]
-	if d.BackendID != "backend-1" || d.BucketName != "bucket-1" ||
+	if d.BackendID != purgeBackend || d.BucketName != purgeBucket ||
 		d.Collection != "docs" || d.Key != "a.txt" || d.TenantID != tenantID {
 		t.Errorf("purge debt is missing routing needed to find the bytes: %+v", d)
 	}

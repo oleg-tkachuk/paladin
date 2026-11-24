@@ -49,14 +49,16 @@ func TestListObjects_SortsByEveryOrderField(t *testing.T) {
 	// Values repeat on purpose; a third of the objects are trashed, at one of
 	// two instants, and the rest have no terminated_at.
 	mustExec(t, ctx, admin, `
-		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, size_bytes, created_at, terminated_at)
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, size_bytes, created_at, terminated_at,
+		                     placement_bucket_id)
 		SELECT $1, c.id,
 		       (ARRAY['b', 'a', 'B', 'a/z', 'A'])[g % 5 + 1] || '-' || g,
 		       CASE WHEN g % 3 = 0 THEN 'DELETED' ELSE 'AVAILABLE' END::object_state,
 		       (ARRAY['image/png', 'application/pdf', 'text/plain'])[g % 3 + 1],
 		       CASE WHEN g % 4 = 0 THEN NULL ELSE (g % 3) * 100 END,
 		       '2026-10-01T00:00:00Z'::timestamptz + (g % 4) * interval '1 hour',
-		       CASE WHEN g % 3 = 0 THEN '2026-10-02T00:00:00Z'::timestamptz + (g % 2) * interval '1 minute' END
+		       CASE WHEN g % 3 = 0 THEN '2026-10-02T00:00:00Z'::timestamptz + (g % 2) * interval '1 minute' END,
+		       c.bucket_id
 		  FROM generate_series(1, 23) g
 		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant)
 

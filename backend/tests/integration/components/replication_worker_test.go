@@ -23,6 +23,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 const (
@@ -98,12 +99,11 @@ func (wr workerReplication) enable(t *testing.T, ctx context.Context) {
 // leaves it.
 func (wr workerReplication) promoted(t *testing.T, ctx context.Context, key string, size int) uuid.UUID {
 	t.Helper()
-	id := uuid.NewV7()
-	mustExec(t, ctx, wr.pool, `INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type,
-		   checksum_algorithm, size_bytes, committed_at, bytes_written_at)
-		 VALUES ($1, $2, $3, $4, 'AVAILABLE', 'application/octet-stream', 0, $5, now(), clock_timestamp())`,
-		id, wr.f.tenantID, wr.f.collectionID, key, int64(size))
-	return id
+	now := time.Now()
+	return seedObject(t, ctx, wr.pool, objectrow.Row{
+		TenantID: wr.f.tenantID, CollectionID: wr.f.collectionID, Path: key,
+		SizeBytes: objectrow.Ptr(int64(size)), CommittedAt: &now, BytesWrittenAt: &now,
+	})
 }
 
 // run starts the worker and stops it when the test ends.

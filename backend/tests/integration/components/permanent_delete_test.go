@@ -66,14 +66,13 @@ func purgeDebtCount(t *testing.T, ctx context.Context, pool *pgxpool.Pool, objec
 func availableObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture) objecth.Object {
 	t.Helper()
 	id := seedPendingObject(t, ctx, pool, f)
-	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE' WHERE id = $1`, id)
-	var key string
-	if err := pool.QueryRow(ctx, `SELECT path FROM objects WHERE id = $1`, id).Scan(&key); err != nil {
-		t.Fatalf("read key: %v", err)
+	mustExec(t, ctx, pool, `UPDATE objects SET state = 'AVAILABLE', placement_bucket_id = upload_bucket_id WHERE id = $1`, id)
+	// As the handler reads it, placement included.
+	obj, err := adapters.NewObjectRepo(sqlc.New(pool), pool).FindByName(ctx, f.tenantID, f.collection, id.String())
+	if err != nil {
+		t.Fatalf("read the object: %v", err)
 	}
-	return objecth.Object{
-		ObjectID: id, TenantID: f.tenantID, Collection: f.collection, Key: key,
-	}
+	return obj
 }
 
 func permanentDeleteHandler(pool *pgxpool.Pool, st objecth.Storage) *objecth.Handler {

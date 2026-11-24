@@ -20,6 +20,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 const folderDelimiter = "/"
@@ -33,10 +34,9 @@ func TestListObjects_OneFolderLevel(t *testing.T) {
 	seedCollectionFor(t, ctx, admin, tenant, "docs")
 	put := func(path, state string) {
 		t.Helper()
-		mustExec(t, ctx, admin, `
-			INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-			SELECT $1, c.id, $2, $3::object_state, 'text/plain'
-			  FROM collections c WHERE c.tenant_id = $1 AND c.name = 'docs'`, tenant, path, state)
+		seedObject(t, ctx, admin, objectrow.Row{
+			TenantID: tenant, Collection: "docs", Path: path, State: state, ContentType: "text/plain",
+		})
 	}
 	for _, p := range []string{
 		"top.txt",
@@ -134,8 +134,8 @@ func TestListCommonPrefixes_Truncated(t *testing.T) {
 	seedBucketRow(t, ctx, admin)
 	seedCollectionFor(t, ctx, admin, tenant, "docs")
 	mustExec(t, ctx, admin, `
-		INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-		SELECT $1, c.id, 'f' || lpad(g::text, 5, '0') || '/x', 'AVAILABLE', 'text/plain'
+		INSERT INTO objects (tenant_id, collection_id, path, state, content_type, placement_bucket_id)
+		SELECT $1, c.id, 'f' || lpad(g::text, 5, '0') || '/x', 'AVAILABLE', 'text/plain', c.bucket_id
 		  FROM generate_series(1, $2::int) g
 		  JOIN collections c ON c.tenant_id = $1 AND c.name = 'docs'`, tenant, objecth.MaxCommonPrefixes+1)
 	pool := rlsPool(t, ctx, admin)
@@ -165,8 +165,8 @@ func TestListObjectPrefixes_Scoped(t *testing.T) {
 	for _, tid := range []uuid.UUID{tenantA, tenantB} {
 		seedCollectionFor(t, ctx, admin, tid, "docs")
 		mustExec(t, ctx, admin, `
-			INSERT INTO objects (tenant_id, collection_id, path, state, content_type)
-			SELECT $1, c.id, 'x/1', 'AVAILABLE', 'text/plain'
+			INSERT INTO objects (tenant_id, collection_id, path, state, content_type, placement_bucket_id)
+			SELECT $1, c.id, 'x/1', 'AVAILABLE', 'text/plain', c.bucket_id
 			  FROM collections c WHERE c.tenant_id = $1 AND c.name = 'docs'`, tid)
 	}
 	pool := rlsPool(t, ctx, admin)

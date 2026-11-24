@@ -11,6 +11,7 @@ import (
 	objectkey "github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/collectionh"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // A collection's usage counts its available objects alone — not one still
@@ -26,12 +27,10 @@ func TestCollectionUsage_CountsTheAvailableObjects(t *testing.T) {
 	newest := time.Date(2026, 10, 21, 12, 0, 0, 0, time.UTC)
 
 	seed := func(f fixture, path string, state sqlc.ObjectState, size int64, committed time.Time) {
-		mustExec(t, ctx, pool, `
-			INSERT INTO objects (id, tenant_id, collection_id, path, state,
-			                     content_type, checksum_algorithm, size_bytes, committed_at)
-			VALUES (gen_random_uuid(), $1, $2, $3, $4::object_state,
-			        'application/octet-stream', 0, $5, $6)`,
-			f.tenantID, f.collectionID, path, string(state), size, committed)
+		seedObject(t, ctx, pool, objectrow.Row{
+			TenantID: f.tenantID, CollectionID: f.collectionID, Path: path, State: string(state),
+			SizeBytes: &size, CommittedAt: &committed,
+		})
 	}
 	seed(a, "one", sqlc.ObjectStateAVAILABLE, 100, newest.Add(-time.Hour))
 	seed(a, "two", sqlc.ObjectStateAVAILABLE, 50, newest)

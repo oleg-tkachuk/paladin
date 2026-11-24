@@ -13,12 +13,12 @@ import (
 	"uuid"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
+	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
 )
 
 // The workers that delete bytes in the background ask the bucket gate as a
@@ -178,13 +178,11 @@ func TestPurgeDrainerDefersDebtOnABackendTheGateRefuses(t *testing.T) {
 // hard-deleter takes it, and returns its id.
 func seedTrashedObject(t *testing.T, ctx context.Context, pool *pgxpool.Pool, f fixture, age time.Duration) uuid.UUID {
 	t.Helper()
-	id := uuid.NewV7()
-	mustExec(t, ctx, pool,
-		`INSERT INTO objects (id, tenant_id, collection_id, path, state, content_type, checksum_algorithm, terminated_at)
-		 VALUES ($1, $2, $3, $4, 'DELETED', 'application/octet-stream', 0, now() - $5::interval)`,
-		id, f.tenantID, f.collectionID, "trashed-"+uuid.New().String()[:8],
-		pgtype.Interval{Microseconds: age.Microseconds(), Valid: true})
-	return id
+	trashed := time.Now().Add(-age)
+	return seedObject(t, ctx, pool, objectrow.Row{
+		TenantID: f.tenantID, CollectionID: f.collectionID, Path: "trashed-" + uuid.New().String()[:8],
+		State: objectrow.StateDeleted, TerminatedAt: &trashed,
+	})
 }
 
 func TestLifecycleHardDeleterLeavesTheTrashOnABackendTheGateRefuses(t *testing.T) {
