@@ -214,7 +214,7 @@ describe("TableToolbar", () => {
       // The byte order mark, then the text.
       expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
       expect(new TextDecoder().decode(bytes)).toBe(
-        "Name\r\nalice\r\n'=bob\r\n",
+        `"Name"\r\n"alice"\r\n"'=bob"\r\n`,
       );
     });
   });

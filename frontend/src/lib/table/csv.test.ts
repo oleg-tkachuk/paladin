@@ -18,11 +18,26 @@ describe("neutraliseFormula", () => {
     ["@cmd", "'@cmd"],
     ["\tx", "'\tx"],
     ["\rx", "'\rx"],
+    ["\nx", "'\nx"],
+    ["\vx", "'\vx"],
+    ["\fx", "'\fx"],
+    ["|cmd", "'|cmd"],
+    ["%x", "'%x"],
+    // A spreadsheet strips what leads a value before it evaluates it, so
+    // the lead is looked for past blanks, controls, NBSP and a BOM; the
+    // guard still goes before the text as it was.
+    [" =1+1", "' =1+1"],
+    ["   +1", "'   +1"],
+    ["\u00A0=1", "'\u00A0=1"],
+    ["\uFEFF=1", "'\uFEFF=1"],
+    ["\u0000@x", "'\u0000@x"],
+    ["\u001F-1", "'\u001F-1"],
+    [" \t\u00A0\uFEFF%x", "' \t\u00A0\uFEFF%x"],
   ])("guards %j", (text, want) => {
     expect(neutraliseFormula(text)).toBe(want);
   });
 
-  it.each(["plain", "", "a=b", "1-2", " =x", "'already"])(
+  it.each(["plain", "", "a=b", "1-2", " x=1", "\u00A0x", "'already"])(
     "leaves %j as it is",
     (text) => {
       expect(neutraliseFormula(text)).toBe(text);
@@ -32,13 +47,17 @@ describe("neutraliseFormula", () => {
 
 describe("csvField", () => {
   it.each([
-    ["plain", "plain"],
-    ["", ""],
+    ["plain", '"plain"'],
+    ["", '""'],
     ["a,b", '"a,b"'],
+    // Quoted whatever it holds, so a reader splitting on ; or a tab still
+    // reads one cell.
+    ["a;b", '"a;b"'],
+    ["a\tb", '"a\tb"'],
     ['say "hi"', '"say ""hi"""'],
     ["two\nlines", '"two\nlines"'],
     ["cr\rlf", '"cr\rlf"'],
-    ["ünïcödé", "ünïcödé"],
+    ["ünïcödé", '"ünïcödé"'],
   ])("writes %j as %j", (text, want) => {
     expect(csvField(text)).toBe(want);
   });
@@ -47,6 +66,7 @@ describe("csvField", () => {
   it("neutralises before it quotes", () => {
     expect(csvField("=1,2")).toBe(`"'=1,2"`);
     expect(csvField('-"x"')).toBe(`"'-""x"""`);
+    expect(csvField(" =1;2")).toBe(`"' =1;2"`);
   });
 });
 
@@ -62,15 +82,19 @@ describe("toCsv", () => {
       { name: "b", size: 2 },
       { name: "a", size: 1 },
     ];
-    expect(toCsv(COLUMNS, rows)).toBe('Name,"Size, bytes"\r\nb,2\r\na,1\r\n');
+    expect(toCsv(COLUMNS, rows)).toBe(
+      '"Name","Size, bytes"\r\n"b","2"\r\n"a","1"\r\n',
+    );
   });
 
   it("writes the header alone for no rows", () => {
-    expect(toCsv(COLUMNS, [])).toBe('Name,"Size, bytes"\r\n');
+    expect(toCsv(COLUMNS, [])).toBe('"Name","Size, bytes"\r\n');
   });
 
   it("guards a negative number as it guards any leading minus", () => {
-    expect(toCsv(COLUMNS, [{ name: "x", size: -3 }])).toContain("x,'-3\r\n");
+    expect(toCsv(COLUMNS, [{ name: "x", size: -3 }])).toContain(
+      `"x","'-3"\r\n`,
+    );
   });
 });
 
@@ -113,7 +137,7 @@ describe("csvExport", () => {
     const ex = csvExport("users", counted, [{ name: "a", size: 1 }]);
     expect(ex).toMatchObject({ name: "users", rowCount: 1 });
     expect(reads).toBe(0);
-    expect(ex.build()).toBe("Name\r\na\r\n");
+    expect(ex.build()).toBe('"Name"\r\n"a"\r\n');
     expect(reads).toBe(1);
   });
 });

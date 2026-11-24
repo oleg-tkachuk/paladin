@@ -33,7 +33,7 @@ test("a list exports the rows its search leaves, as CSV", async ({ page }) => {
   const path = await download.path();
   const text = await readFile(path, "utf8");
   const [header, ...rows] = text.replace(BOM, "").trimEnd().split("\r\n");
-  expect(header).toBe("User,Tenant,Roles,Last login,State");
+  expect(header).toBe('"User","Tenant","Roles","Last login","State"');
   expect(rows.length).toBeGreaterThan(0);
   for (const row of rows) expect(row).toContain(SEEDED_ADMIN.subject);
 });

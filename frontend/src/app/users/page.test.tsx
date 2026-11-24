@@ -169,9 +169,9 @@ describe("UsersPage", () => {
     click.mockRestore();
 
     const lines = (await blobs[0].text()).replace(/^\uFEFF/, "").split("\r\n");
-    expect(lines[0]).toBe("User,Tenant,Roles,Last login,State");
+    expect(lines[0]).toBe('"User","Tenant","Roles","Last login","State"');
     expect(lines.slice(1, -1)).toHaveLength(60);
-    expect(lines[1]).toBe("User59 (user59),t-1,,—,active");
-    expect(lines[60]).toBe("User00 (user00),t-1,,—,active");
+    expect(lines[1]).toBe('"User59 (user59)","t-1","","—","active"');
+    expect(lines[60]).toBe('"User00 (user00)","t-1","","—","active"');
   });
 });

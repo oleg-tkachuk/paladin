@@ -29,31 +29,56 @@ const QUOTE = '"';
 const ESCAPED_QUOTE = '""';
 
 /**
- * The first characters a spreadsheet reads as the start of a formula, or as
- * a way to hide one (a leading tab or carriage return), after OWASP's CSV
- * injection guidance.
+ * The first characters a spreadsheet reads as the start of a formula (=, +,
+ * -, @; | and % in some), or as a way to hide one (a leading tab, line break
+ * or form feed), after OWASP's CSV injection guidance.
  */
-const FORMULA_LEADS: readonly string[] = ["=", "+", "-", "@", "\t", "\r"];
+const FORMULA_LEADS: readonly string[] = [
+  "=",
+  "+",
+  "-",
+  "@",
+  "|",
+  "%",
+  "\t",
+  "\r",
+  "\n",
+  "\v",
+  "\f",
+];
+
+/**
+ * What a spreadsheet strips from the start of a value before it evaluates
+ * it: blanks and control characters (U+0000–U+0020), the no-break space and
+ * a byte order mark. " =1+1" is a formula once they are gone.
+ */
+const STRIPPED_LEAD = /^[\u0000-  ﻿]+/;
 
 /** Put before a cell that would open as a formula, so it opens as text. */
 const FORMULA_GUARD = "'";
 
-/** Characters that make a field need quotes. */
-const NEEDS_QUOTES = /[",\r\n]/;
+const leadsAFormula = (text: string) =>
+  FORMULA_LEADS.some((lead) => text.startsWith(lead));
 
-/** The text as a spreadsheet will show it, never as a formula it runs. */
+/**
+ * The text as a spreadsheet will show it, never as a formula it runs: a
+ * formula lead, as written or once the stripped lead is gone, gets the guard
+ * before the text as it was.
+ */
 export function neutraliseFormula(text: string): string {
-  return FORMULA_LEADS.some((lead) => text.startsWith(lead))
+  return leadsAFormula(text) || leadsAFormula(text.replace(STRIPPED_LEAD, ""))
     ? `${FORMULA_GUARD}${text}`
     : text;
 }
 
-/** One field: neutralised first, then quoted when RFC 4180 needs it. */
+/**
+ * One field: neutralised first, then quoted. Every field is quoted, not only
+ * the ones RFC 4180 requires, so a reader splitting on ; or a tab, as some
+ * locales do, still reads one cell and never an unguarded piece of one.
+ */
 export function csvField(text: string): string {
   const safe = neutraliseFormula(text);
-  return NEEDS_QUOTES.test(safe)
-    ? `${QUOTE}${safe.replaceAll(QUOTE, ESCAPED_QUOTE)}${QUOTE}`
-    : safe;
+  return `${QUOTE}${safe.replaceAll(QUOTE, ESCAPED_QUOTE)}${QUOTE}`;
 }
 
 function record(fields: readonly string[]): string {
