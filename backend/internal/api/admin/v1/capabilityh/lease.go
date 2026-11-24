@@ -187,9 +187,11 @@ func leaseAmount(subject limes.MeterSubject, req *adminv1.CapabilityServiceLease
 	if req.GetAmount() == nil {
 		return 0, nil
 	}
+	// NanosOf answers InvalidArgument itself; wrapping it again printed its
+	// code into the text.
 	n, unit, err := apiutil.NanosOf(leaseAmountField, req.GetAmount())
 	if err != nil {
-		return 0, rpcerr.New(connect.CodeInvalidArgument, err)
+		return 0, err
 	}
 	if unit != subject.UnitCode() {
 		return 0, connect.NewError(connect.CodeInvalidArgument,
