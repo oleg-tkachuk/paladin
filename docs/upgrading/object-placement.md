@@ -10,6 +10,11 @@
   trash's hard delete now resolve an object's bytes by its placement, and
   the bucket gate decides on that bucket's state. While no storage migration
   runs the placement is the collection's bucket, so nothing changes.
+- Bucket replication copies the objects whose bytes are in the bucket, read
+  from there, rather than the objects of the collections bound to it
+  (migration 126). An object is queued again when its bytes move to another
+  bucket; rebinding a collection no longer queues its bucket again, since it
+  moves no bytes.
 - After `BindCollectionToBucket` points a collection at another bucket, its
   existing objects keep being read from the bucket that holds them; until
   now they were looked for in the new bucket, which does not. New uploads go

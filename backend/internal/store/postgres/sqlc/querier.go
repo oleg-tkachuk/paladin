@@ -332,7 +332,9 @@ type Querier interface {
 	GetQuotaByID(ctx context.Context, id pgtype.UUID) (Quota, error)
 	GetRefreshToken(ctx context.Context, id pgtype.UUID) (RefreshToken, error)
 	// The claimed rows' objects as they are now, with the bucket each one's
-	// collection is bound to and the byte write a replica of it must match:
+	// bytes are in (objects.placement_bucket_id, ADR-0051; a row a binary from
+	// before 123 promoted has them in its collection's bucket) and the byte
+	// write a replica of it must match:
 	// bytes_written_at, which every promote sets, or for a row promoted before
 	// migration 111 its first commit. Every column cel.ObjectVars projects, so
 	// the bucket's filter sees what a ListObjects filter sees.
@@ -1075,7 +1077,8 @@ type Querier interface {
 	ScanPendingExpired(ctx context.Context, batchSize int32) ([]ScanPendingExpiredRow, error)
 	// Per-object replication state (migration 121, ADR-0050). Every query here
 	// runs on the worker's cross-tenant connection.
-	// Queues every AVAILABLE object of the bucket's collections, once: the
+	// Queues every AVAILABLE object whose bytes are in the bucket
+	// (objects.placement_bucket_id, ADR-0051), once: the
 	// replication_seeds row is written by the same statement, and a bucket that
 	// has one is left alone. The triggers queue every write from then on; a
 	// change to the bucket's replication settings drops the seed row, so the

@@ -148,9 +148,10 @@ func TestObjectReplicasSeedOnceUntilTheSettingsChange(t *testing.T) {
 	}
 }
 
-// A collection rebound into a seeded bucket — a storage migration's rebind —
-// has the bucket queued again, so the objects it brings are replicated.
-func TestObjectReplicasReseedACollectionRebound(t *testing.T) {
+// A collection rebound into a bucket brings no object into it: objects are
+// replicated from the bucket their bytes are in (ADR-0051). One moved into
+// it — a storage migration's move — is queued there by its move.
+func TestObjectReplicasFollowAMoveNotARebind(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	rf := newReplicaFixture(t, ctx)
@@ -165,8 +166,19 @@ func TestObjectReplicasReseedACollectionRebound(t *testing.T) {
 		t.Fatalf("seed of the empty target = (%d, %v), want 0", n, err)
 	}
 	mustExec(t, ctx, rf.pool, `UPDATE collections SET bucket_id = $2 WHERE id = $1`, rf.collectionID, target)
-	if n, err := rf.store.SeedReplication(ctx, target); err != nil || n != 1 {
-		t.Errorf("seed after the rebind = (%d, %v), want the moved object", n, err)
+	var queued int
+	if err := rf.pool.QueryRow(ctx, `SELECT count(*) FROM object_replicas WHERE source_bucket_id = $1`, target).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if queued != 0 {
+		t.Fatalf("a rebind queued %d objects for the bucket, want none: their bytes did not move", queued)
+	}
+	mustExec(t, ctx, rf.pool, `UPDATE objects SET placement_bucket_id = $2 WHERE collection_id = $1`, rf.collectionID, target)
+	if err := rf.pool.QueryRow(ctx, `SELECT count(*) FROM object_replicas WHERE source_bucket_id = $1`, target).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if queued != 1 {
+		t.Errorf("queued %d objects for the bucket after the move, want the moved object", queued)
 	}
 }
 
