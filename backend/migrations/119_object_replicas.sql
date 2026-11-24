@@ -78,7 +78,8 @@ CREATE POLICY tenant_isolation ON object_replicas FOR ALL
 -- enabled; from then on the triggers queue every write. A change to its
 -- replication settings drops the row, so the worker queues the whole bucket
 -- again: a new destination holds none of it, and a new filter may select
--- objects the old one passed over.
+-- objects the old one passed over. So does a collection rebound into it,
+-- whose objects were never queued there.
 CREATE TABLE replication_seeds (
     bucket_id  uuid        PRIMARY KEY REFERENCES buckets(id) ON DELETE CASCADE,
     seeded_at  timestamptz NOT NULL DEFAULT now()
@@ -180,8 +181,31 @@ CREATE TRIGGER buckets_reseed_replication
     EXECUTE FUNCTION buckets_reseed_replication();
 -- +goose StatementEnd
 
+-- +goose StatementBegin
+-- A collection rebound to a bucket — a storage migration's rebind — brings
+-- objects no trigger queued there: the bucket it joins is queued again. The
+-- objects already replicated from it settle without a copy.
+CREATE OR REPLACE FUNCTION collections_reseed_replication() RETURNS trigger
+    LANGUAGE plpgsql SET search_path TO 'pg_catalog', 'public' AS $$
+BEGIN
+    DELETE FROM replication_seeds WHERE bucket_id = NEW.bucket_id;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+
+-- +goose StatementBegin
+CREATE TRIGGER collections_reseed_replication
+    AFTER UPDATE OF bucket_id ON collections
+    FOR EACH ROW
+    WHEN (OLD.bucket_id IS DISTINCT FROM NEW.bucket_id)
+    EXECUTE FUNCTION collections_reseed_replication();
+-- +goose StatementEnd
+
 -- +goose Down
 -- +goose StatementBegin
+DROP TRIGGER IF EXISTS collections_reseed_replication ON collections;
+DROP FUNCTION IF EXISTS collections_reseed_replication();
 DROP TRIGGER IF EXISTS buckets_reseed_replication ON buckets;
 DROP FUNCTION IF EXISTS buckets_reseed_replication();
 DROP TRIGGER IF EXISTS objects_queue_replica_delete ON objects;

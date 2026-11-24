@@ -148,6 +148,28 @@ func TestObjectReplicasSeedOnceUntilTheSettingsChange(t *testing.T) {
 	}
 }
 
+// A collection rebound into a seeded bucket — a storage migration's rebind —
+// has the bucket queued again, so the objects it brings are replicated.
+func TestObjectReplicasReseedACollectionRebound(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	rf := newReplicaFixture(t, ctx)
+	rf.available(t, ctx, "moved")
+	var target pgtype.UUID
+	if err := rf.pool.QueryRow(ctx, `INSERT INTO buckets (backend_id, name, owner_tenant_id, replication_enabled, replication_destination)
+		 SELECT backend_id, $2, $3, TRUE, 'storageBackends/x/buckets/y' FROM buckets WHERE id = $1
+		 RETURNING id`, rf.bucketID, "bkt-tgt-"+uuid.New().String()[:8], rf.tenantID).Scan(&target); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := rf.store.SeedReplication(ctx, target); err != nil || n != 0 {
+		t.Fatalf("seed of the empty target = (%d, %v), want 0", n, err)
+	}
+	mustExec(t, ctx, rf.pool, `UPDATE collections SET bucket_id = $2 WHERE id = $1`, rf.collectionID, target)
+	if n, err := rf.store.SeedReplication(ctx, target); err != nil || n != 1 {
+		t.Errorf("seed after the rebind = (%d, %v), want the moved object", n, err)
+	}
+}
+
 // A claimed row is not claimed again until it is given back; a copy recorded
 // at the claim's generation settles it, while a write since the claim leaves
 // it due.
@@ -307,6 +329,17 @@ func TestObjectReplicasRetryAndFrozenTenants(t *testing.T) {
 	}
 	if again := rf.claim(t, ctx); len(again) != 0 {
 		t.Errorf("a put-off row was claimed: %+v", again)
+	}
+
+	// A write during a failed attempt is tried afresh, not put off.
+	written := rf.available(t, ctx, "w")
+	claims = rf.claim(t, ctx)
+	mustExec(t, ctx, rf.pool, `UPDATE objects SET bytes_written_at = clock_timestamp() WHERE id = $1`, written)
+	if err := rf.store.RetryReplica(ctx, claims[0], replicaTestRetryDelay, "timeout"); err != nil {
+		t.Fatal(err)
+	}
+	if again := rf.claim(t, ctx); len(again) != 1 || again[0].Attempts != 0 {
+		t.Fatalf("after a write during a failed attempt: claims = %+v, want the row due afresh", again)
 	}
 
 	rf.available(t, ctx, "b")

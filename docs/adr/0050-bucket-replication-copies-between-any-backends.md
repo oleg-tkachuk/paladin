@@ -82,7 +82,13 @@ at. The row is the work queue and the record at once.
   bucket's collections, in one statement that also records the seed
   (`replication_seeds`). A change to the bucket's replication settings drops
   that record, so a new destination receives everything and a new filter is
-  applied to everything.
+  applied to everything; so does a collection rebound into the bucket by a
+  storage migration, whose objects no trigger queued there.
+- *What counts as a byte write.* Every path that puts new bytes under a key
+  — an upload, a copy, a storage event's newer write — ends in the
+  promote, which sets `bytes_written_at`. A version restore repoints
+  `current_version_id` only: reads serve the key's bytes, and so does the
+  replica.
 
 **Deletes.** A replica mirrors the bytes the source holds, not the object's
 lifecycle state. A move to the trash leaves the source's bytes in place, so

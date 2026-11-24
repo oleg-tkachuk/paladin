@@ -472,6 +472,25 @@ func TestReplicationDryRunDeletesNothing(t *testing.T) {
 	}
 }
 
+// An object trashed before its first copy is not copied while in the trash;
+// its restore queues it again.
+func TestReplicationDoesNotCopyATrashedObject(t *testing.T) {
+	store := newFakeReplicaStore()
+	obj := store.write("a")
+	store.setState(obj.Row.ObjectID, "DELETED")
+	rep := newScriptedReplicator(store, nil)
+	w := replicatingWorker(store, rep, nil)
+	mustTick(t, w)
+	if len(rep.copied) != 0 {
+		t.Fatalf("copied %v from the trash", rep.copiedKeys())
+	}
+	store.setState(obj.Row.ObjectID, string(statemachine.StateAvailable))
+	mustTick(t, w)
+	if len(rep.copied) != 1 {
+		t.Errorf("copies after the restore = %d, want 1", len(rep.copied))
+	}
+}
+
 // A row whose object left the bucket — its collection rebound — is
 // forgotten without a copy.
 func TestReplicationForgetsAnObjectThatLeftTheBucket(t *testing.T) {
