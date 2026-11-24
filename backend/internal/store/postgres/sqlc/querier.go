@@ -610,7 +610,8 @@ type Querier interface {
 	// still checked against every row.
 	//
 	// The placement_* columns are the bucket each object's bytes are in (123,
-	// ADR-0051), by primary key; NULL on a PENDING row.
+	// ADR-0051), by primary key; NULL on a PENDING row. A row promoted by a
+	// binary from before 123 has its bytes in its collection's bucket.
 	ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string, level *string, delimiter *string) ([]ListObjectsRow, error)
 	// Oldest first. The cursor compares `>`, so paging walks forward in time.
 	ListOperations(ctx context.Context, tenantID pgtype.UUID, state *OperationState, afterID pgtype.UUID, initiatorSubject *string, hideDismissed bool, typeIn []string, typeLike *string, errorCodeIn []string, stateIn []string, done *bool, hasFailures *bool, errorMessageNeq *string, createdAtGte pgtype.Timestamptz, createdAtLte pgtype.Timestamptz, pageSize int32) ([]ListOperationsRow, error)

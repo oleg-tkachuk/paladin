@@ -305,13 +305,18 @@ FROM list_object_prefixes(
 -- still checked against every row.
 --
 -- The placement_* columns are the bucket each object's bytes are in (123,
--- ADR-0051), by primary key; NULL on a PENDING row.
+-- ADR-0051), by primary key; NULL on a PENDING row. A row promoted by a
+-- binary from before 123 has its bytes in its collection's bucket.
 SELECT sqlc.embed(o), sqlc.arg('collection')::text AS collection_name,
        psb.name AS placement_backend_name, pb.name AS placement_bucket_name,
        psb.enabled AS placement_enabled, psb.read_only AS placement_read_only,
        pb.provision_state AS placement_provision_state
 FROM objects o
-LEFT JOIN buckets pb           ON pb.id = o.placement_bucket_id
+LEFT JOIN buckets pb           ON pb.id = COALESCE(o.placement_bucket_id,
+                                    CASE WHEN o.state <> 'PENDING' THEN
+                                        (SELECT c.bucket_id FROM collections c
+                                          WHERE c.tenant_id = sqlc.arg('tenant_id')::uuid
+                                            AND c.name = sqlc.arg('collection')::text) END)
 LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(

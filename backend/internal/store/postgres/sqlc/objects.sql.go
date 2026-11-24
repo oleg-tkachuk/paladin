@@ -608,7 +608,11 @@ SELECT o.id, o.tenant_id, o.collection_id, o.path, o.state, o.content_type, o.si
        psb.enabled AS placement_enabled, psb.read_only AS placement_read_only,
        pb.provision_state AS placement_provision_state
 FROM objects o
-LEFT JOIN buckets pb           ON pb.id = o.placement_bucket_id
+LEFT JOIN buckets pb           ON pb.id = COALESCE(o.placement_bucket_id,
+                                    CASE WHEN o.state <> 'PENDING' THEN
+                                        (SELECT c.bucket_id FROM collections c
+                                          WHERE c.tenant_id = $2::uuid
+                                            AND c.name = $1::text) END)
 LEFT JOIN storage_backends psb ON psb.id = pb.backend_id
 WHERE o.id = ANY (ARRAY(
         SELECT search_object_ids(
@@ -669,7 +673,8 @@ type ListObjectsRow struct {
 // still checked against every row.
 //
 // The placement_* columns are the bucket each object's bytes are in (123,
-// ADR-0051), by primary key; NULL on a PENDING row.
+// ADR-0051), by primary key; NULL on a PENDING row. A row promoted by a
+// binary from before 123 has its bytes in its collection's bucket.
 func (q *Queries) ListObjects(ctx context.Context, collection string, tenantID pgtype.UUID, state *string, prefix *string, substr *string, contentType *string, contentTypePrefix *string, tagsContains []byte, metadataContains []byte, afterID pgtype.UUID, pageSize int32, liveOnly bool, orderBy string, sortDesc bool, afterValue *string, level *string, delimiter *string) ([]ListObjectsRow, error) {
 	rows, err := q.db.Query(ctx, listObjects,
 		collection,
