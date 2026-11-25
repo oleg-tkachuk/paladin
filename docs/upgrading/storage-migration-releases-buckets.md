@@ -1,4 +1,4 @@
-## Unreleased — a finished storage migration no longer holds its buckets
+## sdk/python/v0.153.1, sdk/go/v0.153.1 — a finished storage migration no longer holds its buckets
 
 - A `failed` or `cleaned` storage migration no longer refuses the delete of
   its buckets: `DeleteBucket` on a migrated tenant's dedicated bucket, or on
