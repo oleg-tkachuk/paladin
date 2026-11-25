@@ -89,6 +89,36 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## sdk/python/v0.153.1, sdk/go/v0.153.1 — a finished storage migration no longer holds its buckets
+
+- A `failed` or `cleaned` storage migration no longer refuses the delete of
+  its buckets: `DeleteBucket` on a migrated tenant's dedicated bucket, or on
+  the shared bucket a tenant migrated off, goes through once nothing else
+  holds it, and a migrated tenant can be purged. Migration 135 makes the
+  migration's bucket references `ON DELETE SET NULL` and guards them with a
+  trigger while the migration is `provisioning`, `moving`, `completed` or
+  `rolling_back`; `DeleteBucket` then still answers `FAILED_PRECONDITION`,
+  naming the storage migration.
+- `PreviewPurgeTenant` reports a new blocker kind,
+  `PURGE_BLOCKER_KIND_STORAGE_MIGRATION`, for a migration in flight, and
+  `PurgeTenant` refuses it with `FAILED_PRECONDITION`: restore the tenant,
+  cancel the migration or let it finish, then trash and purge it.
+- A migration whose bucket was deleted reports that bucket as empty in
+  `GetTenantStorageMigration`; a retry provisions the dedicated bucket anew.
+
+## Unreleased — a storage migration's switch is one transaction
+
+- A storage migration points the tenant's collections, default binding and
+  layout at the dedicated bucket in the same transaction that moves it to
+  `moving`, and back at the shared bucket in the one that moves it to
+  `rolling_back`, the worker's rollback and a cancel alike. An upload made
+  right after the switch is signed for the new bucket; it used to be signed
+  for the old one until the next pass, up to a worker interval later.
+- A collection the schema refuses to move now fails a migration still in
+  `provisioning`, with nothing pointed at the dedicated bucket.
+- Each repoint is logged at INFO with the tenant, both buckets and the
+  collections repointed.
+
 ## sdk/python/v0.153.0, sdk/go/v0.153.0 — an operator can cancel a storage migration
 
 - `CancelTenantStorageMigration` (admin `TenantService`) cancels a tenant's
