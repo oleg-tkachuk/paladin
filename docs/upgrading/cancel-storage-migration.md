@@ -1,4 +1,4 @@
-## Unreleased — an operator can cancel a storage migration
+## sdk/python/v0.153.0, sdk/go/v0.153.0 — an operator can cancel a storage migration
 
 - `CancelTenantStorageMigration` (admin `TenantService`) cancels a tenant's
   storage migration at the `resource_version` read from
