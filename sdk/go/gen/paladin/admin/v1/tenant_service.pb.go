@@ -44,6 +44,12 @@ const (
 	// operator: each row goes once the backend bucket is gone, and the purge
 	// can be retried then.
 	PurgeBlockerKind_PURGE_BLOCKER_KIND_BUCKETS_DELETING PurgeBlockerKind = 4
+	// The tenant's storage migration, while it is provisioning, moving,
+	// completed or rolling back: it holds the dedicated bucket the tenant owns.
+	// Reported first, for it comes first: in the trash the migration is
+	// frozen, so restore the tenant, cancel the migration
+	// (CancelTenantStorageMigration) or let it finish, and trash it again.
+	PurgeBlockerKind_PURGE_BLOCKER_KIND_STORAGE_MIGRATION PurgeBlockerKind = 5
 )
 
 // Enum value maps for PurgeBlockerKind.
@@ -54,13 +60,15 @@ var (
 		2: "PURGE_BLOCKER_KIND_BUCKETS",
 		3: "PURGE_BLOCKER_KIND_USERS",
 		4: "PURGE_BLOCKER_KIND_BUCKETS_DELETING",
+		5: "PURGE_BLOCKER_KIND_STORAGE_MIGRATION",
 	}
 	PurgeBlockerKind_value = map[string]int32{
-		"PURGE_BLOCKER_KIND_UNSPECIFIED":      0,
-		"PURGE_BLOCKER_KIND_COLLECTIONS":      1,
-		"PURGE_BLOCKER_KIND_BUCKETS":          2,
-		"PURGE_BLOCKER_KIND_USERS":            3,
-		"PURGE_BLOCKER_KIND_BUCKETS_DELETING": 4,
+		"PURGE_BLOCKER_KIND_UNSPECIFIED":       0,
+		"PURGE_BLOCKER_KIND_COLLECTIONS":       1,
+		"PURGE_BLOCKER_KIND_BUCKETS":           2,
+		"PURGE_BLOCKER_KIND_USERS":             3,
+		"PURGE_BLOCKER_KIND_BUCKETS_DELETING":  4,
+		"PURGE_BLOCKER_KIND_STORAGE_MIGRATION": 5,
 	}
 )
 
@@ -1131,6 +1139,8 @@ type StorageMigrationStatus struct {
 	ObjectsCopied int64 `protobuf:"varint,4,opt,name=objects_copied,json=objectsCopied,proto3" json:"objects_copied,omitempty"`
 	// Bucket references as resource names, consistent with
 	// TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
+	// Empty once the bucket was deleted: a failed or cleaned migration does not
+	// hold its buckets.
 	SourceBucket string `protobuf:"bytes,5,opt,name=source_bucket,json=sourceBucket,proto3" json:"source_bucket,omitempty"`
 	TargetBucket string `protobuf:"bytes,6,opt,name=target_bucket,json=targetBucket,proto3" json:"target_bucket,omitempty"`
 	// error — why the migration is rolling back or failed; empty otherwise.
@@ -1856,13 +1866,14 @@ const file_paladin_admin_v1_tenant_service_proto_rawDesc = "" +
 	"\x14reservation_enforced\x18\x03 \x01(\bR\x13reservationEnforced\"7\n" +
 	"\x18ReleaseTenantSlugRequest\x12\x1b\n" +
 	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\"\x1b\n" +
-	"\x19ReleaseTenantSlugResponse*\xc1\x01\n" +
+	"\x19ReleaseTenantSlugResponse*\xeb\x01\n" +
 	"\x10PurgeBlockerKind\x12\"\n" +
 	"\x1ePURGE_BLOCKER_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1ePURGE_BLOCKER_KIND_COLLECTIONS\x10\x01\x12\x1e\n" +
 	"\x1aPURGE_BLOCKER_KIND_BUCKETS\x10\x02\x12\x1c\n" +
 	"\x18PURGE_BLOCKER_KIND_USERS\x10\x03\x12'\n" +
-	"#PURGE_BLOCKER_KIND_BUCKETS_DELETING\x10\x042\xcb\x0e\n" +
+	"#PURGE_BLOCKER_KIND_BUCKETS_DELETING\x10\x04\x12(\n" +
+	"$PURGE_BLOCKER_KIND_STORAGE_MIGRATION\x10\x052\xcb\x0e\n" +
 	"\rTenantService\x12O\n" +
 	"\fCreateTenant\x12%.paladin.admin.v1.CreateTenantRequest\x1a\x18.paladin.admin.v1.Tenant\x12N\n" +
 	"\tGetTenant\x12\".paladin.admin.v1.GetTenantRequest\x1a\x18.paladin.admin.v1.Tenant\"\x03\x90\x02\x01\x12T\n" +

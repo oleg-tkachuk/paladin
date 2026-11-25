@@ -101,9 +101,14 @@ func TestStorageMigrationCompletesOnceItsURLsSettle(t *testing.T) {
 	id := f.registerUpload(t, ctx, lateKey, f.private)
 	f.complete(t, ctx, id, f.private, f.putThroughURL(t, ctx, lateKey, f.private))
 
-	f.enterMoving(t, ctx)
+	// The switch records the source's write deadline with the worker's
+	// window: max_ttl.
+	if err := f.start(t, ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
 	start := time.Now()
 	w := f.deadlinesWorker(func() time.Time { return start })
+	f.tickUntil(t, ctx, w, worker.MigStateMoving)
 	f.ticks(t, ctx, w, deadlinesQuietTicks)
 	if state := f.migrationState(t, ctx); state != worker.MigStateMoving {
 		t.Fatalf("migration %s while a URL can write the source, want moving", state)

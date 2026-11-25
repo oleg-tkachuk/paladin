@@ -12,6 +12,7 @@ import (
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/tenanth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
+	"github.com/oleg-tkachuk/paladin/backend/internal/worker"
 )
 
 // Names are supplied by the caller, which has them from the join or from the
@@ -61,6 +62,10 @@ func (r *TenantRepo) CancelStorageMigration(ctx context.Context, tenantID uuid.U
 	if !ok {
 		return tenanth.StorageMigration{}, fmt.Errorf("%w (state %q)", tenanth.ErrStorageMigrationNotCancellable, m.State)
 	}
+	read, err := qtx.GetStorageMigration(ctx, tenant)
+	if err != nil {
+		return tenanth.StorageMigration{}, fmt.Errorf("read storage migration: %w", err)
+	}
 	var n int64
 	if to == migstate.Failed {
 		n, err = qtx.FailStorageMigration(ctx, to, &reason, tenant, m.State, m.Attempts)
@@ -74,6 +79,20 @@ func (r *TenantRepo) CancelStorageMigration(ctx context.Context, tenantID uuid.U
 		// The row is locked as read: nothing else can have moved it.
 		return tenanth.StorageMigration{}, fmt.Errorf("cancel storage migration: no row moved from %q", m.State)
 	}
+	var rp worker.Repointed
+	if to == migstate.RollingBack {
+		// The uploads go back to the source on the cancel's own transaction,
+		// as a rollback the worker starts does. The target's write deadline
+		// is the rollback's first pass's to record: this repository does not
+		// know limes.presign.max_ttl.
+		source := worker.MigrationBucket{ID: uuidFrom(read.TenantStorageMigration.SourceBucketID),
+			BackendID: read.SourceBackendName, Bucket: read.SourceBucketName}
+		target := worker.MigrationBucket{ID: uuidFrom(read.TenantStorageMigration.TargetBucketID),
+			BackendID: read.TargetBackendName, Bucket: read.TargetBucketName}
+		if rp, err = repointUploads(ctx, qtx, tenantID, target, source, worker.LayoutShared); err != nil {
+			return tenanth.StorageMigration{}, fmt.Errorf("point the tenant's uploads back at %s: %w", source.Bucket, err)
+		}
+	}
 	got, err := qtx.GetStorageMigration(ctx, tenant)
 	if err != nil {
 		return tenanth.StorageMigration{}, fmt.Errorf("read the cancelled migration: %w", err)
@@ -81,8 +100,10 @@ func (r *TenantRepo) CancelStorageMigration(ctx context.Context, tenantID uuid.U
 	if err := tx.Commit(ctx); err != nil {
 		return tenanth.StorageMigration{}, err
 	}
-	return storageMigrationToDomain(got.TenantStorageMigration, got.SourceBackendName, got.SourceBucketName,
-		got.TargetBackendName, got.TargetBucketName), nil
+	out := storageMigrationToDomain(got.TenantStorageMigration, got.SourceBackendName, got.SourceBucketName,
+		got.TargetBackendName, got.TargetBucketName)
+	out.RepointedCollections = rp.Collections
+	return out, nil
 }
 
 // StartStorageMigration provisions the tenant's dedicated bucket (pending,

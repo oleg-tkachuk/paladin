@@ -43,6 +43,16 @@ func Owing() []string {
 	return []string{Provisioning, Moving, Completed, RollingBack, Failed}
 }
 
+// HoldsBuckets are the states in which the worker still owns the migration's
+// buckets, so neither may be deleted and the tenant may not be purged: every
+// state the worker drives the objects through. Cleaned and Failed are done
+// with them: what a failed migration still passes back from its target is
+// placed, anchored or bound there, and those rows hold the bucket themselves.
+// Migration 135's buckets_storage_migration_guard lists the same states.
+func HoldsBuckets() []string {
+	return []string{Provisioning, Moving, Completed, RollingBack}
+}
+
 // CancelTo is the state an operator's cancel moves a migration in state to,
 // and whether a cancel applies at all (ADR-0051, CancelTenantStorageMigration):
 //

@@ -73,6 +73,8 @@ func TestPurgeBlockersNone(t *testing.T) {
 		{PurgeBlockers{Collections: 1}, false},
 		{PurgeBlockers{Buckets: 1}, false},
 		{PurgeBlockers{Users: 1}, false},
+		{PurgeBlockers{BucketsDeleting: 1}, false},
+		{PurgeBlockers{StorageMigrations: 1}, false},
 	} {
 		if got := tc.b.None(); got != tc.want {
 			t.Errorf("%+v.None() = %v, want %v", tc.b, got, tc.want)

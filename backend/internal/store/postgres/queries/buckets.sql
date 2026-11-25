@@ -60,13 +60,15 @@ LIMIT sqlc.arg('page_size');
 -- clean themselves up.
 --
 -- Rows come back for relations with a zero count too; the caller decides what
--- to do with those. tenant_storage_migrations carries two of the constraints
--- (source and target), so it is matched on both columns and reported once.
+-- to do with those. tenant_storage_migrations holds its two buckets by a
+-- trigger rather than RESTRICT (migration 135), and only in the states the
+-- worker still drives (holding_states, migstate.HoldsBuckets): it is matched
+-- on both columns, in those states, and reported once.
 WITH target AS (
     SELECT b.id
     FROM buckets b
     JOIN storage_backends sb ON sb.id = b.backend_id
-    WHERE sb.name = $1 AND b.name = $2
+    WHERE sb.name = sqlc.arg('backend_name') AND b.name = sqlc.arg('bucket_name')
 )
 SELECT 'collections'::text AS relation, count(*)::bigint AS count
     FROM collections WHERE bucket_id IN (SELECT id FROM target)
@@ -76,8 +78,9 @@ SELECT 'tenant_default_bindings'::text, count(*)::bigint
 UNION ALL
 SELECT 'tenant_storage_migrations'::text, count(*)::bigint
     FROM tenant_storage_migrations
-    WHERE source_bucket_id IN (SELECT id FROM target)
-       OR target_bucket_id IN (SELECT id FROM target)
+    WHERE (source_bucket_id IN (SELECT id FROM target)
+           OR target_bucket_id IN (SELECT id FROM target))
+      AND state = ANY(sqlc.arg('holding_states')::text[])
 UNION ALL
 SELECT 'multipart_uploads'::text, count(*)::bigint
     FROM multipart_uploads WHERE bucket_id IN (SELECT id FROM target)

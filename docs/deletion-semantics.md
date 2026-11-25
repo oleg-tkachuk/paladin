@@ -22,7 +22,7 @@ their parent, and children that hold their parent hostage.
 | --- | --- | --- |
 | `tenants` | `quotas`, `api_tokens`, `refresh_tokens`, `oauth_authorization_codes`, `operations`, `event_subscriptions`, `event_deliveries`, `object_locks`, `multipart_uploads`, `idempotency_keys` (every partition), `tenant_default_bindings`, `tenant_storage_migrations`, `erased_objects`, `bucket_grants` | `users`, `user_settings`, `buckets.owner_tenant_id`, `collections` |
 | `storage_backends` | `storage_backend_health`, `storage_backend_features` | `buckets` |
-| `buckets` | `replication_state`, `bucket_quotas`, `bucket_grants` | `collections`, `tenant_default_bindings`, `tenant_storage_migrations`, `multipart_uploads`, `pending_purges`, `pending_multipart_aborts` |
+| `buckets` | `replication_state`, `bucket_quotas`, `bucket_grants` | `collections`, `tenant_default_bindings`, `tenant_storage_migrations` (by trigger, while the worker drives the migration; `SET NULL` once it is `failed` or `cleaned`), `multipart_uploads`, `pending_purges`, `pending_multipart_aborts` |
 | `collections` | `erased_objects` | `objects` |
 | `objects` | `object_versions`, `multipart_uploads` | — |
 

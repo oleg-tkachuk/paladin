@@ -16,6 +16,7 @@ import (
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
 	objecth "github.com/oleg-tkachuk/paladin/backend/internal/api/data/v1/objecth"
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
 	"github.com/oleg-tkachuk/paladin/backend/tests/objectrow"
@@ -106,7 +107,7 @@ func TestABucketAnUploadIsAnchoredToIsHeld(t *testing.T) {
 		SELECT b.id FROM buckets b JOIN storage_backends sb ON sb.id = b.backend_id
 		 WHERE sb.name = $2 AND b.name = $3) WHERE id = $1`, f.collectionID, f.backend, next)
 
-	refs, err := sqlc.New(pool).CountBucketReferences(ctx, f.backend, f.bucket)
+	refs, err := sqlc.New(pool).CountBucketReferences(ctx, f.backend, f.bucket, migstate.HoldsBuckets())
 	if err != nil {
 		t.Fatalf("CountBucketReferences: %v", err)
 	}

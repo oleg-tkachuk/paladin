@@ -206,13 +206,13 @@ func (q *Queries) FinishStorageMigrationRollback(ctx context.Context, toState st
 
 const getStorageMigration = `-- name: GetStorageMigration :one
 SELECT m.id, m.tenant_id, m.source_bucket_id, m.target_bucket_id, m.state, m.objects_total, m.objects_copied, m.cursor_collection, m.cursor_path, m.error, m.attempts, m.cleanup_retention_seconds, m.cleanup_after, m.cleaned_at, m.created_at, m.updated_at, m.completed_at, m.writes_close_at, m.failed_passes, m.settle_after, m.settled_at, m.resource_version,
-       ssb.name AS source_backend_name, sb.name AS source_bucket_name,
-       tsb.name AS target_backend_name, tb.name AS target_bucket_name
+       COALESCE(ssb.name, '')::text AS source_backend_name, COALESCE(sb.name, '')::text AS source_bucket_name,
+       COALESCE(tsb.name, '')::text AS target_backend_name, COALESCE(tb.name, '')::text AS target_bucket_name
 FROM tenant_storage_migrations m
-JOIN buckets sb           ON sb.id = m.source_bucket_id
-JOIN storage_backends ssb ON ssb.id = sb.backend_id
-JOIN buckets tb           ON tb.id = m.target_bucket_id
-JOIN storage_backends tsb ON tsb.id = tb.backend_id
+LEFT JOIN buckets sb           ON sb.id = m.source_bucket_id
+LEFT JOIN storage_backends ssb ON ssb.id = sb.backend_id
+LEFT JOIN buckets tb           ON tb.id = m.target_bucket_id
+LEFT JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.tenant_id = $1
 ORDER BY m.created_at DESC
 LIMIT 1
@@ -226,6 +226,8 @@ type GetStorageMigrationRow struct {
 	TargetBucketName       string                 `json:"target_bucket_name"`
 }
 
+// A finished migration may outlive either bucket (migration 135): its names
+// are then empty.
 // The latest, as StartStorageMigration reads it: a start used to be able to
 // leave a tenant with two rows (see LockTenantForStorageMigration).
 func (q *Queries) GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (GetStorageMigrationRow, error) {

@@ -238,7 +238,18 @@ type StorageMigration struct {
 	// ResourceVersion moves with every change of state, never with a pass's
 	// progress: the compare-and-set CancelStorageMigration takes.
 	ResourceVersion int64
+	// RepointedCollections are the collections a cancel pointed back at the
+	// source; set by CancelStorageMigration only, for its log.
+	RepointedCollections []string
 }
+
+// ErrTenantMigrating is returned by Repository.Purge while the tenant's
+// storage migration is one the worker still drives (migstate.HoldsBuckets):
+// it holds the tenant's dedicated bucket. In the trash the migration is
+// frozen, so the way out is to restore the tenant, cancel the migration (or
+// let it finish), and trash the tenant again.
+var ErrTenantMigrating = errors.New(
+	"tenant has a storage migration in flight; restore the tenant, cancel the migration or let it finish, then trash and purge it")
 
 // ErrStorageMigrationNotCancellable is returned by CancelStorageMigration for
 // a migration whose state takes no cancel (migstate.CancelTo): rolling back
@@ -988,7 +999,9 @@ func (h *Handler) CancelTenantStorageMigration(ctx context.Context, tenantID uui
 		fmt.Sprintf(reasonCancelledBy, p.Subject))
 	switch {
 	case err == nil:
-		log.Info("storage migration cancelled", zap.String("state", m.State))
+		log.Info("storage migration cancelled; the tenant's uploads go to the source",
+			zap.String("state", m.State), zap.String("source_bucket", m.SourceBucketName),
+			zap.String("target_bucket", m.TargetBucketName), zap.Strings("collections_repointed", m.RepointedCollections))
 		return &m, nil
 	case errors.Is(err, ErrStorageMigrationNotCancellable):
 		log.Warn("storage migration cancel refused", zap.Error(err))
@@ -1461,6 +1474,7 @@ func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
 	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
 	apiutil.RegisterError(ErrStorageMigrationNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
+	apiutil.RegisterError(ErrTenantMigrating, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_HAS_CHILDREN)
 	apiutil.RegisterError(ErrStorageMigrationNotCancellable, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_FAILED_PRECONDITION)
 	apiutil.RegisterError(ErrSlugConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
 	apiutil.RegisterError(ErrSlugHeldInTrash, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/oleg-tkachuk/limes/pgstore"
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/auth"
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
@@ -509,6 +510,15 @@ func (r *TenantRepo) hardDeleteWith(ctx context.Context, q *sqlc.Queries, tenant
 	if err := q.RetireTenantSlug(ctx, pgUUID(tenantID)); err != nil {
 		return fmt.Errorf("retire tenant slug: %w", err)
 	}
+	// A migration the worker still drives refuses the purge before any
+	// foreign key does, with what the operator has to do about it.
+	state, err := q.TenantStorageMigrationHolding(ctx, pgUUID(tenantID), migstate.HoldsBuckets())
+	switch {
+	case err == nil:
+		return fmt.Errorf("%w (state %q)", tenanth.ErrTenantMigrating, state)
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("read the tenant's storage migration: %w", err)
+	}
 	rows, err := q.HardDeleteTenant(ctx, pgUUID(tenantID), expectedVersion)
 	if err != nil {
 		// A legal hold or an unexpired retention window refuses the purge
@@ -789,15 +799,16 @@ func (r *TenantRepo) PreviewPurge(ctx context.Context, tenantID uuid.UUID, names
 	if out.SubscriptionCount, err = q.CountPurgeEventSubscriptions(ctx, id); err != nil {
 		return out, fmt.Errorf("preview purge: count event subscriptions: %w", err)
 	}
-	blockers, err := q.CountPurgeBlockers(ctx, id)
+	blockers, err := q.CountPurgeBlockers(ctx, id, migstate.HoldsBuckets())
 	if err != nil {
 		return out, fmt.Errorf("preview purge: blockers: %w", err)
 	}
 	out.Blockers = tenanth.PurgeBlockers{
-		Collections:     blockers.Collections,
-		Buckets:         blockers.Buckets,
-		BucketsDeleting: blockers.BucketsDeleting,
-		Users:           blockers.Users,
+		Collections:       blockers.Collections,
+		Buckets:           blockers.Buckets,
+		BucketsDeleting:   blockers.BucketsDeleting,
+		Users:             blockers.Users,
+		StorageMigrations: blockers.StorageMigrations,
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return out, fmt.Errorf("preview purge: commit: %w", err)

@@ -109,44 +109,81 @@ func migrationMoved(rows int64, err error) error {
 	return nil
 }
 
-func (r *StorageMigrationRepo) EnterMoving(ctx context.Context, at worker.MigrationRead) error {
-	return migrationMoved(r.q.SetStorageMigrationState(ctx, worker.MigStateMoving, pgUUID(at.TenantID), at.State, at.Attempts))
+// EnterMoving moves the migration to moving and points the tenant's uploads
+// at the target on one transaction, under the migration row's lock (see
+// worker.MigrationRepo): the state first, then the repoint and the source's
+// write deadline, which name the migration as it now is.
+func (r *StorageMigrationRepo) EnterMoving(ctx context.Context, at worker.MigrationRead, source, target worker.MigrationBucket, writeWindow time.Duration) (worker.Repointed, error) {
+	var rp worker.Repointed
+	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if err := migrationMoved(q.LockStorageMigrationAsRead(ctx, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		if err := migrationMoved(q.SetStorageMigrationState(ctx, worker.MigStateMoving, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		var err error
+		if rp, err = repointUploads(ctx, q, at.TenantID, source, target, worker.LayoutDedicated); err != nil {
+			return err
+		}
+		return migrationMoved(q.MigrationCloseWrites(ctx, intervalOf(writeWindow), pgUUID(at.TenantID), worker.MigStateMoving, at.Attempts))
+	})
+	return rp, err
 }
 
 // Repoint points the tenant's uploads at to, under the migration row's lock,
 // in one transaction (see worker.MigrationRepo). A collection the schema
 // refuses to move comes back as a *worker.RebindRefusedError.
-func (r *StorageMigrationRepo) Repoint(ctx context.Context, at worker.MigrationRead, from, to worker.MigrationBucket, layout string, writeWindow time.Duration) error {
-	setBy := setByMigration
-	if worker.Reverses(at.State) {
-		setBy = setByMigrationRollback
-	}
-	return r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+func (r *StorageMigrationRepo) Repoint(ctx context.Context, at worker.MigrationRead, from, to worker.MigrationBucket, layout string, writeWindow time.Duration) (worker.Repointed, error) {
+	var rp worker.Repointed
+	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
 		if err := migrationMoved(q.LockStorageMigrationAsRead(ctx, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
 			return err
 		}
-		names, err := q.MigrationListBoundCollections(ctx, pgUUID(at.TenantID), pgUUID(from.ID))
-		if err != nil {
-			return fmt.Errorf("list collections bound to %s: %w", from.Bucket, err)
-		}
-		for _, name := range names {
-			// expected_version 0 = skip the optimistic check: the migration
-			// owns the tenant's bindings to the bucket it empties.
-			if _, err := q.BindCollectionToBucket(ctx, pgUUID(at.TenantID), name, to.BackendID, to.Bucket, 0); err != nil {
-				if pgerr.Is(err, pgerr.CheckViolation) {
-					return worker.RebindRefused(name, err)
-				}
-				return fmt.Errorf("rebind %q: %w", name, err)
-			}
-		}
-		if _, err := q.MigrationRepointDefaultBinding(ctx, pgUUID(at.TenantID), pgUUID(to.ID), setBy, pgUUID(from.ID)); err != nil {
-			return fmt.Errorf("point the default binding at %s: %w", to.Bucket, err)
-		}
-		if _, err := q.SetTenantStorageLayout(ctx, pgUUID(at.TenantID), sqlc.TenantStorageLayout(layout)); err != nil {
-			return fmt.Errorf("set storage_layout: %w", err)
+		var err error
+		if rp, err = repointUploads(ctx, q, at.TenantID, from, to, layout); err != nil {
+			return err
 		}
 		return migrationMoved(q.MigrationCloseWrites(ctx, intervalOf(writeWindow), pgUUID(at.TenantID), at.State, at.Attempts))
 	})
+	return rp, err
+}
+
+// repointUploads points the tenant's private collections bound to from, and
+// its default binding when it names from or none, at to, and sets the
+// tenant's storage layout — on q's transaction, which holds the migration
+// row. The default binding records the migration's direction: the dedicated
+// layout is the migration's, the shared one its rollback's.
+func repointUploads(ctx context.Context, q *sqlc.Queries, tenantID uuid.UUID, from, to worker.MigrationBucket, layout string) (worker.Repointed, error) {
+	var rp worker.Repointed
+	setBy := setByMigration
+	if layout == worker.LayoutShared {
+		setBy = setByMigrationRollback
+	}
+	names, err := q.MigrationListBoundCollections(ctx, pgUUID(tenantID), pgUUID(from.ID))
+	if err != nil {
+		return rp, fmt.Errorf("list collections bound to %s: %w", from.Bucket, err)
+	}
+	for _, name := range names {
+		// expected_version 0 = skip the optimistic check: the migration
+		// owns the tenant's bindings to the bucket it empties.
+		if _, err := q.BindCollectionToBucket(ctx, pgUUID(tenantID), name, to.BackendID, to.Bucket, 0); err != nil {
+			if pgerr.Is(err, pgerr.CheckViolation) {
+				return rp, worker.RebindRefused(name, err)
+			}
+			return rp, fmt.Errorf("rebind %q: %w", name, err)
+		}
+		rp.Collections = append(rp.Collections, name)
+	}
+	n, err := q.MigrationRepointDefaultBinding(ctx, pgUUID(tenantID), pgUUID(to.ID), setBy, pgUUID(from.ID))
+	if err != nil {
+		return rp, fmt.Errorf("point the default binding at %s: %w", to.Bucket, err)
+	}
+	rp.DefaultBinding = n > 0
+	if _, err := q.SetTenantStorageLayout(ctx, pgUUID(tenantID), sqlc.TenantStorageLayout(layout)); err != nil {
+		return rp, fmt.Errorf("set storage_layout: %w", err)
+	}
+	return rp, nil
 }
 
 // intervalOf is d as Postgres reads an interval.
@@ -298,8 +335,26 @@ func (r *StorageMigrationRepo) MarkCleaned(ctx context.Context, at worker.Migrat
 	return migrationMoved(r.q.MarkStorageMigrationCleaned(ctx, worker.MigStateCleaned, pgUUID(at.TenantID), at.State, at.Attempts))
 }
 
-func (r *StorageMigrationRepo) StartRollback(ctx context.Context, at worker.MigrationRead, reason string) error {
-	return migrationMoved(r.q.StartStorageMigrationRollback(ctx, worker.MigStateRollingBack, &reason, pgUUID(at.TenantID), at.State, at.Attempts))
+// StartRollback moves the migration to rolling_back and points the tenant's
+// uploads back at the source on one transaction, under the migration row's
+// lock (see worker.MigrationRepo). The rollback counts a failure, so the
+// repoint's write deadline names the attempt after the one read.
+func (r *StorageMigrationRepo) StartRollback(ctx context.Context, at worker.MigrationRead, reason string, target, source worker.MigrationBucket, writeWindow time.Duration) (worker.Repointed, error) {
+	var rp worker.Repointed
+	err := r.withTenantTx(ctx, at.TenantID, func(q *sqlc.Queries) error {
+		if err := migrationMoved(q.LockStorageMigrationAsRead(ctx, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		if err := migrationMoved(q.StartStorageMigrationRollback(ctx, worker.MigStateRollingBack, &reason, pgUUID(at.TenantID), at.State, at.Attempts)); err != nil {
+			return err
+		}
+		var err error
+		if rp, err = repointUploads(ctx, q, at.TenantID, target, source, worker.LayoutShared); err != nil {
+			return err
+		}
+		return migrationMoved(q.MigrationCloseWrites(ctx, intervalOf(writeWindow), pgUUID(at.TenantID), worker.MigStateRollingBack, at.Attempts+1))
+	})
+	return rp, err
 }
 
 func (r *StorageMigrationRepo) FinishRollback(ctx context.Context, at worker.MigrationRead, settleWindow time.Duration) error {

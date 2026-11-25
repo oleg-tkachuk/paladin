@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/api/admin/v1/admindomain"
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/adapters"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/pgerr"
 	"github.com/oleg-tkachuk/paladin/backend/internal/store/postgres/sqlc"
@@ -37,6 +38,10 @@ import (
 // CASCADE dependents (replication_state, quotas today) are excluded on both
 // sides — they never block a delete, so listing them would send an operator
 // after rows that clean themselves up.
+// storageMigrationGuard is the trigger by which a storage migration the
+// worker still drives holds its buckets (migration 135).
+const storageMigrationGuard = "buckets_storage_migration_guard"
+
 func TestBucketReferenceListMatchesSchema(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -69,10 +74,28 @@ func TestBucketReferenceListMatchesSchema(t *testing.T) {
 			"changed fundamentally or this query stopped matching; do not " +
 			"read this as 'nothing to check'")
 	}
+	// A storage migration holds its buckets by a trigger, not RESTRICT, and
+	// only while the worker drives it (migration 135): the guard is part of
+	// the set the query must cover, and its relation must not hold them by
+	// RESTRICT as well.
+	var guarded bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_trigger
+		WHERE tgrelid = 'buckets'::regclass AND tgname = $1)`, storageMigrationGuard).Scan(&guarded); err != nil {
+		t.Fatalf("read pg_trigger: %v", err)
+	}
+	if !guarded {
+		t.Fatalf("trigger %s on buckets is gone; the reference check counts the migrations it guarded", storageMigrationGuard)
+	}
+	for _, rel := range schema {
+		if rel == admindomain.RelationTenantStorageMigration {
+			t.Fatalf("%s holds buckets by RESTRICT again: a finished migration would pin them", rel)
+		}
+	}
+	schema = append(schema, admindomain.RelationTenantStorageMigration)
 
 	// The query answers for a bucket that does not exist, which is fine: the
 	// relations it reports are fixed by the SQL, and the counts are all zero.
-	counted, err := q.CountBucketReferences(ctx, "no-such-backend", "no-such-bucket")
+	counted, err := q.CountBucketReferences(ctx, "no-such-backend", "no-such-bucket", migstate.HoldsBuckets())
 	if err != nil {
 		t.Fatalf("CountBucketReferences: %v", err)
 	}

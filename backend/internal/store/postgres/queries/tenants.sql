@@ -188,13 +188,26 @@ SELECT count(*) FROM event_subscriptions WHERE tenant_id = sqlc.arg('tenant_id')
 -- while any is left (docs/deletion-semantics.md). Trashed collections count:
 -- the foreign key does not tell them apart. Buckets being deleted on the
 -- backend are counted apart: they leave without the operator doing anything.
+-- A storage migration the worker still drives (holding_states,
+-- migstate.HoldsBuckets) holds the dedicated bucket the tenant owns, and is
+-- counted apart too: it is cancelled or finished, not deleted.
 SELECT
     (SELECT count(*) FROM collections c WHERE c.tenant_id = sqlc.arg('tenant_id'))::bigint AS collections,
     (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = sqlc.arg('tenant_id')
         AND b.provision_state <> 'deleting')::bigint AS buckets,
     (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = sqlc.arg('tenant_id')
         AND b.provision_state = 'deleting')::bigint AS buckets_deleting,
-    (SELECT count(*) FROM users u WHERE u.tenant_id = sqlc.arg('tenant_id'))::bigint AS users;
+    (SELECT count(*) FROM users u WHERE u.tenant_id = sqlc.arg('tenant_id'))::bigint AS users,
+    (SELECT count(*) FROM tenant_storage_migrations m WHERE m.tenant_id = sqlc.arg('tenant_id')
+        AND m.state = ANY(sqlc.arg('holding_states')::text[]))::bigint AS storage_migrations;
+
+-- name: TenantStorageMigrationHolding :one
+-- The state of the tenant's migration when the worker still drives it
+-- (holding_states, migstate.HoldsBuckets): what refuses a purge before any
+-- foreign key does. No row: none does.
+SELECT m.state FROM tenant_storage_migrations m
+WHERE m.tenant_id = sqlc.arg('tenant_id') AND m.state = ANY(sqlc.arg('holding_states')::text[])
+LIMIT 1;
 
 -- name: RetireTenantSlug :exec
 -- Records the slug of the tenant about to be deleted, so it is never handed

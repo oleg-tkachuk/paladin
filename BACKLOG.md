@@ -553,6 +553,20 @@ the same commit. Treat this file like a runtime invariant.
   delete and finds the new bytes kept.
 - **Blockers:** none.
 
+### A cancel that waits out the lock timeout answers Internal
+
+- **Status:** Deferred.
+- **Reason:** `CancelTenantStorageMigration` takes the migration row
+  `FOR UPDATE`, which waits for a move or a cleanup delete holding it shared
+  for the length of one copy; past the pool's `lock_timeout` the statement
+  fails with SQLSTATE 55P03, which the error mapper does not know, so the
+  operator reads `Internal` for a call that only has to be retried.
+- **Definition of Done:** a lock-not-available error maps to `Unavailable`
+  (retryable) with a message naming the move in flight; a test holds the
+  migration row shared past a short lock timeout and finds the cancel
+  answered so.
+- **Blockers:** none.
+
 ## API error messages
 
 ### The handler fuzz targets do not reach UserService

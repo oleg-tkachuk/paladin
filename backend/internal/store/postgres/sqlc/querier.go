@@ -92,11 +92,13 @@ type Querier interface {
 	// clean themselves up.
 	//
 	// Rows come back for relations with a zero count too; the caller decides what
-	// to do with those. tenant_storage_migrations carries two of the constraints
-	// (source and target), so it is matched on both columns and reported once.
+	// to do with those. tenant_storage_migrations holds its two buckets by a
+	// trigger rather than RESTRICT (migration 135), and only in the states the
+	// worker still drives (holding_states, migstate.HoldsBuckets): it is matched
+	// on both columns, in those states, and reported once.
 	// An object holds the bucket it is placed in and the one its upload URL is
 	// anchored to (migration 132).
-	CountBucketReferences(ctx context.Context, name string, name_2 string) ([]CountBucketReferencesRow, error)
+	CountBucketReferences(ctx context.Context, backendName string, bucketName string, holdingStates []string) ([]CountBucketReferencesRow, error)
 	CountBucketsForBackend(ctx context.Context, name string) (int64, error)
 	CountObjects(ctx context.Context, tenantID pgtype.UUID, name string, state *ObjectState, liveOnly bool) (int64, error)
 	// How many operations of a listing are in each state: ListOperations' own
@@ -111,7 +113,10 @@ type Querier interface {
 	// while any is left (docs/deletion-semantics.md). Trashed collections count:
 	// the foreign key does not tell them apart. Buckets being deleted on the
 	// backend are counted apart: they leave without the operator doing anything.
-	CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID) (CountPurgeBlockersRow, error)
+	// A storage migration the worker still drives (holding_states,
+	// migstate.HoldsBuckets) holds the dedicated bucket the tenant owns, and is
+	// counted apart too: it is cancelled or finished, not deleted.
+	CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID, holdingStates []string) (CountPurgeBlockersRow, error)
 	CountPurgeEventSubscriptions(ctx context.Context, tenantID pgtype.UUID) (int64, error)
 	CountStorageMigrationMove(ctx context.Context, tenantID pgtype.UUID, fromState string, attempts int32) (int64, error)
 	// Trashed tenants whose trash retention has lapsed as of as_of: the ones the
@@ -318,6 +323,8 @@ type Querier interface {
 	// the bucket's filter sees what a ListObjects filter sees.
 	GetReplicaObjects(ctx context.Context, ids []pgtype.UUID) ([]GetReplicaObjectsRow, error)
 	GetStorageBackendV2(ctx context.Context, name string) (GetStorageBackendV2Row, error)
+	// A finished migration may outlive either bucket (migration 135): its names
+	// are then empty.
 	// The latest, as StartStorageMigration reads it: a start used to be able to
 	// leave a tenant with two rows (see LockTenantForStorageMigration).
 	GetStorageMigration(ctx context.Context, tenantID pgtype.UUID) (GetStorageMigrationRow, error)
@@ -1124,6 +1131,10 @@ type Querier interface {
 	// cannot hide it: 'live', 'trashed', 'retired', or '' when it is free. The
 	// values are tenanth.SlugHolder's.
 	TenantSlugHolder(ctx context.Context, slug string) (string, error)
+	// The state of the tenant's migration when the worker still drives it
+	// (holding_states, migstate.HoldsBuckets): what refuses a purge before any
+	// foreign key does. No row: none does.
+	TenantStorageMigrationHolding(ctx context.Context, tenantID pgtype.UUID, holdingStates []string) (string, error)
 	TouchAPITokenLastUsed(ctx context.Context, lastUsedAt pgtype.Timestamptz, iD pgtype.UUID) error
 	// Heartbeat for a RUNNING operation. Bumps updated_at and nothing else — in
 	// particular it must not touch progress, which an executor may be writing

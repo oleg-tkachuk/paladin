@@ -111,11 +111,20 @@ func storageMigrationToProto(m *tenanth.StorageMigration) *pb.StorageMigrationSt
 		State:           m.State,
 		ObjectsTotal:    m.ObjectsTotal,
 		ObjectsCopied:   m.ObjectsCopied,
-		SourceBucket:    "storageBackends/" + m.SourceBackendName + "/buckets/" + m.SourceBucketName,
-		TargetBucket:    "storageBackends/" + m.TargetBackendName + "/buckets/" + m.TargetBucketName,
+		SourceBucket:    migrationBucketName(m.SourceBackendName, m.SourceBucketName),
+		TargetBucket:    migrationBucketName(m.TargetBackendName, m.TargetBucketName),
 		Error:           m.Error,
 		ResourceVersion: convx.ResourceVersion(m.ResourceVersion),
 	}
+}
+
+// migrationBucketName is a migration's bucket as a resource name, or empty
+// once the bucket was deleted after the migration finished.
+func migrationBucketName(backend, bucket string) string {
+	if bucket == "" {
+		return ""
+	}
+	return "storageBackends/" + backend + "/buckets/" + bucket
 }
 
 func (s *TenantServer) CancelTenantStorageMigration(ctx context.Context, req *pb.CancelTenantStorageMigrationRequest) (*pb.StorageMigrationStatus, error) {
