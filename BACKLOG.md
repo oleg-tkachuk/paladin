@@ -553,6 +553,43 @@ the same commit. Treat this file like a runtime invariant.
   delete and finds the new bytes kept.
 - **Blockers:** none.
 
+### A rollback the schema refuses to switch back is retried forever
+
+- **Status:** Deferred.
+- **Reason:** entering `rolling_back` points the tenant's collections back
+  at the source on the transition's transaction (ADR-0051, live-run
+  amendment). A collection the schema refuses to rebind there takes the
+  whole transition back: the worker's rollback is retried from `moving` every
+  tick, logged at Warn, and an operator's cancel answers `Internal`.
+- **Definition of Done:** a refused reverse rebind is reported as what it
+  is — the migration records the collection, the cancel answers
+  `FAILED_PRECONDITION` naming it — and a test refuses one and finds both.
+- **Blockers:** none known: a collection bound to the source before the
+  migration should always be able to bind there again.
+
+### DeleteBucket tells the operator to remove a storage migration
+
+- **Status:** Deferred.
+- **Reason:** a bucket a migration in flight holds is refused with "still
+  referenced by … storage migrations; remove those first", and a migration
+  cannot be removed: the operator has to cancel it or let it finish.
+- **Definition of Done:** the refusal names the migration's state and the
+  way out (cancel or wait), on the pre-count and on the trigger's refusal
+  alike; a test reads both messages.
+- **Blockers:** none.
+
+### A retry naming a backend is refused once the dedicated bucket is gone
+
+- **Status:** Deferred.
+- **Reason:** a failed migration no longer holds its dedicated bucket
+  (migration 135), and once that bucket is deleted its status names no
+  target. `retryTarget` then compares a requested `target_backend_id` with an
+  empty one and refuses it; only a retry naming no backend goes through.
+- **Definition of Done:** a retry of a migration whose target was deleted
+  takes the backend asked for (or the source's); a handler test retries with
+  and without one after the target is gone.
+- **Blockers:** none.
+
 ### A cancel that waits out the lock timeout answers Internal
 
 - **Status:** Deferred.
