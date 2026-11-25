@@ -345,7 +345,7 @@ func TestStorageMigrationLeavesPublicCollectionsInPlace(t *testing.T) {
 		mustExec(t, ctx, f.pool,
 			`UPDATE tenant_storage_migrations SET state = 'moving' WHERE tenant_id = $1`, f.tenant)
 		// A private collection may not bind to a public bucket.
-		err = repo.Repoint(ctx, worker.MigrationRead{TenantID: f.tenant, State: worker.MigStateMoving},
+		_, err = repo.Repoint(ctx, worker.MigrationRead{TenantID: f.tenant, State: worker.MigStateMoving},
 			worker.MigrationBucket{ID: m.SourceBucketID.Bytes, BackendID: f.backend, Bucket: f.private},
 			worker.MigrationBucket{ID: m.TargetBucketID.Bytes, BackendID: f.backend, Bucket: f.public},
 			worker.LayoutDedicated, time.Hour)

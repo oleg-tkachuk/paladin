@@ -51,14 +51,18 @@ func (f *fakeMigRepo) BucketProvisionState(_ context.Context, _, bucket string) 
 	return bucketgate.ProvisionReady, nil
 }
 
-func (f *fakeMigRepo) EnterMoving(context.Context, MigrationRead) error {
+func (f *fakeMigRepo) EnterMoving(_ context.Context, _ MigrationRead, source, target MigrationBucket, _ time.Duration) (Repointed, error) {
+	if f.repointErr != nil {
+		return Repointed{}, f.repointErr
+	}
 	f.transitions = append(f.transitions, MigStateMoving)
-	return nil
+	f.repoints = append(f.repoints, source.Bucket+">"+target.Bucket+":"+LayoutDedicated)
+	return Repointed{}, nil
 }
 
-func (f *fakeMigRepo) Repoint(_ context.Context, _ MigrationRead, from, to MigrationBucket, layout string, _ time.Duration) error {
+func (f *fakeMigRepo) Repoint(_ context.Context, _ MigrationRead, from, to MigrationBucket, layout string, _ time.Duration) (Repointed, error) {
 	f.repoints = append(f.repoints, from.Bucket+">"+to.Bucket+":"+layout)
-	return f.repointErr
+	return Repointed{}, f.repointErr
 }
 
 func (f *fakeMigRepo) ListMovable(_ context.Context, _ MigrationRead, _ MigrationBucket, after uuid.UUID, limit int) ([]MoveCandidate, error) {
@@ -125,10 +129,11 @@ func (f *fakeMigRepo) MarkCleaned(context.Context, MigrationRead) error {
 	return nil
 }
 
-func (f *fakeMigRepo) StartRollback(_ context.Context, _ MigrationRead, reason string) error {
+func (f *fakeMigRepo) StartRollback(_ context.Context, _ MigrationRead, reason string, target, source MigrationBucket, _ time.Duration) (Repointed, error) {
 	f.transitions = append(f.transitions, MigStateRollingBack)
 	f.reasons = append(f.reasons, reason)
-	return nil
+	f.repoints = append(f.repoints, target.Bucket+">"+source.Bucket+":"+LayoutShared)
+	return Repointed{}, nil
 }
 
 func (f *fakeMigRepo) FinishRollback(_ context.Context, _ MigrationRead, settleWindow time.Duration) error {
@@ -226,6 +231,22 @@ func newStore() *fakeBytes {
 
 func newMigWorker(repo *fakeMigRepo, s *fakeBytes) *StorageMigrationWorker {
 	return &StorageMigrationWorker{Repo: repo, Copier: s, Deleter: s, Header: s, Identity: s, CopyBatch: 2}
+}
+
+// A switch the schema refuses fails the migration, recording the collection:
+// the transition took nothing pointed with it, and retrying cannot change the
+// answer.
+func TestStepProvisioningFailsARefusedSwitch(t *testing.T) {
+	repo := &fakeMigRepo{m: newMigration(MigStateProvisioning), repointErr: RebindRefused("docs", errors.New("check violation"))}
+	if err := newMigWorker(repo, newStore()).Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(repo.transitions) != fmt.Sprint([]string{MigStateFailed}) {
+		t.Fatalf("transitions %v, want failed", repo.transitions)
+	}
+	if want := fmt.Sprintf(reasonRebindRefused, "docs"); len(repo.reasons) != 1 || repo.reasons[0] != want {
+		t.Errorf("reasons %v, want %q", repo.reasons, want)
+	}
 }
 
 // A ready target starts the moves; a failed one fails the migration with

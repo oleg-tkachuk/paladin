@@ -238,6 +238,9 @@ type StorageMigration struct {
 	// ResourceVersion moves with every change of state, never with a pass's
 	// progress: the compare-and-set CancelStorageMigration takes.
 	ResourceVersion int64
+	// RepointedCollections are the collections a cancel pointed back at the
+	// source; set by CancelStorageMigration only, for its log.
+	RepointedCollections []string
 }
 
 // ErrStorageMigrationNotCancellable is returned by CancelStorageMigration for
@@ -988,7 +991,9 @@ func (h *Handler) CancelTenantStorageMigration(ctx context.Context, tenantID uui
 		fmt.Sprintf(reasonCancelledBy, p.Subject))
 	switch {
 	case err == nil:
-		log.Info("storage migration cancelled", zap.String("state", m.State))
+		log.Info("storage migration cancelled; the tenant's uploads go to the source",
+			zap.String("state", m.State), zap.String("source_bucket", m.SourceBucketName),
+			zap.String("target_bucket", m.TargetBucketName), zap.Strings("collections_repointed", m.RepointedCollections))
 		return &m, nil
 	case errors.Is(err, ErrStorageMigrationNotCancellable):
 		log.Warn("storage migration cancel refused", zap.Error(err))

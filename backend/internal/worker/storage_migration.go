@@ -243,6 +243,19 @@ func (h MigrationHolds) Clear() bool {
 	return h.Placed == 0 && h.Anchored == 0 && h.Sessions == 0 && h.Bound == 0
 }
 
+// Repointed is what pointing a tenant's uploads at a bucket changed: the
+// private collections rebound, and whether the default binding moved. Empty
+// when everything already pointed there.
+type Repointed struct {
+	Collections    []string
+	DefaultBinding bool
+}
+
+// Changed reports whether anything was pointed anew.
+func (r Repointed) Changed() bool {
+	return len(r.Collections) > 0 || r.DefaultBinding
+}
+
 // MigrationRepo is the persistence seam for the migration.
 //
 // The writes name the migration as it was read (MigrationRead) and apply
@@ -254,15 +267,19 @@ type MigrationRepo interface {
 	ListActive(ctx context.Context, limit int) ([]StorageMigration, error)
 	// BucketProvisionState returns a bucket's provision_state.
 	BucketProvisionState(ctx context.Context, backendID, bucketName string) (string, error)
-	// EnterMoving moves provisioning -> moving.
-	EnterMoving(ctx context.Context, at MigrationRead) error
+	// EnterMoving moves provisioning -> moving and, on the same transaction,
+	// points the tenant's uploads from source at target as Repoint does —
+	// with the dedicated layout and the source's write deadline — so no
+	// upload after the transition is signed for the source. A collection the
+	// schema refuses is a *RebindRefusedError, and nothing changes.
+	EnterMoving(ctx context.Context, at MigrationRead, source, target MigrationBucket, writeWindow time.Duration) (Repointed, error)
 	// Repoint, in one transaction under the migration row's lock, points
 	// the tenant's private collections bound to from at to, and its default
 	// binding when it names from or none; sets the tenant's storage layout;
 	// and records, once per direction, when the last URL signed for from
 	// expires: now plus writeWindow. A collection the schema refuses is a
 	// *RebindRefusedError, and nothing changes.
-	Repoint(ctx context.Context, at MigrationRead, from, to MigrationBucket, layout string, writeWindow time.Duration) error
+	Repoint(ctx context.Context, at MigrationRead, from, to MigrationBucket, layout string, writeWindow time.Duration) (Repointed, error)
 	// ListMovable lists one batch of the tenant's live and trashed private
 	// objects placed in from whose upload anchor has settled, after the id
 	// after, by id.
@@ -297,8 +314,10 @@ type MigrationRepo interface {
 	// deleted.
 	MarkCleaned(ctx context.Context, at MigrationRead) error
 	// StartRollback moves moving -> rolling_back, recording reason as the
-	// migration's error and counting the failure.
-	StartRollback(ctx context.Context, at MigrationRead, reason string) error
+	// migration's error and counting the failure, and on the same transaction
+	// points the tenant's uploads from target back at source, with the shared
+	// layout and the target's write deadline.
+	StartRollback(ctx context.Context, at MigrationRead, reason string, target, source MigrationBucket, writeWindow time.Duration) (Repointed, error)
 	// FinishRollback moves rolling_back -> failed, keeping the reason; the
 	// failed migration's passes go on until at least settleWindow from now.
 	FinishRollback(ctx context.Context, at MigrationRead, settleWindow time.Duration) error
@@ -485,12 +504,19 @@ func (w *StorageMigrationWorker) stepProvisioning(ctx context.Context, m Storage
 	default:
 		return nil // still pending; wait for the bucket reconciler
 	}
-	if err := w.Repo.EnterMoving(ctx, m.Read()); err != nil {
+	log := w.log().With(zap.String("tenant_id", m.TenantID.String()),
+		zap.String("source_bucket", m.Source.Bucket), zap.String("target_bucket", m.Target.Bucket))
+	rp, err := w.Repo.EnterMoving(ctx, m.Read(), m.Source, m.Target, w.WriteWindow)
+	if errors.Is(err, ErrRebindRefused) {
+		// Nothing was pointed at the target: the transition took it back.
+		log.Error("the schema refuses to move a collection; failing the migration", zap.Error(err))
+		return w.Repo.Fail(ctx, m.Read(), rebindReason(err))
+	}
+	if err != nil {
 		return fmt.Errorf("start moving: %w", err)
 	}
-	w.log().Info("migration starts moving objects",
-		zap.String("tenant_id", m.TenantID.String()),
-		zap.String("source_bucket", m.Source.Bucket), zap.String("target_bucket", m.Target.Bucket))
+	log.Info("migration starts moving objects; the tenant's uploads go to the target",
+		zap.Strings("collections_repointed", rp.Collections), zap.Bool("default_binding_repointed", rp.DefaultBinding))
 	return nil
 }
 
@@ -533,12 +559,19 @@ func (w *StorageMigrationWorker) pass(ctx context.Context, m StorageMigration) e
 	from, to, layout := m.direction()
 	log := w.log().With(zap.String("tenant_id", m.TenantID.String()), zap.String("state", m.State),
 		zap.String("from_bucket", from.Bucket), zap.String("to_bucket", to.Bucket))
-	if err := w.Repo.Repoint(ctx, m.Read(), from, to, layout, w.WriteWindow); err != nil {
+	rp, err := w.Repo.Repoint(ctx, m.Read(), from, to, layout, w.WriteWindow)
+	if err != nil {
 		if errors.Is(err, ErrRebindRefused) && m.State == MigStateMoving {
 			log.Error("the schema refuses to move a collection; rolling the migration back", zap.Error(err))
 			return w.rollBack(ctx, m, rebindReason(err))
 		}
 		return fmt.Errorf("point the tenant's uploads at %s: %w", to.Bucket, err)
+	}
+	if rp.Changed() {
+		// A request that read a binding before the switch bound it to the
+		// bucket being emptied.
+		log.Info("pointed what was bound to the bucket being emptied at the one being filled",
+			zap.Strings("collections_repointed", rp.Collections), zap.Bool("default_binding_repointed", rp.DefaultBinding))
 	}
 	p := w.passFor(m)
 	batch, err := w.Repo.ListMovable(ctx, m.Read(), from, p.after, w.batch())
@@ -646,10 +679,14 @@ func (w *StorageMigrationWorker) settle(ctx context.Context, log *zap.Logger, m 
 // rollBack starts the rollback of m for reason.
 func (w *StorageMigrationWorker) rollBack(ctx context.Context, m StorageMigration, reason string) error {
 	w.forgetPass(m.TenantID)
-	if err := w.Repo.StartRollback(ctx, m.Read(), reason); err != nil {
+	rp, err := w.Repo.StartRollback(ctx, m.Read(), reason, m.Target, m.Source, w.WriteWindow)
+	if err != nil {
 		return fmt.Errorf("start the rollback: %w", err)
 	}
-	w.log().Warn("migration rolling back", zap.String("tenant_id", m.TenantID.String()), zap.String("reason", reason))
+	w.log().Warn("migration rolling back; the tenant's uploads go to the source again",
+		zap.String("tenant_id", m.TenantID.String()), zap.String("reason", reason),
+		zap.String("source_bucket", m.Source.Bucket), zap.String("target_bucket", m.Target.Bucket),
+		zap.Strings("collections_repointed", rp.Collections), zap.Bool("default_binding_repointed", rp.DefaultBinding))
 	return nil
 }
 

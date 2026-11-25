@@ -3,8 +3,9 @@
 - **Status:** Accepted 2026-11-24 — implemented in the three stages below.
   Amended 2026-11-24: the completion waits for the anchors, not for the
   write deadline (see Amendment). Amended 2026-11-25: a rolled-back
-  migration keeps passing after it fails, and an operator can cancel a
-  migration (see the later amendments).
+  migration keeps passing after it fails, an operator can cancel a
+  migration, and the switch and what a finished migration holds were
+  corrected after a live run (see the later amendments).
   Supersedes the storage-migration parts of
   [ADR-0015](0015-per-tenant-bucket-layout.md): Phase 3 and the migration
   addenda of 2026-11-24.
@@ -417,3 +418,21 @@ write read before it — a move, a pass's record, a transition — matches nothi
 - **Not an agent's tool.** The MCP bridge exposes no storage-migration RPC;
   moving a tenant's storage stays an operator's decision, like the tenant
   lifecycle in `DefaultAlwaysDeny`.
+
+## Amendment (2026-11-25): what a live run corrected
+
+- **The switch is the transition's.** As implemented, entering `moving`
+  changed the state alone, and the collections, the default binding, the
+  layout and the write deadline followed on the next pass, up to a worker
+  interval later: an upload in between was signed for the source, and held
+  the completion for its URL's life. Entering `moving` now does all of them
+  on its own transaction, as decided above, and so does entering
+  `rolling_back`, the worker's or a cancel's; a collection the schema refuses
+  fails a migration still provisioning with nothing pointed. A cancel cannot
+  record the target's write deadline (the admin plane does not hold
+  `limits.presign.max_ttl`); the rollback's first pass does.
+- **An overwrite through an old URL.** A presigned PUT carries
+  `If-None-Match: *`, so on a store that honours it (`features.ConditionalPut`)
+  a second PUT through the same URL is refused and cannot write other bytes.
+  A POST cannot carry the condition, and a store may ignore it, so the
+  settle's different-ETag case stays.
