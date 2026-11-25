@@ -349,6 +349,8 @@ message StorageMigrationStatus {
   int64 objects_copied = 4;
   // Bucket references as resource names, consistent with
   // TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
+  // Empty once the bucket was deleted: a failed or cleaned migration does not
+  // hold its buckets.
   string source_bucket = 5;
   string target_bucket = 6;
   reserved 7, 8;

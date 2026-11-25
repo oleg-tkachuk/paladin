@@ -624,6 +624,8 @@ export type StorageMigrationStatus =
     /**
      * Bucket references as resource names, consistent with
      * TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
+     * Empty once the bucket was deleted: a failed or cleaned migration does not
+     * hold its buckets.
      *
      * @generated from field: string source_bucket = 5;
      */

@@ -1139,6 +1139,8 @@ type StorageMigrationStatus struct {
 	ObjectsCopied int64 `protobuf:"varint,4,opt,name=objects_copied,json=objectsCopied,proto3" json:"objects_copied,omitempty"`
 	// Bucket references as resource names, consistent with
 	// TenantDefaultBinding: "storageBackends/{backend}/buckets/{bucket}".
+	// Empty once the bucket was deleted: a failed or cleaned migration does not
+	// hold its buckets.
 	SourceBucket string `protobuf:"bytes,5,opt,name=source_bucket,json=sourceBucket,proto3" json:"source_bucket,omitempty"`
 	TargetBucket string `protobuf:"bytes,6,opt,name=target_bucket,json=targetBucket,proto3" json:"target_bucket,omitempty"`
 	// error — why the migration is rolling back or failed; empty otherwise.
