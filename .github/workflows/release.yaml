@@ -83,7 +83,7 @@ env:
   # renovate: datasource=github-releases depName=mikefarah/yq
   YQ_VERSION: "v4.54.3"
   # renovate: datasource=github-releases depName=sigstore/cosign
-  COSIGN_VERSION: "v3.1.4"
+  COSIGN_VERSION: "v3.1.5"
   # renovate: datasource=github-releases depName=anchore/syft
   SYFT_VERSION: "v1.57.2"
   # renovate: datasource=github-releases depName=google/go-containerregistry
