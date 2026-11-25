@@ -97,6 +97,36 @@ func TestStorageMigrationFinishedReleasesItsBuckets(t *testing.T) {
 	}
 }
 
+// The shared bucket a live tenant migrated off is not held by the cleaned
+// migration: once nothing else holds it, it is deleted with the tenant still
+// there, and the migration's status reads on without its source.
+func TestStorageMigrationCleanedReleasesTheSourceOfALiveTenant(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := seedPublicMigrationFixture(t, ctx)
+	f.addCollection(t, ctx, "docs", f.private, false)
+	if err := f.start(t, ctx); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if state, reason := f.drive(t, ctx); state != worker.MigStateCleaned {
+		t.Fatalf("migration left at %s (%s), want cleaned", state, reason)
+	}
+	if n := f.migrationRefs(t, ctx, f.private); n != 0 {
+		t.Fatalf("a cleaned migration holds the source bucket (%d)", n)
+	}
+	mustExec(t, ctx, f.pool, `DELETE FROM bucket_grants WHERE bucket_id IN (SELECT id FROM buckets WHERE name = $1)`, f.private)
+	app := rlsPool(t, ctx, f.pool)
+	if err := f.deleteBucket(ctx, adapters.NewBucketRepoV2(sqlc.New(app), app), f.private); err != nil {
+		t.Fatalf("delete the shared source of a live tenant after the cleanup: %v", err)
+	}
+	if m := f.status(t, ctx); m.State != worker.MigStateCleaned || m.SourceBucketName != "" || m.TargetBucketName != f.dedicated {
+		t.Fatalf("status after the source went: %+v, want cleaned with no source", m)
+	}
+	if got := f.boundTo(t, ctx, "docs"); got != f.dedicated {
+		t.Fatalf("docs bound to %s after the source went, want the dedicated bucket", got)
+	}
+}
+
 // A migration the worker still drives holds both buckets — at the reference
 // check, at the database under the application's role, and at the purge,
 // which says what to do — until a cancel has rolled it back to failed; the
