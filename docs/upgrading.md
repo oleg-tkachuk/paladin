@@ -89,6 +89,166 @@ here.
 
 <!-- sections: written by the release from docs/upgrading/, newest first; add a file there instead -->
 
+## sdk/python/v0.153.0, sdk/go/v0.153.0 — an operator can cancel a storage migration
+
+- `CancelTenantStorageMigration` (admin `TenantService`) cancels a tenant's
+  storage migration at the `resource_version` read from
+  `GetTenantStorageMigration`. A `provisioning` migration fails at once; a
+  `moving` or `completed` one rolls back — every object moves back to the
+  shared bucket and new uploads go there again — and ends `failed`,
+  retryable with `MigrateTenantStorageLayout`. The migration's `error`
+  records who cancelled it. A migration `rolling_back`, `failed` or `cleaned`
+  answers `FAILED_PRECONDITION`, a stale version `ABORTED`. Authorised as
+  `MigrateTenantStorageLayout` is, and audited.
+- `StorageMigrationStatus.resource_version` is new (migration 134): it moves
+  with every change of state, never with a pass's progress.
+- The console's storage migration card has a **Cancel migration** action,
+  confirmed before it runs.
+- The cleanup of a completed migration's source copies now deletes each one
+  while holding the migration row, so a cancel waits for a delete in flight.
+
+## Unreleased — the reconciler announces the writes it finds
+
+- An upload the reconciler promotes after its completion never came, and a
+  later write through its URL that no storage event reported, now reach
+  event subscribers as `paladin.object.uploaded`, with `source` set to
+  `reconciler`. They used to reach none. A promote another producer made
+  first, or a settle that finds the bytes the object records, is not
+  announced again.
+
+## Unreleased — every object row is placed or anchored
+
+- Migrations 132 and 133 make an object's placement a schema guarantee
+  (ADR-0051): a `PENDING` row must name the bucket its upload URL is signed
+  for, and any other row the bucket its bytes are in. Rows an older binary
+  left without them are placed in, or anchored to, their collection's bucket
+  first. Upgrade from a release that already records placement (migration
+  123 onward): a binary from before it, still serving while the migration
+  runs, would have its promotes refused.
+- `DeleteBucket` now refuses, with `FAILED_PRECONDITION` naming objects, a
+  bucket an upload is still anchored to. It used to delete the bucket and
+  clear the anchor.
+
+## Unreleased — a rolled-back storage migration keeps passing after it fails
+
+- A storage migration that rolled back keeps running its passes while it is
+  `failed`, until it settles: an upload or a collection that read the
+  tenant's dedicated bucket before the switch back and was created after the
+  rollback ended is moved back to the shared bucket. The passes stop once
+  nothing of the tenant is left in the dedicated bucket and
+  `worker.jobs.storage_migration.source_copy_retention` (by default
+  `limits.presign.max_ttl`) has passed since the rollback ended. A
+  regenerated or part URL for the dedicated bucket is bounded by the
+  rollback's write deadline until then.
+- The state stays `failed` and `MigrateTenantStorageLayout` retries it as
+  before. A migration that failed while its bucket was provisioned is not
+  passed.
+- Migration 131 adds `tenant_storage_migrations.settle_after` and
+  `settled_at`, and takes every migration already `failed` as settled.
+
+## Unreleased — a storage migration completes once its URLs have expired
+
+- A migration no longer waits `limits.presign.max_ttl` plus
+  `worker.jobs.reconciler.min_object_age` after it starts moving. It
+  completes once nothing of the tenant is placed in or anchored to the
+  source, no multipart session is open there and nothing is bound to it:
+  usually a few minutes after the last upload URL signed for the source
+  expires. A pending upload to the source still holds it until it completes
+  or the reconciler discards it, `min_object_age` past its URL's expiry.
+- New key `worker.jobs.reconciler.write_settle_grace` (default `5m`): how
+  long past its URL's expiry a promoted object's upload anchor is settled.
+  It used to be `min_object_age`, which stays the grace of a pending upload.
+  Raise it with `limits.max_object_size` if clients upload slowly.
+- New key `worker.jobs.storage_migration.source_copy_retention` (default
+  `limits.presign.max_ttl`): the least a completed migration keeps the
+  source copies, for GET URLs signed before their objects moved. The
+  operator's `cleanup_retention_seconds` can only lengthen it.
+- A completed migration keeps passing until it is cleaned: an upload a
+  request anchored to the source after the completion is moved, a
+  collection bound there is pointed at the target, and the cleanup waits for
+  them. Regenerated and part URLs for the source stay bounded by the write
+  deadline until the migration is cleaned.
+- No key is removed. Ship the schema with the binary: the loader refuses the
+  new keys before it.
+
+## Unreleased — the old storage-migration bookkeeping is dropped
+
+- Migration 130 drops what the rebind-at-an-instant migration kept: the
+  tables `storage_migration_caught_up`, `storage_migration_copied_back` and
+  `storage_migration_source_etags`, and the columns `rebound_at`,
+  `rebound_back_at`, `copy_started_at`, `rollback_cursor_at` and
+  `rollback_cursor_id` of `tenant_storage_migrations` (ADR-0051). A binary
+  from before stage 2 of ADR-0051 fails its migration queries once it runs;
+  deploy this with the release that carries it.
+- It also places every promoted object and anchors every pending upload
+  that an older binary wrote without them.
+- `MigrateTenantStorageLayout` on a `dedicated` tenant whose migration
+  failed no longer starts a rollback: a failed migration now always leaves
+  its tenant `shared`, and the call is refused as for any dedicated tenant.
+
+## Unreleased — a storage migration moves objects one by one
+
+- A tenant's storage migration no longer rebinds every collection at one
+  instant (ADR-0051). Once its dedicated bucket is ready it enters the new
+  state `moving`: the tenant's private collections and default binding point
+  at the target and `storage_layout` is `dedicated` at once, so new uploads
+  go there, and each pass of the worker copies the objects still in the
+  source, verifies each copy and moves its placement. `rebinding` and
+  `verifying` are gone; migration 127 resumes a migration found in
+  `copying`, `rebinding` or `verifying` as `moving`.
+- A migration completes only once nothing of the tenant is left in or
+  anchored to the source. The source copies are then kept until the later of the retention the
+  operator asked for and `worker.jobs.storage_migration.source_copy_retention`
+  (by default `max_ttl`), so a GET URL signed before an object
+  moved keeps working until it expires.
+- A rollback moves the objects back the same way. It starts when the target
+  bucket leaves `ready`, the schema refuses to move a collection, or moves
+  fail their verification on five passes in a row; the migration ends
+  `failed`, the tenant `shared`, and is retried with
+  `MigrateTenantStorageLayout` as before. `objects_copied` counts the moves
+  of the current direction, `objects_total` the moves plus what is still to
+  move.
+- An upload's anchor (the bucket its URL was signed for) is kept after its
+  promote until the URL has expired; the reconciler then HEADs the bucket
+  once, clears the anchor, and records any write through the URL that no
+  storage event reported. A storage event is applied only when it comes
+  from that bucket; one from any other bucket is acknowledged and changes
+  nothing. Migration 127 anchors every pending upload and every promoted
+  object whose URL is still valid; 128 indexes the anchors by URL expiry
+  concurrently. Moving an object or clearing its anchor no longer changes
+  its `resource_version` (migration 129).
+- `CompleteObject`, a multipart completion and the reconciler promote an
+  upload in the bucket its URL was signed for and no longer copy it into
+  the collection's current bucket. A regenerated upload URL is signed for
+  that same bucket. While a migration empties a bucket, a regenerated or
+  part URL for it expires by the migration's write deadline, and past it is
+  refused with `FAILED_PRECONDITION` ("start a new upload").
+- `CreateCollection` no longer refuses a collection bound to a bucket a
+  migration has left (`ABORTED`); the migration's next pass moves it.
+
+## Unreleased — an object is read from the bucket its bytes are in
+
+- Every object now records the bucket its bytes are in
+  (`objects.placement_bucket_id`, ADR-0051). Migration 123 adds the column,
+  124 backfills it from each object's collection binding, and 125 builds an
+  index on it concurrently. A pending upload is placed nowhere until its
+  bytes are confirmed.
+- Downloads, presigned GETs, copies and batch copies (their source), the
+  check a restore makes, permanent deletes with their purge debt, and the
+  trash's hard delete now resolve an object's bytes by its placement, and
+  the bucket gate decides on that bucket's state. While no storage migration
+  runs the placement is the collection's bucket, so nothing changes.
+- Bucket replication copies the objects whose bytes are in the bucket, read
+  from there, rather than the objects of the collections bound to it
+  (migration 126). An object is queued again when its bytes move to another
+  bucket; rebinding a collection no longer queues its bucket again, since it
+  moves no bytes.
+- After `BindCollectionToBucket` points a collection at another bucket, its
+  existing objects keep being read from the bucket that holds them; until
+  now they were looked for in the new bucket, which does not. New uploads go
+  to the new bucket. The placement an authorised reader sees
+  (`Object.placement`) is the bucket the bytes are in.
+
 ## Unreleased — a storage migration's cleanup keeps a source write no event has recorded
 
 - Migration 120 adds the `storage_migration_source_etags` table: the ETag
