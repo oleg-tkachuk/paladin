@@ -295,6 +295,12 @@ enum PurgeBlockerKind {
   // operator: each row goes once the backend bucket is gone, and the purge
   // can be retried then.
   PURGE_BLOCKER_KIND_BUCKETS_DELETING = 4;
+  // The tenant's storage migration, while it is provisioning, moving,
+  // completed or rolling back: it holds the dedicated bucket the tenant owns.
+  // Reported first, for it comes first: in the trash the migration is
+  // frozen, so restore the tenant, cancel the migration
+  // (CancelTenantStorageMigration) or let it finish, and trash it again.
+  PURGE_BLOCKER_KIND_STORAGE_MIGRATION = 5;
 }
 
 message MigrateTenantStorageLayoutRequest {

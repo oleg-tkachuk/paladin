@@ -18,6 +18,10 @@ const BLOCKER_NOUNS: Record<PurgeBlockerKind, [one: string, many: string]> = {
     "bucket being deleted",
     "buckets being deleted",
   ],
+  [PurgeBlockerKind.STORAGE_MIGRATION]: [
+    "storage migration in flight",
+    "storage migrations in flight",
+  ],
 };
 
 /** one for a count of one, many for any other. */
@@ -106,20 +110,33 @@ function toWaitFor(deleting: bigint): string {
 }
 
 /**
- * Why the purge would be refused: what the tenant still owns and has to
- * remove, then the buckets it only has to wait for; null when nothing
- * refuses it.
+ * Why a storage migration in flight refuses the purge: it holds the
+ * tenant's dedicated bucket, and in the trash it is frozen.
+ */
+export const MIGRATION_BLOCKS_PURGE =
+  "A storage migration is in flight and holds the tenant's dedicated bucket. Restore the tenant, cancel the migration or let it finish, and trash it again.";
+
+/**
+ * Why the purge would be refused: a storage migration in flight first, then
+ * what the tenant still owns and has to remove, then the buckets it only has
+ * to wait for; null when nothing refuses it.
  */
 export function whatBlocksPurge(
   blockers: readonly PurgeBlocker[],
 ): string | null {
+  const migrating = blockers.some(
+    (b) => b.kind === PurgeBlockerKind.STORAGE_MIGRATION && b.count > 0n,
+  );
   const owned = blockers.filter(
-    (b) => b.kind !== PurgeBlockerKind.BUCKETS_DELETING,
+    (b) =>
+      b.kind !== PurgeBlockerKind.BUCKETS_DELETING &&
+      b.kind !== PurgeBlockerKind.STORAGE_MIGRATION,
   );
   const deleting = blockers
     .filter((b) => b.kind === PurgeBlockerKind.BUCKETS_DELETING)
     .reduce((sum, b) => sum + b.count, 0n);
   const reasons = [
+    ...(migrating ? [MIGRATION_BLOCKS_PURGE] : []),
     ...(owned.length > 0 ? [toRemove(owned)] : []),
     ...(deleting > 0n ? [toWaitFor(deleting)] : []),
   ];

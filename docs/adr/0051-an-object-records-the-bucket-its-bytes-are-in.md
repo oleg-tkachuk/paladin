@@ -431,6 +431,24 @@ write read before it — a move, a pass's record, a transition — matches nothi
   fails a migration still provisioning with nothing pointed. A cancel cannot
   record the target's write deadline (the admin plane does not hold
   `limits.presign.max_ttl`); the rollback's first pass does.
+- **A finished migration holds no bucket.** Both bucket references were
+  `RESTRICT` in every state, and the row goes only with its tenant: a
+  migrated tenant could not be purged before its dedicated bucket was
+  deleted, nor that bucket deleted while the row named it, and the shared
+  source stayed pinned by every tenant that had left it. The references are
+  now `SET NULL` (migration 135), and a trigger refuses a bucket's delete only
+  while the worker drives the migration — `provisioning`, `moving`,
+  `completed`, `rolling_back` (`migstate.HoldsBuckets`). A `failed` migration,
+  settled or not, holds none: what it may still pass back is an object
+  placed, an upload anchored or a collection bound in the target, and each
+  holds the bucket by its own reference. The status of a migration whose
+  bucket is gone names none, and a retry provisions the dedicated bucket
+  anew.
+- **A purge waits for the migration.** `PreviewPurgeTenant` reports a
+  migration the worker drives as a blocker of its own, first, and the purge
+  refuses it before any foreign key. In the trash the migration is frozen, so
+  the way out is to restore the tenant, cancel the migration or let it
+  finish, and trash the tenant again.
 - **An overwrite through an old URL.** A presigned PUT carries
   `If-None-Match: *`, so on a store that honours it (`features.ConditionalPut`)
   a second PUT through the same URL is refused and cannot write other bytes.

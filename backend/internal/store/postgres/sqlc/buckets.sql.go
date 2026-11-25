@@ -24,8 +24,9 @@ SELECT 'tenant_default_bindings'::text, count(*)::bigint
 UNION ALL
 SELECT 'tenant_storage_migrations'::text, count(*)::bigint
     FROM tenant_storage_migrations
-    WHERE source_bucket_id IN (SELECT id FROM target)
-       OR target_bucket_id IN (SELECT id FROM target)
+    WHERE (source_bucket_id IN (SELECT id FROM target)
+           OR target_bucket_id IN (SELECT id FROM target))
+      AND state = ANY($3::text[])
 UNION ALL
 SELECT 'multipart_uploads'::text, count(*)::bigint
     FROM multipart_uploads WHERE bucket_id IN (SELECT id FROM target)
@@ -55,12 +56,14 @@ type CountBucketReferencesRow struct {
 // clean themselves up.
 //
 // Rows come back for relations with a zero count too; the caller decides what
-// to do with those. tenant_storage_migrations carries two of the constraints
-// (source and target), so it is matched on both columns and reported once.
+// to do with those. tenant_storage_migrations holds its two buckets by a
+// trigger rather than RESTRICT (migration 135), and only in the states the
+// worker still drives (holding_states, migstate.HoldsBuckets): it is matched
+// on both columns, in those states, and reported once.
 // An object holds the bucket it is placed in and the one its upload URL is
 // anchored to (migration 132).
-func (q *Queries) CountBucketReferences(ctx context.Context, name string, name_2 string) ([]CountBucketReferencesRow, error) {
-	rows, err := q.db.Query(ctx, countBucketReferences, name, name_2)
+func (q *Queries) CountBucketReferences(ctx context.Context, backendName string, bucketName string, holdingStates []string) ([]CountBucketReferencesRow, error) {
+	rows, err := q.db.Query(ctx, countBucketReferences, backendName, bucketName, holdingStates)
 	if err != nil {
 		return nil, err
 	}

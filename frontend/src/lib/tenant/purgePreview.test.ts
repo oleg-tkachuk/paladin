@@ -7,6 +7,7 @@ import {
   PurgeBlockerSchema,
 } from "@/gen/paladin/admin/v1/tenant_service_pb";
 import {
+  MIGRATION_BLOCKS_PURGE,
   PURGE_ALSO_REMOVED,
   whatBlocksPurge,
   affectedByPurge,
@@ -132,5 +133,19 @@ describe("whatBlocksPurge", () => {
     expect(text).toBe(
       "The tenant still owns 1 bucket. The purge is refused until it is removed: restore the tenant, delete it, and trash it again. 2 buckets are still being deleted on the storage backend. Nothing needs doing: retry the purge once they finish.",
     );
+  });
+
+  it("asks for the storage migration first, then what is owned", () => {
+    const text = whatBlocksPurge([
+      create(PurgeBlockerSchema, {
+        kind: PurgeBlockerKind.STORAGE_MIGRATION,
+        count: 1n,
+      }),
+      create(PurgeBlockerSchema, { kind: PurgeBlockerKind.BUCKETS, count: 1n }),
+    ]);
+    expect(text).toBe(
+      `${MIGRATION_BLOCKS_PURGE} The tenant still owns 1 bucket. The purge is refused until it is removed: restore the tenant, delete it, and trash it again.`,
+    );
+    expect(text).toContain("cancel the migration");
   });
 });

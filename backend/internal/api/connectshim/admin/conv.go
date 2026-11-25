@@ -573,6 +573,8 @@ func purgePreviewToProto(tenant uuid.UUID, p *tenanth.PurgePreview) *pb.PreviewP
 		kind  pb.PurgeBlockerKind
 		count int64
 	}{
+		// The migration first: the bucket it holds cannot go before it does.
+		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_STORAGE_MIGRATION, p.Blockers.StorageMigrations},
 		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_COLLECTIONS, p.Blockers.Collections},
 		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_BUCKETS, p.Blockers.Buckets},
 		{pb.PurgeBlockerKind_PURGE_BLOCKER_KIND_USERS, p.Blockers.Users},

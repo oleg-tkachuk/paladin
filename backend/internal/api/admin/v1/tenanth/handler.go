@@ -243,6 +243,14 @@ type StorageMigration struct {
 	RepointedCollections []string
 }
 
+// ErrTenantMigrating is returned by Repository.Purge while the tenant's
+// storage migration is one the worker still drives (migstate.HoldsBuckets):
+// it holds the tenant's dedicated bucket. In the trash the migration is
+// frozen, so the way out is to restore the tenant, cancel the migration (or
+// let it finish), and trash the tenant again.
+var ErrTenantMigrating = errors.New(
+	"tenant has a storage migration in flight; restore the tenant, cancel the migration or let it finish, then trash and purge it")
+
 // ErrStorageMigrationNotCancellable is returned by CancelStorageMigration for
 // a migration whose state takes no cancel (migstate.CancelTo): rolling back
 // already, failed, or cleaned.
@@ -1466,6 +1474,7 @@ func init() {
 	apiutil.RegisterError(ErrVersionMismatch, connect.CodeAborted, commonv1.ErrorReason_ERROR_REASON_VERSION_CONFLICT)
 	apiutil.RegisterError(ErrNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
 	apiutil.RegisterError(ErrStorageMigrationNotFound, connect.CodeNotFound, commonv1.ErrorReason_ERROR_REASON_NOT_FOUND)
+	apiutil.RegisterError(ErrTenantMigrating, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_TENANT_HAS_CHILDREN)
 	apiutil.RegisterError(ErrStorageMigrationNotCancellable, connect.CodeFailedPrecondition, commonv1.ErrorReason_ERROR_REASON_FAILED_PRECONDITION)
 	apiutil.RegisterError(ErrSlugConflict, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)
 	apiutil.RegisterError(ErrSlugHeldInTrash, connect.CodeAlreadyExists, commonv1.ErrorReason_ERROR_REASON_SLUG_TAKEN)

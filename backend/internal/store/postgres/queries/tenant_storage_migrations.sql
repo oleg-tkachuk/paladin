@@ -15,14 +15,16 @@ WHERE ssb.name = $2 AND sb.name = $3
 RETURNING *;
 
 -- name: GetStorageMigration :one
+-- A finished migration may outlive either bucket (migration 135): its names
+-- are then empty.
 SELECT sqlc.embed(m),
-       ssb.name AS source_backend_name, sb.name AS source_bucket_name,
-       tsb.name AS target_backend_name, tb.name AS target_bucket_name
+       COALESCE(ssb.name, '')::text AS source_backend_name, COALESCE(sb.name, '')::text AS source_bucket_name,
+       COALESCE(tsb.name, '')::text AS target_backend_name, COALESCE(tb.name, '')::text AS target_bucket_name
 FROM tenant_storage_migrations m
-JOIN buckets sb           ON sb.id = m.source_bucket_id
-JOIN storage_backends ssb ON ssb.id = sb.backend_id
-JOIN buckets tb           ON tb.id = m.target_bucket_id
-JOIN storage_backends tsb ON tsb.id = tb.backend_id
+LEFT JOIN buckets sb           ON sb.id = m.source_bucket_id
+LEFT JOIN storage_backends ssb ON ssb.id = sb.backend_id
+LEFT JOIN buckets tb           ON tb.id = m.target_bucket_id
+LEFT JOIN storage_backends tsb ON tsb.id = tb.backend_id
 WHERE m.tenant_id = $1
 -- The latest, as StartStorageMigration reads it: a start used to be able to
 -- leave a tenant with two rows (see LockTenantForStorageMigration).

@@ -22,11 +22,13 @@ class PurgeBlockerKind(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     PURGE_BLOCKER_KIND_BUCKETS: _ClassVar[PurgeBlockerKind]
     PURGE_BLOCKER_KIND_USERS: _ClassVar[PurgeBlockerKind]
     PURGE_BLOCKER_KIND_BUCKETS_DELETING: _ClassVar[PurgeBlockerKind]
+    PURGE_BLOCKER_KIND_STORAGE_MIGRATION: _ClassVar[PurgeBlockerKind]
 PURGE_BLOCKER_KIND_UNSPECIFIED: PurgeBlockerKind
 PURGE_BLOCKER_KIND_COLLECTIONS: PurgeBlockerKind
 PURGE_BLOCKER_KIND_BUCKETS: PurgeBlockerKind
 PURGE_BLOCKER_KIND_USERS: PurgeBlockerKind
 PURGE_BLOCKER_KIND_BUCKETS_DELETING: PurgeBlockerKind
+PURGE_BLOCKER_KIND_STORAGE_MIGRATION: PurgeBlockerKind
 
 class CreateTenantRequest(_message.Message):
     __slots__ = ("tenant_id", "tenant", "default_bucket")

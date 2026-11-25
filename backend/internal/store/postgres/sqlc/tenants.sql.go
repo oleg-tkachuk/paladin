@@ -29,28 +29,35 @@ SELECT
         AND b.provision_state <> 'deleting')::bigint AS buckets,
     (SELECT count(*) FROM buckets b WHERE b.owner_tenant_id = $1
         AND b.provision_state = 'deleting')::bigint AS buckets_deleting,
-    (SELECT count(*) FROM users u WHERE u.tenant_id = $1)::bigint AS users
+    (SELECT count(*) FROM users u WHERE u.tenant_id = $1)::bigint AS users,
+    (SELECT count(*) FROM tenant_storage_migrations m WHERE m.tenant_id = $1
+        AND m.state = ANY($2::text[]))::bigint AS storage_migrations
 `
 
 type CountPurgeBlockersRow struct {
-	Collections     int64 `json:"collections"`
-	Buckets         int64 `json:"buckets"`
-	BucketsDeleting int64 `json:"buckets_deleting"`
-	Users           int64 `json:"users"`
+	Collections       int64 `json:"collections"`
+	Buckets           int64 `json:"buckets"`
+	BucketsDeleting   int64 `json:"buckets_deleting"`
+	Users             int64 `json:"users"`
+	StorageMigrations int64 `json:"storage_migrations"`
 }
 
 // The ON DELETE RESTRICT children of the tenant, which refuse its purge
 // while any is left (docs/deletion-semantics.md). Trashed collections count:
 // the foreign key does not tell them apart. Buckets being deleted on the
 // backend are counted apart: they leave without the operator doing anything.
-func (q *Queries) CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID) (CountPurgeBlockersRow, error) {
-	row := q.db.QueryRow(ctx, countPurgeBlockers, tenantID)
+// A storage migration the worker still drives (holding_states,
+// migstate.HoldsBuckets) holds the dedicated bucket the tenant owns, and is
+// counted apart too: it is cancelled or finished, not deleted.
+func (q *Queries) CountPurgeBlockers(ctx context.Context, tenantID pgtype.UUID, holdingStates []string) (CountPurgeBlockersRow, error) {
+	row := q.db.QueryRow(ctx, countPurgeBlockers, tenantID, holdingStates)
 	var i CountPurgeBlockersRow
 	err := row.Scan(
 		&i.Collections,
 		&i.Buckets,
 		&i.BucketsDeleting,
 		&i.Users,
+		&i.StorageMigrations,
 	)
 	return i, err
 }
@@ -618,6 +625,22 @@ func (q *Queries) TenantSlugHolder(ctx context.Context, slug string) (string, er
 	var holder string
 	err := row.Scan(&holder)
 	return holder, err
+}
+
+const tenantStorageMigrationHolding = `-- name: TenantStorageMigrationHolding :one
+SELECT m.state FROM tenant_storage_migrations m
+WHERE m.tenant_id = $1 AND m.state = ANY($2::text[])
+LIMIT 1
+`
+
+// The state of the tenant's migration when the worker still drives it
+// (holding_states, migstate.HoldsBuckets): what refuses a purge before any
+// foreign key does. No row: none does.
+func (q *Queries) TenantStorageMigrationHolding(ctx context.Context, tenantID pgtype.UUID, holdingStates []string) (string, error) {
+	row := q.db.QueryRow(ctx, tenantStorageMigrationHolding, tenantID, holdingStates)
+	var state string
+	err := row.Scan(&state)
+	return state, err
 }
 
 const updateTenant = `-- name: UpdateTenant :execrows

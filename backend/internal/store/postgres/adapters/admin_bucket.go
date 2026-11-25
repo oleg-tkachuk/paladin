@@ -10,6 +10,7 @@ import (
 	"uuid"
 
 	"github.com/oleg-tkachuk/paladin/backend/internal/filter/cel"
+	"github.com/oleg-tkachuk/paladin/backend/internal/migstate"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -477,7 +478,7 @@ func (r *BucketRepoV2) SetConstraints(ctx context.Context, backendID, bucketName
 }
 
 func (r *BucketRepoV2) CountBucketReferences(ctx context.Context, backendID, bucketName string) ([]admindomain.BucketReference, error) {
-	rows, err := r.q.CountBucketReferences(ctx, backendID, bucketName)
+	rows, err := r.q.CountBucketReferences(ctx, backendID, bucketName, migstate.HoldsBuckets())
 	if err != nil {
 		return nil, err
 	}
