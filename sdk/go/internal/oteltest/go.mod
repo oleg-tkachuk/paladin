@@ -15,8 +15,8 @@ require (
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2 // indirect
 	buf.build/go/protovalidate v1.4.1 // indirect
-	cel.dev/cel-go v0.33.2 // indirect
-	cel.dev/expr v0.25.3 // indirect
+	cel.dev/cel-go v0.33.4 // indirect
+	cel.dev/expr v0.26.0 // indirect
 	connectrpc.com/connect v1.21.1 // indirect
 	connectrpc.com/connect/v2 v2.0.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
@@ -28,15 +28,15 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/oleg-tkachuk/limes v1.0.0-rc.76 // indirect
 	github.com/oleg-tkachuk/limes/biscuit v0.2.0 // indirect
-	github.com/spiffe/go-spiffe/v2 v2.9.0 // indirect
-	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	github.com/spiffe/go-spiffe/v2 v2.10.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.2 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
-	golang.org/x/exp v0.0.0-20261106192419-47ce03d25ef0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/exp v0.0.0-20261128033645-f63ec7c7eed0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	google.golang.org/genproto v0.0.0-20261123191846-1e707ab9fbc2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261123191846-1e707ab9fbc2 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261123191846-1e707ab9fbc2 // indirect
